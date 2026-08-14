@@ -9,7 +9,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"

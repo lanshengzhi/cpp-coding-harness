@@ -9,7 +9,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"

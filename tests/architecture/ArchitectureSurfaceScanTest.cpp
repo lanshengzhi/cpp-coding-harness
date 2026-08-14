@@ -107,6 +107,44 @@ TEST_CASE(
     }
 }
 
+TEST_CASE(
+    "Agent Core Owner Interfaces use one canonical Boost-free root",
+    "[architecture][agent][issue460]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto owner_root = source_root / "include" / "cch" / "agent";
+    const std::vector<std::filesystem::path> expected_interfaces{
+        owner_root / "Agent.hpp",
+        owner_root / "AgentContext.hpp",
+        owner_root / "AgentEvent.hpp",
+        owner_root / "AgentTool.hpp",
+        owner_root / "ToolRegistry.hpp",
+        owner_root / "harness" / "ExecutionEnv.hpp",
+        owner_root / "harness" / "LocalExecutionEnv.hpp",
+        owner_root / "harness" / "session" / "JsonlSessionStore.hpp",
+        owner_root / "harness" / "session" / "SessionEntry.hpp",
+        owner_root / "harness" / "session" / "SessionResume.hpp",
+        owner_root / "harness" / "session" / "SessionStore.hpp",
+        owner_root / "harness" / "session" / "SessionTree.hpp",
+        owner_root / "tools" / "ToolFactories.hpp",
+    };
+    for (const auto& interface : expected_interfaces) {
+        CHECK(std::filesystem::exists(interface));
+    }
+    CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "harness"));
+    CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "tools"));
+
+    const auto interfaces = files_under({"include/cch/agent"});
+    REQUIRE_FALSE(interfaces.empty());
+    for (const auto& interface : interfaces) {
+        const auto text = read_text(interface);
+        CHECK(text.find("#include <boost/") == std::string::npos);
+        CHECK(text.find("boost::") == std::string::npos);
+        CHECK(text.find("#include <cch/util/") == std::string::npos);
+        CHECK(text.find("#include \"../") == std::string::npos);
+        CHECK(text.find("#include \"../../") == std::string::npos);
+    }
+}
+
 TEST_CASE("public headers do not include private src paths", "[architecture][u1]") {
     const auto headers = public_headers();
     REQUIRE_FALSE(headers.empty());
@@ -514,7 +552,7 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
               "boost::asio::awaitable<util::ExpectedVoid> prompt(") == 1);
     CHECK(cch::tests::count_occurrences(session_header, "util::ExpectedVoid prompt_blocking(") == 1);
     CHECK(runtime_source.find(
-              "result = co_await agent::detail::AgentPromptAccess::prompt(") !=
+              "result = co_await ai::detail::await_async_result(") !=
           std::string::npos);
     CHECK(cch::tests::count_occurrences(runtime_source, "boost::asio::co_spawn(") == 1);
     CHECK(cch::tests::count_occurrences(session_header, "AgentEventSink") == 1);
@@ -729,7 +767,7 @@ TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capa
     const auto lifecycle_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "SessionLifecycle.cpp");
     const auto store_header = read_text(
-        source_root / "include" / "cch" / "harness" / "session" / "SessionStore.hpp");
+        source_root / "include" / "cch" / "agent" / "harness" / "session" / "SessionStore.hpp");
     const auto in_memory_store_header = read_text(
         source_root / "src" / "harness" / "session" / "InMemorySessionStore.hpp");
 

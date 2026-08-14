@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../ai/Message.hpp"
-#include "../../util/JsonValue.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -57,7 +57,7 @@ struct CustomEntryValue {
     /// pi `data?: T` — absent (omitted on the wire) vs explicit null are both
     /// representable: nullopt = absent, engaged = the JSON value (including an
     /// explicit JSON null).
-    std::optional<util::JsonValue> data;
+    std::optional<support::JsonValue> data;
 };
 
 using CustomMessageEntryContentBlock = std::variant<ai::TextContent, ai::ImageContent>;
@@ -68,7 +68,7 @@ struct CustomMessageEntryValue {
     std::string custom_type;
     CustomMessageEntryContent content;
     bool display{true};
-    std::optional<util::JsonValue> details;
+    std::optional<support::JsonValue> details;
 };
 
 struct LabelEntryValue {
@@ -84,7 +84,7 @@ struct CompactionEntryValue {
     /// pi `retainedTail?: AgentMessage[]` — recent messages kept on the entry
     /// itself; context rebuild projects compactionSummary + retained tail.
     std::optional<std::vector<ai::MessageVariant>> retained_tail;
-    std::optional<util::JsonValue> details;
+    std::optional<support::JsonValue> details;
     std::optional<ai::Usage> usage;
     std::optional<bool> from_hook;
 };
@@ -92,7 +92,7 @@ struct CompactionEntryValue {
 struct BranchSummaryEntryValue {
     std::string from_id;
     std::string summary;
-    std::optional<util::JsonValue> details;
+    std::optional<support::JsonValue> details;
     std::optional<ai::Usage> usage;
     std::optional<bool> from_hook;
 };
@@ -127,7 +127,7 @@ struct SessionEntry {
     ai::TimestampMs timestamp{};
     std::optional<ai::MessageVariant> message;
     SessionEntryValue value;
-    util::JsonValue payload;
+    support::JsonValue payload;
     std::string raw_line;
 };
 

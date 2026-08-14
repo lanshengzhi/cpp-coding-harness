@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/support/AsyncResult.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -118,68 +118,68 @@ struct ShellExecResult {
 };
 
 // ---------------------------------------------------------------------------
-// Error conversion helpers (pi-shaped → util::Error)
+// Error conversion helpers (pi-shaped → support::Error)
 // ---------------------------------------------------------------------------
 
-[[nodiscard]] inline util::Error to_util_error(FileError e) {
-    auto code = util::ErrorCode::Workspace;
+[[nodiscard]] inline support::Error to_util_error(FileError e) {
+    auto code = support::ErrorCode::Workspace;
     switch (e.code) {
     case FileErrorCode::Aborted:
-        code = util::ErrorCode::Cancelled;
+        code = support::ErrorCode::Cancelled;
         break;
     case FileErrorCode::Busy:
-        code = util::ErrorCode::Busy;
+        code = support::ErrorCode::Busy;
         break;
     case FileErrorCode::NotFound:
-        code = util::ErrorCode::Validation;
+        code = support::ErrorCode::Validation;
         break;
     case FileErrorCode::PermissionDenied:
-        code = util::ErrorCode::Workspace;
+        code = support::ErrorCode::Workspace;
         break;
     case FileErrorCode::NotDirectory:
     case FileErrorCode::IsDirectory:
     case FileErrorCode::Invalid:
-        code = util::ErrorCode::Validation;
+        code = support::ErrorCode::Validation;
         break;
     case FileErrorCode::NotSupported:
-        code = util::ErrorCode::Unknown;
+        code = support::ErrorCode::Unknown;
         break;
     case FileErrorCode::Unknown:
-        code = util::ErrorCode::Unknown;
+        code = support::ErrorCode::Unknown;
         break;
     }
-    return util::make_error(code, e.message, e.message, e.path);
+    return support::make_error(code, e.message, e.message, e.path);
 }
 
-[[nodiscard]] inline util::Error to_util_error(ExecutionError e) {
-    auto code = util::ErrorCode::Process;
+[[nodiscard]] inline support::Error to_util_error(ExecutionError e) {
+    auto code = support::ErrorCode::Process;
     switch (e.code) {
     case ExecutionErrorCode::Aborted:
-        code = util::ErrorCode::Cancelled;
+        code = support::ErrorCode::Cancelled;
         break;
     case ExecutionErrorCode::Busy:
-        code = util::ErrorCode::Busy;
+        code = support::ErrorCode::Busy;
         break;
     case ExecutionErrorCode::Timeout:
-        code = util::ErrorCode::Timeout;
+        code = support::ErrorCode::Timeout;
         break;
     case ExecutionErrorCode::ShellUnavailable:
-        code = util::ErrorCode::Process;
+        code = support::ErrorCode::Process;
         break;
     case ExecutionErrorCode::SpawnError:
-        code = util::ErrorCode::Process;
+        code = support::ErrorCode::Process;
         break;
     case ExecutionErrorCode::CallbackError:
-        code = util::ErrorCode::Process;
+        code = support::ErrorCode::Process;
         break;
     case ExecutionErrorCode::NotSupported:
-        code = util::ErrorCode::Unknown;
+        code = support::ErrorCode::Unknown;
         break;
     case ExecutionErrorCode::Unknown:
-        code = util::ErrorCode::Unknown;
+        code = support::ErrorCode::Unknown;
         break;
     }
-    return util::make_error(code, e.message, e.message);
+    return support::make_error(code, e.message, e.message);
 }
 
 // ---------------------------------------------------------------------------

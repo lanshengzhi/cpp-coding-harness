@@ -8,8 +8,8 @@
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/tools/ToolFactories.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/tools/ToolFactories.hpp>
 #include <cch/util/Error.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"

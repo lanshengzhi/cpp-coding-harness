@@ -14,7 +14,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
 #include "support/EnvVarGuard.hpp"

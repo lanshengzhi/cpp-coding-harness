@@ -11,7 +11,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <boost/asio/co_spawn.hpp>

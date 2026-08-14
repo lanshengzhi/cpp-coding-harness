@@ -10,7 +10,7 @@
 // session-family flows).
 
 #include <cch/ai/Message.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/JsonValue.hpp>
 
 #include "coding_agent/SessionDiscovery.hpp"

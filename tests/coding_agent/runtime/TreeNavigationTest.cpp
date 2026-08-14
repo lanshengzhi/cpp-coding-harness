@@ -15,8 +15,8 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>

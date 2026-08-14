@@ -1,3 +1,5 @@
+#include "support/TextHelpers.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -151,14 +153,12 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     const auto interactive_sources = target_decl_block(cmake, "cch_coding_agent_interactive");
     CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/InteractiveMode.cpp"));
     CHECK(block_mentions(cmake, "TARGET cch_ai\n"));
-    CHECK(block_mentions(cmake, "TARGET cch_agent\n"));
-    const auto agent_sources = target_decl_block(cmake, "cch_agent");
-    CHECK(block_mentions(agent_sources, "src/agent/Agent.cpp"));
-    CHECK(block_mentions(agent_sources, "src/agent/AgentLoop.cpp"));
-    CHECK(block_mentions(cmake, "TARGET cch_harness\n"));
-    const auto harness_sources = target_decl_block(cmake, "cch_harness");
-    CHECK(block_mentions(harness_sources, "src/harness/ShellResolver.cpp"));
-    CHECK(block_mentions(cmake, "TARGET cch_tools\n"));
+    CHECK(block_mentions(cmake, "TARGET cch_agent_core\n"));
+    const auto agent_core_sources = target_decl_block(cmake, "cch_agent_core");
+    CHECK(block_mentions(agent_core_sources, "src/agent/Agent.cpp"));
+    CHECK(block_mentions(agent_core_sources, "src/agent/AgentLoop.cpp"));
+    CHECK(block_mentions(agent_core_sources, "src/harness/ShellResolver.cpp"));
+    CHECK(block_mentions(agent_core_sources, "src/tools/AsyncToolFactories.cpp"));
     CHECK(block_mentions(cmake, "TARGET cch_coding_agent_core\n"));
     const auto core_sources = target_decl_block(cmake, "cch_coding_agent_core");
     CHECK(block_mentions(core_sources, "src/coding_agent/ModelRuntime.cpp"));
@@ -179,6 +179,59 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(ai_sources, "src/ai/providers/BoostBeastStreamTransport.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/FakeProvider.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/SseParser.cpp"));
+}
+
+TEST_CASE(
+    "Agent Core has one authoritative target with one legal Owner edge",
+    "[architecture][cmake][issue460]") {
+    const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
+
+    const auto agent_core = target_decl_block(cmake, "cch_agent_core");
+    REQUIRE_FALSE(agent_core.empty());
+    CHECK(target_decl_block(cmake, "cch_agent").empty());
+    CHECK(target_decl_block(cmake, "cch_harness").empty());
+    CHECK(target_decl_block(cmake, "cch_tools").empty());
+
+    const std::vector<std::string> authoritative_sources{
+        "src/agent/Agent.cpp",
+        "src/agent/AgentLoop.cpp",
+        "src/agent/AgentPolicyAdapters.cpp",
+        "src/agent/ToolArgumentPreparation.cpp",
+        "src/agent/ToolCallExecutor.cpp",
+        "src/harness/AsyncLocalExecutionEnv.cpp",
+        "src/harness/RuntimeRoot.cpp",
+        "src/harness/ShellResolver.cpp",
+        "src/harness/SyncLocalExecutionEnv.cpp",
+        "src/harness/WorkspaceFileSystemFdWalk.cpp",
+        "src/harness/WorkspaceFileSystemLegacy.cpp",
+        "src/harness/WorkspaceFileSystemPi.cpp",
+        "src/harness/WorkspaceFileSystemTemp.cpp",
+        "src/harness/compaction/Compaction.cpp",
+        "src/harness/session/SessionJournal.cpp",
+        "src/harness/session/EntrySerializer.cpp",
+        "src/harness/session/InMemorySessionStore.cpp",
+        "src/harness/session/JsonlSessionStore.cpp",
+        "src/harness/session/SessionResume.cpp",
+        "src/harness/session/SessionTree.cpp",
+        "src/tools/AsyncToolFactories.cpp",
+        "src/tools/EditDiff.cpp",
+    };
+    for (const auto& source : authoritative_sources) {
+        CHECK(block_mentions(agent_core, source));
+        CHECK(cch::tests::count_occurrences(cmake, source) == 1);
+    }
+
+    const auto agent_core_links = depends_section(cmake, "cch_agent_core");
+    CHECK(block_mentions(agent_core_links, "cch_ai"));
+    CHECK(block_mentions(agent_core_links, "cch_support"));
+    CHECK_FALSE(block_mentions(agent_core_links, "cch_coding_agent"));
+    CHECK_FALSE(block_mentions(agent_core_links, "cch_tui"));
+
+    const auto runtime_links = depends_section(cmake, "cch_coding_agent_runtime");
+    CHECK(block_mentions(runtime_links, "cch_agent_core"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_agent\n"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_harness"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_tools"));
 }
 
 TEST_CASE("CMake target links follow the package dependency direction", "[architecture][cmake][issue58]") {
@@ -216,32 +269,17 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(ai_links, "cch_coding_agent_core"));
     CHECK_FALSE(block_mentions(ai_links, "cch_coding_agent_runtime"));
 
-    const auto agent_links = depends_section(cmake, "cch_agent");
-    CHECK_FALSE(block_mentions(agent_links, "cch_coding_agent_core"));
-    CHECK(block_mentions(agent_links, "cch_ai"));
-    CHECK(block_mentions(agent_links, "cch_util"));
-    CHECK_FALSE(block_mentions(agent_links, "cch_harness"));
-    CHECK_FALSE(block_mentions(agent_links, "cch_tools"));
-    CHECK_FALSE(block_mentions(agent_links, "cch_coding_agent_runtime"));
-
-    const auto harness_links = depends_section(cmake, "cch_harness");
-    CHECK(block_mentions(harness_links, "cch_ai"));
-    CHECK(block_mentions(harness_links, "cch_util"));
-    CHECK_FALSE(block_mentions(harness_links, "cch_agent"));
-    CHECK_FALSE(block_mentions(harness_links, "cch_tools"));
-    CHECK_FALSE(block_mentions(harness_links, "cch_coding_agent_core"));
-    CHECK_FALSE(block_mentions(harness_links, "cch_coding_agent_runtime"));
-
-    const auto tools_links = depends_section(cmake, "cch_tools");
-    CHECK(block_mentions(tools_links, "cch_agent"));
-    CHECK(block_mentions(tools_links, "cch_harness"));
-    CHECK_FALSE(block_mentions(tools_links, "cch_coding_agent_core"));
-    CHECK_FALSE(block_mentions(tools_links, "cch_coding_agent_runtime"));
+    const auto agent_core_links = depends_section(cmake, "cch_agent_core");
+    CHECK_FALSE(block_mentions(agent_core_links, "cch_coding_agent_core"));
+    CHECK(block_mentions(agent_core_links, "cch_ai"));
+    CHECK(block_mentions(agent_core_links, "cch_support"));
+    CHECK(block_mentions(agent_core_links, "cch_util"));
+    CHECK_FALSE(block_mentions(agent_core_links, "cch_coding_agent_runtime"));
 
     const auto runtime_links = depends_section(cmake, "cch_coding_agent_runtime");
-    CHECK(block_mentions(runtime_links, "cch_agent"));
-    CHECK(block_mentions(runtime_links, "cch_harness"));
-    CHECK(block_mentions(runtime_links, "cch_tools"));
+    CHECK(block_mentions(runtime_links, "cch_agent_core"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_harness"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_tools"));
     CHECK(block_mentions(runtime_links, "cch_coding_agent_core"));
     CHECK(block_mentions(runtime_links, "cch_ai"));
     CHECK(block_mentions(runtime_links, "WebP::webpdecoder"));

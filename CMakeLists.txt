@@ -219,7 +219,7 @@ cch_parity_declare_target(
 cch_target_defaults(cch_coding_agent_core)
 
 cch_parity_declare_target(
-    TARGET cch_agent
+    TARGET cch_agent_core
     ROLE owner
     OWNER cch_agent_core
     SOURCES
@@ -228,20 +228,6 @@ cch_parity_declare_target(
         src/agent/AgentPolicyAdapters.cpp
         src/agent/ToolArgumentPreparation.cpp
         src/agent/ToolCallExecutor.cpp
-    DEPENDS
-        cch_ai
-        cch_util
-    INTERFACE_DEPENDS
-        cch_ai
-        cch_util
-)
-cch_target_defaults(cch_agent)
-
-cch_parity_declare_target(
-    TARGET cch_harness
-    ROLE implementation
-    OWNER cch_agent_core
-    SOURCES
         src/harness/AsyncLocalExecutionEnv.cpp
         src/harness/RuntimeRoot.cpp
         src/harness/ShellResolver.cpp
@@ -257,35 +243,18 @@ cch_parity_declare_target(
         src/harness/session/JsonlSessionStore.cpp
         src/harness/session/SessionResume.cpp
         src/harness/session/SessionTree.cpp
-    DEPENDS
-        cch_ai
-        cch_util
-    INTERFACE_DEPENDS
-        cch_ai
-        cch_util
-)
-cch_target_defaults(cch_harness)
-
-cch_parity_declare_target(
-    TARGET cch_tools
-    ROLE implementation
-    OWNER cch_agent_core
-    SOURCES
         src/tools/AsyncToolFactories.cpp
         src/tools/EditDiff.cpp
     DEPENDS
-        cch_agent
-        cch_harness
         cch_ai
+        cch_support
         cch_util
         utf8proc::utf8proc@utf8proc
     INTERFACE_DEPENDS
-        cch_agent
-        cch_harness
         cch_ai
-        cch_util
+        cch_support
 )
-cch_target_defaults(cch_tools)
+cch_target_defaults(cch_agent_core)
 
 cch_parity_declare_target(
     TARGET cch_coding_agent_runtime
@@ -321,17 +290,13 @@ cch_parity_declare_target(
         src/coding_agent/runtime/SessionFork.cpp
         src/coding_agent/runtime/SessionLifecycle.cpp
     DEPENDS
-        cch_agent
-        cch_harness
-        cch_tools
+        cch_agent_core
         cch_coding_agent_core
         cch_ai
         cch_util
         WebP::webpdecoder@webp
     INTERFACE_DEPENDS
-        cch_agent
-        cch_harness
-        cch_tools
+        cch_agent_core
         cch_coding_agent_core
         cch_ai
         cch_util
@@ -636,7 +601,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cch_tests_ai PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_ai
         PRIVATE
-            cch_agent
+            cch_agent_core
             cch_ai
             Catch2::Catch2
 )
@@ -658,7 +623,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cch_tests_agent PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_agent
         PRIVATE
-            cch_agent
+            cch_agent_core
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_agent PRIVATE
@@ -683,8 +648,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cch_tests_harness_tools PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_harness_tools
         PRIVATE
-            cch_harness
-            cch_tools
+            cch_agent_core
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_harness_tools PRIVATE

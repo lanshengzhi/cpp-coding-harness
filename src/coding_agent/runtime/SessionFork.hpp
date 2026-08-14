@@ -2,7 +2,7 @@
 
 #include "AgentSessionCreationRequest.hpp"
 
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/util/Error.hpp>
 
 #include <filesystem>

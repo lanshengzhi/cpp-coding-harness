@@ -1,9 +1,9 @@
 #pragma once
 
-#include "SessionEntry.hpp"
+#include <cch/agent/harness/session/SessionEntry.hpp>
 
-#include "../../ai/Message.hpp"
-#include "../../util/Error.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -37,6 +37,6 @@ struct SessionResumeResult {
 };
 
 /// Reopen a persisted session into agent-ready context for the active path.
-[[nodiscard]] util::Expected<SessionResumeResult> resume_session(const std::filesystem::path& path);
+[[nodiscard]] support::Expected<SessionResumeResult> resume_session(const std::filesystem::path& path);
 
 } // namespace cch::harness::session

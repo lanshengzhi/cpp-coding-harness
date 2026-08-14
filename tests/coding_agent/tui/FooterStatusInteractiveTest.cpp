@@ -7,7 +7,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"

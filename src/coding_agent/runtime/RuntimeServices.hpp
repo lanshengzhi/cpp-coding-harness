@@ -3,8 +3,8 @@
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/harness/LocalExecutionEnv.hpp>
-#include <cch/tools/ToolFactories.hpp>
+#include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 
 #include <filesystem>

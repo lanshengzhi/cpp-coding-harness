@@ -2,7 +2,7 @@
 
 namespace cch::harness::session {
 
-util::ExpectedVoid InMemorySessionStore::append(const ai::MessageVariant& /*message*/) {
+support::ExpectedVoid InMemorySessionStore::append(const ai::MessageVariant& /*message*/) {
     return {};
 }
 

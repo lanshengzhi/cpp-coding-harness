@@ -1,4 +1,5 @@
 // pi-agent-core fixture evidence for #351 (T02): the committed goldens under
+#include "ai/AsyncResultBridge.hpp"
 // fixtures/pi-agent-core/ compared byte-for-byte against the C++ Agent's
 // observable behavior. Three evidence bundles:
 //
@@ -304,7 +305,7 @@ util::ExpectedVoid run_prompt(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await subject.prompt(std::move(prompt));
+            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
             co_return;
         },
         boost::asio::detached);

@@ -1,8 +1,8 @@
 #include "harness/session/InMemorySessionStore.hpp"
 
 #include "../../../include/cch/ai/Content.hpp"
-#include "../../../include/cch/ai/Message.hpp"
-#include "../../../include/cch/harness/session/SessionStore.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

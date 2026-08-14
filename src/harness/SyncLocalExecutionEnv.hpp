@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/ExecutionEnv.hpp>
 
 #include "WorkspaceFileSystem.hpp"
 #include "util/Process.hpp"

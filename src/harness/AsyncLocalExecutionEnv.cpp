@@ -1,4 +1,4 @@
-#include <cch/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/LocalExecutionEnv.hpp>
 
 #include "ExecutionErrorClassification.hpp"
 #include "RuntimeRoot.hpp"

@@ -4,6 +4,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Models.hpp>
+#include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 

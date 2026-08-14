@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cch/agent/AgentContext.hpp>
-#include <cch/harness/session/SessionEntry.hpp>
-#include <cch/harness/session/SessionResume.hpp>
+#include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/agent/harness/session/SessionResume.hpp>
 
 #include <filesystem>
 #include <optional>

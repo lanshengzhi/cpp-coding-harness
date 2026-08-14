@@ -1,7 +1,7 @@
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 
-#include <cch/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/LocalExecutionEnv.hpp>
 #include "harness/ShellResolver.hpp"
 #include "harness/SyncLocalExecutionEnv.hpp"
 #include "harness/RuntimeRoot.hpp"

@@ -1,7 +1,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include "../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 

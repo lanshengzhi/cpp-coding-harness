@@ -1,4 +1,5 @@
 // T07 (#356): the pi v3 session wire contract — all eleven entry types
+#include "ai/AsyncResultBridge.hpp"
 // round-trip byte-identically against a golden captured from the frozen pi
 // tests (fixtures/pi-agent-core/session-roundtrip.jsonl), and context
 // projection per entry type matches pi (custom omitted by default,
@@ -8,8 +9,8 @@
 // the fake-ModelRuntime seam so the model sees exactly what pi's model sees.
 
 #include <cch/agent/Agent.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
@@ -179,7 +180,7 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await subject.prompt(std::move(prompt));
+            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
             co_return;
         },
         boost::asio::detached);

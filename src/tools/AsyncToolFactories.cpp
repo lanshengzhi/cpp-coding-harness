@@ -1,4 +1,4 @@
-#include <cch/tools/ToolFactories.hpp>
+#include <cch/agent/tools/ToolFactories.hpp>
 
 #include "tools/EditDiff.hpp"
 #include "ai/AsyncResultBridge.hpp"

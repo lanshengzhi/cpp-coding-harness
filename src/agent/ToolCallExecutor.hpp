@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../../include/cch/agent/AgentContext.hpp"
-#include "../../include/cch/agent/AgentEvent.hpp"
-#include "../../include/cch/agent/AgentTool.hpp"
-#include "../../include/cch/agent/ToolRegistry.hpp"
-#include "../../include/cch/ai/Context.hpp"
-#include "../../include/cch/ai/Message.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include <cch/agent/AgentContext.hpp>
+#include <cch/agent/AgentEvent.hpp>
+#include <cch/agent/AgentTool.hpp>
+#include <cch/agent/ToolRegistry.hpp>
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 

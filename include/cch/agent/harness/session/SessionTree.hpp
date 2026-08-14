@@ -1,8 +1,8 @@
 #pragma once
 
-#include "SessionEntry.hpp"
-#include "../../ai/Message.hpp"
-#include "../../util/Error.hpp"
+#include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -99,7 +99,7 @@ public:
     /// Move the active leaf to a different entry.
     /// The target entry_id must exist in the tree.
     /// Returns an error if entry_id is not found.
-    [[nodiscard]] util::ExpectedVoid branch(std::string_view entry_id);
+    [[nodiscard]] support::ExpectedVoid branch(std::string_view entry_id);
 
     /// pi `resetLeaf`: move the active leaf to null (before any entries); the
     /// next append creates a new root entry. Used when navigating to re-edit
@@ -166,22 +166,22 @@ public:
     /// Data produced by a branch summary hook.
     struct BranchSummaryData {
         std::string summary;
-        std::optional<util::JsonValue> details;
+        std::optional<support::JsonValue> details;
     };
 
     /// Hook for generating branch summaries.
     /// Returns BranchSummaryData on success, nullopt to skip summary,
     /// or an error on failure.
     using BranchSummaryHook = std::move_only_function<
-        util::Expected<std::optional<BranchSummaryData>>(const BranchSummaryContext&)>;
+        support::Expected<std::optional<BranchSummaryData>>(const BranchSummaryContext&)>;
 
     /// Navigate to a target entry and optionally generate a branch summary.
     /// If hook is provided and returns data, a BranchSummary entry is appended.
     /// The append_writer callback writes entries to the underlying store.
-    [[nodiscard]] util::ExpectedVoid branchWithSummary(
+    [[nodiscard]] support::ExpectedVoid branchWithSummary(
         std::string_view entry_id,
         BranchSummaryHook& hook,
-        std::move_only_function<util::ExpectedVoid(const SessionEntry&)> append_writer);
+        std::move_only_function<support::ExpectedVoid(const SessionEntry&)> append_writer);
 
 private:
     void build_index();

@@ -5,10 +5,8 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/support/AsyncResult.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
-
-#include <boost/asio/awaitable.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <functional>
 #include <optional>
@@ -22,13 +20,13 @@ namespace cch::agent {
 struct ToolInvocation {
     std::string call_id;
     std::string name;
-    util::JsonValue arguments;
+    support::JsonValue arguments;
     std::string raw_arguments;
 };
 
 struct AsyncToolExecutionResult {
     std::vector<ai::Content> content;
-    std::optional<util::JsonValue> details;
+    std::optional<support::JsonValue> details;
     bool is_error{false};
     bool terminate{false};
 };
@@ -36,12 +34,12 @@ struct AsyncToolExecutionResult {
 /// Synchronous publication of one cumulative partial tool execution result.
 /// A failure asks the tool to stop producing updates and propagate the error.
 using ToolUpdateSink = std::move_only_function<
-    util::ExpectedVoid(const AsyncToolExecutionResult&)>;
+    support::ExpectedVoid(const AsyncToolExecutionResult&)>;
 
 struct BeforeToolCallContext {
     ai::AssistantMessage assistant_message;
     ai::ToolCallContent tool_call;
-    util::JsonValue args;
+    support::JsonValue args;
     ai::AiContext context;
 };
 
@@ -53,7 +51,7 @@ struct BeforeToolCallResult {
 struct AfterToolCallContext {
     ai::AssistantMessage assistant_message;
     ai::ToolCallContent tool_call;
-    util::JsonValue args;
+    support::JsonValue args;
     AsyncToolExecutionResult result;
     bool is_error{false};
     ai::AiContext context;
@@ -61,7 +59,7 @@ struct AfterToolCallContext {
 
 struct AfterToolCallResult {
     std::optional<std::vector<ai::Content>> content;
-    std::optional<util::JsonValue> details;
+    std::optional<support::JsonValue> details;
     std::optional<bool> is_error;
     std::optional<bool> terminate;
 };
@@ -70,11 +68,11 @@ struct AfterToolCallResult {
 /// deliberately cross this suspension boundary by value, so a hook cannot
 /// retain a reference to run-owned state after the invocation finishes.
 using BeforeToolCallHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<BeforeToolCallResult>>(
+    support::AsyncResult<BeforeToolCallResult>(
         BeforeToolCallContext,
         std::stop_token)>;
 using AfterToolCallHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<AfterToolCallResult>>(
+    support::AsyncResult<AfterToolCallResult>(
         AfterToolCallContext,
         std::stop_token)>;
 
@@ -82,13 +80,13 @@ using AfterToolCallHook = std::move_only_function<
 /// synchronous Agent execution path. Cancellable forms receive the active
 /// run's stop token; non-cancellable forms explicitly ignore it.
 using SyncBeforeToolCallPolicy = std::move_only_function<
-    util::Expected<BeforeToolCallResult>(BeforeToolCallContext)>;
+    support::Expected<BeforeToolCallResult>(BeforeToolCallContext)>;
 using CancellableSyncBeforeToolCallPolicy = std::move_only_function<
-    util::Expected<BeforeToolCallResult>(BeforeToolCallContext, std::stop_token)>;
+    support::Expected<BeforeToolCallResult>(BeforeToolCallContext, std::stop_token)>;
 using SyncAfterToolCallPolicy = std::move_only_function<
-    util::Expected<AfterToolCallResult>(AfterToolCallContext)>;
+    support::Expected<AfterToolCallResult>(AfterToolCallContext)>;
 using CancellableSyncAfterToolCallPolicy = std::move_only_function<
-    util::Expected<AfterToolCallResult>(AfterToolCallContext, std::stop_token)>;
+    support::Expected<AfterToolCallResult>(AfterToolCallContext, std::stop_token)>;
 
 [[nodiscard]] BeforeToolCallHook adapt_sync_before_tool_call(
     SyncBeforeToolCallPolicy policy);

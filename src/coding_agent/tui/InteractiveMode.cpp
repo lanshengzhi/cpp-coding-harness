@@ -62,7 +62,7 @@
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include "harness/compaction/Compaction.hpp"
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>

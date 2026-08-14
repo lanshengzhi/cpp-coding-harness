@@ -2,6 +2,7 @@
 
 #include "AgentLoop.hpp"
 #include "agent/AgentMessageAccess.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
 #include "util/BoundedText.hpp"
@@ -472,25 +473,39 @@ Agent::~Agent() {
     }
 }
 
-boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
-    std::string user_prompt) {
-    co_return co_await prompt(std::move(user_prompt), {});
+support::AsyncResult<void> Agent::prompt(std::string user_prompt) {
+    return prompt(std::move(user_prompt), {});
 }
 
-boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
+support::AsyncResult<void> Agent::prompt(
     std::string user_prompt,
     AgentEventCommitter commitment) {
-    co_return co_await prompt(
+    return prompt(
         ai::user_text_message(std::move(user_prompt)),
         std::move(commitment),
         std::stop_source{});
 }
 
-boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
+support::AsyncResult<void> Agent::prompt(
     ai::UserMessage user_message,
     AgentEventCommitter commitment,
     std::stop_source stop_source) {
-    auto impl = impl_;
+    if (!impl_) {
+        return support::AsyncResult<void>{std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"))};
+    }
+    if (impl_->active_run) {
+        return support::AsyncResult<void>{std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is busy (prompt already in flight)"))};
+    }
+    return ai::detail::make_async_result(
+        [impl = impl_,
+         user_message = std::move(user_message),
+         commitment = std::move(commitment),
+         stop_source = std::move(stop_source)]() mutable
+            -> boost::asio::awaitable<support::ExpectedVoid> {
     if (!impl) {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -536,12 +551,17 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
         },
         std::move(commitment),
         std::move(stop_source));
+        });
 }
 
-boost::asio::awaitable<util::ExpectedVoid> Agent::continue_run(
+support::AsyncResult<void> Agent::continue_run(
     AgentEventCommitter commitment,
     std::stop_source stop_source) {
-    auto impl = impl_;
+    return ai::detail::make_async_result(
+        [impl = impl_,
+         commitment = std::move(commitment),
+         stop_source = std::move(stop_source)]() mutable
+            -> boost::asio::awaitable<support::ExpectedVoid> {
     if (!impl) {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -587,6 +607,7 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::continue_run(
         },
         std::move(commitment),
         std::move(stop_source));
+        });
 }
 
 void Agent::abort() {

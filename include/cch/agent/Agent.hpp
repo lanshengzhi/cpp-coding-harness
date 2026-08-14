@@ -4,9 +4,8 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Models.hpp>
-#include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
+#include <cch/support/AsyncResult.hpp>
+#include <cch/support/Error.hpp>
 
 #include <memory>
 #include <stop_token>
@@ -76,14 +75,13 @@ public:
 
     /// Execute one prompt from the Agent's retained history.
     /// A second prompt is rejected without mutation while a run is active.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
-        std::string user_prompt);
+    [[nodiscard]] support::AsyncResult<void> prompt(std::string user_prompt);
 
     /// Execute one prompt with a named strong event commitment capability.
     /// For each event, Agent state advances first, weak observers run second,
     /// and the commitment runs last. A commitment failure stops the run without
     /// rolling back live state and is returned unwrapped to the caller.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
+    [[nodiscard]] support::AsyncResult<void> prompt(
         std::string user_prompt,
         AgentEventCommitter commitment);
 
@@ -94,17 +92,17 @@ public:
 
     /// Admit an Agent Message for injection after the current assistant turn.
     /// The configured queue capacity is checked before the queue is mutated.
-    [[nodiscard]] util::ExpectedVoid steer(ai::MessageVariant message);
+    [[nodiscard]] support::ExpectedVoid steer(ai::MessageVariant message);
 
     /// Admit an Agent Message to run when the Agent would otherwise stop.
     /// The configured queue capacity is checked before the queue is mutated.
-    [[nodiscard]] util::ExpectedVoid follow_up(ai::MessageVariant message);
+    [[nodiscard]] support::ExpectedVoid follow_up(ai::MessageVariant message);
 
     /// Change the drain policy for queued steering messages.
-    [[nodiscard]] util::ExpectedVoid set_steering_mode(InputQueueMode mode);
+    [[nodiscard]] support::ExpectedVoid set_steering_mode(InputQueueMode mode);
 
     /// Change the drain policy for queued follow-up messages.
-    [[nodiscard]] util::ExpectedVoid set_follow_up_mode(InputQueueMode mode);
+    [[nodiscard]] support::ExpectedVoid set_follow_up_mode(InputQueueMode mode);
 
     /// Set the thinking level for subsequent turns (pi `setThinkingLevel`).
     /// The request is validated against the seven-level set and clamped to the
@@ -114,7 +112,7 @@ public:
     /// the live state. Returns the effective level, or an error for an invalid
     /// request. A request whose clamped level equals the current level is a
     /// no-op success.
-    [[nodiscard]] util::Expected<std::string> set_thinking_level(
+    [[nodiscard]] support::Expected<std::string> set_thinking_level(
         std::string_view level);
 
     /// Swap the active Model for subsequent turns (pi's runtime `setModel`:
@@ -122,7 +120,7 @@ public:
     /// thinking level is untouched here — the caller re-clamps it against the
     /// new model's supported set right after, exactly like pi's `setModel` →
     /// `setThinkingLevel` sequence.
-    [[nodiscard]] util::ExpectedVoid set_model(ai::Model model);
+    [[nodiscard]] support::ExpectedVoid set_model(ai::Model model);
 
     /// Replace the session System Prompt for subsequent turns (pi's runtime
     /// `/reload` `_rebuildSystemPrompt`: `agent.state.systemPrompt =
@@ -131,13 +129,13 @@ public:
     void set_system_prompt(std::string system_prompt);
 
     /// Remove all pending steering messages.
-    [[nodiscard]] util::ExpectedVoid clear_steering_queue();
+    [[nodiscard]] support::ExpectedVoid clear_steering_queue();
 
     /// Remove all pending follow-up messages.
-    [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
+    [[nodiscard]] support::ExpectedVoid clear_follow_up_queue();
 
     /// Remove all pending steering and follow-up messages.
-    [[nodiscard]] util::ExpectedVoid clear_input_queues();
+    [[nodiscard]] support::ExpectedVoid clear_input_queues();
 
     /// Return an independent passive snapshot of current live Agent state.
     [[nodiscard]] AgentState state() const;
@@ -145,7 +143,7 @@ public:
     /// Subscribe a move-only weak observer. State is reduced before delivery.
     /// Observer failures and exceptions deactivate that observer without
     /// vetoing Agent progress.
-    [[nodiscard]] util::Expected<AgentEventSubscription> subscribe(
+    [[nodiscard]] support::Expected<AgentEventSubscription> subscribe(
         AgentEventSink sink);
 
     /// Deactivate all weak observers. Idempotent. The current delivery
@@ -162,7 +160,7 @@ private:
     /// Execute one prompt using a caller-created prompt-scoped cancellation
     /// source. Copies of the source share one stop state, allowing an admission
     /// owner to request cancellation before the Agent coroutine starts.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
+    [[nodiscard]] support::AsyncResult<void> prompt(
         ai::UserMessage user_message,
         AgentEventCommitter commitment,
         std::stop_source stop_source);
@@ -173,7 +171,7 @@ private:
     /// be an assistant message (the session removes the failed error message
     /// before continuing); the loop rejects the empty and assistant-terminal
     /// cases with pi's continuation errors.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> continue_run(
+    [[nodiscard]] support::AsyncResult<void> continue_run(
         AgentEventCommitter commitment,
         std::stop_source stop_source);
 

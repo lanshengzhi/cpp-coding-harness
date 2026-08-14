@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AgentTool.hpp"
+#include <cch/agent/AgentTool.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -33,14 +33,14 @@ public:
     ToolRegistry(const ToolRegistry&) = delete;
     ToolRegistry& operator=(const ToolRegistry&) = delete;
 
-    [[nodiscard]] util::ExpectedVoid add(Tool tool) {
+    [[nodiscard]] support::ExpectedVoid add(Tool tool) {
         if (!tool.execute) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation, "cannot add a tool without an execute operation"));
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "cannot add a tool without an execute operation"));
         }
         if (tool.definition.name.empty()) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation, "cannot add a tool without a name"));
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "cannot add a tool without a name"));
         }
         tools_[tool.definition.name] = std::move(tool);
         return {};

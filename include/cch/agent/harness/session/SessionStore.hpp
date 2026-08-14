@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../ai/Message.hpp"
-#include "../../util/Error.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -16,7 +16,7 @@ class SessionStore {
 public:
     virtual ~SessionStore() = default;
 
-    [[nodiscard]] virtual util::ExpectedVoid append(const ai::MessageVariant& message) = 0;
+    [[nodiscard]] virtual support::ExpectedVoid append(const ai::MessageVariant& message) = 0;
     [[nodiscard]] virtual std::optional<std::filesystem::path> path() const = 0;
 };
 

@@ -1,7 +1,7 @@
 #include "../support/TempWorkspace.hpp"
 
-#include <cch/harness/LocalExecutionEnv.hpp>
-#include <cch/tools/ToolFactories.hpp>
+#include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/tools/ToolFactories.hpp>
 #include "agent/ToolArgumentPreparation.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include "harness/RuntimeRoot.hpp"

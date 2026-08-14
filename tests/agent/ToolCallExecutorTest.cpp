@@ -1,4 +1,5 @@
 #include "agent/ToolCallExecutor.hpp"
+#include "ai/AsyncResultBridge.hpp"
 
 #include "support/FakeTool.hpp"
 #include "support/ToolArgumentCompatibilityFixture.hpp"
@@ -1288,12 +1289,12 @@ TEST_CASE(
 
     agent::BeforeToolCallHook before_hook = [&stop_source](
         agent::BeforeToolCallContext,
-        std::stop_token)
-        -> boost::asio::awaitable<util::Expected<agent::BeforeToolCallResult>> {
+        std::stop_token) {
         (void)stop_source.request_stop();
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
-            "Operation aborted"));
+        return support::AsyncResult<agent::BeforeToolCallResult>{
+            std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "Operation aborted"))};
     };
     agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
         .before_tool_call = &before_hook,
@@ -1765,15 +1766,17 @@ TEST_CASE(
         --active_lifecycle_callbacks;
     };
 
-    agent::AfterToolCallHook after_hook = [&](agent::AfterToolCallContext, std::stop_token)
-        -> boost::asio::awaitable<util::Expected<agent::AfterToolCallResult>> {
+    agent::AfterToolCallHook after_hook = [&](agent::AfterToolCallContext, std::stop_token) {
         enter_hook();
-        auto timer = boost::asio::steady_timer(
-            co_await boost::asio::this_coro::executor,
-            std::chrono::milliseconds{15});
-        co_await timer.async_wait(boost::asio::use_awaitable);
-        --active_hooks;
-        co_return agent::AfterToolCallResult{};
+        return ai::detail::make_async_result(
+            [&active_hooks]() -> boost::asio::awaitable<util::Expected<agent::AfterToolCallResult>> {
+                auto timer = boost::asio::steady_timer(
+                    co_await boost::asio::this_coro::executor,
+                    std::chrono::milliseconds{15});
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                --active_hooks;
+                co_return agent::AfterToolCallResult{};
+            });
     };
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{2};

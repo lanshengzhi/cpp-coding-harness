@@ -12,6 +12,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <atomic>
 #include <expected>
 #include <exception>
 #include <memory>
@@ -47,16 +48,22 @@ template <typename T, typename E>
     auto initiate = [executor](auto&& handler, cch::support::AsyncResult<T, E> operation) {
         auto owner = std::make_shared<std::decay_t<decltype(handler)>>(
             std::forward<decltype(handler)>(handler));
+        auto initiating = std::make_shared<std::atomic<bool>>(true);
         const auto previous_executor = t_initiating_executor;
         t_initiating_executor = executor;
         std::move(operation).start(
-            [executor, owner](std::expected<T, E> outcome) noexcept {
+            [executor, owner, initiating](std::expected<T, E> outcome) noexcept {
+                if (initiating->load(std::memory_order_acquire)) {
+                    std::move(*owner)(std::move(outcome));
+                    return;
+                }
                 boost::asio::dispatch(
                     executor,
                     [owner, outcome = std::move(outcome)]() mutable noexcept {
                         std::move(*owner)(std::move(outcome));
                     });
             });
+        initiating->store(false, std::memory_order_release);
         t_initiating_executor = previous_executor;
     };
     co_return co_await boost::asio::async_initiate<
@@ -91,9 +98,18 @@ template <typename AwaitableFactory>
                         [shared, completion = std::move(completion)](
                             std::exception_ptr exception, Terminal result) mutable noexcept {
                             if (exception) {
-                                completion(std::unexpected(cch::support::make_error(
-                                    cch::support::ErrorCode::Unknown,
-                                    "async operation failed")));
+                                try {
+                                    std::rethrow_exception(exception);
+                                } catch (const std::exception& error) {
+                                    completion(std::unexpected(cch::support::make_error(
+                                        cch::support::ErrorCode::Unknown,
+                                        "async operation failed",
+                                        error.what())));
+                                } catch (...) {
+                                    completion(std::unexpected(cch::support::make_error(
+                                        cch::support::ErrorCode::Unknown,
+                                        "async operation failed")));
+                                }
                             } else {
                                 completion(std::move(result));
                             }

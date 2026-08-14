@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/harness/session/SessionEntry.hpp"
+#include <cch/agent/harness/session/SessionEntry.hpp>
 
 #include <cstddef>
 #include <optional>

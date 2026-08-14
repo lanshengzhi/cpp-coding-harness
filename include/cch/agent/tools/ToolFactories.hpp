@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/agent/AgentTool.hpp>
-#include <cch/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/ExecutionEnv.hpp>
 
 #include <memory>
 #include <optional>

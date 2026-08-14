@@ -1,8 +1,8 @@
 #include "SessionLifecycle.hpp"
 
 #include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../../include/cch/harness/session/SessionTree.hpp"
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/EntrySerializer.hpp"

@@ -1,5 +1,7 @@
-#include "../../../include/cch/harness/session/SessionTree.hpp"
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/util/Error.hpp>
+#include <cch/util/JsonValue.hpp>
 #include "../../support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>

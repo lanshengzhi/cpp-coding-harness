@@ -1,4 +1,5 @@
 #include <cch/agent/Agent.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
@@ -56,7 +57,7 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await subject.prompt(std::move(prompt));
+            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
             co_return;
         },
         boost::asio::detached);
@@ -78,8 +79,8 @@ util::ExpectedVoid run_prompt(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await subject.prompt(
-                std::move(prompt), std::move(commitment));
+            result = co_await ai::detail::await_async_result(
+                subject.prompt(std::move(prompt), std::move(commitment)));
             co_return;
         },
         boost::asio::detached);
@@ -504,11 +505,11 @@ TEST_CASE(
     bool stop_requested = true;
     options.transform_context = [&stop_possible, &stop_requested](
                                     std::vector<ai::MessageVariant> messages,
-                                    std::stop_token stop_token)
-        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                                    std::stop_token stop_token) {
         stop_possible = stop_token.stop_possible();
         stop_requested = stop_token.stop_requested();
-        co_return messages;
+        return support::AsyncResult<std::vector<ai::MessageVariant>>{
+            std::move(messages)};
     };
 
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
@@ -527,10 +528,10 @@ TEST_CASE(
     options.model = tests::make_model("fake-model");
     options.transform_context = [&transform_stop_token](
                                     std::vector<ai::MessageVariant> messages,
-                                    std::stop_token stop_token)
-        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                                    std::stop_token stop_token) {
         transform_stop_token = stop_token;
-        co_return messages;
+        return support::AsyncResult<std::vector<ai::MessageVariant>>{
+            std::move(messages)};
     };
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
@@ -539,7 +540,7 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await subject.prompt("abort me");
+            result = co_await ai::detail::await_async_result(subject.prompt("abort me"));
             co_return;
         },
         boost::asio::detached);
@@ -1003,7 +1004,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            first_prompt = co_await subject.prompt("first");
+            first_prompt = co_await ai::detail::await_async_result(subject.prompt("first"));
             co_return;
         },
         boost::asio::detached);
@@ -1018,7 +1019,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            second_prompt = co_await subject.prompt("second");
+            second_prompt = co_await ai::detail::await_async_result(subject.prompt("second"));
             co_return;
         },
         boost::asio::detached);
@@ -1053,7 +1054,7 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            prompted = co_await original.prompt("hello");
+            prompted = co_await ai::detail::await_async_result(original.prompt("hello"));
             co_return;
         },
         boost::asio::detached);
@@ -1285,7 +1286,7 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            prompted = co_await subject.prompt("first");
+            prompted = co_await ai::detail::await_async_result(subject.prompt("first"));
             co_return;
         },
         boost::asio::detached);

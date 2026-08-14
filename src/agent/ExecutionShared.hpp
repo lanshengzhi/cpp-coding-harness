@@ -2,7 +2,9 @@
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Message.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/util/Error.hpp>
+#include "ai/AsyncResultBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -87,26 +89,34 @@ template <typename Hook, typename... Args>
 }
 
 template <typename T>
-struct AwaitableResult;
+struct AsyncResultTerminal;
 
-template <typename T, typename Executor>
-struct AwaitableResult<boost::asio::awaitable<T, Executor>> {
-    using type = T;
+template <typename T, typename E>
+struct AsyncResultTerminal<support::AsyncResult<T, E>> {
+    using type = std::expected<T, E>;
 };
 
-/// Invoke one awaitable Agent policy hook with exception containment. The
-/// caller awaits the hook on its Agent executor; hook_name is the pi wire
-/// vocabulary reported in the failure diagnostic.
+/// Invoke one asynchronous Agent policy hook with exception containment. The
+/// consuming loop owns the private Asio bridge; Owner Interfaces expose only
+/// `AsyncResult` operations.
 template <typename Hook, typename... Args>
 [[nodiscard]] boost::asio::awaitable<
-    typename AwaitableResult<std::invoke_result_t<Hook&, Args...>>::type>
+    typename AsyncResultTerminal<std::invoke_result_t<Hook&, Args...>>::type>
 invoke_agent_hook(
     std::string_view hook_name,
     Hook& hook,
     Args&&... args) {
-    using Result = typename AwaitableResult<std::invoke_result_t<Hook&, Args...>>::type;
+    using Result = typename AsyncResultTerminal<std::invoke_result_t<Hook&, Args...>>::type;
     try {
-        co_return co_await hook(std::forward<Args>(args)...);
+        auto result = co_await ai::detail::await_async_result(
+            hook(std::forward<Args>(args)...));
+        if (!result && result.error().message == "async operation failed") {
+            co_return Result(std::unexpected(util::make_error(
+                util::ErrorCode::Tool,
+                std::string(hook_name) + " hook failed",
+                result.error().detail)));
+        }
+        co_return result;
     } catch (const std::exception& e) {
         co_return Result(std::unexpected(util::make_error(
             util::ErrorCode::Tool,

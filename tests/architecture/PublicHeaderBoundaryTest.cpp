@@ -17,12 +17,12 @@
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/harness/ExecutionEnv.hpp>
-#include <cch/harness/LocalExecutionEnv.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/harness/session/SessionEntry.hpp>
-#include <cch/harness/session/SessionStore.hpp>
-#include <cch/tools/ToolFactories.hpp>
+#include <cch/agent/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/agent/tools/ToolFactories.hpp>
 #include <cch/tui/CancellableLoader.hpp>
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Component.hpp>
@@ -103,6 +103,10 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<
                   decltype(std::declval<const agent::Agent&>().state()),
                   agent::AgentState>);
+    using PromptMethod = support::AsyncResult<void> (agent::Agent::*)(std::string);
+    static_assert(std::is_same_v<
+                  decltype(static_cast<PromptMethod>(&agent::Agent::prompt)),
+                  PromptMethod>);
     static_assert(std::is_aggregate_v<coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_copy_constructible_v<coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_aggregate_v<coding_agent::UserSettings>);

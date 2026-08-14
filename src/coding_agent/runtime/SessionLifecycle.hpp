@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../../include/cch/ai/Message.hpp"
-#include "../../../include/cch/harness/session/SessionStore.hpp"
-#include "../../../include/cch/harness/session/SessionResume.hpp"
-#include "../../../include/cch/util/Error.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/util/Error.hpp>
 
 #include <filesystem>
 #include <memory>

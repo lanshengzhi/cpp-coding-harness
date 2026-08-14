@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/harness/session/SessionEntry.hpp>
+#include <cch/agent/harness/session/SessionEntry.hpp>
 
 #include <cch/ai/Message.hpp>
 #include <cch/util/Error.hpp>

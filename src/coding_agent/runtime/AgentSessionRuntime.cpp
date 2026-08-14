@@ -4,8 +4,8 @@
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include "harness/WorkspaceFileSystem.hpp"
 
 #include "agent/AgentMessageAccess.hpp"
@@ -198,14 +198,13 @@ AgentSessionRuntime::AgentSessionRuntime(
     // pi's harness boundary (agent-loop.ts `streamAssistantResponse`). The
     // provider conversion layer repeats the drop defensively.
     options.convert_to_llm = [](
-                                  std::vector<ai::MessageVariant> messages)
-        -> boost::asio::awaitable<
-            util::Expected<std::vector<ai::MessageVariant>>> {
+                                 std::vector<ai::MessageVariant> messages) {
         std::erase_if(messages, [](const ai::MessageVariant& message) {
             const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
             return bash != nullptr && bash->exclude_from_context;
         });
-        co_return messages;
+        return support::AsyncResult<std::vector<ai::MessageVariant>>{
+            std::move(messages)};
     };
     // The System Prompt is built at session construction in pi's exact shape
     // (ADR 0036 G4; `core/agent-session.ts` `_rebuildSystemPrompt` +
@@ -856,11 +855,12 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
     };
 
     std::optional<util::ExpectedVoid> result;
-    result = co_await agent::detail::AgentPromptAccess::prompt(
-        *agent_,
-        std::move(prompt),
-        make_retry_observing_sink(),
-        stop_source);
+    result = co_await ai::detail::await_async_result(
+        agent::detail::AgentPromptAccess::prompt(
+            *agent_,
+            std::move(prompt),
+            make_retry_observing_sink(),
+            stop_source));
     if (!result) {
         co_return commitment.conclude(std::move(result));
     }
@@ -881,9 +881,9 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
         if (is_retryable_error(*last_assistant)) {
             if (co_await prepare_retry(
                     *last_assistant, stop_source.get_token())) {
-                result =
-                    co_await agent::detail::AgentPromptAccess::continue_run(
-                        *agent_, make_retry_observing_sink(), stop_source);
+                result = co_await ai::detail::await_async_result(
+                    agent::detail::AgentPromptAccess::continue_run(
+                        *agent_, make_retry_observing_sink(), stop_source));
                 if (!result) {
                     break;
                 }
@@ -918,8 +918,9 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
         if (outcome != AutoCompactionOutcome::OverflowRetry) {
             break;
         }
-        result = co_await agent::detail::AgentPromptAccess::continue_run(
-            *agent_, make_retry_observing_sink(), stop_source);
+        result = co_await ai::detail::await_async_result(
+            agent::detail::AgentPromptAccess::continue_run(
+                *agent_, make_retry_observing_sink(), stop_source));
         if (!result) {
             break;
         }

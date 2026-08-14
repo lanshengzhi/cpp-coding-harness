@@ -1,7 +1,7 @@
-#include "../../../include/cch/harness/session/SessionTree.hpp"
+#include <cch/agent/harness/session/SessionTree.hpp>
 
-#include "../../../include/cch/ai/Message.hpp"
-#include "../../../include/cch/util/Error.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/util/Error.hpp>
 #include "SessionLeaf.hpp"
 
 #include <algorithm>

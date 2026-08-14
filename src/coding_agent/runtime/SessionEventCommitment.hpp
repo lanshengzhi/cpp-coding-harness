@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../../include/cch/agent/AgentEvent.hpp"
-#include "../../../include/cch/harness/session/SessionStore.hpp"
-#include "../../../include/cch/util/Error.hpp"
+#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/util/Error.hpp>
 
 #include <optional>
 

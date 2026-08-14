@@ -2,7 +2,7 @@
 
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>

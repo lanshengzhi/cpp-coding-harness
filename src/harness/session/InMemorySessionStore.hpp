@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/harness/session/SessionStore.hpp"
+#include <cch/agent/harness/session/SessionStore.hpp>
 
 #include <optional>
 
@@ -10,7 +10,7 @@ namespace cch::harness::session {
 /// Live Session State remains owned exclusively by AgentSessionRuntime.
 class InMemorySessionStore final : public SessionStore {
 public:
-    [[nodiscard]] util::ExpectedVoid append(const ai::MessageVariant& message) override;
+    [[nodiscard]] support::ExpectedVoid append(const ai::MessageVariant& message) override;
     [[nodiscard]] std::optional<std::filesystem::path> path() const override;
 };
 

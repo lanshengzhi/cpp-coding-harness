@@ -20,7 +20,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"

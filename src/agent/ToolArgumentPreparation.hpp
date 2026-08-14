@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/Tool.hpp"
-#include "../../include/cch/util/Error.hpp"
-#include "../../include/cch/util/JsonValue.hpp"
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Tool.hpp>
+#include <cch/util/Error.hpp>
+#include <cch/util/JsonValue.hpp>
 #include "util/BoundedText.hpp"
 
 #include <cstddef>

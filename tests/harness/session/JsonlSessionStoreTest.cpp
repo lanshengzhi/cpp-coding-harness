@@ -1,5 +1,5 @@
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../../include/cch/harness/session/SessionResume.hpp"
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionResume.hpp>
 #include "util/Json.hpp"
 #include "../../support/TempWorkspace.hpp"
 

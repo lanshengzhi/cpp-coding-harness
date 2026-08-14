@@ -1,4 +1,5 @@
 #include <cch/agent/Agent.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include "agent/AgentLoop.hpp"
 #include "ai/SimpleOptions.hpp"
@@ -29,7 +30,7 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await subject.prompt(std::move(prompt));
+            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
             co_return;
         },
         boost::asio::detached);

@@ -2,7 +2,7 @@
 
 #include <cch/agent/Agent.hpp>
 
-#include <boost/asio/awaitable.hpp>
+#include <cch/support/AsyncResult.hpp>
 
 #include <stop_token>
 #include <string>
@@ -14,7 +14,7 @@ namespace cch::agent::detail {
 /// without widening the public Agent execution contract.
 class AgentPromptAccess {
 public:
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt(
+    [[nodiscard]] static support::AsyncResult<void> prompt(
         Agent& agent,
         ai::UserMessage user_message,
         AgentEventCommitter commitment,
@@ -28,7 +28,7 @@ public:
     /// Continue the loop without a new user message (pi `agent.continue()` /
     /// `runAgentLoopContinue`), used by the session assembly's overflow
     /// compact-and-retry-once after compaction rebuilt the live context.
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> continue_run(
+    [[nodiscard]] static support::AsyncResult<void> continue_run(
         Agent& agent,
         AgentEventCommitter commitment,
         std::stop_source stop_source) {

@@ -2,7 +2,7 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "ai/providers/FakeProvider.hpp"
 
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "support/TempWorkspace.hpp"
 

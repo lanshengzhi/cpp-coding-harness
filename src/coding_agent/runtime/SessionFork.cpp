@@ -8,8 +8,8 @@
 #include <fstream>
 #include <iterator>
 #include <cch/ai/Message.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <algorithm>
 #include <filesystem>

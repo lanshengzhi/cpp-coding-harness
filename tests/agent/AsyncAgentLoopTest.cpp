@@ -1,6 +1,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/util/Error.hpp>
 #include "agent/AgentLoop.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
@@ -1419,26 +1420,35 @@ TEST_CASE(
                                  &resumed_on_same_executor,
                                  &stop_requested_after_resume,
                                  &gate](std::vector<ai::MessageVariant> messages,
-                                        std::stop_token stop_token)
-        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
-        const auto executor = co_await boost::asio::this_coro::executor;
-        CHECK(*owned == 41);
-        ordering.push_back("transform-start");
-        gate.emplace(executor);
-        gate->expires_at(std::chrono::steady_clock::time_point::max());
-        boost::system::error_code error;
-        co_await gate->async_wait(boost::asio::redirect_error(
-            boost::asio::use_awaitable, error));
-        const auto resumed_executor = co_await boost::asio::this_coro::executor;
-        resumed_on_same_executor = resumed_executor == executor;
-        stop_requested_after_resume = stop_token.stop_requested();
-        ordering.push_back("transform-resume");
-        co_return messages;
+                                        std::stop_token stop_token) mutable {
+        return ai::detail::make_async_result(
+            [owned = std::move(owned),
+             &ordering,
+             &resumed_on_same_executor,
+             &stop_requested_after_resume,
+             &gate,
+             messages = std::move(messages),
+             stop_token]() mutable
+                -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                const auto executor = co_await boost::asio::this_coro::executor;
+                CHECK(*owned == 41);
+                ordering.push_back("transform-start");
+                gate.emplace(executor);
+                gate->expires_at(std::chrono::steady_clock::time_point::max());
+                boost::system::error_code error;
+                co_await gate->async_wait(boost::asio::redirect_error(
+                    boost::asio::use_awaitable, error));
+                const auto resumed_executor = co_await boost::asio::this_coro::executor;
+                resumed_on_same_executor = resumed_executor == executor;
+                stop_requested_after_resume = stop_token.stop_requested();
+                ordering.push_back("transform-resume");
+                co_return messages;
+            });
     };
-    options.convert_to_llm = [&ordering](std::vector<ai::MessageVariant> messages)
-        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+    options.convert_to_llm = [&ordering](std::vector<ai::MessageVariant> messages) {
         ordering.push_back("convert");
-        co_return messages;
+        return support::AsyncResult<std::vector<ai::MessageVariant>>{
+            std::move(messages)};
     };
 
     agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
@@ -1594,13 +1604,12 @@ TEST_CASE(
     std::stop_source stop_source;
     options.transform_context = [&stop_source](
                                     std::vector<ai::MessageVariant>,
-                                    std::stop_token)
-        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                                    std::stop_token) {
         (void)stop_source.request_stop();
-        throw std::runtime_error("transform policy cancelled");
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
-            "unreachable transform result"));
+        return support::AsyncResult<std::vector<ai::MessageVariant>>{
+            std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "transform policy cancelled"))};
     };
 
     agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
@@ -1624,12 +1633,12 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 1;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call = [&stop_source](agent::BeforeToolCallContext, std::stop_token)
-        -> boost::asio::awaitable<util::Expected<agent::BeforeToolCallResult>> {
+    options.before_tool_call = [&stop_source](agent::BeforeToolCallContext, std::stop_token) {
         (void)stop_source.request_stop();
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
-            "before-tool policy cancelled"));
+        return support::AsyncResult<agent::BeforeToolCallResult>{
+            std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "before-tool policy cancelled"))};
     };
 
     auto tool = make_fake_tool(ai::Tool{
@@ -1661,12 +1670,12 @@ TEST_CASE(
     std::stop_source stop_source;
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call = [&stop_source](agent::AfterToolCallContext, std::stop_token)
-        -> boost::asio::awaitable<util::Expected<agent::AfterToolCallResult>> {
+    options.after_tool_call = [&stop_source](agent::AfterToolCallContext, std::stop_token) {
         (void)stop_source.request_stop();
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
-            "after-tool policy cancelled"));
+        return support::AsyncResult<agent::AfterToolCallResult>{
+            std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "after-tool policy cancelled"))};
     };
 
     auto tool = make_fake_tool(ai::Tool{
@@ -1697,13 +1706,17 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.transform_context = [](std::vector<ai::MessageVariant> messages, std::stop_token)
-        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
-        auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor);
-        timer.expires_after(std::chrono::milliseconds{0});
-        co_await timer.async_wait(boost::asio::use_awaitable);
-        throw std::runtime_error("suspended transform boom");
-        co_return messages;
+    options.transform_context = [](std::vector<ai::MessageVariant> messages, std::stop_token) {
+        return ai::detail::make_async_result(
+            [messages = std::move(messages)]() mutable
+                -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                auto timer = boost::asio::steady_timer(
+                    co_await boost::asio::this_coro::executor);
+                timer.expires_after(std::chrono::milliseconds{0});
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                throw std::runtime_error("suspended transform boom");
+                co_return messages;
+            });
     };
 
     agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));

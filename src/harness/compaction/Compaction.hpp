@@ -4,8 +4,8 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/RequestOptions.hpp>
-#include <cch/harness/session/SessionEntry.hpp>
-#include <cch/harness/session/SessionTree.hpp>
+#include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
 

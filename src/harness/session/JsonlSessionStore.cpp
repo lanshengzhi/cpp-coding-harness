@@ -1,5 +1,5 @@
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../../include/cch/harness/session/SessionTree.hpp"
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include "EntrySerializer.hpp"
 #include "SessionLeaf.hpp"
 #include "SessionJournal.hpp"

@@ -31,7 +31,7 @@
 #include "support/FakeModelRuntime.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "ai/providers/FakeProvider.hpp"

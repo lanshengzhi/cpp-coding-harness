@@ -1,7 +1,7 @@
-#include "../../../include/cch/harness/session/SessionResume.hpp"
+#include <cch/agent/harness/session/SessionResume.hpp>
 
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../../include/cch/harness/session/SessionTree.hpp"
+#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -96,7 +96,7 @@ namespace {
 
 } // namespace
 
-util::Expected<SessionResumeResult> resume_session(const std::filesystem::path& path) {
+support::Expected<SessionResumeResult> resume_session(const std::filesystem::path& path) {
     auto loaded = JsonlSessionStore::load(path);
     if (!loaded) {
         return std::unexpected(loaded.error());
