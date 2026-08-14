@@ -3,6 +3,8 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Style.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -41,7 +43,7 @@ public:
     void clear();
     [[nodiscard]] bool has_content() const;
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

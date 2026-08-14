@@ -3,6 +3,8 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Style.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <functional>
@@ -23,7 +25,7 @@ class AnimationTimer {
 public:
     virtual ~AnimationTimer() = default;
 
-    [[nodiscard]] virtual util::ExpectedVoid start(
+    [[nodiscard]] virtual support::ExpectedVoid start(
         std::chrono::milliseconds interval,
         AnimationTickSink tick) = 0;
     virtual void stop() = 0;
@@ -60,7 +62,7 @@ public:
     void set_message(std::string message);
     void set_indicator(std::optional<LoaderIndicatorOptions> indicator = std::nullopt);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

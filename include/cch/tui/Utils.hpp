@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <string>
@@ -16,14 +16,14 @@ namespace cch::tui {
 
 /// Word-wrap `text` to at most `width` visible columns per line, preserving
 /// ANSI styling across physical line breaks (pi `wrapTextWithAnsi`).
-[[nodiscard]] util::Expected<std::vector<std::string>> wrap_text(
+[[nodiscard]] support::Expected<std::vector<std::string>> wrap_text(
     std::string_view text,
     std::size_t width);
 
 /// Truncate `text` to at most `max_width` visible columns, appending
 /// `ellipsis` when truncation occurs and optionally padding to exactly
 /// `max_width` (pi `truncateToWidth`).
-[[nodiscard]] util::Expected<std::string> truncate_text(
+[[nodiscard]] support::Expected<std::string> truncate_text(
     std::string_view text,
     std::size_t max_width,
     std::string_view ellipsis = "...",
@@ -32,7 +32,7 @@ namespace cch::tui {
 /// Extract the text occupying visible columns `[start_col, start_col + length)`
 /// of `line`, carrying ANSI styling into the result. With `strict`, a wide
 /// grapheme extending past the range end is excluded (pi `sliceByColumn`).
-[[nodiscard]] util::Expected<std::string> slice_by_column(
+[[nodiscard]] support::Expected<std::string> slice_by_column(
     std::string_view line,
     std::size_t start_col,
     std::size_t length,

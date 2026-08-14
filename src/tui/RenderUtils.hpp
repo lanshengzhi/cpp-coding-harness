@@ -5,6 +5,7 @@
 
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <exception>
 #include <format>
 #include <memory>

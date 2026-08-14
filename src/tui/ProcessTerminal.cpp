@@ -5,6 +5,7 @@
 #include "KeyboardProtocol.hpp"
 #include "util/UniqueFd.hpp"
 
+#include <cch/util/Error.hpp>
 #include <array>
 #include <cerrno>
 #include <charconv>

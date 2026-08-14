@@ -5,6 +5,7 @@
 #include <cch/tui/Utils.hpp>
 #include "coding_agent/tui/Theme.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <format>

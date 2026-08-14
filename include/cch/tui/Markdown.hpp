@@ -2,6 +2,8 @@
 
 #include <cch/tui/Component.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -66,7 +68,7 @@ public:
     void set_syntax_highlighter(SyntaxHighlightHook syntax_highlighter);
     void set_background_hook(BackgroundHook background_hook);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

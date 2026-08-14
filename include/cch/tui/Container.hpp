@@ -2,6 +2,8 @@
 
 #include <cch/tui/Component.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -21,13 +23,13 @@ public:
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
 
-    [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
+    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
     /// Remove all children (pi `Container.clear`); used by streaming
     /// components that rebuild their content on update.
     void clear();
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:
@@ -48,14 +50,14 @@ public:
     Box(const Box&) = delete;
     Box& operator=(const Box&) = delete;
 
-    [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
+    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
     void clear();
     /// Replace the background hook (pi `Box.setBgFn`); used by tool
     /// execution to transition pending/success/error backgrounds.
     void set_background_hook(BackgroundHook background_hook);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:
@@ -72,7 +74,7 @@ public:
 
     void set_lines(std::size_t lines);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

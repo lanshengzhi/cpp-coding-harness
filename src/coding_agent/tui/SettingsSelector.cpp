@@ -7,6 +7,7 @@
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Text.hpp>
 
+#include <cch/util/Error.hpp>
 #include <memory>
 #include <optional>
 #include <string>

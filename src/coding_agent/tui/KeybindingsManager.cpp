@@ -5,6 +5,7 @@
 
 #include <cch/tui/Text.hpp>
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <format>

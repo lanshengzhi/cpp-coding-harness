@@ -1,6 +1,7 @@
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include <cch/util/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>

@@ -145,6 +145,66 @@ TEST_CASE(
     }
 }
 
+TEST_CASE(
+    "TUI Owner Interfaces use one canonical support root and no terminal machinery",
+    "[architecture][tui][issue463]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto owner_root = source_root / "include" / "cch" / "tui";
+    const std::vector<std::filesystem::path> expected_interfaces{
+        owner_root / "Autocomplete.hpp",
+        owner_root / "CancellableLoader.hpp",
+        owner_root / "Component.hpp",
+        owner_root / "Container.hpp",
+        owner_root / "Editor.hpp",
+        owner_root / "Fuzzy.hpp",
+        owner_root / "Image.hpp",
+        owner_root / "Input.hpp",
+        owner_root / "Keybindings.hpp",
+        owner_root / "Keys.hpp",
+        owner_root / "Loader.hpp",
+        owner_root / "Markdown.hpp",
+        owner_root / "Overlay.hpp",
+        owner_root / "ProcessTerminal.hpp",
+        owner_root / "SelectList.hpp",
+        owner_root / "SettingsList.hpp",
+        owner_root / "Style.hpp",
+        owner_root / "Terminal.hpp",
+        owner_root / "TerminalImage.hpp",
+        owner_root / "Text.hpp",
+        owner_root / "TruncatedText.hpp",
+        owner_root / "Tui.hpp",
+        owner_root / "Utils.hpp",
+        owner_root / "VirtualTerminal.hpp",
+    };
+    for (const auto& interface : expected_interfaces) {
+        CHECK(std::filesystem::exists(interface));
+    }
+
+    // The TUI Toolkit has no alternate or forwarding header root: every Owner
+    // Interface lives only under the owner-local root and is self-contained
+    // (one canonical support root, no Boost, no relative include escapes).
+    const auto interfaces = files_under({"include/cch/tui"});
+    REQUIRE_FALSE(interfaces.empty());
+    for (const auto& interface : interfaces) {
+        const auto text = read_text(interface);
+        CHECK(text.find("#include <cch/util/") == std::string::npos);
+        CHECK(text.find("#include <boost/") == std::string::npos);
+        CHECK(text.find("boost::") == std::string::npos);
+        CHECK(text.find("#include \"../") == std::string::npos);
+        CHECK(text.find("#include \"../../") == std::string::npos);
+        // Criterion 3: public TUI headers expose passive project values and
+        // allowed standard-library facilities, never execution or
+        // terminal-library machinery (no termios, polling, signal, or POSIX
+        // terminal headers in the Owner Interface surface).
+        CHECK(text.find("#include <termios.h>") == std::string::npos);
+        CHECK(text.find("#include <poll.h>") == std::string::npos);
+        CHECK(text.find("#include <signal.h>") == std::string::npos);
+        CHECK(text.find("#include <sys/ioctl.h>") == std::string::npos);
+        CHECK(text.find("tcsetattr") == std::string::npos);
+        CHECK(text.find("termios") == std::string::npos);
+    }
+}
+
 TEST_CASE("public headers do not include private src paths", "[architecture][u1]") {
     const auto headers = public_headers();
     REQUIRE_FALSE(headers.empty());

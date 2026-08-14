@@ -2,6 +2,7 @@
 
 #include "tui/InputInternal.hpp"
 
+#include <cch/util/Error.hpp>
 #include <array>
 #include <string>
 

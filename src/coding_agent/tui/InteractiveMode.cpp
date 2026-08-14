@@ -64,6 +64,7 @@
 #include "harness/compaction/Compaction.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 
+#include <cch/util/Error.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>

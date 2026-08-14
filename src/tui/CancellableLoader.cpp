@@ -1,5 +1,6 @@
 #include <cch/tui/CancellableLoader.hpp>
 
+#include <cch/util/Error.hpp>
 #include <memory>
 #include <mutex>
 #include <optional>

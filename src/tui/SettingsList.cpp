@@ -7,6 +7,7 @@
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <exception>

@@ -14,6 +14,8 @@
 
 #include "coding_agent/tui/InteractiveMode.hpp"
 
+#include <cch/util/Error.hpp>
+
 #include <filesystem>
 #include <memory>
 #include <type_traits>

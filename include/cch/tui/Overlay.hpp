@@ -2,6 +2,8 @@
 
 #include <cch/tui/Component.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -114,7 +116,7 @@ public:
 
     /// Add a child component to the overlay. The overlay may hold
     /// multiple children stacked in z-order.
-    [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
+    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
 
     /// Update the overlay options.
@@ -130,11 +132,11 @@ public:
     void set_anchor(std::size_t column, std::size_t row, std::size_t width, std::size_t height);
 
     /// Focus the first focusable child.
-    [[nodiscard]] util::ExpectedVoid focus_first();
+    [[nodiscard]] support::ExpectedVoid focus_first();
 
     /// Render the overlay content (without position offset).
     /// The caller (Tui) uses layout information to position output.
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
     // InputHandler (forwards to focused child)

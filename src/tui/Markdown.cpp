@@ -5,6 +5,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <md4c.h>
 
 #include <algorithm>

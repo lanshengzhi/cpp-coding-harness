@@ -2,6 +2,8 @@
 
 #include <cch/tui/Component.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <string>
 #include <string_view>
 
@@ -25,7 +27,7 @@ public:
     void set_text(std::string text);
     [[nodiscard]] std::string_view text() const;
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

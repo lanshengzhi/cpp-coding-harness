@@ -2,6 +2,8 @@
 
 #include <cch/tui/Component.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -34,7 +36,7 @@ public:
     void set_padding_y(std::size_t padding_y);
     void set_background_hook(BackgroundHook background_hook);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

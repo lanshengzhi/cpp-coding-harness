@@ -7,6 +7,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>

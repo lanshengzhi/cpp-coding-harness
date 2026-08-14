@@ -5,6 +5,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <format>
 #include <string>
 #include <utility>

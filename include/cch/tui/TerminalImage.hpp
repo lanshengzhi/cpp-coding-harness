@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/tui/Terminal.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -114,12 +114,12 @@ struct CellSizeInputResult {
     InlineImageProtocol protocol,
     std::string_view mime_type);
 
-[[nodiscard]] util::Expected<std::string> encode_terminal_image(
+[[nodiscard]] support::Expected<std::string> encode_terminal_image(
     InlineImageProtocol protocol,
     const TerminalImage& image,
     TerminalImageHandle handle);
 
-[[nodiscard]] util::Expected<std::string> encode_terminal_image_removal(
+[[nodiscard]] support::Expected<std::string> encode_terminal_image_removal(
     InlineImageProtocol protocol,
     TerminalImageHandle handle);
 

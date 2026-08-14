@@ -6,6 +6,7 @@
 
 #include <cch/tui/Text.hpp>
 
+#include <cch/util/Error.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/this_coro.hpp>

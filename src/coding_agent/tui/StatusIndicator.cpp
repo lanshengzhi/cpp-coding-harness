@@ -1,6 +1,7 @@
 #include "coding_agent/tui/StatusIndicator.hpp"
 
 #include "coding_agent/tui/KeybindingHints.hpp"
+#include <cch/util/Error.hpp>
 
 #include <format>
 #include <string>

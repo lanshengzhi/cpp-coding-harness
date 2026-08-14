@@ -2,6 +2,7 @@
 
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/BoundedText.hpp"
+#include <cch/util/Error.hpp>
 
 #include <algorithm>
 #include <array>

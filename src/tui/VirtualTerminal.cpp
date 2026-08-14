@@ -3,6 +3,7 @@
 #include <cch/tui/TerminalImage.hpp>
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <exception>
 #include <format>

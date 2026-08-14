@@ -234,6 +234,80 @@ TEST_CASE(
     CHECK_FALSE(block_mentions(runtime_links, "cch_tools"));
 }
 
+TEST_CASE(
+    "TUI Toolkit has one authoritative target owning every TUI source exactly once",
+    "[architecture][cmake][issue463]") {
+    const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
+
+    const auto tui_target = target_decl_block(cmake, "cch_tui");
+    REQUIRE_FALSE(tui_target.empty());
+    CHECK(block_mentions(tui_target, "ROLE owner"));
+    CHECK(block_mentions(tui_target, "OWNER cch_tui"));
+
+    const std::vector<std::string> authoritative_sources{
+        "src/tui/Autocomplete.cpp",
+        "src/tui/CancellableLoader.cpp",
+        "src/tui/Container.cpp",
+        "src/tui/Editor.cpp",
+        "src/tui/Fuzzy.cpp",
+        "src/tui/Image.cpp",
+        "src/tui/Input.cpp",
+        "src/tui/InputDecoder.cpp",
+        "src/tui/Keybindings.cpp",
+        "src/tui/KeyboardProtocol.cpp",
+        "src/tui/Keys.cpp",
+        "src/tui/Loader.cpp",
+        "src/tui/Markdown.cpp",
+        "src/tui/Overlay.cpp",
+        "src/tui/ProcessTerminal.cpp",
+        "src/tui/SelectList.cpp",
+        "src/tui/SettingsList.cpp",
+        "src/tui/TerminalImage.cpp",
+        "src/tui/Text.cpp",
+        "src/tui/TruncatedText.cpp",
+        "src/tui/Tui.cpp",
+        "src/tui/UnicodeWidth.cpp",
+        "src/tui/Utils.cpp",
+        "src/tui/VirtualTerminal.cpp",
+    };
+    for (const auto& source : authoritative_sources) {
+        CHECK(block_mentions(tui_target, source));
+        CHECK(cch::tests::count_occurrences(cmake, source) == 1);
+    }
+
+    // The authoritative owner's only interface dependency is the pi-neutral
+    // support package; terminal, encoding, and execution dependencies stay
+    // private. No reverse or cross-Owner capability edge exists.
+    const auto tui_links = depends_section(cmake, "cch_tui");
+    CHECK(block_mentions(tui_links, "cch_support"));
+    CHECK(block_mentions(tui_links, "cch_util"));
+    CHECK(block_mentions(tui_links, "md4c::md4c"));
+    CHECK(block_mentions(tui_links, "utf8proc::utf8proc"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_ai"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_agent_core"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_harness"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent_core"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent_runtime"));
+
+    // TUI Owner Interfaces use one canonical support root: the support
+    // dependency is interface-visible while every other dependency is private.
+    const auto tui_block = target_decl_block(cmake, "cch_tui");
+    const auto interface_start = tui_block.find("INTERFACE_DEPENDS");
+    CHECK(interface_start != std::string::npos);
+    const auto interface_section = tui_block.substr(interface_start);
+    CHECK(interface_section.find("cch_support") != std::string::npos);
+    CHECK_FALSE(interface_section.find("cch_util") != std::string::npos);
+
+    // The coding-agent TUI configuration (theme/keybindings) is not a TUI
+    // Toolkit capability: it is repository-private composition over cch_tui.
+    const auto coding_agent_tui_links = depends_section(cmake, "cch_coding_agent_tui");
+    CHECK(block_mentions(coding_agent_tui_links, "cch_tui"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_ai"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_agent_core"));
+}
+
 TEST_CASE("CMake target links follow the package dependency direction", "[architecture][cmake][issue58]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 

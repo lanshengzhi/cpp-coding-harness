@@ -1,5 +1,7 @@
 #include "coding_agent/tui/ExternalEditor.hpp"
 
+#include <cch/util/Error.hpp>
+
 #include <array>
 #include <cerrno>
 #include <cstdlib>

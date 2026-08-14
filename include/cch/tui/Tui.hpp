@@ -4,6 +4,8 @@
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/Terminal.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -31,32 +33,32 @@ public:
     Tui(const Tui&) = delete;
     Tui& operator=(const Tui&) = delete;
 
-    [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
+    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
-    [[nodiscard]] util::ExpectedVoid start();
-    [[nodiscard]] util::ExpectedVoid stop();
-    [[nodiscard]] util::ExpectedVoid render();
+    [[nodiscard]] support::ExpectedVoid start();
+    [[nodiscard]] support::ExpectedVoid stop();
+    [[nodiscard]] support::ExpectedVoid render();
     /// Clear the physical screen and reset differential-render state so the
     /// next render repaints its complete current presentation.
-    [[nodiscard]] util::ExpectedVoid clear_screen();
-    [[nodiscard]] util::ExpectedVoid set_focus(Component* component);
+    [[nodiscard]] support::ExpectedVoid clear_screen();
+    [[nodiscard]] support::ExpectedVoid set_focus(Component* component);
     void set_render_request_sink(TuiRenderRequestSink sink);
     void invalidate();
 
     /// Add an overlay. Overlays are rendered on top of base children
     /// and support position strategies, stacking, and focus isolation.
-    [[nodiscard]] util::Expected<std::reference_wrapper<Overlay>> add_overlay(
+    [[nodiscard]] support::Expected<std::reference_wrapper<Overlay>> add_overlay(
         std::unique_ptr<Overlay> overlay);
 
     /// Remove (dispose) an overlay. Focus falls back to the next
     /// available overlay or base component.
-    [[nodiscard]] util::ExpectedVoid remove_overlay(Overlay* overlay);
+    [[nodiscard]] support::ExpectedVoid remove_overlay(Overlay* overlay);
 
     /// Hide an overlay. Focus falls back to the next available target.
-    [[nodiscard]] util::ExpectedVoid hide_overlay(Overlay* overlay);
+    [[nodiscard]] support::ExpectedVoid hide_overlay(Overlay* overlay);
 
     /// Restore (show) a previously hidden overlay.
-    [[nodiscard]] util::ExpectedVoid restore_overlay(Overlay* overlay);
+    [[nodiscard]] support::ExpectedVoid restore_overlay(Overlay* overlay);
 
 private:
     struct OverlayFocusEntry {
@@ -73,21 +75,21 @@ private:
 
     [[nodiscard]] bool owns(const Component* component) const;
     [[nodiscard]] bool owns_overlay(const Overlay* overlay) const;
-    [[nodiscard]] util::Expected<RenderResult> render_children(TerminalDimensions dimensions);
+    [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions);
     [[nodiscard]] RenderResult materialize_images(
         RenderResult output,
         const TerminalCapabilities& capabilities,
         std::size_t width,
         std::size_t available_rows) const;
-    [[nodiscard]] util::ExpectedVoid composite_overlays(
+    [[nodiscard]] support::ExpectedVoid composite_overlays(
         TerminalDimensions dimensions,
         const TerminalCapabilities& capabilities,
         RenderResult& output);
-    [[nodiscard]] util::ExpectedVoid remove_active_images();
-    [[nodiscard]] util::ExpectedVoid remove_images_intersecting(const CellRegion& region);
-    [[nodiscard]] util::ExpectedVoid remove_stale_images(
+    [[nodiscard]] support::ExpectedVoid remove_active_images();
+    [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
+    [[nodiscard]] support::ExpectedVoid remove_stale_images(
         const std::vector<InlineImageRenderRegion>& desired_images);
-    [[nodiscard]] util::ExpectedVoid place_images(
+    [[nodiscard]] support::ExpectedVoid place_images(
         const std::vector<InlineImageRenderRegion>& desired_images);
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);

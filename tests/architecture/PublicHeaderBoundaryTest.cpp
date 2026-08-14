@@ -162,10 +162,10 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<decltype(tui::visible_width("")), std::size_t>);
     static_assert(std::is_same_v<
                   decltype(tui::wrap_text("", 1)),
-                  util::Expected<std::vector<std::string>>>);
+                  support::Expected<std::vector<std::string>>>);
     static_assert(std::is_same_v<
                   decltype(tui::slice_by_column("", 0, 1)),
-                  util::Expected<std::string>>);
+                  support::Expected<std::string>>);
     static_assert(std::is_same_v<decltype(tui::strip_terminal_sequences("")), std::string>);
     static_assert(std::is_aggregate_v<tui::KeybindingDefinition>);
     static_assert(std::is_aggregate_v<tui::KeybindingOverride>);
@@ -238,6 +238,18 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<tui::VirtualTerminalCell>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalImage>);
     static_assert(std::is_final_v<tui::VirtualTerminal>);
+    // ADR 0039 / issue #463: TUI Owner Interfaces carry passive project
+    // values from the pi-neutral support package (never the temporary util
+    // alias or execution/terminal machinery).
+    using RenderMethod = support::Expected<tui::RenderResult> (tui::Component::*)(std::size_t);
+    static_assert(std::is_same_v<
+                  decltype(static_cast<RenderMethod>(&tui::Component::render)),
+                  RenderMethod>);
+    using TerminalStartMethod = support::ExpectedVoid (
+        tui::Terminal::*)(tui::TerminalInputSink, tui::TerminalResizeSink);
+    static_assert(std::is_same_v<
+                  decltype(static_cast<TerminalStartMethod>(&tui::Terminal::start)),
+                  TerminalStartMethod>);
     // ADR 0006: the local environment uniquely owns its synchronous state, so
     // environment copies cannot alias live state.
     static_assert(!std::is_copy_constructible_v<harness::AsyncLocalExecutionEnv>);

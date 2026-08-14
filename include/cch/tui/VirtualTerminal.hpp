@@ -2,6 +2,8 @@
 
 #include <cch/tui/Terminal.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -67,30 +69,30 @@ public:
     VirtualTerminal(const VirtualTerminal&) = delete;
     VirtualTerminal& operator=(const VirtualTerminal&) = delete;
 
-    [[nodiscard]] util::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) override;
-    [[nodiscard]] util::ExpectedVoid stop() override;
+    [[nodiscard]] support::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) override;
+    [[nodiscard]] support::ExpectedVoid stop() override;
     [[nodiscard]] TerminalDimensions dimensions() const override;
     [[nodiscard]] TerminalCapabilities capabilities() const override;
     [[nodiscard]] TerminalModeState modes() const override;
-    [[nodiscard]] util::ExpectedVoid clear_screen() override;
-    [[nodiscard]] util::ExpectedVoid write(std::string_view output) override;
-    [[nodiscard]] util::ExpectedVoid set_cursor(CursorPosition position) override;
-    [[nodiscard]] util::ExpectedVoid set_cursor_visible(bool visible) override;
-    [[nodiscard]] util::Expected<TerminalImageHandle> place_image(const TerminalImage& image) override;
-    [[nodiscard]] util::ExpectedVoid remove_image(
+    [[nodiscard]] support::ExpectedVoid clear_screen() override;
+    [[nodiscard]] support::ExpectedVoid write(std::string_view output) override;
+    [[nodiscard]] support::ExpectedVoid set_cursor(CursorPosition position) override;
+    [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool visible) override;
+    [[nodiscard]] support::Expected<TerminalImageHandle> place_image(const TerminalImage& image) override;
+    [[nodiscard]] support::ExpectedVoid remove_image(
         TerminalImageHandle handle,
         const CellRegion& region) override;
-    [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override;
-    [[nodiscard]] util::ExpectedVoid end_synchronized_update() override;
-    [[nodiscard]] util::ExpectedVoid set_title(std::string_view title) override;
-    [[nodiscard]] util::ExpectedVoid set_progress(bool active) override;
-    [[nodiscard]] util::ExpectedVoid drain_input(
+    [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override;
+    [[nodiscard]] support::ExpectedVoid end_synchronized_update() override;
+    [[nodiscard]] support::ExpectedVoid set_title(std::string_view title) override;
+    [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
+    [[nodiscard]] support::ExpectedVoid drain_input(
         std::chrono::milliseconds max_ms = kDrainInputMaxMs,
         std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
 
-    [[nodiscard]] util::ExpectedVoid inject_input(std::string input);
-    [[nodiscard]] util::ExpectedVoid flush_input();
-    [[nodiscard]] util::ExpectedVoid inject_resize(TerminalDimensions dimensions);
+    [[nodiscard]] support::ExpectedVoid inject_input(std::string input);
+    [[nodiscard]] support::ExpectedVoid flush_input();
+    [[nodiscard]] support::ExpectedVoid inject_resize(TerminalDimensions dimensions);
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;
     /// The full written buffer as the terminal models it under the

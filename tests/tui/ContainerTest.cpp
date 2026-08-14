@@ -1,6 +1,7 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Text.hpp>
 
+#include <cch/util/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>

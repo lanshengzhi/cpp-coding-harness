@@ -1,5 +1,6 @@
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <utf8proc.h>
 
 #include <algorithm>

@@ -130,9 +130,12 @@ cch_parity_declare_target(
         src/tui/Utils.cpp
         src/tui/VirtualTerminal.cpp
     DEPENDS
+        cch_support
         cch_util
         md4c::md4c@md4c
         utf8proc::utf8proc@utf8proc
+    INTERFACE_DEPENDS
+        cch_support
 )
 cch_target_defaults(cch_tui)
 

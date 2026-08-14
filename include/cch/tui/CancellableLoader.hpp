@@ -3,6 +3,8 @@
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Loader.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <functional>
 #include <memory>
 #include <stop_token>
@@ -45,7 +47,7 @@ public:
     void set_message(std::string message);
     void set_indicator(std::optional<LoaderIndicatorOptions> indicator = std::nullopt);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     void handle_input(const InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override;

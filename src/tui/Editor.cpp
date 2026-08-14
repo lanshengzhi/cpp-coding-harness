@@ -6,6 +6,7 @@
 #include "tui/UnicodeWidth.hpp"
 #include "tui/WordNavigation.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <chrono>

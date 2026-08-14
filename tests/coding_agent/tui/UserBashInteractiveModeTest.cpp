@@ -18,6 +18,7 @@
 #include "support/TextHelpers.hpp"
 #include "util/Redactor.hpp"
 
+#include <cch/util/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>

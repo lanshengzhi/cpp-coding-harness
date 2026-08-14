@@ -10,6 +10,7 @@
 
 #include <cch/tui/Keybindings.hpp>
 
+#include <cch/util/Error.hpp>
 #include <chrono>
 #include <iterator>
 #include <filesystem>

@@ -3,6 +3,8 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -50,7 +52,7 @@ public:
     /// Replace the value, clamping the cursor to the new length (pi `setValue`).
     void set_value(std::string value);
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     void handle_input(const InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override;

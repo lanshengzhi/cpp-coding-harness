@@ -3,6 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -24,7 +25,7 @@ struct AgentSessionSnapshot {
     /// Bounded, redacted diagnostics for session-event observer failures
     /// (ADR 0017), mirroring `agent_state.diagnostics` for the session
     /// assembly's own weak-observer registry.
-    std::vector<util::Error> session_event_diagnostics{};
+    std::vector<support::Error> session_event_diagnostics{};
 };
 
 } // namespace cch::coding_agent

@@ -5,6 +5,7 @@
 #include "util/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
 
+#include <cch/util/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #if defined(__linux__) || defined(__APPLE__)

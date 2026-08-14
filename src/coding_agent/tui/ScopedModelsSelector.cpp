@@ -10,6 +10,7 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <exception>
 #include <iterator>

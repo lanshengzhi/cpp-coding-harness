@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/tui/Keys.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <memory>
 #include <optional>
@@ -81,7 +81,7 @@ struct KeybindingResolution {
 /// Resolve one immutable registry. User entries replace only their action's
 /// defaults. When multiple user actions claim one key, callers resolve it by
 /// candidate order and the returned issues report the conflict.
-[[nodiscard]] util::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request);
+[[nodiscard]] support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request);
 
 /// Reusable actions implemented by cch_tui, pinned to pi baseline 83114817.
 [[nodiscard]] std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions();

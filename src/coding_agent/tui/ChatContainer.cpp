@@ -12,6 +12,7 @@
 #include "coding_agent/tui/UserMessageComponent.hpp"
 #include "util/Json.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <deque>

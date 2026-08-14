@@ -6,6 +6,7 @@
 
 #include <cch/tui/Utils.hpp>
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cctype>

@@ -19,6 +19,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include <cch/util/Error.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 

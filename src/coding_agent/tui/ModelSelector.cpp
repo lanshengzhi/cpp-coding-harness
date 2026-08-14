@@ -9,6 +9,7 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 
+#include <cch/util/Error.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>

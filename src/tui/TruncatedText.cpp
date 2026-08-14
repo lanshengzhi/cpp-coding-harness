@@ -4,6 +4,7 @@
 
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/util/Error.hpp>
 #include <format>
 #include <string>
 #include <string_view>

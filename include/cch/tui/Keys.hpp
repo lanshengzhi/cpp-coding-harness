@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <string>
@@ -39,7 +39,7 @@ struct PasteEvent {
 using InputEventVariant = std::variant<KeyEvent, PasteEvent>;
 
 /// Parse a pi baseline key identifier. Aliases normalize to their canonical key name.
-[[nodiscard]] util::Expected<KeyEvent> parse_key_id(std::string_view identifier);
+[[nodiscard]] support::Expected<KeyEvent> parse_key_id(std::string_view identifier);
 [[nodiscard]] std::string key_id(const KeyEvent& event);
 [[nodiscard]] bool matches_key(const KeyEvent& event, std::string_view identifier);
 

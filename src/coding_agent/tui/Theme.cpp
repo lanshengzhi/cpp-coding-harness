@@ -4,6 +4,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "util/Json.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>

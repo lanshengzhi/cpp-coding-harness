@@ -6,6 +6,7 @@
 #include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/TruncatedText.hpp>
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <utility>

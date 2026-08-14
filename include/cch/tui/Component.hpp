@@ -2,7 +2,7 @@
 
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/Terminal.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -42,7 +42,7 @@ class Component {
 public:
     virtual ~Component() = default;
 
-    [[nodiscard]] virtual util::Expected<RenderResult> render(std::size_t width) = 0;
+    [[nodiscard]] virtual support::Expected<RenderResult> render(std::size_t width) = 0;
     virtual void invalidate() = 0;
 };
 

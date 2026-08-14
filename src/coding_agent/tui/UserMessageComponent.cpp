@@ -4,6 +4,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
+#include <cch/util/Error.hpp>
 #include <cstddef>
 #include <format>
 #include <string>

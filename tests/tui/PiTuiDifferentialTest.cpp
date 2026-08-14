@@ -26,6 +26,7 @@
 #include "tui/InteractionUtils.hpp"
 #include "util/Json.hpp"
 
+#include <cch/util/Error.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 

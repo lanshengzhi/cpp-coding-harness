@@ -4,6 +4,8 @@
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Style.hpp>
 
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -82,7 +84,7 @@ public:
     [[nodiscard]] std::string search_query() const;
     [[nodiscard]] bool submenu_open() const;
 
-    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     void handle_input(const InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override;

@@ -1,5 +1,6 @@
 #include <cch/tui/TerminalImage.hpp>
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <array>
 #include <cerrno>

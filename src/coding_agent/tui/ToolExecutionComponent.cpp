@@ -9,6 +9,7 @@
 #include "util/Json.hpp"
 #include "util/JsonGlaze.hpp"
 
+#include <cch/util/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <format>

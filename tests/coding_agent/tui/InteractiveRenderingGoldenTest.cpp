@@ -38,6 +38,7 @@
 #include "ai/providers/FakeProvider.hpp"
 #include "util/ExpectedMacros.hpp"
 
+#include <cch/util/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
