@@ -10,6 +10,8 @@
 #include "coding_agent/SessionCwd.hpp"
 #include "harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/ClipboardWrite.hpp"
+#include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -22,6 +24,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <csignal>
 #include <exception>
 #include <filesystem>
 #include <future>
@@ -29,6 +32,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -166,38 +170,89 @@ void print_session_diagnostics(
     facts.model = config.model;
     facts.models = config.models;
     facts.api_key = config.api_key;
-    coding_agent::tui::SessionFactorySink session_factory =
-        [facts, models, runtime_root](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
-            request.provide_user_shell = true;
-            request.execution_runtime_target = runtime_root->make_target();
-            request.project_trust_override = facts.project_trust_override;
-            request.no_skills = facts.no_skills;
-            request.no_prompt_templates = facts.no_prompt_templates;
-            request.prompt_template_paths = facts.prompt_template_paths;
-            request.skill_paths = facts.skill_paths;
-            request.no_themes = facts.no_themes;
-            request.theme_paths = facts.theme_paths;
-            request.no_context_files = facts.no_context_files;
-            request.system_prompt = facts.system_prompt;
-            request.append_system_prompt = facts.append_system_prompt;
-            request.provider = facts.provider;
-            request.model = facts.model;
-            request.models = facts.models;
-            request.api_key = facts.api_key;
-            return models
-                ? coding_agent::create_agent_session_for_testing(
-                      std::move(request), models)
-                : coding_agent::create_agent_session(std::move(request));
-        };
     const bool is_resume_target =
         std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
             request.session_target);
-    // The boot reports session-creation failures through the sink (pi
+    // The boot reports session-creation failures through the action seam (pi
     // print_creation_failure); the host must not double-print "Native TUI
     // failed" for those. The flag is written on the io thread before the
     // future completes and read after io.run(), so the future synchronizes.
     bool creation_failure_reported = false;
+    coding_agent::tui::TuiActionSink action_sink =
+        [facts, models, runtime_root, &streams, &creation_failure_reported,
+         is_resume_target](std::size_t /* action_generation */,
+                          coding_agent::tui::TuiActionVariant action)
+        -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
+            // One move-only sink carries every application-level Native TUI
+            // operation to the composition host (ADR 0040); dispatch on the
+            // closed action value.
+            return std::visit(
+                [&](auto&& payload)
+                    -> util::Expected<
+                        coding_agent::tui::TuiActionResultVariant> {
+                    using T = std::decay_t<decltype(payload)>;
+                    if constexpr (std::is_same_v<T, coding_agent::tui::OpenBrowserAction>) {
+                        coding_agent::tui::open_browser(std::move(payload.url));
+                        return coding_agent::tui::TuiActionResultVariant{
+                            std::monostate{}};
+                    } else if constexpr (std::is_same_v<T, coding_agent::tui::WriteClipboardAction>) {
+                        return coding_agent::tui::TuiActionResultVariant{
+                            coding_agent::tui::write_clipboard_text(payload.text)};
+                    } else if constexpr (std::is_same_v<T, coding_agent::tui::SuspendProcessAction>) {
+#if !defined(_WIN32)
+                        // pi `process.kill(0, "SIGTSTP")`: the host owns the
+                        // process-group suspend.
+                        (void)::kill(0, SIGTSTP);
+#endif
+                        return coding_agent::tui::TuiActionResultVariant{
+                            std::monostate{}};
+                    } else if constexpr (std::is_same_v<T, coding_agent::tui::ReplaceSessionAction>) {
+                        auto request = std::move(payload.request);
+                        request.provide_user_shell = true;
+                        request.execution_runtime_target = runtime_root->make_target();
+                        request.project_trust_override = facts.project_trust_override;
+                        request.no_skills = facts.no_skills;
+                        request.no_prompt_templates = facts.no_prompt_templates;
+                        request.prompt_template_paths = facts.prompt_template_paths;
+                        request.skill_paths = facts.skill_paths;
+                        request.no_themes = facts.no_themes;
+                        request.theme_paths = facts.theme_paths;
+                        request.no_context_files = facts.no_context_files;
+                        request.system_prompt = facts.system_prompt;
+                        request.append_system_prompt = facts.append_system_prompt;
+                        request.provider = facts.provider;
+                        request.model = facts.model;
+                        request.models = facts.models;
+                        request.api_key = facts.api_key;
+                        auto created = models
+                            ? coding_agent::create_agent_session_for_testing(
+                                  std::move(request), models)
+                            : coding_agent::create_agent_session(
+                                  std::move(request));
+                        return coding_agent::tui::TuiActionResultVariant{
+                            std::move(created)};
+                    } else if constexpr (std::is_same_v<T, coding_agent::tui::ReportBootDiagnosticsAction>) {
+                        print_session_diagnostics(streams.error, payload.diagnostics);
+                        return coding_agent::tui::TuiActionResultVariant{
+                            std::monostate{}};
+                    } else if constexpr (std::is_same_v<T, coding_agent::tui::ReportBootCreationFailureAction>) {
+                        // pi `print_creation_failure`; the host must not
+                        // double-print "Native TUI failed" for those. The
+                        // flag is written on the io thread before the future
+                        // completes and read after io.run(), so the future
+                        // synchronizes.
+                        print_creation_error(
+                            is_resume_target, streams.error, payload.error);
+                        creation_failure_reported = true;
+                        return coding_agent::tui::TuiActionResultVariant{
+                            std::monostate{}};
+                    } else {
+                        return coding_agent::tui::TuiActionResultVariant{
+                            std::monostate{}};
+                    }
+                },
+                std::move(action));
+        };
     auto future = boost::asio::co_spawn(
         *io,
         coding_agent::tui::run_interactive_mode_boot(
@@ -211,18 +266,9 @@ void print_session_diagnostics(
                     .expand_prompt_templates = true,
                     .images = std::move(initial.initial_images),
                 },
-                .session_factory = std::move(session_factory),
+                .action_sink = std::move(action_sink),
                 .session_facts = std::move(facts),
                 .boot_request = std::move(request),
-                .boot_diagnostics_sink =
-                    [&streams](const std::vector<coding_agent::SessionDiagnostic>& diagnostics) {
-                        print_session_diagnostics(streams.error, diagnostics);
-                    },
-                .boot_creation_failure_sink =
-                    [&streams, is_resume_target, &creation_failure_reported](const util::Error& error) {
-                        print_creation_error(is_resume_target, streams.error, error);
-                        creation_failure_reported = true;
-                    },
             }),
         boost::asio::use_future);
     while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {

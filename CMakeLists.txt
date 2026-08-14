@@ -746,6 +746,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/TreeSelectorComponentTest.cpp
         tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/TuiActionSeamTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
 )
     target_include_directories(cch_tests_coding_agent_interactive PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

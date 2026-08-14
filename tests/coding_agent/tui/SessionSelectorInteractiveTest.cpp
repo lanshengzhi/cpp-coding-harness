@@ -8,6 +8,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -139,7 +140,8 @@ void drain_ready(boost::asio::io_context& io) {
     auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created.has_value());
 
-    coding_agent::tui::SessionFactorySink session_factory =
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    recorder.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> util::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
@@ -154,7 +156,7 @@ void drain_ready(boost::asio::io_context& io) {
             running.terminal,
             {
                 .agent_config_directory = fixture.agent_dir.path(),
-                .session_factory = std::move(session_factory),
+                .action_sink = recorder.make_sink(),
             }),
         [&](std::exception_ptr exception, util::ExpectedVoid result) {
             CHECK(exception == nullptr);

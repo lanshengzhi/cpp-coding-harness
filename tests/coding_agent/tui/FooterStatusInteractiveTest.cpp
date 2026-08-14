@@ -592,8 +592,17 @@ TEST_CASE(
     coding_agent::tui::InteractiveModeConfig config;
     config.agent_config_directory = fixture.config.path();
     // The test never sends a real SIGTSTP to its own process group; the
-    // recorder stands in for pi's `process.kill(0, "SIGTSTP")`.
-    config.suspend_process_sink = [&suspend_calls] { ++suspend_calls; };
+    // closed action sink records pi's `process.kill(0, "SIGTSTP")` instead.
+    config.action_sink =
+        [&suspend_calls](std::size_t /* action_generation */,
+                        coding_agent::tui::TuiActionVariant action)
+        -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
+            if (std::holds_alternative<coding_agent::tui::SuspendProcessAction>(
+                    action)) {
+                ++suspend_calls;
+            }
+            return coding_agent::tui::TuiActionResultVariant{std::monostate{}};
+        };
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(

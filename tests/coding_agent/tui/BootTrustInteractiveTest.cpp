@@ -5,6 +5,7 @@
 // `--approve`/`--no-approve` one-run overrides.
 
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
@@ -83,12 +84,13 @@ struct BootTrustRun {
     /// each in-session replacement), so tests can assert the decided trust
     /// override.
     std::vector<std::optional<bool>> request_overrides;
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
 
     void start(
         const TrustIsolatedWorkspace& fixture,
         coding_agent::runtime::AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models) {
-        coding_agent::tui::SessionFactorySink factory =
+        recorder.replace_session =
             [this, models](coding_agent::runtime::AgentSessionCreationRequest req)
             -> util::Expected<coding_agent::CreateAgentSessionResult> {
                 request_overrides.push_back(req.project_trust_override);
@@ -102,7 +104,7 @@ struct BootTrustRun {
                 terminal,
                 coding_agent::tui::InteractiveModeConfig{
                     .agent_config_directory = fixture.agent_dir,
-                    .session_factory = std::move(factory),
+                    .action_sink = recorder.make_sink(),
                     .boot_request = std::move(request),
                 }),
             [this](std::exception_ptr exception, util::ExpectedVoid result) {
@@ -397,8 +399,8 @@ TEST_CASE(
     tui::VirtualTerminal terminal{{.columns = 120, .rows = 30}};
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
-    std::string failure_text;
-    coding_agent::tui::SessionFactorySink factory =
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    recorder.replace_session =
         [models = ai::providers::make_scripted_fake_models()](
             coding_agent::runtime::AgentSessionCreationRequest req)
         -> util::Expected<coding_agent::CreateAgentSessionResult> {
@@ -412,12 +414,8 @@ TEST_CASE(
             terminal,
             coding_agent::tui::InteractiveModeConfig{
                 .agent_config_directory = fixture.agent_dir,
-                .session_factory = std::move(factory),
+                .action_sink = recorder.make_sink(),
                 .boot_request = std::move(request),
-                .boot_creation_failure_sink =
-                    [&failure_text](const util::Error& error) {
-                        failure_text = "could not create session: " + error.message;
-                    },
             }),
         [&](std::exception_ptr exception, util::ExpectedVoid result) {
             CHECK(exception == nullptr);
@@ -425,8 +423,9 @@ TEST_CASE(
         });
     drain_ready(io);
 
-    // The creation failure was reported through the sink.
-    CHECK(failure_text.find("could not create session:") != std::string::npos);
+    // The creation failure was reported through the closed action seam.
+    REQUIRE(recorder.boot_creation_failure.size() == 1);
+    CHECK_FALSE(recorder.boot_creation_failure[0].error.message.empty());
     REQUIRE(run_result);
     CHECK_FALSE(*run_result);
 }

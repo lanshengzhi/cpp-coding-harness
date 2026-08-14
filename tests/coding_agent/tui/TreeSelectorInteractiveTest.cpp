@@ -11,6 +11,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -122,17 +123,14 @@ void drain_ready(boost::asio::io_context& io) {
     return text;
 }
 
-/// The recorded clipboard writes (the injected fake writer).
-struct ClipboardRecorder {
-    std::vector<std::string> writes;
-};
-
 /// Boot the interactive mode against the fixture session with the real
-/// session-factory replacement surface (pi `createRuntime`).
+/// session-replacement surface (pi `createRuntime`). The recorder shares its
+/// state with the closed action sink, so it stays valid while the run lives.
 [[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(
     Fixture& fixture,
     Running& running,
-    std::shared_ptr<ClipboardRecorder> recorder = nullptr) {
+    std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder> actions =
+        std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>()) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.no_skills = true;
     request.no_prompt_templates = true;
@@ -142,7 +140,7 @@ struct ClipboardRecorder {
     auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created.has_value());
 
-    coding_agent::tui::SessionFactorySink session_factory =
+    actions->replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> util::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
@@ -152,15 +150,8 @@ struct ClipboardRecorder {
 
     coding_agent::tui::InteractiveModeConfig config{
         .agent_config_directory = fixture.agent_dir.path(),
-        .session_factory = std::move(session_factory),
+        .action_sink = actions->make_sink(),
     };
-    if (recorder) {
-        config.clipboard_write_sink =
-            [recorder](std::string text) {
-                recorder->writes.push_back(std::move(text));
-                return true;
-            };
-    }
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(
@@ -317,7 +308,8 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created.has_value());
 
-    coding_agent::tui::SessionFactorySink session_factory =
+    coding_agent::tui::testing::ActionSinkRecorder actions;
+    actions.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> util::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
@@ -331,7 +323,7 @@ TEST_CASE(
             running.terminal,
             {
                 .agent_config_directory = fixture.agent_dir.path(),
-                .session_factory = std::move(session_factory),
+                .action_sink = actions.make_sink(),
             }),
         [&](std::exception_ptr exception, util::ExpectedVoid result) {
             CHECK(exception == nullptr);
@@ -415,8 +407,8 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1"});
     Running running;
-    auto recorder = std::make_shared<ClipboardRecorder>();
-    auto session = boot(fixture, running, recorder);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     double_escape(running);
     // Copy the selected entry (the last user message: the leaf — the
@@ -425,8 +417,8 @@ TEST_CASE(
     drain_ready(running.io);
     auto screen = visible_screen(running.terminal);
     CHECK(screen.find("Copied selected message to clipboard") != std::string::npos);
-    REQUIRE(recorder->writes.size() == 1);
-    CHECK(recorder->writes[0] == "user-1");
+    REQUIRE(actions->write_clipboard.size() == 1);
+    CHECK(actions->write_clipboard[0].text == "user-1");
 
     // Escape, reopen, and copy an entry with no copyable text (the current
     // leaf is the assistant message; a settings entry hides behind the all

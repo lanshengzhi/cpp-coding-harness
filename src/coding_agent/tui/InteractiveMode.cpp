@@ -94,6 +94,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -1813,27 +1814,10 @@ public:
     [[nodiscard]] util::ExpectedVoid start(InteractiveModeConfig config) {
         clipboard_reader_ = std::move(config.clipboard_reader);
         model_fallback_message_ = std::move(config.model_fallback_message);
-        session_factory_ = std::move(config.session_factory);
+        action_sink_ = std::move(config.action_sink);
         session_facts_ = std::move(config.session_facts);
         boot_request_ = std::move(config.boot_request);
-        boot_diagnostics_sink_ = std::move(config.boot_diagnostics_sink);
-        boot_creation_failure_sink_ = std::move(config.boot_creation_failure_sink);
         const bool booting = boot_request_.has_value();
-        if (config.open_browser_sink) {
-            open_browser_sink_ = std::move(config.open_browser_sink);
-        } else {
-            open_browser_sink_ = [](std::string url) { open_browser(std::move(url)); };
-        }
-        if (config.clipboard_write_sink) {
-            clipboard_write_sink_ = std::move(config.clipboard_write_sink);
-        } else {
-            clipboard_write_sink_ = [](std::string text) {
-                return write_clipboard_text(text);
-            };
-        }
-        if (config.suspend_process_sink) {
-            suspend_process_sink_ = std::move(config.suspend_process_sink);
-        }
         if (!booting) {
             update_model_completion();
         }
@@ -1896,7 +1880,7 @@ public:
     /// the deferred boot of the interactive host. Resolves boot trust
     /// (prompt overlay when a trust-requiring resource exists and no
     /// override is set), creates the boot session through the config's
-    /// `boot_request`/`session_factory` with the decided trust, then binds
+    /// `boot_request`/`action_sink` with the decided trust, then binds
     /// it (subscribe, initialize view, render, initial prompt).
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> boot_session() {
         // pi main.ts `autoTrustOnReloadCwd`: no `--approve`-style override
@@ -1926,11 +1910,14 @@ public:
         //    resolves deterministically (pi `projectTrustByCwd` cache).
         auto request = std::move(*boot_request_);
         request.project_trust_override = decision;
-        auto created = session_factory_(std::move(request));
+        auto created = request_session_replacement(action_generation_, std::move(request));
         if (!created) {
-            if (boot_creation_failure_sink_) {
-                boot_creation_failure_sink_(created.error());
-            }
+            const util::Error failure = created.error();
+            // pi `print_creation_failure`: the host reports the failure
+            // through the closed action seam before the boot exits.
+            (void)deliver_action(
+                action_generation_,
+                TuiActionVariant{ReportBootCreationFailureAction{failure}});
             // Stop the TUI so the terminal is restored before the host
             // reports the error; the session never bound.
             running_ = false;
@@ -1938,10 +1925,14 @@ public:
                 (void)tui_.stop();
                 tui_started_ = false;
             }
-            co_return std::unexpected(created.error());
+            co_return std::unexpected(failure);
         }
-        if (boot_diagnostics_sink_) {
-            boot_diagnostics_sink_(created->diagnostics);
+        // pi `reportDiagnostics`: the host prints the creation diagnostics.
+        if (!created->diagnostics.empty()) {
+            (void)deliver_action(
+                action_generation_,
+                TuiActionVariant{ReportBootDiagnosticsAction{
+                    std::move(created->diagnostics)}});
         }
         model_fallback_message_ = std::move(created->model_fallback_message);
         // pi interactive-mode ctor `setRegisteredThemes(...)` + init
@@ -2022,8 +2013,11 @@ public:
         // Surface the boot resolution's diagnostics (e.g. an unreadable
         // trust store) like pi's `reportDiagnostics`; SessionFactory skips
         // re-resolution because the boot passes the decided override.
-        if (boot_diagnostics_sink_ && !resolved.diagnostics.empty()) {
-            boot_diagnostics_sink_(convert_trust_diagnostics(resolved.diagnostics));
+        if (!resolved.diagnostics.empty()) {
+            (void)deliver_action(
+                action_generation_,
+                TuiActionVariant{ReportBootDiagnosticsAction{
+                    convert_trust_diagnostics(std::move(resolved.diagnostics))}});
         }
         if (resolved.source != ProjectTrustSource::DefaultAskNoUi) {
             co_return resolved.decision == ProjectTrustDecision::Trusted;
@@ -2099,6 +2093,9 @@ public:
 
     [[nodiscard]] util::ExpectedVoid finish() {
         running_ = false;
+        // Retire the action generation so late deliveries from captured
+        // hooks are rejected after Close (ADR 0040).
+        retire_action_generation();
         subscription_.reset();
         if (session_ != nullptr) {
             session_->close();
@@ -3289,13 +3286,11 @@ private:
         (*arm)();
         suspend_signals_ = std::move(signals);
 
-        if (suspend_process_sink_) {
-            suspend_process_sink_();
-        } else {
-            // Send SIGTSTP to the whole process group (pid 0), exactly like
-            // pi's `process.kill(0, "SIGTSTP")`.
-            (void)::kill(0, SIGTSTP);
-        }
+        // pi `process.kill(0, "SIGTSTP")` through the closed action seam; a
+        // null host sends SIGTSTP to the process group directly.
+        (void)deliver_action(
+            action_generation_,
+            TuiActionVariant{SuspendProcessAction{}});
 #endif
     }
 
@@ -3587,10 +3582,14 @@ private:
     /// The configured clipboard writer (pi `copyToClipboard` platform-tools
     /// path; tests inject a recorder).
     [[nodiscard]] bool write_clipboard_text_sink(const std::string& text) {
-        if (clipboard_write_sink_) {
-            return clipboard_write_sink_(text);
+        auto result = deliver_action(
+            action_generation_,
+            TuiActionVariant{WriteClipboardAction{std::move(text)}});
+        if (!result) {
+            return false;
         }
-        return write_clipboard_text(text);
+        const auto* wrote = std::get_if<bool>(&*result);
+        return wrote != nullptr && *wrote;
     }
 
     /// Build one in-session session creation request from the CLI-owned facts
@@ -3625,12 +3624,93 @@ private:
         return request;
     }
 
+    // ── Closed action delivery (ADR 0040) ──────────────────────────────────
+
+    /// The error a null host returns for `ReplaceSessionAction`.
+    [[nodiscard]] static util::Error session_replacement_unavailable_error() {
+        return util::make_error(
+            util::ErrorCode::Unknown,
+            "Session switching is not available in this host");
+    }
+
+    /// Carry one closed application-level action to the composition host with
+    /// the generation that admitted it. A delivery from a retired generation
+    /// (the session was replaced or the mode closed) is rejected, so a late
+    /// action cannot reach the host; `open_browser_hook()` is the one
+    /// captured vector and drops those rejections. A null host applies the
+    /// TUI-local platform default for the environment operations. Render
+    /// state may coalesce, but this path never drops an admitted action.
+    [[nodiscard]] util::Expected<TuiActionResultVariant> deliver_action(
+        std::size_t captured_generation,
+        TuiActionVariant action) {
+        if (captured_generation != action_generation_) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "Native TUI action rejected",
+                "retired session generation"));
+        }
+        if (action_sink_) {
+            // The action is stamped with the generation that admitted it so
+            // the host can reject a delivery from a retired generation.
+            return action_sink_(action_generation_, std::move(action));
+        }
+        // Null host: TUI-local platform defaults for environment operations;
+        // diagnostics and reporting are silent; replacement is unavailable.
+        return std::visit(
+            [](auto&& payload) -> util::Expected<TuiActionResultVariant> {
+                using T = std::decay_t<decltype(payload)>;
+                if constexpr (std::is_same_v<T, OpenBrowserAction>) {
+                    open_browser(std::move(payload.url));
+                    return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
+                    return TuiActionResultVariant{
+                        write_clipboard_text(payload.text)};
+                } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
+#if !defined(_WIN32)
+                    (void)::kill(0, SIGTSTP);
+#endif
+                    return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, ReplaceSessionAction>) {
+                    return TuiActionResultVariant{
+                        util::Expected<coding_agent::CreateAgentSessionResult>{
+                            std::unexpected(
+                                session_replacement_unavailable_error())}};
+                } else {
+                    return TuiActionResultVariant{std::monostate{}};
+                }
+            },
+            std::move(action));
+    }
+
+    /// Create and return a replacement/boot session through the composition
+    /// host (pi `createRuntime`); a null host reports it as unavailable.
+    [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult>
+    request_session_replacement(
+        std::size_t captured_generation,
+        runtime::AgentSessionCreationRequest request) {
+        auto result = deliver_action(
+            captured_generation,
+            TuiActionVariant{ReplaceSessionAction{std::move(request)}});
+        if (!result) {
+            return std::unexpected(result.error());
+        }
+        auto* created =
+            std::get_if<util::Expected<coding_agent::CreateAgentSessionResult>>(
+                &*result);
+        if (created == nullptr) {
+            return std::unexpected(session_replacement_unavailable_error());
+        }
+        return std::move(*created);
+    }
+
     /// pi `AgentSessionRuntime.apply` + `rebindCurrentSession` subset: swap
     /// the live session, resubscribe, and rebuild the presentation from the
     /// new session's snapshot. The host-owned view stays in place; the chat
-    /// re-renders like pi's `renderCurrentSessionState`.
+    /// re-renders like pi's `renderCurrentSessionState`. Retires the action
+    /// generation so actions admitted by the previous session are rejected.
     [[nodiscard]] util::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> next) {
+        retire_action_generation();
         subscription_.reset();
         owned_session_ = std::move(next);
         session_ = owned_session_.get();
@@ -3657,7 +3737,7 @@ private:
     /// `Resumed session in current cwd` / `Resume cancelled` statuses.
     [[nodiscard]] boost::asio::awaitable<void> handle_resume_session(
         std::string session_path) {
-        if (!session_factory_) {
+        if (!action_sink_) {
             show_error("Session switching is not available in this host");
             co_return;
         }
@@ -3687,7 +3767,7 @@ private:
             cwd_override ? *cwd_override : session_->workspace(),
             ExplicitOpenOrCreateSessionTarget{target});
         request.resume_cwd_override = cwd_override;
-        auto created = session_factory_(std::move(request));
+        auto created = request_session_replacement(action_generation_, std::move(request));
         if (!created) {
             show_error(combined_error_text(created.error()));
             co_return;
@@ -3704,7 +3784,7 @@ private:
     /// the current session is in-memory) session in the current session's
     /// directory, then the `✓ New session started` chat line.
     [[nodiscard]] boost::asio::awaitable<void> handle_new_session() {
-        if (!session_factory_) {
+        if (!action_sink_) {
             show_error("Session switching is not available in this host");
             co_return;
         }
@@ -3716,7 +3796,7 @@ private:
         if (session_->session_path()) {
             request.session_dir = session_->session_path()->parent_path().string();
         }
-        auto created = session_factory_(std::move(request));
+        auto created = request_session_replacement(action_generation_, std::move(request));
         if (!created) {
             show_error(combined_error_text(created.error()));
             co_return;
@@ -3792,7 +3872,7 @@ private:
     /// report `Forked to new session`.
     [[nodiscard]] boost::asio::awaitable<void> handle_fork_session(
         std::string entry_id) {
-        if (!session_factory_) {
+        if (!action_sink_) {
             show_error("Session switching is not available in this host");
             co_return;
         }
@@ -3812,7 +3892,7 @@ private:
         if (prepared->in_memory_seed) {
             request.in_memory_branch_seed = std::move(prepared->in_memory_seed);
         }
-        auto created = session_factory_(std::move(request));
+        auto created = request_session_replacement(action_generation_, std::move(request));
         if (!created) {
             show_error(combined_error_text(created.error()));
             co_return;
@@ -4375,11 +4455,20 @@ private:
         show_status("Model selection saved to settings");
     }
 
+    /// One captured open-browser delivery for the login dialog's auth-URL
+    /// view. The hook captures the generation that admitted it; a delivery
+    /// from a retired generation (the session was replaced or the mode
+    /// closed) is rejected and safely dropped, so a late auth-URL open from
+    /// an old dialog cannot reach the host.
     [[nodiscard]] OpenBrowserSink open_browser_hook() {
         const auto weak = weak_from_this();
-        return [weak](std::string url) {
-            if (const auto self = weak.lock(); self && self->open_browser_sink_) {
-                self->open_browser_sink_(std::move(url));
+        const std::size_t captured_generation = action_generation_;
+        return [weak, captured_generation](std::string url) {
+            if (const auto self = weak.lock();
+                self && captured_generation == self->action_generation_) {
+                (void)self->deliver_action(
+                    captured_generation,
+                    TuiActionVariant{OpenBrowserAction{std::move(url)}});
             }
         };
     }
@@ -5804,14 +5893,11 @@ private:
     std::shared_ptr<const ModelCompletionSnapshot> model_completion_{};
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
-    std::move_only_function<void(std::string)> open_browser_sink_;
-    /// The configured clipboard writer (pi `copyToClipboard` platform-tools
-    /// path); null installs the real platform tools.
-    std::move_only_function<bool(std::string)> clipboard_write_sink_;
+    /// One move-only sink carrying closed application-level actions to the
+    /// composition host (ADR 0040); null applies TUI-local platform defaults
+    /// for the environment operations.
+    TuiActionSink action_sink_{nullptr};
     std::optional<std::string> model_fallback_message_;
-    /// In-session session replacement (pi `AgentSessionRuntime`
-    /// createRuntime); null when the host supplies none.
-    SessionFactorySink session_factory_;
     /// CLI-owned facts reused for in-session session replacement requests.
     InteractiveSessionFacts session_facts_;
     /// Boot path (pi main.ts `createRuntime` + `resolveProjectTrust`): the
@@ -5824,13 +5910,17 @@ private:
     /// workspace (a session-only choice leaves no store entry).
     std::optional<std::pair<std::filesystem::path, bool>>
         resolved_boot_trust_{std::nullopt};
-    /// Session-creation diagnostics printing for the boot path (pi
-    /// `reportDiagnostics`): the host wires this to stderr.
-    std::move_only_function<void(const std::vector<SessionDiagnostic>&)>
-        boot_diagnostics_sink_{nullptr};
-    /// Boot-session creation failure printing (pi `print_creation_failure`):
-    /// the host wires this to stderr.
-    std::move_only_function<void(const util::Error&)> boot_creation_failure_sink_{nullptr};
+    /// Action-generation counter for the closed action seam (ADR 0040):
+    /// every action is delivered with the generation that admitted it, and
+    /// `retire_action_generation()` rejects later deliveries from a retired
+    /// session generation. Executor-confined; captured by `open_browser_hook`
+    /// at hook creation.
+    std::size_t action_generation_{0};
+
+    /// Retire the current action generation (session replacement or Close):
+    /// later deliveries admitted by the retired generation are rejected.
+    void retire_action_generation() noexcept { ++action_generation_; }
+
     /// Startup diagnostics stashed by the boot `start()` until the boot
     /// session binds and `initialize_view` renders them (pi
     /// `renderInitialMessages` after the trust prompt).
@@ -5865,9 +5955,6 @@ private:
     /// Git branch source for the footer's pwd line (pi
     /// `FooterDataProvider` subset).
     FooterDataProvider footer_data_provider_{std::filesystem::path{}};
-    /// The suspend process action (pi `process.kill(0, "SIGTSTP")`); tests
-    /// inject a recorder so the test process is never stopped.
-    std::move_only_function<void()> suspend_process_sink_;
     InteractiveView* view_{nullptr}; // aliases the child owned by tui_.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
     std::atomic<bool> running_{false};

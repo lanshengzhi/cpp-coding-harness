@@ -27,6 +27,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeModelRuntime.hpp"
 #include "support/TempWorkspace.hpp"
@@ -504,7 +505,8 @@ TEST_CASE(
     REQUIRE(created.has_value());
     REQUIRE(created->session->message_count() == 5);
 
-    coding_agent::tui::SessionFactorySink session_factory =
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    recorder.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> util::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
@@ -519,7 +521,7 @@ TEST_CASE(
             running.terminal,
             {
                 .agent_config_directory = agent_dir.path(),
-                .session_factory = std::move(session_factory),
+                .action_sink = recorder.make_sink(),
             }),
         [&](std::exception_ptr exception, util::ExpectedVoid result) {
             CHECK(exception == nullptr);

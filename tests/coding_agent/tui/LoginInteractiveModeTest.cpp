@@ -10,6 +10,7 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/TestTuiActionSink.hpp"
 
 #include <cch/ai/Auth.hpp>
 #include "coding_agent/AgentSession.hpp"
@@ -253,8 +254,21 @@ struct InteractiveRun {
                 [&] {
                     coding_agent::tui::InteractiveModeConfig config;
                     config.agent_config_directory = agent_config_directory;
-                    config.open_browser_sink =
-                        [this](std::string url) { opened_urls.push_back(std::move(url)); };
+                    // The closed action seam carries the login dialog's
+                    // browser open (pi `openBrowser`); every other
+                    // application-level action is a no-op here.
+                    config.action_sink =
+                        [this](std::size_t /* action_generation */,
+                               coding_agent::tui::TuiActionVariant action)
+                        -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
+                            if (const auto* open =
+                                    std::get_if<coding_agent::tui::OpenBrowserAction>(
+                                        &action)) {
+                                opened_urls.push_back(open->url);
+                            }
+                            return coding_agent::tui::TuiActionResultVariant{
+                                std::monostate{}};
+                        };
                     return config;
                 }()),
             [this](std::exception_ptr exception, util::ExpectedVoid result) {

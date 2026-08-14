@@ -9,11 +9,14 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
+#include <vector>
 
 namespace cch::coding_agent {
 class AgentSession;
@@ -52,13 +55,83 @@ struct InteractiveSessionFacts {
     std::optional<std::string> api_key;
 };
 
-/// In-session session replacement (pi `AgentSessionRuntime` createRuntime
-/// closure): creates the next Agent Session for `switchSession`/
-/// `newSession`/`fork`. The interactive host supplies it; focused tests
-/// inject a deterministic factory.
-using SessionFactorySink = std::move_only_function<
-    util::Expected<CreateAgentSessionResult>(runtime::AgentSessionCreationRequest)>;
+// ── Closed application-level action seam (ADR 0040) ──────────────────────────
+//
+// Broad positional application callbacks become one closed action value and
+// one move-only sink: every application-level Native TUI operation is one
+// alternative of `TuiActionVariant`, carried to the composition host through
+// `TuiActionSink`. Payloads are owned passive values; the host performs the
+// operation and returns the operation's result. Render-state requests stay
+// separate and may coalesce, but this path never drops an admitted action.
 
+/// Open a URL in the platform browser (pi `openBrowser`: detached argv spawn,
+/// never through a shell, best-effort). Fire-and-forget; the login dialog's
+/// auth-URL view requests it (ADR 0032).
+struct OpenBrowserAction {
+    std::string url;
+};
+
+/// Write text to the system clipboard (pi `copyToClipboard` platform-tools
+/// path). The host returns whether a clipboard tool ran successfully.
+struct WriteClipboardAction {
+    std::string text;
+};
+
+/// Suspend the process group (pi `handleCtrlZ` `process.kill(0, "SIGTSTP")`).
+/// Fire-and-forget; a null host performs the platform SIGTSTP directly.
+struct SuspendProcessAction {};
+
+/// In-session session replacement (pi `AgentSessionRuntime` createRuntime
+/// closure): create the next Agent Session for `switchSession`/`newSession`/
+/// `fork`, and the boot path's deferred boot-session creation. The host
+/// applies the CLI-owned facts and returns the created session for binding.
+struct ReplaceSessionAction {
+    runtime::AgentSessionCreationRequest request;
+};
+
+/// Report session-creation diagnostics on the boot path (pi
+/// `reportDiagnostics`); the host wires this to stderr.
+struct ReportBootDiagnosticsAction {
+    std::vector<SessionDiagnostic> diagnostics;
+};
+
+/// Report boot-session creation failure (pi `print_creation_failure`); the
+/// host wires this to stderr so the boot reports the error before exiting.
+struct ReportBootCreationFailureAction {
+    util::Error error;
+};
+
+/// One closed application-level Native TUI operation. Each alternative is an
+/// owned passive payload; the composition host performs the operation.
+using TuiActionVariant = std::variant<
+    OpenBrowserAction,
+    WriteClipboardAction,
+    SuspendProcessAction,
+    ReplaceSessionAction,
+    ReportBootDiagnosticsAction,
+    ReportBootCreationFailureAction>;
+
+/// The result the host returns for one dispatched action. Fire-and-forget
+/// operations return `std::monostate`; `WriteClipboardAction` returns the
+/// clipboard-tool success; `ReplaceSessionAction` returns the created session
+/// (or its creation error).
+using TuiActionResultVariant = std::variant<
+    std::monostate,
+    bool,
+    util::Expected<coding_agent::CreateAgentSessionResult>>;
+
+/// Move-only sink carrying closed Native TUI actions to the composition host.
+/// The host dispatches on `TuiActionVariant` and returns the matching
+/// `TuiActionResultVariant`. Each action is stamped with the session
+/// generation that admitted it; a host may reject actions from a retired
+/// generation (ADR 0040, issue #461; consumed by the in-session replacement
+/// host in #466). Delivery is lossless: every admitted action is carried
+/// exactly once (render-state coalescing never applies here). A null sink
+/// falls back to the TUI-local platform defaults for environment operations;
+/// session replacement reports an unavailable host.
+using TuiActionSink = std::move_only_function<
+    util::Expected<TuiActionResultVariant>(std::size_t action_generation,
+                                           TuiActionVariant action)>;
 struct InteractiveModeConfig {
     std::filesystem::path agent_config_directory;
     cch::tui::KeybindingPlatform platform{cch::tui::native_keybinding_platform()};
@@ -69,22 +142,13 @@ struct InteractiveModeConfig {
     /// `Warning: <message>` boot line in the chat container (pi
     /// `interactive-mode.ts` `showWarning`). Absent in print mode.
     std::optional<std::string> model_fallback_message{std::nullopt};
-    /// Browser opening for the login dialog's auth-URL view (pi
-    /// `openBrowser`: detached argv spawn, never through a shell, best-effort).
-    /// Null installs the real platform spawn; tests inject a recorder.
-    std::move_only_function<void(std::string)> open_browser_sink{nullptr};
-    /// Clipboard writing for the tree's `app.message.copy` and the main
-    /// editor's copy action (pi `copyToClipboard` platform-tools path). Null
-    /// installs the real platform tools; tests inject a recorder.
-    std::move_only_function<bool(std::string)> clipboard_write_sink{nullptr};
-    /// The suspend process action (pi `handleCtrlZ` `process.kill(0,
-    /// "SIGTSTP")`). Null sends SIGTSTP to the process group; tests inject a
-    /// recorder so the test process is never stopped.
-    std::move_only_function<void()> suspend_process_sink{nullptr};
-    /// In-session session replacement factory (pi `AgentSessionRuntime`
-    /// `createRuntime`). Null installs no replacement: the session flows
-    /// report an error. The interactive host always supplies it.
-    SessionFactorySink session_factory{nullptr};
+    /// One move-only sink carrying every application-level Native TUI
+    /// operation to the composition host (ADR 0040). Null falls back to the
+    /// TUI-local platform defaults for environment operations (browser,
+    /// clipboard, process suspend) and reports session replacement as
+    /// unavailable; the CLI interactive host always supplies it and tests
+    /// inject recorders through it.
+    TuiActionSink action_sink{nullptr};
     /// CLI-owned facts reused for in-session session replacement requests.
     InteractiveSessionFacts session_facts{};
     /// Boot path (pi main.ts `createRuntime` + `resolveProjectTrust`): when
@@ -93,15 +157,6 @@ struct InteractiveModeConfig {
     /// pre-created session. The CLI interactive host sets this; focused
     /// tests bind pre-created sessions.
     std::optional<runtime::AgentSessionCreationRequest> boot_request{std::nullopt};
-    /// Session-creation diagnostics printing for the boot path (pi
-    /// `reportDiagnostics`): the host wires this to stderr.
-    std::move_only_function<void(const std::vector<SessionDiagnostic>&)>
-        boot_diagnostics_sink{nullptr};
-    /// Boot-session creation failure printing (pi `print_creation_failure`):
-    /// the host wires this to stderr; the boot reports the error through it
-    /// before exiting.
-    std::move_only_function<void(const util::Error&)>
-        boot_creation_failure_sink{nullptr};
 };
 
 /// Run the private Native TUI composition until its exit binding is received.
@@ -115,7 +170,7 @@ struct InteractiveModeConfig {
 /// the boot (pi main.ts `createAgentSessionRuntime`): the TUI starts first,
 /// the boot trust prompt resolves as an overlay when a trust-requiring
 /// resource exists and no override is set (G2 record), then the session is
-/// created through the config's `boot_request`/`session_factory` with the
+/// created through the config's `boot_request`/`action_sink` with the
 /// decided trust, bound, and the initial prompt submitted. The Terminal must
 /// outlive the returned coroutine.
 [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode_boot(
