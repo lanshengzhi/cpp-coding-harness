@@ -1,6 +1,6 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
+#include "ai/providers/StreamTransport.hpp"
 #include "support/AdapterProviderFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -64,10 +64,10 @@ struct RunResult {
     return model;
 }
 
-[[nodiscard]] std::unique_ptr<ai::Models> make_models(
+[[nodiscard]] std::shared_ptr<ai::Models> make_models(
     const std::shared_ptr<ScriptedTransport>& transport,
     const ai::Model& model) {
-    auto models = std::make_unique<ai::Models>(
+    auto models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
     auto provider = tests::make_openai_responses_test_provider(
@@ -148,10 +148,9 @@ struct RunResult {
     ai::AiContext context,
     ai::SimpleStreamOptions options) {
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(models.stream_simple(
-        model,
-        std::move(context),
-        std::move(options),
+    auto stream = models.stream(model, std::move(context), std::move(options));
+    auto result = run_awaitable(ai::consume(
+        std::move(stream),
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};

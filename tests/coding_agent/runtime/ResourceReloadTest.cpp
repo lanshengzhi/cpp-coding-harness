@@ -5,6 +5,7 @@
 // preservation; and the fatal-error path. No live keys or network: every
 // session runs against the scripted fake provider seam.
 
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
@@ -41,11 +42,14 @@ class ReloadRecordingProvider final : public tests::ScriptedProvider {
 public:
     ReloadRecordingProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         requests.push_back(context);
         auto terminal = ai::assistant_text_message("done");
         terminal.provider = "sdk-host";
@@ -53,7 +57,9 @@ public:
         terminal.model = model.id;
         terminal.timestamp = 1718000000123;
         co_return terminal;
+                });
     }
+
 
     std::vector<ai::AiContext> requests;
 };
@@ -339,11 +345,14 @@ class GatedCompactionProvider final : public tests::ScriptedProvider {
 public:
     GatedCompactionProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         requests.push_back(context);
         if (gate_request_number && request_count == *gate_request_number) {
@@ -364,7 +373,9 @@ public:
             CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
         }
         co_return response;
+                });
     }
+
 
     void release_gate() {
         if (gate_) {

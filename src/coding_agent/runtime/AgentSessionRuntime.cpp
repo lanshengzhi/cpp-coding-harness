@@ -153,14 +153,14 @@ ai::ModelStreamFactory AgentSessionRuntime::make_stream_factory() {
             ai::Model model,
             ai::AiContext context,
             ai::SimpleStreamOptions options)
-            -> boost::asio::awaitable<ai::ModelStream> {
+            -> ai::ModelStream {
             // The provider identity must survive the move into the Models
             // call; the forwarding sink may fire after the model argument is
             // already moved-from.
             const std::string provider{model.provider};
-            auto inner = co_await models->stream(
+            auto inner = models->stream(
                 std::move(model), std::move(context), std::move(options));
-            co_return apply_auth_guidance(
+            return apply_auth_guidance(
                 std::move(inner),
                 provider,
                 OAuthProviderPredicate{[runtime](std::string_view provider_id) {
@@ -1970,7 +1970,7 @@ AgentSessionRuntime::execute_compaction(
             ai::AiContext context,
             ai::SimpleStreamOptions options) mutable
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        auto stream = co_await factory(
+        auto stream = factory(
             model, std::move(context), std::move(options));
         co_return co_await ai::consume(std::move(stream), {});
     };

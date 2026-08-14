@@ -4,11 +4,10 @@
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Model.hpp>
+#include <cch/ai/ModelStream.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
 
 #include <cstdint>
 #include <optional>
@@ -54,16 +53,20 @@ public:
     [[nodiscard]] virtual ProviderAuth& auth() noexcept = 0;
     [[nodiscard]] virtual std::vector<Model> models() const = 0;
 
+    /// One move-only, single-consumption model stream (ADR 0040 / #455).
+    ///
     /// Domain failures complete through one terminal event and a final
-    /// AssistantMessage value. The Expected error alternative is reserved for
-    /// consumer-sink or other infrastructure failure. The borrowed Model and
-    /// AiContext must outlive the returned awaitable. `stream` must not run
-    /// concurrently on the same Provider; see the class concurrency contract.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
-        const Model& model,
-        const AiContext& context,
-        ProviderStreamOptions options,
-        AssistantEventSink sink) = 0;
+    /// AssistantMessage value; the Expected error alternative is reserved for
+    /// consumer-sink or other infrastructure failure. The returned stream owns
+    /// the Model and AiContext and delivers events in order through the
+    /// consumption-time sink before exactly one terminal outcome; retry
+    /// boundaries and cooperative cancellation stay inside the provider.
+    /// `stream` must not run concurrently on the same Provider; see the class
+    /// concurrency contract.
+    [[nodiscard]] virtual ModelStream stream(
+        Model model,
+        AiContext context,
+        ProviderStreamOptions options) = 0;
 };
 
 } // namespace cch::ai

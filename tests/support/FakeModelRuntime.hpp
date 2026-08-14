@@ -4,6 +4,7 @@
 #include <cch/ai/Provider.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/util/Error.hpp>
+#include "ai/ModelStreamBridge.hpp"
 #include "support/ModelsFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -53,11 +54,10 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override;
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override;
 
 private:
     ai::ProviderAuth auth_;
@@ -143,12 +143,18 @@ inline ScriptedRuntimeProvider::ScriptedRuntimeProvider(FakeModelRuntime* owner)
     auth_ = ai::ProviderAuth{.api_key = std::move(api_key)};
 }
 
-inline boost::asio::awaitable<util::Expected<ai::AssistantMessage>>
+inline ai::ModelStream
 ScriptedRuntimeProvider::stream(
-    const ai::Model& model,
-    const ai::AiContext& context,
-    ai::ProviderStreamOptions options,
-    ai::AssistantEventSink sink) {
+    ai::Model model,
+    ai::AiContext context,
+    ai::ProviderStreamOptions options) {
+    return ai::detail::make_model_stream(
+        [this,
+         model = std::move(model),
+         context = std::move(context),
+         options = std::move(options)](
+            ai::AssistantEventSink sink)
+            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
     const std::size_t call_index = owner_->calls.size();
     owner_->calls.push_back(RecordedRuntimeCall{model, context, options});
     const auto& stop_token = owner_->calls.back().options.stop_token;
@@ -237,6 +243,7 @@ ScriptedRuntimeProvider::stream(
         }
     }
     co_return response;
+        });
 }
 
 inline FakeModelRuntime::FakeModelRuntime() {

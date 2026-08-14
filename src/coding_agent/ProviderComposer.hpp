@@ -5,8 +5,8 @@
 
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
-#include <cch/ai/providers/WebSocketTransport.hpp>
+#include "ai/providers/StreamTransport.hpp"
+#include "ai/providers/WebSocketTransport.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include <cch/util/Error.hpp>
 #include "util/Process.hpp"

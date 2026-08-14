@@ -8,6 +8,7 @@
 // through the VirtualTerminal seam with scripted providers and temp
 // credential state — no live network, no real credentials.
 
+#include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 
 #include <cch/ai/Auth.hpp>
@@ -135,14 +136,19 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model&,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Provider, "scripted provider does not stream"));
+                });
     }
+
 
 private:
     std::string provider_id_;

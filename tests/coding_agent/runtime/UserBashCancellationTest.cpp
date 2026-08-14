@@ -1,3 +1,4 @@
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/SessionResume.hpp>
@@ -37,18 +38,23 @@ class ImmediateChatProvider final : public tests::ScriptedProvider {
 public:
     ImmediateChatProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("immediate reply");
         response.provider = "immediate-fake";
         response.api = "fake";
         response.model = model.id;
         co_return response;
+                });
     }
+
 
     std::vector<tests::RecordedProviderRequest> requests;
 };

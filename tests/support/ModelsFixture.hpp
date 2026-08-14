@@ -123,13 +123,12 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return inner_->auth(); }
     [[nodiscard]] std::vector<ai::Model> models() const override { return inner_->models(); }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        co_return co_await inner_->stream(
-            model, context, std::move(options), std::move(sink));
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return inner_->stream(
+            std::move(model), std::move(context), std::move(options));
     }
 
 private:

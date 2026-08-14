@@ -346,18 +346,15 @@ TEST_CASE("provider DTOs stay out of the public contract surface", "[architectur
     CHECK_FALSE(std::filesystem::exists(
         source_root / "src" / "ai" / "glaze" / "ProviderDtos.hpp"));
 
-    const auto providers_dir = source_root / "include" / "cch" / "ai" / "providers";
-    const std::vector<std::string> allowed_provider_headers = {
-        "StreamTransport.hpp",
-        "WebSocketTransport.hpp",
-    };
-    for (const auto& entry : std::filesystem::directory_iterator(providers_dir)) {
-        if (entry.path().extension() != ".hpp") {
-            continue;
-        }
-        const auto filename = entry.path().filename().string();
-        CHECK(std::find(allowed_provider_headers.begin(), allowed_provider_headers.end(), filename) != allowed_provider_headers.end());
-    }
+    // The HTTP/WebSocket transport interfaces moved private behind the AI
+    // implementation root (ADR 0040 / #455): no provider transport header
+    // remains on the public include surface.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "providers"));
+    CHECK(std::filesystem::exists(
+        source_root / "src" / "ai" / "providers" / "StreamTransport.hpp"));
+    CHECK(std::filesystem::exists(
+        source_root / "src" / "ai" / "providers" / "WebSocketTransport.hpp"));
 }
 
 TEST_CASE("AI message surface does not accept new runtime-only message variants", "[architecture][ai]") {
@@ -411,7 +408,7 @@ TEST_CASE(
     CHECK_FALSE(std::filesystem::exists(
         source_root / "include" / "cch" / "ai" / "ProviderRegistry.hpp"));
     const auto provider_header = read_text(source_root / "include" / "cch" / "ai" / "Provider.hpp");
-    CHECK(provider_header.find("const Model& model") != std::string::npos);
+    CHECK(provider_header.find("Model model") != std::string::npos);
     const auto agent_context_header = read_text(source_root / "include" / "cch" / "agent" / "AgentContext.hpp");
     CHECK(agent_context_header.find("struct AgentState") != std::string::npos);
     CHECK(agent_context_header.find("ai::Model model{};") != std::string::npos);

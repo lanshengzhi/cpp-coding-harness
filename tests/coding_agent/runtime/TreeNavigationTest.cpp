@@ -7,6 +7,7 @@
 // (editLabel), the tree topology access, and the in-memory truncation path.
 // Branch summarization generation stays absent with no placeholder.
 
+#include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -127,11 +128,14 @@ class QuietProvider final : public tests::ScriptedProvider {
 public:
     QuietProvider() : tests::ScriptedProvider("fake") {}
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         (void)model;
         (void)context;
         (void)options;
@@ -143,7 +147,9 @@ public:
             (void)sink(ai::AssistantStartEvent{message});
         }
         co_return message;
+                });
     }
+
 };
 
 /// Open the session over the existing file (resume path).
@@ -185,11 +191,14 @@ public:
     explicit ReplyProvider(std::deque<ai::AssistantMessage> replies)
         : tests::ScriptedProvider("fake"), replies_(std::move(replies)) {}
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         (void)model;
         (void)context;
         (void)options;
@@ -200,7 +209,9 @@ public:
             (void)sink(ai::AssistantStartEvent{message});
         }
         co_return message;
+                });
     }
+
 
     std::deque<ai::AssistantMessage> replies_;
 };
@@ -220,11 +231,14 @@ class GatedProvider final : public tests::ScriptedProvider {
 public:
     GatedProvider() : tests::ScriptedProvider("fake") {}
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         (void)model;
         (void)context;
         (void)options;
@@ -243,7 +257,9 @@ public:
             (void)sink(ai::AssistantStartEvent{message});
         }
         co_return message;
+                });
     }
+
 
     std::atomic<bool> started{false};
     std::optional<boost::asio::steady_timer> release_timer_;

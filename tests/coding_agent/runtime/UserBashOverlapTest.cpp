@@ -1,3 +1,4 @@
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/SessionResume.hpp>
@@ -50,11 +51,14 @@ public:
         : ScriptedProvider("sdk-host"),
           read_path_(std::move(read_path)) {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-gated-fake";
@@ -86,7 +90,9 @@ public:
             gate_.reset();
         }
         co_return response;
+                });
     }
+
 
     void release() {
         if (gate_) (void)gate_->cancel();

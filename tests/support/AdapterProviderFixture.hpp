@@ -2,6 +2,7 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
+#include "ai/ModelStreamBridge.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
@@ -41,21 +42,28 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
 
-    /// Borrowed model and context must outlive the returned awaitable.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        if (model.api != api_) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Stream,
-                "Provider " + provider_id_ +
-                    " has no API implementation for \"" + model.api + "\""));
-        }
-        CCH_TRY(message, co_await adapter_.stream(
-            model, context, std::move(options), std::move(sink)));
-        co_return message;
+    /// One move-only model stream delegated to the private wire adapter.
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this,
+             model = std::move(model),
+             context = std::move(context),
+             options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                if (model.api != api_) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Stream,
+                        "Provider " + provider_id_ +
+                            " has no API implementation for \"" + model.api + "\""));
+                }
+                CCH_TRY(message, co_await adapter_.stream(
+                    model, context, std::move(options), std::move(sink)));
+                co_return message;
+            });
     }
 
 private:

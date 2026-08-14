@@ -1,6 +1,6 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
+#include "ai/providers/StreamTransport.hpp"
 #include "ai/providers/KimiCatalog.hpp"
 #include "ai/providers/KimiProvider.hpp"
 #include "support/ModelFixture.hpp"
@@ -77,10 +77,10 @@ struct RunResult {
     return ai::ProviderAuth{.api_key = std::move(api_key)};
 }
 
-[[nodiscard]] std::unique_ptr<ai::Models> make_models(
+[[nodiscard]] std::shared_ptr<ai::Models> make_models(
     const std::shared_ptr<ScriptedTransport>& transport,
     const ai::Model&) {
-    auto models = std::make_unique<ai::Models>(
+    auto models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
     auto provider = ai::providers::make_kimi_coding_provider(
@@ -188,10 +188,9 @@ struct RunResult {
     ai::AiContext context,
     ai::SimpleStreamOptions options) {
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(models.stream_simple(
-        model,
-        std::move(context),
-        std::move(options),
+    auto stream = models.stream(model, std::move(context), std::move(options));
+    auto result = run_awaitable(ai::consume(
+        std::move(stream),
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};

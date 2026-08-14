@@ -9,6 +9,7 @@
 // agent continuation mechanism. The scripted fake `Models` seam serves every
 // request; no live keys or network.
 
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
@@ -94,11 +95,14 @@ class RetryScriptedProvider final : public tests::ScriptedProvider {
 public:
     RetryScriptedProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         if (options.stop_token.stop_requested()) {
@@ -145,7 +149,9 @@ public:
             }
         }
         co_return response;
+                });
     }
+
 
     int request_count{0};
     std::vector<tests::RecordedProviderRequest> requests;

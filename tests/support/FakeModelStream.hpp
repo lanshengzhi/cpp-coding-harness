@@ -4,6 +4,8 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/util/Error.hpp>
+#include "ai/AsyncResultBridge.hpp"
+#include "ai/ModelStreamBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_executor.hpp>
@@ -51,17 +53,16 @@ public:
         auto self = shared_from_this();
         return ai::ModelStreamFactory{
             [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options)
-                -> boost::asio::awaitable<ai::ModelStream> {
-                auto executor = co_await boost::asio::this_coro::executor;
+                -> ai::ModelStream {
                 self->calls.push_back(RecordedStreamSimpleCall{
                     std::move(model), std::move(context), std::move(options)});
-                co_return ai::ModelStream{ai::ModelStreamProducer{
-                    [executor, self](
+                return ai::ModelStream{ai::ModelStreamProducer{
+                    [self](
                         ai::AssistantEventSink sink,
                         ai::ModelStreamCompletion completion) mutable noexcept {
                         try {
                             boost::asio::post(
-                                executor,
+                                cch::ai::detail::t_initiating_executor,
                                 [self,
                                  sink = std::move(sink),
                                  completion = std::move(completion)]() mutable {
@@ -221,43 +222,21 @@ public:
         [shared_fn](
             ai::Model model,
             ai::AiContext context,
-            ai::SimpleStreamOptions options) mutable
-            -> boost::asio::awaitable<ai::ModelStream> {
-            auto executor = co_await boost::asio::this_coro::executor;
-            co_return ai::ModelStream{ai::ModelStreamProducer{
-                [executor,
-                 shared_fn,
+            ai::SimpleStreamOptions options)
+            -> ai::ModelStream {
+            return ai::detail::make_model_stream(
+                [shared_fn,
                  model = std::move(model),
                  context = std::move(context),
                  options = std::move(options)](
-                    ai::AssistantEventSink sink,
-                    ai::ModelStreamCompletion completion) mutable noexcept {
-                    try {
-                        boost::asio::co_spawn(
-                            executor,
-                            (*shared_fn)(std::move(model),
-                                         std::move(context),
-                                         std::move(options),
-                                         std::move(sink)),
-                            boost::asio::bind_executor(
-                                executor,
-                                [completion = std::move(completion)](
-                                    std::exception_ptr eptr,
-                                    util::Expected<ai::AssistantMessage> result) mutable noexcept {
-                                    if (eptr) {
-                                        completion(std::unexpected(util::make_error(
-                                            util::ErrorCode::Stream,
-                                            "model stream failed")));
-                                    } else {
-                                        completion(std::move(result));
-                                    }
-                                }));
-                    } catch (...) {
-                        completion(std::unexpected(util::make_error(
-                            util::ErrorCode::Stream,
-                            "model stream initiation failed")));
-                    }
-                }}};
+                    ai::AssistantEventSink sink) mutable
+                    -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                    co_return co_await (*shared_fn)(
+                        std::move(model),
+                        std::move(context),
+                        std::move(options),
+                        std::move(sink));
+                });
         }};
 }
 

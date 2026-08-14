@@ -1,6 +1,8 @@
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -134,11 +136,13 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model&,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink sink) override {
+        [[nodiscard]] ai::ModelStream stream(
+        ai::Model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this](ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ai::AssistantMessage message;
         message.api = "unknown";
         message.provider = "login-provider";
@@ -151,7 +155,9 @@ public:
             }
         }
         co_return message;
+                });
     }
+
 
 private:
     ai::ProviderAuth auth_;
@@ -280,9 +286,11 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     REQUIRE_FALSE(models_json.empty());
     home.write(".pi/agent/models.json", models_json);
 
-    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-        .http_transport = transport,
-    });
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+        coding_agent::ModelRuntimeOptions{},
+        coding_agent::ModelRuntimeTransportOptions{
+            .http_transport = transport,
+        });
     REQUIRE(runtime);
     CHECK_FALSE((*runtime)->get_error().has_value());
 
@@ -300,10 +308,11 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     options.timeout_ms = 4321;
 
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable((*runtime)->ai_models()->stream_simple(
-        *model,
-        request_context(),
-        std::move(options),
+    auto result = run_awaitable(ai::consume(
+        (*runtime)->ai_models()->stream(
+            *model,
+            request_context(),
+            std::move(options)),
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};
@@ -474,17 +483,21 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
       }
     })");
 
-    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-        .http_transport = transport,
-    });
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+        coding_agent::ModelRuntimeOptions{},
+        coding_agent::ModelRuntimeTransportOptions{
+            .http_transport = transport,
+        });
     REQUIRE(runtime);
     const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
     REQUIRE(model.has_value());
 
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
-    auto result = run_awaitable((*runtime)->ai_models()->stream_simple(
-        *model, {}, std::move(options), [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
+    auto result = run_awaitable(ai::consume(
+        (*runtime)->ai_models()->stream(
+            *model, {}, std::move(options)),
+        [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-env-key");
@@ -613,17 +626,21 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
       }
     })");
 
-    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-        .http_transport = transport,
-    });
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+        coding_agent::ModelRuntimeOptions{},
+        coding_agent::ModelRuntimeTransportOptions{
+            .http_transport = transport,
+        });
     REQUIRE(runtime);
     const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
     REQUIRE(model.has_value());
 
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
-    auto result = run_awaitable((*runtime)->ai_models()->stream_simple(
-        *model, {}, std::move(options), [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
+    auto result = run_awaitable(ai::consume(
+        (*runtime)->ai_models()->stream(
+            *model, {}, std::move(options)),
+        [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");

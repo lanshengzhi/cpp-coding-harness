@@ -11,6 +11,7 @@
 // every request is served by scripted runtimes. Committed verbatim goldens
 // pin both branches at both trigger points under `fixtures/pi-agent-core/`.
 
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Models.hpp>
@@ -114,11 +115,14 @@ public:
           message_(std::move(message)),
           content_(std::move(content)) {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         auto terminal = ai::assistant_text_message(content_);
         terminal.stop_reason = ai::AssistantStopReason::Error;
@@ -136,7 +140,9 @@ public:
             }));
         }
         co_return terminal;
+                });
     }
+
 
     int request_count{0};
 
@@ -236,7 +242,7 @@ struct GuidedRun {
         io,
         [&]() -> boost::asio::awaitable<void> {
             auto factory = fake->factory();
-            auto inner = co_await factory(
+            auto inner = factory(
                 tests::make_model("gpt-test"),
                 ai::AiContext{},
                 ai::SimpleStreamOptions{});

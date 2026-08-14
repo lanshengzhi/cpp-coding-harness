@@ -50,10 +50,12 @@ RunResult run_fake(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await models->stream_simple(
+            auto stream = models->stream(
                 std::move(request.model),
                 std::move(request.context),
-                std::move(request.options),
+                std::move(request.options));
+            result = co_await ai::consume(
+                std::move(stream),
                 [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                     events.push_back(event);
                     if (fail_at_event && events.size() - 1 == *fail_at_event) {

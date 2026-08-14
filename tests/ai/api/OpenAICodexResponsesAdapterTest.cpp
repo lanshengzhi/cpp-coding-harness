@@ -1,6 +1,6 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
+#include "ai/providers/StreamTransport.hpp"
 #include "support/AdapterProviderFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -77,7 +77,7 @@ struct RunResult {
 struct CodexHarness {
     std::shared_ptr<ScriptedTransport> http;
     std::shared_ptr<ScriptedWebSocketTransport> ws;
-    std::unique_ptr<ai::Models> models;
+    std::shared_ptr<ai::Models> models;
 };
 
 [[nodiscard]] CodexHarness make_codex_harness(
@@ -86,7 +86,7 @@ struct CodexHarness {
     CodexHarness harness;
     harness.http = std::make_shared<ScriptedTransport>();
     harness.ws = std::make_shared<ScriptedWebSocketTransport>();
-    harness.models = std::make_unique<ai::Models>(
+    harness.models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
     auto provider = tests::make_openai_codex_responses_test_provider(
@@ -124,11 +124,11 @@ struct CodexHarness {
     ai::Models& models,
     const ai::Model& model,
     ai::AiContext context,
-    ai::SimpleStreamOptions options) {    std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(models.stream_simple(
-        model,
-        std::move(context),
-        std::move(options),
+    ai::SimpleStreamOptions options) {
+    std::vector<ai::AssistantStreamEvent> events;
+    auto stream = models.stream(model, std::move(context), std::move(options));
+    auto result = run_awaitable(ai::consume(
+        std::move(stream),
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};

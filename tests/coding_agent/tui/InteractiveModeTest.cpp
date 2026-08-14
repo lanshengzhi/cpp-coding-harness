@@ -1,3 +1,4 @@
+#include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
@@ -175,11 +176,14 @@ public:
 class FailOnceChatProvider final : public tests::ScriptedProvider {
 public:
     FailOnceChatProvider() : ScriptedProvider("sdk-host") {}
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         if (calls++ == 0) {
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Provider,
@@ -194,7 +198,9 @@ public:
         response.api = "fake";
         response.model = model.id;
         co_return response;
+                });
     }
+
 
     std::size_t calls{0};
 };
@@ -307,11 +313,14 @@ public:
     AbortAwareInteractiveChatProvider(const AbortAwareInteractiveChatProvider&) = delete;
     AbortAwareInteractiveChatProvider& operator=(const AbortAwareInteractiveChatProvider&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         if (request_count > 1) {
             recovery_uses_fresh_token = first_stop_token && options.stop_token != *first_stop_token;
@@ -381,7 +390,9 @@ public:
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Unknown,
             "abort-aware fake released without cancellation"));
+                });
     }
+
 
     bool started{false};
     bool recovery_uses_fresh_token{false};
@@ -403,11 +414,14 @@ public:
     GatedChatProvider(const GatedChatProvider&) = delete;
     GatedChatProvider& operator=(const GatedChatProvider&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto partial = ai::assistant_text_message("");
         partial.content.clear();
         partial.provider = "fake";
@@ -429,7 +443,9 @@ public:
         response.api = "fake";
         response.model = model.id;
         co_return response;
+                });
     }
+
 
     void release() {
         if (gate_) (void)gate_->cancel();
@@ -450,11 +466,14 @@ public:
     TurnGatedChatProvider(const TurnGatedChatProvider&) = delete;
     TurnGatedChatProvider& operator=(const TurnGatedChatProvider&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         std::vector<std::string> users;
         for (const auto& message : context.messages) {
@@ -480,7 +499,9 @@ public:
             response.error_message = "accepted queued error";
         }
         co_return response;
+                });
     }
+
 
     void release() {
         if (gate_) (void)gate_->cancel();
@@ -497,11 +518,14 @@ private:
 class RepeatedReadCallChatProvider final : public tests::ScriptedProvider {
 public:
     RepeatedReadCallChatProvider() : ScriptedProvider("sdk-host") {}
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-fake";
         response.api = "fake";
@@ -579,7 +603,9 @@ public:
             co_return std::unexpected(emitted.error());
         }
         co_return response;
+                });
     }
+
 };
 
 [[nodiscard]] agent::AsyncToolExecutionResult gated_partial_final_result(
@@ -751,11 +777,14 @@ struct DelayedCancellationToolHandle {
 class AbortThroughToolChatProvider final : public tests::ScriptedProvider {
 public:
     AbortThroughToolChatProvider() : ScriptedProvider("sdk-host") {}
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         if (options.stop_token.stop_requested()) {
             completion_stop_token = options.stop_token;
@@ -805,7 +834,9 @@ public:
             util::JsonValue::object_t{}));
         response.stop_reason = ai::AssistantStopReason::ToolUse;
         co_return response;
+                });
     }
+
 
     std::size_t request_count{0};
     std::optional<std::stop_token> first_stop_token;
@@ -815,11 +846,14 @@ public:
 class AcceptedOutcomeChatProvider final : public tests::ScriptedProvider {
 public:
     AcceptedOutcomeChatProvider() : ScriptedProvider("sdk-host") {}
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         std::string prompt;
         for (auto message = context.messages.rbegin();
              message != context.messages.rend();
@@ -859,7 +893,9 @@ public:
             response.error_message = "custom provider abort detail";
         }
         co_return response;
+                });
     }
+
 };
 
 class IncrementalGatedChatProvider final : public tests::ScriptedProvider {
@@ -871,11 +907,14 @@ public:
     IncrementalGatedChatProvider(const IncrementalGatedChatProvider&) = delete;
     IncrementalGatedChatProvider& operator=(const IncrementalGatedChatProvider&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto partial = ai::assistant_text_message("");
         partial.content.clear();
         partial.provider = "fake";
@@ -930,7 +969,9 @@ public:
             co_return std::unexpected(emitted.error());
         }
         co_return partial;
+                });
     }
+
 
     void release() {
         if (gate_) (void)gate_->cancel();

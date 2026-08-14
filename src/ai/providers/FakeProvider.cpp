@@ -3,6 +3,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
+#include "ai/ModelStreamBridge.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
@@ -265,11 +266,16 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return detail::make_model_stream(
+            [model = std::move(model),
+             context = std::move(context),
+             options = std::move(options)](
+                ai::AssistantEventSink sink)
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ai::AssistantMessage assistant;
         set_fake_metadata(assistant, model);
         assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -360,6 +366,7 @@ public:
         assistant.content.emplace_back(ai::text_content("fake: " + prompt));
         CCH_TRY_VOID(emit_complete_lifecycle(assistant, sink));
         co_return assistant;
+            });
     }
 
 private:

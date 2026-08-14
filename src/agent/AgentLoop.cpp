@@ -341,7 +341,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (stop_token.stop_requested()) {
             cancellation_completion_attempted = true;
         }
-        auto stream = co_await stream_factory_(
+        auto stream = stream_factory_(
             options_.model,
             std::move(request_context),
             std::move(stream_options));

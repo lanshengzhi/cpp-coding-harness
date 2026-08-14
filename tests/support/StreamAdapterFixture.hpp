@@ -2,7 +2,7 @@
 
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/StreamEvent.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
+#include "ai/providers/StreamTransport.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 

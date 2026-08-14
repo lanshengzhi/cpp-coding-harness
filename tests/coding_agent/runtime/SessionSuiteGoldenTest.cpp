@@ -15,6 +15,7 @@
 
 #include "coding_agent/SessionDiscovery.hpp"
 
+#include "ai/ModelStreamBridge.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -68,9 +69,12 @@ public:
 
   void add_model(ai::Model model) { models_.push_back(std::move(model)); }
 
-  [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>>
-  stream(const ai::Model &model, const ai::AiContext &,
-         ai::ProviderStreamOptions, ai::AssistantEventSink sink) override {
+  [[nodiscard]] ai::ModelStream
+  stream(ai::Model model, ai::AiContext,
+         ai::ProviderStreamOptions) override {
+    return ai::detail::make_model_stream(
+        [this, model = std::move(model)](ai::AssistantEventSink sink) mutable
+            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
     REQUIRE(!turns_.empty());
     auto response = std::move(turns_.front());
     turns_.pop_front();
@@ -110,6 +114,7 @@ public:
       }
     }
     co_return response;
+        });
   }
 
 private:

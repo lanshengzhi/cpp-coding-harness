@@ -1,3 +1,4 @@
+#include "ai/ModelStreamBridge.hpp"
 #include "support/ModelsFixture.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
@@ -80,11 +81,14 @@ class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
 public:
     GatedSnapshotChatProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto partial = ai::assistant_text_message("");
         partial.provider = "snapshot-fake";
         partial.api = "fake";
@@ -110,7 +114,9 @@ public:
         response.api = "fake";
         response.model = model.id;
         co_return response;
+                });
     }
+
 
     void release() {
         if (gate_) {
@@ -128,17 +134,22 @@ class CapturingSnapshotChatProvider final : public tests::ScriptedProvider {
 public:
     CapturingSnapshotChatProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto response = ai::assistant_text_message("captured");
         response.provider = "snapshot-fake";
         response.api = "fake";
         response.model = model.id;
         co_return response;
+                });
     }
+
 };
 
 } // namespace

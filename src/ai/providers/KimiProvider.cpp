@@ -1,6 +1,7 @@
 #include "KimiProvider.hpp"
 
 #include "KimiCatalog.hpp"
+#include "ai/ModelStreamBridge.hpp"
 #include "ai/api/AnthropicMessagesAdapter.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -37,21 +38,28 @@ public:
     [[nodiscard]] ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<Model> models() const override { return models_; }
 
-    /// Borrowed model and context must outlive the returned awaitable.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
-        const Model& model,
-        const AiContext& context,
-        ProviderStreamOptions options,
-        AssistantEventSink sink) override {
-        if (model.api != "anthropic-messages") {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Stream,
-                "Provider kimi-coding has no API implementation for \"" +
-                    model.api + "\""));
-        }
-        CCH_TRY(message, co_await adapter_.stream(
-            model, context, std::move(options), std::move(sink)));
-        co_return message;
+    /// One move-only model stream backed by the anthropic-messages adapter.
+    [[nodiscard]] ModelStream stream(
+        Model model,
+        AiContext context,
+        ProviderStreamOptions options) override {
+        return detail::make_model_stream(
+            [this,
+             model = std::move(model),
+             context = std::move(context),
+             options = std::move(options)](
+                AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<AssistantMessage>> {
+                if (model.api != "anthropic-messages") {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Stream,
+                        "Provider kimi-coding has no API implementation for \"" +
+                            model.api + "\""));
+                }
+                CCH_TRY(message, co_await adapter_.stream(
+                    model, context, std::move(options), std::move(sink)));
+                co_return message;
+            });
     }
 
 private:

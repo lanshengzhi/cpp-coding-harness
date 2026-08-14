@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support/ModelsFixture.hpp"
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 
 #include <boost/asio/io_context.hpp>
@@ -29,29 +30,36 @@ class GatedChatProvider final : public ScriptedProvider {
 public:
     GatedChatProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
-        requests.push_back(RecordedProviderRequest{model, context, options});
-        const auto turn = requests.size();
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this,
+             model = std::move(model),
+             context = std::move(context),
+             options = std::move(options)](
+                ai::AssistantEventSink)
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                requests.push_back(RecordedProviderRequest{model, context, options});
+                const auto turn = requests.size();
 
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        gate_.reset();
+                const auto executor = co_await boost::asio::this_coro::executor;
+                gate_.emplace(executor);
+                gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                boost::system::error_code error;
+                co_await gate_->async_wait(
+                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                gate_.reset();
 
-        auto response = ai::assistant_text_message(std::format("turn {}", turn));
-        response.provider = "gated-fake";
-        response.api = "fake";
-        response.model = model.id;
-        response.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        co_return response;
+                auto response = ai::assistant_text_message(std::format("turn {}", turn));
+                response.provider = "gated-fake";
+                response.api = "fake";
+                response.model = model.id;
+                response.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                co_return response;
+            });
     }
 
     void release() {

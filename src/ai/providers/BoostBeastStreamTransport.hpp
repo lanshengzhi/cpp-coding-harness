@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/ai/providers/StreamTransport.hpp"
+#include "ai/providers/StreamTransport.hpp"
 
 namespace cch::ai::providers {
 

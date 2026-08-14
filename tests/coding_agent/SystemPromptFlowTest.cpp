@@ -7,6 +7,7 @@
 // this test pins the flow end to end: a scripted provider records the request
 // context the session built. No live keys or network.
 
+#include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
@@ -37,11 +38,14 @@ class RecordingProvider final : public tests::ScriptedProvider {
 public:
     RecordingProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         requests.push_back(context);
         auto terminal = ai::assistant_text_message("done");
         terminal.provider = "sdk-host";
@@ -49,7 +53,9 @@ public:
         terminal.model = model.id;
         terminal.timestamp = 1718000000123;
         co_return terminal;
+                });
     }
+
 
     std::vector<ai::AiContext> requests;
 };

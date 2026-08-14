@@ -5,6 +5,7 @@
 // `formatNoModelsAvailableMessage()` when no models exist — then exits 0
 // without touching session storage (the session manager is in-memory).
 
+#include "ai/ModelStreamBridge.hpp"
 #include "cli/ListModels.hpp"
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -42,14 +43,19 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return catalog_; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model&,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Stream, "catalog provider has no stream"));
+                });
     }
+
 
 private:
     std::string id_;

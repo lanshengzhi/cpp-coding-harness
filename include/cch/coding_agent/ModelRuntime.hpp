@@ -5,8 +5,6 @@
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
-#include <cch/ai/providers/WebSocketTransport.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/util/Error.hpp>
@@ -25,6 +23,8 @@ namespace runtime {
 class SessionFactory;
 }
 
+struct ModelRuntimeTransportOptions;
+
 /// Injectable creation options for ModelRuntime (pi `CreateModelRuntimeOptions`
 /// subset). Every field is optional; defaults derive from the Agent Config
 /// Directory.
@@ -40,16 +40,6 @@ struct ModelRuntimeOptions {
     /// `<agentDir>/auth.json` is constructed and injected into `ai::Models`
     /// (ADR 0030); the ai layer never derives agent-directory paths.
     std::shared_ptr<ai::CredentialStore> credentials{nullptr};
-    /// HTTP transport for the scoped adapters. When unset, the Boost.Beast
-    /// implementation is used.
-    std::shared_ptr<ai::providers::StreamTransport> http_transport{nullptr};
-    /// WebSocket transport for the openai-codex adapter. When unset, the
-    /// Boost.Beast implementation is used.
-    std::shared_ptr<ai::providers::WebSocketTransport> ws_transport{nullptr};
-    /// Codex WebSocket socket-reuse windows. Injectable so tests can shrink
-    /// the expiry windows; production uses pi's frozen 5-minute/55-minute
-    /// defaults.
-    ai::providers::CodexWebSocketCacheConfig codex_cache_config{};
 };
 
 /// Provider auth status (pi `AuthStatus`): configured flag plus the source
@@ -231,6 +221,9 @@ private:
         ModelRuntimeOptions options = {});
 
     friend class runtime::SessionFactory;
+    friend util::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
+        ModelRuntimeOptions options,
+        ModelRuntimeTransportOptions transports);
     std::unique_ptr<Impl> impl_;
 };
 

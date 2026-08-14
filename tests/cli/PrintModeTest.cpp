@@ -1,3 +1,4 @@
+#include "ai/ModelStreamBridge.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include "support/ModelsFixture.hpp"
 
@@ -45,11 +46,14 @@ public:
           diagnostic_(std::move(diagnostic)),
           partial_(std::move(partial)) {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         ai::AssistantMessage terminal;
         terminal.provider = "host";
@@ -70,7 +74,9 @@ public:
             }
         }
         co_return terminal;
+                });
     }
+
 
     int request_count{0};
 
@@ -86,11 +92,14 @@ class CapturingChatProvider final : public tests::ScriptedProvider {
 public:
     CapturingChatProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions,
-        ai::AssistantEventSink sink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), context = std::move(context)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         messages.push_back(context.messages);
         ai::AssistantMessage message;
         message.provider = "host";
@@ -107,7 +116,9 @@ public:
             }
         }
         co_return message;
+                });
     }
+
 
     std::vector<std::vector<ai::MessageVariant>> messages;
 };
@@ -119,11 +130,14 @@ class SignalGateProvider final : public tests::ScriptedProvider {
 public:
     SignalGateProvider() : ScriptedProvider("sdk-host") {}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext&,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink) override {
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this, model = std::move(model), options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         ++request_count;
         const auto executor = co_await boost::asio::this_coro::executor;
         boost::asio::steady_timer gate{executor};
@@ -148,7 +162,9 @@ public:
         message.error_message = "Request was aborted";
         message.content.emplace_back(ai::text_content("never printed"));
         co_return message;
+                });
     }
+
 
     std::atomic<int> request_count{0};
 };

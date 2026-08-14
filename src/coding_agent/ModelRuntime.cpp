@@ -5,6 +5,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "ai/AsyncResultBridge.hpp"
 #include "ModelConfig.hpp"
+#include "ModelRuntimeTestSupport.hpp"
 #include "ProcessAuthContext.hpp"
 #include "ProviderComposer.hpp"
 #include "RuntimeApiKeyOverlay.hpp"
@@ -151,6 +152,13 @@ ModelRuntime::~ModelRuntime() = default;
 
 util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
     ModelRuntimeOptions options) {
+    return create_model_runtime_for_testing(
+        std::move(options), ModelRuntimeTransportOptions{});
+}
+
+util::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
+    ModelRuntimeOptions options,
+    ModelRuntimeTransportOptions transports) {
     std::filesystem::path agent_dir = options.agent_dir.empty()
         ? agent_config_dir()
         : options.agent_dir;
@@ -172,19 +180,19 @@ util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
     auto models = std::make_shared<ai::Models>(credentials_with_overlay, auth_context);
 
     std::shared_ptr<ai::providers::StreamTransport> http_transport =
-        std::move(options.http_transport);
+        std::move(transports.http_transport);
     if (!http_transport) {
         http_transport = std::make_shared<ai::providers::BoostBeastStreamTransport>();
     }
     std::shared_ptr<ai::providers::WebSocketTransport> ws_transport =
-        std::move(options.ws_transport);
+        std::move(transports.ws_transport);
     if (!ws_transport) {
         ws_transport = std::make_shared<ai::providers::BoostBeastWebSocketTransport>();
     }
     std::shared_ptr<util::AsyncProcessRunner> process_runner =
         std::make_shared<util::DefaultAsyncProcessRunner>();
 
-    auto impl = std::make_unique<Impl>(Impl{
+    auto impl = std::make_unique<ModelRuntime::Impl>(ModelRuntime::Impl{
         .agent_dir = std::move(agent_dir),
         .models_path = std::move(models_path),
         .credentials = credentials_with_overlay,
@@ -197,7 +205,7 @@ util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
         .composer_options = ProviderComposerOptions{
             .http_transport = http_transport,
             .ws_transport = ws_transport,
-            .codex_cache_config = options.codex_cache_config,
+            .codex_cache_config = transports.codex_cache_config,
             .process_runner = process_runner,
         },
         .config_error = {},

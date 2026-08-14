@@ -2,6 +2,7 @@
 
 #include "ai/api/AnthropicMessagesAdapter.hpp"
 #include "ai/api/OpenAIResponsesAdapter.hpp"
+#include "ai/ModelStreamBridge.hpp"
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
 #include "ai/providers/CodexCatalog.hpp"
@@ -695,30 +696,37 @@ public:
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::Model& model,
-        const ai::AiContext& context,
-        ai::ProviderStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        if (model.api == "openai-responses") {
-            CCH_TRY(message, co_await responses_adapter_.stream(
-                model, context, std::move(options), std::move(sink)));
-            co_return message;
-        }
-        if (model.api == "openai-codex-responses") {
-            CCH_TRY(message, co_await codex_adapter_.stream(
-                model, context, std::move(options), std::move(sink)));
-            co_return message;
-        }
-        if (model.api == "anthropic-messages") {
-            CCH_TRY(message, co_await anthropic_adapter_.stream(
-                model, context, std::move(options), std::move(sink)));
-            co_return message;
-        }
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Stream,
-            "Provider " + provider_id_ +
-                " has no API implementation for \"" + model.api + "\""));
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this,
+             model = std::move(model),
+             context = std::move(context),
+             options = std::move(options)](
+                ai::AssistantEventSink sink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                if (model.api == "openai-responses") {
+                    CCH_TRY(message, co_await responses_adapter_.stream(
+                        model, context, std::move(options), std::move(sink)));
+                    co_return message;
+                }
+                if (model.api == "openai-codex-responses") {
+                    CCH_TRY(message, co_await codex_adapter_.stream(
+                        model, context, std::move(options), std::move(sink)));
+                    co_return message;
+                }
+                if (model.api == "anthropic-messages") {
+                    CCH_TRY(message, co_await anthropic_adapter_.stream(
+                        model, context, std::move(options), std::move(sink)));
+                    co_return message;
+                }
+                co_return std::unexpected(util::make_error(
+                    util::ErrorCode::Stream,
+                    "Provider " + provider_id_ +
+                        " has no API implementation for \"" + model.api + "\""));
+            });
     }
 
 private:

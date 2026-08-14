@@ -78,21 +78,15 @@ public:
         AuthType type,
         AuthInteraction interaction);
 
-    /// Normalize model/provider/auth/request failures to one terminal event and
-    /// a final AssistantMessage value. Only sink/infrastructure failure uses
-    /// Expected's error alternative.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream_simple(
-        Model model,
-        AiContext context,
-        SimpleStreamOptions options,
-        AssistantEventSink sink);
-
-    /// Produce one AI-owned move-only `ModelStream` for a single turn. The
-    /// returned value is consumed exactly once through `run`/`start`; its
-    /// closure shares this Models Runtime's lifetime (ADR 0040). The sink is
+    /// Produce one AI-owned move-only `ModelStream` for a single turn
+    /// (ADR 0040 / #455). The returned value is consumed exactly once through
+    /// `run`/`start`/`consume`; its closure shares this Models Runtime's
+    /// lifetime and captures the consuming executor privately. The sink is
     /// supplied at consumption, keeping `ModelStream` composable and free of
-    /// third-party execution types.
-    [[nodiscard]] boost::asio::awaitable<ModelStream> stream(
+    /// third-party execution types. Model/provider/auth/request failures
+    /// normalize to one terminal event and a final AssistantMessage value;
+    /// only sink or infrastructure failure uses the Expected error alternative.
+    [[nodiscard]] ModelStream stream(
         Model model,
         AiContext context,
         SimpleStreamOptions options);
@@ -112,10 +106,10 @@ private:
 consume(ModelStream stream, AssistantEventSink sink);
 
 /// Produces one move-only `ModelStream` per call. The closure deliberately
-/// shares the Models Runtime lifetime (ADR 0040). The awaitable return keeps
-/// the executor capture private to `ai::Models`; the Agent consumes the
-/// resulting `ModelStream` value without naming a third-party execution type.
+/// shares the Models Runtime lifetime (ADR 0040). The executor capture stays
+/// private to `ai::Models`; the Agent consumes the resulting `ModelStream`
+/// value without naming a third-party execution type.
 using ModelStreamFactory = std::move_only_function<
-    boost::asio::awaitable<ModelStream>(Model, AiContext, SimpleStreamOptions)>;
+    ModelStream(Model, AiContext, SimpleStreamOptions)>;
 
 } // namespace cch::ai

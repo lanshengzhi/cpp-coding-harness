@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/ai/providers/WebSocketTransport.hpp>
+#include "ai/providers/WebSocketTransport.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/redirect_error.hpp>

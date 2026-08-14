@@ -1,6 +1,7 @@
 #include <cch/ai/Models.hpp>
 
 #include "ai/AsyncResultBridge.hpp"
+#include "ai/ModelStreamBridge.hpp"
 #include "SimpleOptions.hpp"
 #include "util/BoundedText.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -873,12 +874,21 @@ boost::asio::awaitable<util::Expected<Credential>> Models::login(
     co_return std::move(login_credential);
 }
 
-boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
+namespace {
+
+/// Private one-turn stream implementation (the former public `stream_simple`
+/// surface, now private; #455). Runs on the consuming executor, resolves
+/// authentication, normalizes model/auth/request failures to one terminal
+/// event, delegates to the Provider's move-only `ModelStream`, and reaches
+/// exactly one terminal outcome. `self` keeps the Models Runtime alive for the
+/// whole stream.
+[[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream_impl(
+    std::shared_ptr<Models> self,
     Model model_value,
     AiContext context,
     SimpleStreamOptions options,
     AssistantEventSink sink) {
-    const auto selected = provider(model_value.provider);
+    const auto selected = self->provider(model_value.provider);
     if (!selected) {
         CCH_TRY(terminal, co_await terminal_failure(
             model_value,
@@ -893,7 +903,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
         util::ErrorCode::Auth,
         "Authentication resolution failed for provider " + model_value.provider,
         [&]() {
-            return get_auth(model_value, std::move(options.api_key));
+            return self->get_auth(model_value, std::move(options.api_key));
         });
     if (!auth) {
         CCH_TRY(terminal, co_await terminal_failure(
@@ -969,16 +979,14 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
             }
             return {};
         };
-    auto result = co_await invoke_models_callback(
-        util::ErrorCode::Stream,
-        "Provider stream callback failed for " + model_value.provider,
-        [&]() {
-            return selected->stream(
-                prepared->model,
-                context,
-                std::move(prepared->options),
-                std::move(forwarding_sink));
-        });
+    auto result = co_await [&]() -> boost::asio::awaitable<util::Expected<AssistantMessage>> {
+        auto provider_stream = selected->stream(
+            std::move(prepared->model),
+            std::move(context),
+            std::move(prepared->options));
+        co_return co_await consume(
+            std::move(provider_stream), std::move(forwarding_sink));
+    }();
 
     if (sink_failure) {
         co_return std::unexpected(*sink_failure);
@@ -1035,59 +1043,51 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
     co_return message;
 }
 
-boost::asio::awaitable<ModelStream> Models::stream(
+} // namespace
+
+ModelStream Models::stream(
     Model model,
     AiContext context,
     SimpleStreamOptions options) {
-    // The executor of the consuming coroutine (the Agent's serialized domain)
-    // drives the lazy stream; it is captured here so the ModelStream value
-    // itself stays free of third-party execution types.
-    auto executor = co_await boost::asio::this_coro::executor;
     auto self = shared_from_this();
-    co_return ModelStream{ModelStreamProducer{
-        [executor, self, model = std::move(model), context = std::move(context),
+    return detail::make_model_stream(
+        [self,
+         model = std::move(model),
+         context = std::move(context),
          options = std::move(options)](
-            AssistantEventSink sink,
-            ModelStreamCompletion completion) mutable noexcept {
-            try {
-                boost::asio::co_spawn(
-                    executor,
-                    self->stream_simple(
-                        std::move(model),
-                        std::move(context),
-                        std::move(options),
-                        std::move(sink)),
-                    boost::asio::bind_executor(
-                        executor,
-                        [completion = std::move(completion)](
-                            std::exception_ptr eptr,
-                            util::Expected<AssistantMessage> result) mutable noexcept {
-                            if (eptr) {
-                                completion(std::unexpected(util::make_error(
-                                    util::ErrorCode::Stream,
-                                    "model stream failed")));
-                            } else {
-                                completion(std::move(result));
-                            }
-                        }));
-            } catch (...) {
-                completion(std::unexpected(util::make_error(
-                    util::ErrorCode::Stream,
-                    "model stream initiation failed")));
-            }
-        }}};
+            AssistantEventSink sink) mutable
+            -> boost::asio::awaitable<util::Expected<AssistantMessage>> {
+            co_return co_await stream_impl(
+                self,
+                std::move(model),
+                std::move(context),
+                std::move(options),
+                std::move(sink));
+        });
 }
 
 boost::asio::awaitable<std::expected<AssistantMessage, cch::support::Error>>
 consume(ModelStream stream, AssistantEventSink sink) {
-    auto initiate = [](auto&& handler, ModelStream stream_value, AssistantEventSink stream_sink) {
+    auto executor = co_await boost::asio::this_coro::executor;
+    auto initiate = [executor](auto&& handler, ModelStream stream_value, AssistantEventSink stream_sink) {
         auto handler_owner =
             std::make_shared<std::decay_t<decltype(handler)>>(std::forward<decltype(handler)>(handler));
+        // Expose the consuming executor to the producer so a stream whose
+        // implementation runs coroutine work can co_spawn it onto the
+        // serialized domain (ADR 0040 / #455), then re-enter that domain on
+        // completion regardless of the completing thread.
+        const auto previous_executor = detail::t_initiating_executor;
+        detail::t_initiating_executor = executor;
         std::move(stream_value).start(
             std::move(stream_sink),
-            [handler_owner](std::expected<AssistantMessage, cch::support::Error> outcome) noexcept {
-                std::move(*handler_owner)(std::move(outcome));
+            [executor, handler_owner](std::expected<AssistantMessage, cch::support::Error> outcome) noexcept {
+                boost::asio::dispatch(
+                    executor,
+                    [handler_owner, outcome = std::move(outcome)]() mutable noexcept {
+                        std::move(*handler_owner)(std::move(outcome));
+                    });
             });
+        detail::t_initiating_executor = previous_executor;
     };
     co_return co_await boost::asio::async_initiate<
         void(std::expected<AssistantMessage, cch::support::Error>)>(

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cch/ai/Provider.hpp>
-#include <cch/ai/providers/StreamTransport.hpp>
-#include <cch/ai/providers/WebSocketTransport.hpp>
+#include "ai/providers/StreamTransport.hpp"
+#include "ai/providers/WebSocketTransport.hpp"
 
 #include <chrono>
 #include <memory>
