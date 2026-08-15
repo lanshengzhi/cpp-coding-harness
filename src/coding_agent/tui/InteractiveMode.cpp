@@ -2096,11 +2096,7 @@ public:
         running_ = false;
         // Retire the action generation so late deliveries from captured
         // hooks are rejected after Close (ADR 0040).
-        retire_action_generation();
-        subscription_.reset();
-        if (session_ != nullptr) {
-            session_->close();
-        }
+        retire_current_session();
         const auto stopped = tui_.stop();
         tui_started_ = false;
         if (!completion_result_) completion_result_.emplace();
@@ -3709,10 +3705,32 @@ private:
     /// new session's snapshot. The host-owned view stays in place; the chat
     /// re-renders like pi's `renderCurrentSessionState`. Retires the action
     /// generation so actions admitted by the previous session are rejected.
+    ///
+    /// Session replacement quiesces the previous current Session before
+    /// installing the replacement (ADR 0040, issue #466): the old Session's
+    /// prompt admission stops and its active work is cancelled before the new
+    /// Session becomes current. `close()` is the synchronous admission stop;
+    /// the old Session's admitted work then quiesces asynchronously on the
+    /// shared Runtime root, and its late completions are retired by the
+    /// generation stamp (`prompt_finished`/`user_bash_finished`) so they can
+    /// never mutate or render as the new Session.
     [[nodiscard]] util::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> next) {
-        retire_action_generation();
-        subscription_.reset();
+        retire_current_session();
+        // The retired Session's in-flight prompt and User Bash can no longer
+        // gate or render as the current Session: invalidate their interrupt
+        // generations and clear the active-work facts, the working indicator,
+        // and any pending-bash progress block (their stale completions are
+        // dropped by the generation check).
+        if (prompt_active_ || user_bash_active_) {
+            note_prompt_finished();
+            prompt_active_ = false;
+            user_bash_active_ = false;
+            if (view_ != nullptr) {
+                view_->clear_status_indicator();
+                view_->clear_user_bash_progress();
+            }
+        }
         owned_session_ = std::move(next);
         session_ = owned_session_.get();
         model_completion_ = nullptr;
@@ -5343,11 +5361,13 @@ private:
         // editor (pi setText(text), ADR 0028) — never a re-serialized form.
         auto recall = trim_editor_submission(text);
         const auto self = shared_from_this();
+        const std::size_t started_generation = action_generation_;
         boost::asio::co_spawn(
             executor_,
             [self,
              invocation = std::move(invocation),
-             recall = std::move(recall)]() mutable -> boost::asio::awaitable<void> {
+             recall = std::move(recall),
+             started_generation]() mutable -> boost::asio::awaitable<void> {
                 auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
                     *self->session_,
                     std::move(invocation->command),
@@ -5360,11 +5380,17 @@ private:
                         }
                         return {};
                     });
-                self->user_bash_finished(std::move(result), recall);
+                self->user_bash_finished(started_generation, std::move(result), recall);
             },
-            [weak = weak_from_this()](std::exception_ptr exception) {
+            [weak = weak_from_this(), started_generation](std::exception_ptr exception) {
                 if (!exception) return;
                 if (const auto self = weak.lock()) {
+                    if (self->generation_retired(started_generation)) {
+                        // A launch failure from a retired Session generation
+                        // cannot mutate or render as the current Session
+                        // (issue #466).
+                        return;
+                    }
                     self->user_bash_active_ = false;
                     if (self->view_ != nullptr && self->running_) {
                         self->view_->clear_user_bash_progress();
@@ -5471,11 +5497,13 @@ private:
         note_prompt_started();
         prompt_active_ = true;
         const auto self = shared_from_this();
+        const std::size_t started_generation = action_generation_;
         boost::asio::co_spawn(
             executor_,
             [self,
              text = std::move(text),
-             options = std::move(options)]() mutable -> boost::asio::awaitable<void> {
+             options = std::move(options),
+             started_generation]() mutable -> boost::asio::awaitable<void> {
                 util::ExpectedVoid result;
                 try {
                     result = co_await self->session_->prompt(text, std::move(options));
@@ -5490,11 +5518,13 @@ private:
                         "Native TUI prompt failed",
                         "unknown exception"));
                 }
-                self->prompt_finished(std::move(result), text);
+                self->prompt_finished(started_generation, std::move(result), text);
             },
-            [weak = weak_from_this()](std::exception_ptr exception) {
+            [weak = weak_from_this(), started_generation](std::exception_ptr exception) {
                 if (exception) {
-                    if (const auto self = weak.lock()) self->prompt_launch_failed(exception);
+                    if (const auto self = weak.lock()) {
+                        self->prompt_launch_failed(started_generation, exception);
+                    }
                 }
             });
     }
@@ -5536,7 +5566,14 @@ private:
         tui_.invalidate();
     }
 
-    void prompt_launch_failed(std::exception_ptr exception) {
+    void prompt_launch_failed(
+        std::size_t started_generation,
+        std::exception_ptr exception) {
+        if (generation_retired(started_generation)) {
+            // A launch failure from a retired Session generation cannot
+            // mutate or render as the current Session (issue #466).
+            return;
+        }
         note_prompt_finished();
         prompt_active_ = false;
         std::string detail = "unknown exception";
@@ -5553,7 +5590,18 @@ private:
         if (exit_requested_) signal_exit();
     }
 
-    void prompt_finished(util::ExpectedVoid result, const std::string& submitted_text) {
+    void prompt_finished(
+        std::size_t started_generation,
+        util::ExpectedVoid result,
+        const std::string& submitted_text) {
+        if (generation_retired(started_generation)) {
+            // A completion from a retired Session generation (the Session was
+            // replaced or closed): the old Session's close already retired its
+            // interrupt generation and cleared the active-work facts, so this
+            // late completion must not render, mutate, or un-gate the current
+            // Session (issue #466).
+            return;
+        }
         note_prompt_finished();
         prompt_active_ = false;
         sync_session_observations();
@@ -5566,8 +5614,16 @@ private:
     }
 
     void user_bash_finished(
+        std::size_t started_generation,
         util::Expected<runtime::UserBashCompletion> result,
         const std::string& recall) {
+        if (generation_retired(started_generation)) {
+            // A completion from a retired Session generation (the Session was
+            // replaced or closed): the old Session's close already retired its
+            // active-work facts, so this late completion must not commit or
+            // render as the current Session (issue #466).
+            return;
+        }
         user_bash_active_ = false;
         if (view_ != nullptr && running_) {
             if (result) {
@@ -5921,6 +5977,29 @@ private:
     /// Retire the current action generation (session replacement or Close):
     /// later deliveries admitted by the retired generation are rejected.
     void retire_action_generation() noexcept { ++action_generation_; }
+
+    /// Retire the current action generation, detach the current Session's
+    /// subscriptions, and request Session close (ADR 0040, issue #466): the
+    /// previous current Session's prompt admission stops before a replacement
+    /// is installed or the mode closes, while its admitted work quiesces
+    /// asynchronously on the shared Runtime root.
+    void retire_current_session() noexcept {
+        retire_action_generation();
+        subscription_.reset();
+        session_event_subscription_.reset();
+        if (session_ != nullptr) {
+            session_->close();
+        }
+    }
+
+    /// Reports whether a prompt/User Bash completion was admitted by a
+    /// retired Session generation (the Session was replaced or closed). Such
+    /// late completions must not mutate or render as the current Session
+    /// (issue #466).
+    [[nodiscard]] bool generation_retired(
+        std::size_t started_generation) const noexcept {
+        return started_generation != action_generation_;
+    }
 
     /// Startup diagnostics stashed by the boot `start()` until the boot
     /// session binds and `initialize_view` renders them (pi

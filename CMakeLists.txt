@@ -706,6 +706,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
         tests/coding_agent/runtime/SessionForkTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
+        tests/coding_agent/runtime/SessionSharedRuntimeTest.cpp
         tests/coding_agent/runtime/SessionSuiteGoldenTest.cpp
         tests/coding_agent/runtime/TreeNavigationTest.cpp
         tests/coding_agent/runtime/UserBashCancellationTest.cpp
@@ -747,6 +748,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/SessionSelectorComponentTest.cpp
         tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp
         tests/coding_agent/tui/SessionSelectorSearchTest.cpp
+        tests/coding_agent/tui/SessionReplacementTest.cpp
         tests/coding_agent/tui/SettingsSelectorTest.cpp
         tests/coding_agent/tui/StringListSelectorTest.cpp
         tests/coding_agent/tui/ThemeControllerTest.cpp

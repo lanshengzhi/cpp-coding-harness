@@ -740,6 +740,13 @@ struct SessionTargetNormalizationOptions {
     plan.target = std::move(*target);
 
     plan.model_runtime = std::move(request.model_runtime);
+    // A host-shared ModelRuntime (ADR 0029/0030, issue #466) is never owned
+    // or released by the Session: closing one Session must not stop the
+    // shared Models resources the replacement Session needs. The private test
+    // seam keeps the same rule for its host-injected runtime.
+    if (plan.model_runtime) {
+        plan.model_runtime_owned = false;
+    }
     plan.cli_selection = AssemblyPlan::CliModelSelection{
         .provider = std::move(request.provider),
         .model = std::move(request.model),
@@ -1612,14 +1619,12 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     if (!plan) {
         return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
     }
-    // A host-injected runtime (the private E2E seam) wins; otherwise the
-    // injected Models is the runtime's catalog: its scripted fake provider
-    // serves streams, and the request model is fabricated from it (the
-    // deterministic provider surface the deleted fake-provider CLI flag used
-    // to drive).
-    if (plan->model_runtime) {
-        plan->model_runtime_owned = false;
-    } else {
+    // A host-injected runtime (the private E2E seam, already marked as
+    // never-owned by normalize_cli) wins; otherwise the injected Models is
+    // the runtime's catalog: its scripted fake provider serves streams, and
+    // the request model is fabricated from it (the deterministic provider
+    // surface the deleted fake-provider CLI flag used to drive).
+    if (!plan->model_runtime) {
         plan->model_runtime = std::move(*wrapped);
         plan->model_runtime_owned = true;
         plan->cli_fake = true;
@@ -1648,11 +1653,10 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     if (!plan) {
         return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
     }
-    // A host-injected runtime (the private E2E seam) wins; otherwise the
-    // injected Models is the runtime's catalog (see the two-argument seam).
-    if (plan->model_runtime) {
-        plan->model_runtime_owned = false;
-    } else {
+    // A host-injected runtime (the private E2E seam, already marked as
+    // never-owned by normalize_cli) wins; otherwise the injected Models is
+    // the runtime's catalog (see the two-argument seam).
+    if (!plan->model_runtime) {
         plan->model_runtime = std::move(*wrapped);
         plan->model_runtime_owned = true;
         plan->cli_fake = true;

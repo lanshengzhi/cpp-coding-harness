@@ -124,11 +124,15 @@ struct AgentSessionCreationRequest {
     /// deterministic request model (compaction thresholds, auth guidance)
     /// supply it here.
     std::optional<ai::Model> request_model;
-    /// Private test seam: a host-injected ModelRuntime that wins over the
-    /// default-created runtime (ADR 0029: runtimes are reusable across
-    /// sessions and are never disposed by the session). Production callers
-    /// never set it; the interactive E2E drives a fake ModelRuntime scripted
-    /// turn through it.
+    /// The host-shared ModelRuntime the Session uses (ADR 0029/0030, issue
+    /// #466): the interactive CLI host builds one runtime and passes it to
+    /// the boot Session and every in-session replacement, so Runtime loop,
+    /// worker capacity, and model/auth resources are reused rather than
+    /// reconstructed. The Session never owns or releases a host-injected
+    /// runtime, so closing one Session keeps the shared Models resources the
+    /// replacement Session needs. The private test seam injects a fake
+    /// ModelRuntime through it; absent, the factory default-creates a
+    /// Session-owned runtime from the Agent Config Directory.
     std::shared_ptr<coding_agent::ModelRuntime> model_runtime;
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set. Production callers never set it (the fixed #331 tool set is

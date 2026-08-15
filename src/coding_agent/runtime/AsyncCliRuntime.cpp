@@ -14,6 +14,7 @@
 #include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
 
@@ -151,6 +152,21 @@ void print_session_diagnostics(
     cch::tui::ProcessTerminal terminal;
     auto io = std::make_shared<boost::asio::io_context>();
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, kRuntimeLimits);
+    // One Models runtime shared by the boot Session and every in-session
+    // replacement (ADR 0029/0030, issue #466): the Runtime loop, worker
+    // capacity, and model/auth resources are reused rather than reconstructed
+    // for each Session, and closing one Session never releases the shared
+    // Models resources the replacement Session needs. The injected test
+    // catalog path keeps its own per-Session wrapping (the same `ai::Models`
+    // is already shared there); a production runtime-creation failure falls
+    // back to per-Session construction so the boot reports the same
+    // session-creation error it would have reported otherwise.
+    std::shared_ptr<coding_agent::ModelRuntime> shared_runtime;
+    if (!models) {
+        if (auto created = coding_agent::ModelRuntime::create({}); created) {
+            shared_runtime = std::move(*created);
+        }
+    }
     // pi `createAgentSessionRuntime`: the in-session session flows reuse the
     // CLI-owned facts (model selection, resource flags); the factory applies
     // them to each replacement request, and the state keeps the same facts
@@ -179,9 +195,10 @@ void print_session_diagnostics(
     // future completes and read after io.run(), so the future synchronizes.
     bool creation_failure_reported = false;
     coding_agent::tui::TuiActionSink action_sink =
-        [facts, models, runtime_root, &streams, &creation_failure_reported,
-         is_resume_target](std::size_t /* action_generation */,
-                          coding_agent::tui::TuiActionVariant action)
+        [facts, models, shared_runtime, runtime_root, &streams,
+         &creation_failure_reported, is_resume_target](
+            std::size_t /* action_generation */,
+            coding_agent::tui::TuiActionVariant action)
         -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
             // One move-only sink carries every application-level Native TUI
             // operation to the composition host (ADR 0040); dispatch on the
@@ -224,6 +241,14 @@ void print_session_diagnostics(
                         request.model = facts.model;
                         request.models = facts.models;
                         request.api_key = facts.api_key;
+                        if (shared_runtime) {
+                            // The replacement Session reuses the host-shared
+                            // Models runtime instead of reconstructing one
+                            // (issue #466); the factory never owns or releases
+                            // it, so closing a Session keeps the resources the
+                            // replacement needs.
+                            request.model_runtime = shared_runtime;
+                        }
                         auto created = models
                             ? coding_agent::create_agent_session_for_testing(
                                   std::move(request), models)
