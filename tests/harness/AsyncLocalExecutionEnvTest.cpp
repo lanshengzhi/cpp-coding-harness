@@ -79,7 +79,7 @@ public:
     TestRuntime()
         : loop_(std::make_shared<boost::asio::io_context>()),
           work_guard_(boost::asio::make_work_guard(*loop_)),
-          root_(loop_, 2, 32, 1024 * 1024),
+          root_(loop_, harness::RuntimeLimits{}),
           loop_thread_([this] { loop_->run(); }) {}
 
     ~TestRuntime() {
@@ -522,7 +522,13 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "original");
     auto io = std::make_shared<boost::asio::io_context>();
-    harness::RuntimeRoot root(io, 1, 1, 1024 * 1024);
+    harness::RuntimeRoot root(
+        io,
+        harness::RuntimeLimits{
+            .worker_count = 1,
+            .max_admitted_operations = 1,
+            .max_admitted_bytes = 1024 * 1024,
+        });
     auto target = root.make_target();
     harness::AsyncLocalExecutionEnv env(target, workspace.path());
 
@@ -552,7 +558,13 @@ TEST_CASE(
     "[harness][async][issue459]") {
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
-    harness::RuntimeRoot root(io, 1, 8, 1024 * 1024);
+    harness::RuntimeRoot root(
+        io,
+        harness::RuntimeLimits{
+            .worker_count = 1,
+            .max_admitted_operations = 8,
+            .max_admitted_bytes = 1024 * 1024,
+        });
     auto target = root.make_target();
     harness::AsyncLocalExecutionEnv env(target, workspace.path());
 
@@ -602,7 +614,13 @@ TEST_CASE(
 #if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
-    harness::RuntimeRoot root(io, 2, 8, 1024 * 1024);
+    harness::RuntimeRoot root(
+        io,
+        harness::RuntimeLimits{
+            .worker_count = 2,
+            .max_admitted_operations = 8,
+            .max_admitted_bytes = 1024 * 1024,
+        });
     auto target = root.make_target();
     harness::AsyncLocalExecutionEnv env(target, workspace.path(), true);
 

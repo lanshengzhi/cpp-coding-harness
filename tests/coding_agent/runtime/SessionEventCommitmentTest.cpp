@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <atomic>
@@ -81,7 +82,7 @@ struct CommitmentChannel {
     std::shared_ptr<harness::session::SessionStore> store;
     std::shared_ptr<runtime::SessionPersistence> persistence;
 
-    explicit CommitmentChannel(std::size_t max_admitted_operations = 64) {
+    explicit CommitmentChannel(harness::RuntimeLimits limits = {}) {
         harness::session::SessionMetadata metadata{
             .session_id = "commitment-test",
             .created_at = "2026-07-05T00:00:00Z",
@@ -94,7 +95,7 @@ struct CommitmentChannel {
         REQUIRE(jsonl);
         store =
             std::make_shared<harness::session::SessionStore>(std::move(*jsonl));
-        root.emplace(io, 2, max_admitted_operations, 16 * 1024 * 1024);
+        root.emplace(io, limits);
         target = root->make_target();
         persistence =
             std::make_shared<runtime::SessionPersistence>(store, target);
@@ -245,7 +246,15 @@ TEST_CASE(
 TEST_CASE(
     "Session Event Commitment vetoes the run with a typed Busy when admission is saturated",
     "[coding_agent][runtime][commitment][issue464]") {
-    CommitmentChannel channel{/*max_admitted_operations=*/0};
+    // Both the ordinary and reserved budgets are exhausted: control work has
+    // no lane left, so the commitment is rejected with a typed Busy.
+    CommitmentChannel channel{harness::RuntimeLimits{
+        .worker_count = 2,
+        .max_admitted_operations = 0,
+        .max_admitted_bytes = 16 * 1024 * 1024,
+        .max_reserved_operations = 0,
+        .max_reserved_bytes = 16 * 1024 * 1024,
+    }};
     runtime::SessionEventCommitment commitment{channel.persistence};
     auto sink = commitment.sink();
 
@@ -270,4 +279,52 @@ TEST_CASE(
     REQUIRE(sink(agent::MessageEndEvent{user_msg("hello")}).has_value());
     CHECK(channel.conclude(commitment, util::ExpectedVoid{}).has_value());
     CHECK(channel.persisted_user_texts().empty());
+}
+
+TEST_CASE(
+    "persistence control work is admitted while the ordinary runtime budget is saturated",
+    "[coding_agent][runtime][commitment][issue465]") {
+    // A small ordinary budget, a full reserved control lane (defaults).
+    CommitmentChannel channel{harness::RuntimeLimits{
+        .worker_count = 2,
+        .max_admitted_operations = 4,
+        .max_admitted_bytes = 16 * 1024 * 1024,
+    }};
+
+    // Fill the ordinary budget with bulk work that stays admitted.
+    std::vector<harness::RuntimeTarget::Admission> bulk;
+    for (std::size_t index = 0; index < 4; ++index) {
+        auto admission = channel.target->try_admit(16);
+        REQUIRE(admission.has_value());
+        bulk.push_back(std::move(*admission));
+    }
+    CHECK_FALSE(channel.target->try_admit(16).has_value());
+
+    // The persistence append is control work (ADR 0040 §Admission): reserved
+    // admission means ordinary bulk saturation cannot reject it.
+    auto appended =
+        channel.persistence->submit_message_append(user_msg("control work"));
+    CHECK(appended.has_value());
+
+    // Settle the bulk work, then the append outcome reaches the mailbox and
+    // the persistence chain goes idle.
+    for (auto& admission : bulk) {
+        std::move(admission).complete([]() noexcept {});
+    }
+    std::atomic<bool> drained{false};
+    std::atomic<bool> done{false};
+    boost::asio::co_spawn(
+        *channel.io,
+        [&]() -> boost::asio::awaitable<void> {
+            co_await channel.persistence->drain();
+            drained.store(true, std::memory_order_release);
+            done.store(true, std::memory_order_release);
+        },
+        boost::asio::detached);
+    REQUIRE(pump_until(*channel.io, done));
+    CHECK(drained.load(std::memory_order_acquire));
+    CHECK_FALSE(channel.persistence->failure().has_value());
+    CHECK(
+        channel.persisted_user_texts() ==
+        std::vector<std::string>{"control work"});
 }

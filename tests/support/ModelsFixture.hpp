@@ -27,7 +27,7 @@ public:
     FixtureRuntime()
         : loop_(std::make_shared<boost::asio::io_context>()),
           work_guard_(boost::asio::make_work_guard(*loop_)),
-          root_(loop_, 2, 32, 1024 * 1024),
+          root_(loop_, harness::RuntimeLimits{}),
           loop_thread_([this] { loop_->run(); }) {}
 
     ~FixtureRuntime() {

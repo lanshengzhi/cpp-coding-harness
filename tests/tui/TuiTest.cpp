@@ -666,3 +666,28 @@ TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][termina
     REQUIRE(terminal.drain_input());
     REQUIRE(terminal.drain_input(std::chrono::milliseconds(100), std::chrono::milliseconds(10)));
 }
+
+TEST_CASE("Tui coalesces repeated replaceable invalidations into one render request", "[tui][render][issue465]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
+
+    std::size_t render_requests{0};
+    tui.set_render_request_sink([&render_requests]() { ++render_requests; });
+    REQUIRE(tui.start());
+
+    // Replaceable render state: repeated invalidations before the next render
+    // coalesce into one request (ADR 0040), so redraw storms cannot flood the
+    // loop with duplicate work.
+    tui.invalidate();
+    tui.invalidate();
+    tui.invalidate();
+    CHECK(render_requests == 1);
+
+    // Rendering clears the pending flag; the next invalidation requests again.
+    REQUIRE(tui.render());
+    tui.invalidate();
+    CHECK(render_requests == 2);
+
+    REQUIRE(tui.stop());
+}

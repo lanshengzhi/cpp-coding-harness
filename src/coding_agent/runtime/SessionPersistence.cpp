@@ -195,7 +195,7 @@ support::ExpectedVoid SessionPersistence::submit_message_append(
     if (state_->first_failure) {
         return std::unexpected(*state_->first_failure);
     }
-    auto admission = state_->target->try_admit(byte_charge);
+    auto admission = state_->target->try_admit_reserved(byte_charge);
     if (!admission) {
         auto error = busy_error("runtime admission capacity is saturated");
         state_->first_failure = error;

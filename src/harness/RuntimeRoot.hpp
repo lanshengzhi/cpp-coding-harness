@@ -19,6 +19,37 @@ namespace cch::harness {
 
 class RuntimeTarget;
 
+/// Which admission budget an operation draws from (ADR 0040 §Admission,
+/// overload, and fairness). Ordinary bulk work uses the shared admitted
+/// budget; control work uses the reserved lane so it cannot be rejected
+/// behind ordinary bulk work.
+enum class AdmissionLane { Ordinary, Reserved };
+
+/// Scenario-measured Runtime admission and fairness limits (ADR 0040
+/// §Admission, overload, and fairness; `docs/runtime-capacities.md`). Ordinary
+/// bulk work (filesystem, Shell, model streaming) draws from the admitted
+/// budget; persistence, credential, terminal-completion, and Close control
+/// work draws from the reserved budget so ordinary traffic can never reject
+/// required progress. `mailbox_drain_batch` bounds how many terminal results
+/// one drain delivers before the mailbox requeues itself at the loop tail,
+/// so a busy target cannot monopolize the loop.
+struct RuntimeLimits {
+    /// Worker threads executing admitted blocking work off the loop.
+    std::size_t worker_count{2};
+    /// Ordinary admitted operations in flight (task-count bound).
+    std::size_t max_admitted_operations{32};
+    /// Ordinary admitted operations' conservative byte-charge bound.
+    std::size_t max_admitted_bytes{1024 * 1024};
+    /// Reserved control operations in flight (persistence, credential,
+    /// terminal completion, Close) — never rejected by ordinary bulk work.
+    std::size_t max_reserved_operations{8};
+    /// Reserved control operations' conservative byte-charge bound.
+    std::size_t max_reserved_bytes{256 * 1024};
+    /// Terminal results delivered per mailbox drain before the drain
+    /// requeues itself at the loop tail (bounded batch, ADR 0040).
+    std::size_t mailbox_drain_batch{16};
+};
+
 /// Private, coding-agent-composed Runtime root. One root owns the process
 /// interaction loop and bounded worker capacity for a CLI invocation. Each
 /// state-owning target receives its own ordered mailbox from make_target().
@@ -32,9 +63,7 @@ public:
     /// interaction loop) for the full Runtime lifetime.
     RuntimeRoot(
         std::shared_ptr<boost::asio::io_context> loop,
-        std::size_t worker_count,
-        std::size_t max_admitted_operations,
-        std::size_t max_admitted_bytes);
+        RuntimeLimits limits);
     RuntimeRoot(RuntimeRoot&&) = delete;
     RuntimeRoot& operator=(RuntimeRoot&&) = delete;
     ~RuntimeRoot();
@@ -86,14 +115,22 @@ public:
         Admission(
             std::shared_ptr<State> state,
             std::size_t sequence,
-            std::size_t byte_charge) noexcept;
+            std::size_t byte_charge,
+            AdmissionLane lane) noexcept;
 
         std::shared_ptr<State> state_;
         std::size_t sequence_{0};
         std::size_t byte_charge_{0};
+        AdmissionLane lane_{AdmissionLane::Ordinary};
     };
 
+    /// Admit ordinary bulk work from the shared ordinary budget; nullopt is
+    /// a typed capacity rejection (the caller maps it to domain `Busy`).
     [[nodiscard]] std::optional<Admission> try_admit(std::size_t byte_charge) const noexcept;
+    /// Admit control work from the reserved budget (persistence, credential,
+    /// terminal completion, Close); nullopt is a typed capacity rejection.
+    /// Reserved admission cannot be rejected behind ordinary bulk work.
+    [[nodiscard]] std::optional<Admission> try_admit_reserved(std::size_t byte_charge) const noexcept;
     [[nodiscard]] boost::asio::any_io_executor executor() const noexcept;
 
     explicit RuntimeTarget(std::shared_ptr<State> state) noexcept;

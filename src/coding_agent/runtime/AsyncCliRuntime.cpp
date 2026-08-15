@@ -39,9 +39,13 @@
 namespace cch::cli {
 namespace {
 
-constexpr std::size_t kRuntimeWorkerCount{2};
-constexpr std::size_t kRuntimeMaxAdmittedOperations{32};
-constexpr std::size_t kRuntimeMaxAdmittedBytes{1024 * 1024};
+/// Scenario-measured Runtime capacities and fairness limits
+/// (`docs/runtime-capacities.md`; ADR 0040 §Admission, overload, and
+/// fairness). The `harness::RuntimeLimits` defaults are the measured
+/// production policy; every CLI Runtime root uses the same set so
+/// replacement Sessions reuse identical admission and mailbox-batch
+/// behavior.
+constexpr harness::RuntimeLimits kRuntimeLimits{};
 
 /// pi `readPipedStdin`: read all of piped stdin and trim it; empty (or
 /// whitespace-only) content is absent and contributes nothing to the initial
@@ -146,11 +150,7 @@ void print_session_diagnostics(
     coding_agent::runtime::AgentSessionCreationRequest request) {
     cch::tui::ProcessTerminal terminal;
     auto io = std::make_shared<boost::asio::io_context>();
-    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
-        io,
-        kRuntimeWorkerCount,
-        kRuntimeMaxAdmittedOperations,
-        kRuntimeMaxAdmittedBytes);
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, kRuntimeLimits);
     // pi `createAgentSessionRuntime`: the in-session session flows reuse the
     // CLI-owned facts (model selection, resource flags); the factory applies
     // them to each replacement request, and the state keeps the same facts
@@ -532,11 +532,7 @@ void print_session_diagnostics(
     }
 
     auto runtime_io = std::make_shared<boost::asio::io_context>();
-    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
-        runtime_io,
-        kRuntimeWorkerCount,
-        kRuntimeMaxAdmittedOperations,
-        kRuntimeMaxAdmittedBytes);
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(runtime_io, kRuntimeLimits);
     request.execution_runtime_target = runtime_root->make_target();
 
     auto created = create_session();
