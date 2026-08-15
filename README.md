@@ -33,6 +33,8 @@ ctest --preset vcpkg-release
 
 The Release executable is `build/release/cpp_harness`. Run the unfiltered CTest preset for final validation.
 
+Every supported configure runs the Parity Architecture Gate fail-closed (ADR 0039), including tests-disabled configurations; every normal build, direct production-target build, and CTest entry point additionally requires fresh successful build-phase Gate evidence (compile commands and compiler depfiles). The deterministic machine-readable report is written to `<binary-dir>/parity-build-gate.json` (for the default preset, `build/parity-build-gate.json`) on every run, pass or fail.
+
 ## Install
 
 A supported Runtime-only install is approved in [ADR 0039](docs/adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md) but is not implemented yet. The current CMake project has no install rules, so `cmake --install` installs no files. Issue [#472](https://github.com/lanshengzhi/cpp-coding-harness/issues/472) tracks the relocatable Runtime, required resources and notices, dependency audit, and clean-prefix smoke validation.

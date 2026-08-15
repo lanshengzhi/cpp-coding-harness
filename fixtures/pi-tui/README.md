@@ -168,8 +168,8 @@ Run each item against a real terminal and record the outcome in the gate report:
 
 The real-terminal checklist is bounded to these six items — everything else on the ADR 0035
 surface is exercised deterministically by the differential tests, the lifecycle tests, or the
-architecture scan below. No E2E (interactive-mode boot through an agent turn) is attempted: that
-belongs to the pi-coding-agent gate.
+fail-closed Parity Architecture Gate (ADR 0039). No E2E (interactive-mode boot through an agent
+turn) is attempted: that belongs to the pi-coding-agent gate.
 
 **Recording.** The checklist above is the committed, bounded manual artifact of this gate; the
 six expected outcomes are pinned here. Executing it requires a real emulator, so the run is the
@@ -199,7 +199,7 @@ tickets T2–T9 ([#378]–[#385]); this gate re-checks the coverage rows below.
 | 1 | Terminal seam: raw mode, bracketed paste (`?2004`), SIGWINCH refresh, Kitty negotiation (flags 7) with modifyOtherKeys fallback, split-response buffering with pi's 150 ms fragment timeout, synchronized output, `Expected`-carrying capability/mode reporting, caller-supplied fds, serial worker, drain-before-exit | `packages/tui/src/terminal.ts` | `Terminal.hpp`, `ProcessTerminal.hpp` (+`VirtualTerminal.hpp`), `src/tui/ProcessTerminal.cpp`, `KeyboardProtocol.*` | `ProcessTerminalTest` (11 rows: mode restore, rollback on partial startup, synchronized-output conservatism, drain), `TuiTest` `"Terminal seam records title and progress through VirtualTerminal"` |
 | 2 | Terminal additions: `set_title` (OSC 0), `set_progress` (OSC 9;4 with pi's 1-second keepalive), `drain_input` (pre-exit Kitty key-release drain) | `interactive-mode.ts` call sites at `83114817` (`setTitle`/`setProgress`/`drainInput`) | `Terminal.hpp`, `ProcessTerminal.cpp`, `VirtualTerminal.cpp` | `ProcessTerminalTest` `"Process Terminal writes OSC 0 window titles"`, `TuiTest` `"VirtualTerminal stop clears an active progress indicator"`, `"VirtualTerminal drain input is a started-gated no-op"` |
 | 3 | Input protocol layer (fork A): typed `KeyEvent`/`PasteEvent` decode at the terminal edge with pi's full sequence-table coverage (legacy, modifyOtherKeys `CSI 27;m;k~`, Kitty CSI-u with event types, shifted/base-layout alternate keys, lock-mask filtering, non-Latin safeguards); `parse_key_id`/`key_id`/`matches_key` implement pi's `modifier+key` grammar with alias canonicalization; press/repeat/release with per-component opt-in; bounded paste (1 MiB) | `packages/tui/src/keys.ts` | `Keys.hpp`, `src/tui/InputDecoder.*`, `Keys.cpp` | `KeysTest`, `TuiTest` input rows, `PiTuiDifferentialTest` → `input-decode.json` (140-corpus byte-compare, mode-dependent legacy column, 29 pinned divergences, paste framing, chunk splits) |
-| 4 | Keybindings: the 30 assembled `tui.*` actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) with pi's default keys at `83114817`; immutable resolved registry, one startup read, replace-all-defaults, empty-array unbind, bounded redacted diagnostics; `tui.input.copy` + six `tui.altScreen.*` recognized-but-unassembled | `packages/tui/src/keybindings.ts` (`TUI_KEYBINDINGS`) | `Keybindings.hpp`/`.cpp`, `docs/keybindings.md` | `KeybindingsTest`, `PiTuiDifferentialTest` → `keybindings.json`, architecture scan `"deferred pi-tui capabilities are absent"` |
+| 4 | Keybindings: the 30 assembled `tui.*` actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) with pi's default keys at `83114817`; immutable resolved registry, one startup read, replace-all-defaults, empty-array unbind, bounded redacted diagnostics; `tui.input.copy` + six `tui.altScreen.*` recognized-but-unassembled | `packages/tui/src/keybindings.ts` (`TUI_KEYBINDINGS`) | `Keybindings.hpp`/`.cpp`, `docs/keybindings.md` | `KeybindingsTest`, `PiTuiDifferentialTest` → `keybindings.json`, the Parity Architecture Gate (ADR 0039; user story 40) |
 | 5 | Editor stack: multiline grapheme-segmented editing, paste-marker-aware word wrap, paste markers with `expanded_text`, undo, kill ring (yank/yank-pop), word navigation, jump-to-char, keybinding-table dispatch, cursor-location reporting, **history** (`addToHistory` on every submit path with cursor-boundary up/down recall), visible-line window `max(5, floor(rows × 0.3))`, `paddingX`, `autocompleteMaxVisible` (default 5, clamp 3..20); `EditorOptions::disable_submit` removed | `packages/tui/src/components/editor.ts`, `interactive-mode.ts` `addToHistory` call sites | `Editor.hpp`, `src/tui/Editor.cpp` | `EditorTest` (41 rows incl. `[issue379]` history rows: submit-path recording, 100-entry bound, cursor-boundary recall, undoable recall), `TuiTest`/`OverlayTest` cursor rows |
 | 6 | Autocomplete: async debounced abortable provider contract, `AutocompleteItem`/`AutocompleteRequest`/`AutocompleteSuggestions`/`SlashCommand` values, `CombinedAutocompleteProvider` semantics (slash commands + `@`/`#` fd-backed filesystem completion with quoted-path handling, `.git` exclusion, graceful `fd` absence → empty suggestions, fuzzy ranking, abort awareness), `applyCompletion` text surgery | `packages/tui/src/autocomplete.ts`, `interactive-mode.ts` wiring | `Autocomplete.hpp`, `src/tui/Autocomplete.cpp` | `AutocompleteTest` (9 rows: debounce/abort ordering, stale-response rejection by generation, fd-walk abort, slash/argument completion), `EditorTest` `[issue383]` rows |
 | 7 | Fuzzy as a public module: subsequence scoring with consecutive/word-boundary bonuses, matched-index reporting, ranking filter | `packages/tui/src/fuzzy.ts` (pi: 4 consumers) | `Fuzzy.hpp`, `src/tui/Fuzzy.cpp` | `FuzzyTest` (20 rows), `PiTuiDifferentialTest` → `fuzzy.json` |
@@ -254,9 +254,9 @@ gate re-checks the rows:
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
-Verified by the architecture scan `"deferred pi-tui capabilities are absent with no placeholder
-surface"` (`ArchitectureSurfaceScanTest`, scanning `include/cch/tui` + `src/tui` for every symbol
-below) and by the header inventory:
+Verified absent-with-no-placeholder by the fail-closed Parity Architecture Gate (ADR 0039): any
+reintroduced unclassified/unknown target, root, or source fails configure/build (spec user story
+40), and by the header inventory:
 
 - The entire alt-screen/viewport half: `TuiAltScreen`/`ViewportTUI`/`setLayoutRoot`, the layout
   engine and `LAYOUT_NODE` protocol, `ScrollView`, `Stack`/`HStack`/`VStack`,
@@ -281,7 +281,7 @@ below) and by the header inventory:
 
 Every capability scoped by ADR 0035 is either a **Supported Capability** carrying the evidence in
 the checklist above (differential byte-compare, screen-state goldens, lifecycle tests, or the
-bounded manual checklist), or a **Deferred Capability** verified absent by the architecture scan.
+bounded manual checklist), or a **Deferred Capability** verified absent by the fail-closed Parity Architecture Gate (ADR 0039).
 There are no partial placeholders and no compatibility shims.
 
 Two alignment defects surfaced by the gate were fixed and pinned while building the evidence: the
@@ -304,7 +304,8 @@ Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate r
   mode-dependent + 29 divergences + 12 discarded + 3 paste + 5 chunk splits) + `KeysTest`/
   `TuiTest` input rows.
 - **Keybindings** — `PiTuiDifferentialTest` assembled-table row + `KeybindingsTest` + the
-  recognized-but-unassembled checks in the architecture scan.
+  recognized-but-unassembled rows in `KeybindingsTest`/`PiTuiDifferentialTest` and the Parity
+  Architecture Gate (ADR 0039).
 - **Encoder bytes** — `PiTuiDifferentialTest` `image-encoder` row + `TerminalImageTest` (21) +
   `ImageTest` (18).
 - **Utility/fuzzy/markdown surfaces** — `PiTuiDifferentialTest` `utils`/`fuzzy`/`markdown` rows +
@@ -313,7 +314,7 @@ Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate r
   scrollback-flow rows) + `RenderDifferentialTest` +
   `TuiTest` + `OverlayTest`.
 - **Lifecycle/ordering/cancellation** — the re-check table above (T2–T9 tickets).
-- **Deferred absence** — the architecture scan row.
+- **Deferred absence** — the Parity Architecture Gate (ADR 0039; user story 40).
 
 ### Residual notes
 

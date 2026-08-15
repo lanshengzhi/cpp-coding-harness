@@ -344,15 +344,19 @@ endfunction()
 # and the direct-include lexer output next to the build tree, then invokes the
 # Python validator against the manifest, index, and direct-include evidence; a
 # Gate failure fails configuration with the validator's deterministic report.
-# PROJECT_ROOT is the directory against which manifest interface roots resolve.
+# This Gate runs on every supported configure, including configurations with
+# tests disabled. PROJECT_ROOT is the directory against which manifest
+# interface roots resolve. EXTERNAL_INCLUDE_ROOTS names external dependency
+# include roots (for example the vcpkg installed include directory) that are
+# never project paths.
 #
 # Compile commands and depfiles are produced after generation/build, so the
-# build-phase Gate is driven by the same Python validator from the test harness
-# (see tests/architecture/ParityGateTest.cmake).
+# build-phase Gate is driven by cch_parity_add_build_gate (see
+# tests/architecture/ParityGateTest.cmake and cmake/parity/run-build-gate.cmake).
 function(cch_parity_run_gate manifest_path)
     set(options "")
     set(one_value_keywords PROJECT_ROOT)
-    set(multi_value_keywords "")
+    set(multi_value_keywords EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
     if(NOT EXISTS "${CCH_PARITY_GATE_SCRIPT}")
@@ -394,6 +398,11 @@ function(cch_parity_run_gate manifest_path)
     if(DEFINED gate_PROJECT_ROOT AND NOT "${gate_PROJECT_ROOT}" STREQUAL "")
         list(APPEND gate_command --project-root "${gate_PROJECT_ROOT}")
     endif()
+    if(DEFINED gate_EXTERNAL_INCLUDE_ROOTS)
+        foreach(external_root IN LISTS gate_EXTERNAL_INCLUDE_ROOTS)
+            list(APPEND gate_command --external-include-root "${external_root}")
+        endforeach()
+    endif()
     execute_process(
         COMMAND ${gate_command}
         RESULT_VARIABLE gate_result
@@ -407,102 +416,105 @@ function(cch_parity_run_gate manifest_path)
     message(STATUS "${gate_output}")
 endfunction()
 
-# ---------------------------------------------------------------------------
-# TEMPORARY non-blocking production audit — DELETE when mandatory production
-# enforcement lands (#470).
+# Wires the build-phase Parity Architecture Gate into the build graph (ADR
+# 0039; issue #470). Creates the `cch_parity_gate_build` custom target, a
+# member of `all`, that depends on every declared production target so its
+# command runs after all production compilation has produced fresh depfiles;
+# the command records the active dependency (depfile) evidence and validates
+# manifest, index, direct-include, compile-command, and depfile evidence at
+# the build phase, failing the build on any rejection.
 #
-# Production configure runs the same fail-closed Gate validator as the
-# fixtures (emit the ownership index, scan direct includes, validate against
-# the strict manifest) but reports policy violations instead of failing
-# configuration. The per-Owner contraction tickets (#456, #460, #463, #468)
-# resolved the split-target and reverse-edge violations, and #469 removed the
-# legacy `cch_util` target, the `cch/util` forwarding root, and the global
-# public header root, so the production graph is expected to audit clean.
-#
-# Reporting keeps any regression visible under its stable rule ID without
-# blocking the build, while incomplete or missing evidence still fails loudly
-# so no violation can disappear through a skipped declaration. Do not extend
-# this function or depend on its non-blocking behavior: #470 replaces it with
-# mandatory enforcement and deletes it.
-# ---------------------------------------------------------------------------
-function(cch_parity_run_gate_report manifest_path)
+# Test executables must additionally depend on ${CCH_PARITY_BUILD_GATE_TARGET}
+# so CTest entry points require fresh successful Gate evidence. EXTERNAL_
+# INCLUDE_ROOTS names external dependency include roots that are never project
+# paths. The target name is published as the CACHE INTERNAL variable
+# CCH_PARITY_BUILD_GATE_TARGET.
+function(cch_parity_add_build_gate manifest_path)
     set(options "")
-    set(one_value_keywords PROJECT_ROOT)
-    set(multi_value_keywords "")
+    set(one_value_keywords PROJECT_ROOT BUILD_DIR)
+    set(multi_value_keywords EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
-    if(NOT EXISTS "${CCH_PARITY_GATE_SCRIPT}")
-        message(FATAL_ERROR "Parity Architecture Gate validator not found: '${CCH_PARITY_GATE_SCRIPT}'")
+    if(NOT DEFINED gate_BUILD_DIR OR "${gate_BUILD_DIR}" STREQUAL "")
+        set(gate_BUILD_DIR "${CMAKE_BINARY_DIR}")
+    endif()
+    if(NOT DEFINED gate_PROJECT_ROOT OR "${gate_PROJECT_ROOT}" STREQUAL "")
+        set(gate_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
 
-    set(index_path "${CMAKE_BINARY_DIR}/parity-ownership-index.json")
-    cch_parity_emit_index("${index_path}")
+    get_property(production_targets GLOBAL PROPERTY CCH_PARITY_DECLARED_TARGETS)
+    if(NOT production_targets)
+        message(FATAL_ERROR
+            "cch_parity_add_build_gate: no production targets are declared; call it after "
+            "every cch_parity_declare_target")
+    endif()
 
-    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+    set(build_gate_target "cch_parity_gate_build")
+    set(CCH_PARITY_BUILD_GATE_TARGET "${build_gate_target}" CACHE INTERNAL
+        "Target that runs the build-phase Parity Architecture Gate")
+    set(CCH_PARITY_BUILD_GATE_MANIFEST "${manifest_path}" CACHE INTERNAL
+        "Strict Parity Architecture Manifest path used by the build-phase Gate")
+    set(CCH_PARITY_BUILD_GATE_PROJECT_ROOT "${gate_PROJECT_ROOT}" CACHE INTERNAL
+        "Project root used by the build-phase Gate")
+    set(CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS "${gate_EXTERNAL_INCLUDE_ROOTS}" CACHE INTERNAL
+        "External dependency include roots used by the build-phase Gate")
 
-    # Scan every declared source, forced include, and PCH input in all source
-    # text branches, producing the direct-include evidence the Gate resolves.
-    # A scan failure means the evidence is incomplete, which must fail loudly
-    # rather than disappear as a clean report.
-    get_property(scan_sources GLOBAL PROPERTY CCH_PARITY_SOURCES)
-    get_property(scan_forced GLOBAL PROPERTY CCH_PARITY_FORCED_INCLUDES)
-    get_property(scan_pch GLOBAL PROPERTY CCH_PARITY_PCH_INPUTS)
-    set(direct_includes_path "${CMAKE_BINARY_DIR}/parity-direct-includes.json")
-    execute_process(
+    add_custom_target(${build_gate_target} ALL
         COMMAND
-            "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
-            --out "${direct_includes_path}"
-            --sources ${scan_sources} ${scan_forced} ${scan_pch}
-        RESULT_VARIABLE scan_result
-        OUTPUT_VARIABLE scan_output
-        ERROR_VARIABLE scan_error
+            "${CMAKE_COMMAND}"
+            -DCCH_PARITY_GATE_SCRIPT=${CCH_PARITY_GATE_SCRIPT}
+            -DCCH_PARITY_MANIFEST=${manifest_path}
+            -DCCH_PARITY_INDEX=${gate_BUILD_DIR}/parity-ownership-index.json
+            -DCCH_PARITY_DIRECT_INCLUDES=${gate_BUILD_DIR}/parity-direct-includes.json
+            -DCCH_PARITY_COMPILE_COMMANDS=${gate_BUILD_DIR}/compile_commands.json
+            -DCCH_PARITY_PROJECT_ROOT=${gate_PROJECT_ROOT}
+            -DCCH_PARITY_DEPFILES=${gate_BUILD_DIR}/parity-build-gate-depfiles.json
+            -DCCH_PARITY_REPORT=${gate_BUILD_DIR}/parity-build-gate.json
+            $<$<BOOL:${gate_EXTERNAL_INCLUDE_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${gate_EXTERNAL_INCLUDE_ROOTS}>
+            -P ${CCH_PARITY_DIR}/run-build-gate.cmake
+        DEPENDS ${production_targets}
+        COMMENT "Parity Architecture Gate (build phase)"
+        VERBATIM
     )
-    if(NOT scan_result EQUAL 0)
-        message(FATAL_ERROR
-            "Parity Architecture Gate could not scan direct includes:\n${scan_output}${scan_error}")
-    endif()
 
-    set(gate_base_command
-        "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
-        --manifest "${manifest_path}"
-        --index "${index_path}"
-        --direct-includes "${direct_includes_path}"
-    )
-    if(DEFINED gate_PROJECT_ROOT AND NOT "${gate_PROJECT_ROOT}" STREQUAL "")
-        list(APPEND gate_base_command --project-root "${gate_PROJECT_ROOT}")
-    endif()
-
-    # Deterministic JSON report for automation, then the human report for the
-    # configure log. The validator always writes its report to stdout and uses
-    # exit code 1 to signal found violations, so the report is written
-    # regardless of the exit code; only an empty report is a hard failure.
-    set(json_command ${gate_base_command} --format json)
-    execute_process(
-        COMMAND ${json_command}
-        RESULT_VARIABLE json_result
-        OUTPUT_VARIABLE json_output
-        ERROR_VARIABLE json_error
-    )
-    if(json_output STREQUAL "")
-        message(FATAL_ERROR
-            "Parity Architecture Gate produced no machine-readable report:\n${json_error}")
-    endif()
-    file(WRITE "${CMAKE_BINARY_DIR}/parity-production-audit.json" "${json_output}")
-
-    set(human_command ${gate_base_command} --format human)
-    execute_process(
-        COMMAND ${human_command}
-        RESULT_VARIABLE gate_result
-        OUTPUT_VARIABLE gate_output
-        ERROR_VARIABLE gate_error
-    )
-    if(gate_result EQUAL 0)
-        message(STATUS "Parity Architecture Gate (production audit): PASS")
-    else()
-        message(WARNING
-            "Parity Architecture Gate: TEMPORARY non-blocking production audit reports "
-            "migration violations (mandatory enforcement lands in #470); see "
-            "${CMAKE_BINARY_DIR}/parity-production-audit.json")
-        message(STATUS "${gate_output}${gate_error}")
-    endif()
+    set(CCH_PARITY_BUILD_GATE_SCRIPT ${CCH_PARITY_DIR}/run-build-gate.cmake CACHE INTERNAL
+        "CMake script that runs the build-phase Parity Architecture Gate")
+    set(CCH_PARITY_BUILD_GATE_REPORT ${gate_BUILD_DIR}/parity-build-gate.json CACHE INTERNAL
+        "Path to the machine-readable build-phase Gate report")
 endfunction()
+
+# Attaches the build-phase Parity Architecture Gate as a POST_BUILD step of a
+# production target. Used on the final composition executable so that a direct
+# `--target cpp_harness` production-target build still requires fresh
+# successful Gate evidence: by the time the composition target's POST_BUILD
+# runs, every production source (including its own entry point) has compiled
+# and produced a fresh depfile, so the same evidence set is available that the
+# `cch_parity_gate_build` target validates on an `all` build.
+function(cch_parity_attach_build_gate_post_build target_name)
+    if(NOT TARGET ${target_name})
+        message(FATAL_ERROR
+            "cch_parity_attach_build_gate_post_build: unknown target '${target_name}'")
+    endif()
+    if(NOT DEFINED CCH_PARITY_BUILD_GATE_SCRIPT OR NOT DEFINED CCH_PARITY_BUILD_GATE_REPORT OR
+       NOT DEFINED CCH_PARITY_BUILD_GATE_MANIFEST)
+        message(FATAL_ERROR
+            "cch_parity_attach_build_gate_post_build: call cch_parity_add_build_gate() first")
+    endif()
+
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND
+            "${CMAKE_COMMAND}"
+            -DCCH_PARITY_GATE_SCRIPT=${CCH_PARITY_GATE_SCRIPT}
+            -DCCH_PARITY_MANIFEST=${CCH_PARITY_BUILD_GATE_MANIFEST}
+            -DCCH_PARITY_INDEX=${CMAKE_BINARY_DIR}/parity-ownership-index.json
+            -DCCH_PARITY_DIRECT_INCLUDES=${CMAKE_BINARY_DIR}/parity-direct-includes.json
+            -DCCH_PARITY_COMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json
+            -DCCH_PARITY_PROJECT_ROOT=${CCH_PARITY_BUILD_GATE_PROJECT_ROOT}
+            -DCCH_PARITY_DEPFILES=${CMAKE_BINARY_DIR}/parity-build-gate-depfiles.json
+            -DCCH_PARITY_REPORT=${CCH_PARITY_BUILD_GATE_REPORT}
+            $<$<BOOL:${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>
+            -P ${CCH_PARITY_BUILD_GATE_SCRIPT}
+        VERBATIM
+    )
+endfunction()
+

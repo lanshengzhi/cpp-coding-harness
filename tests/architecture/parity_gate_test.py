@@ -853,6 +853,63 @@ class CompileContextTest(unittest.TestCase):
             )
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNSUPPORTED_COMPILE_FLAG])
 
+    def test_unsupported_flag_on_declared_external_include_root_is_allowed(self):
+        # An unsupported include-affecting flag that points at a declared
+        # external dependency root (for example the vcpkg installed-dependency
+        # include directory, which lives under the build tree inside the
+        # project root) is external, not a project path, so it does not fail.
+        with tempfile.TemporaryDirectory() as tmp:
+            external = os.path.join(tmp, "build", "vcpkg_installed", "x64-linux", "include")
+            os.makedirs(external, exist_ok=True)
+            index = self._single_source_index(os.path.join(tmp, "model.cpp"))
+            commands = make_compile_commands(
+                [
+                    {
+                        "file": os.path.join(tmp, "model.cpp"),
+                        "directory": tmp,
+                        "command": f"g++ -isystem {external} -c {os.path.join(tmp, 'model.cpp')}",
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(),
+                index,
+                "d" * 64,
+                compile_commands=commands,
+                project_root=tmp,
+                external_include_roots=(external,),
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_unsupported_flag_on_project_path_still_rejected_with_external_root(self):
+        # Declaring one external root never makes an undeclared project path
+        # external: the same flag pointing at the project source tree still
+        # fails closed.
+        with tempfile.TemporaryDirectory() as tmp:
+            external = os.path.join(tmp, "build", "vcpkg_installed", "x64-linux", "include")
+            os.makedirs(external, exist_ok=True)
+            project_include = os.path.join(tmp, "include")
+            os.makedirs(project_include, exist_ok=True)
+            index = self._single_source_index(os.path.join(tmp, "model.cpp"))
+            commands = make_compile_commands(
+                [
+                    {
+                        "file": os.path.join(tmp, "model.cpp"),
+                        "directory": tmp,
+                        "command": f"g++ -isystem {project_include} -c {os.path.join(tmp, 'model.cpp')}",
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(),
+                index,
+                "d" * 64,
+                compile_commands=commands,
+                project_root=tmp,
+                external_include_roots=(external,),
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNSUPPORTED_COMPILE_FLAG])
+
     def test_undeclared_forced_include_is_rejected(self):
         index = self._single_source_index("/tmp/fake/model.cpp")
         commands = make_compile_commands(
@@ -1048,6 +1105,126 @@ class DepfileEvidenceTest(unittest.TestCase):
                 pg.PRODUCER_DEPFILES,
             },
         )
+
+
+class DepfileRecorderTest(unittest.TestCase):
+    """The active dependency evidence producer (`--record-depfiles`)."""
+
+    def _record(self, tmp, commands, manifest_digest="d" * 64):
+        source = Path(tmp) / "model.cpp"
+        index = make_index(
+            [
+                {
+                    "name": "cch_ai",
+                    "role": "owner",
+                    "owner": "cch_ai",
+                    "sources": [str(source)],
+                    "dependencies": [],
+                }
+            ]
+        )
+        manifest = valid_manifest()
+        index_path = Path(tmp) / "index.json"
+        index_path.write_text("index\n")
+        commands_path = Path(tmp) / "compile_commands.json"
+        commands_path.write_text("commands\n")
+        output_path = Path(tmp) / "depfiles.json"
+        pg._record_depfiles(
+            manifest,
+            index,
+            manifest_digest,
+            make_compile_commands(commands),
+            str(index_path),
+            str(commands_path),
+            str(output_path),
+        )
+        return json.loads(output_path.read_text())
+
+    def test_records_module_mapper_depfile_for_each_compiled_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            source.write_text("int x;\n")
+            depfile = Path(tmp) / "model.cpp.o.ddi.d"
+            depfile.write_text("model.cpp.o.ddi: model.cpp\n")
+            command = (
+                f"g++ -MD -fmodule-mapper=model.cpp.o.modmap "
+                f"-o model.cpp.o -c {source}"
+            )
+            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            self.assertEqual(document["producer"], pg.PRODUCER_DEPFILES)
+            self.assertEqual(document["schema_version"], 1)
+            self.assertEqual(
+                document["entries"],
+                [
+                    {
+                        "source": str(source),
+                        "depfile": str(depfile),
+                        "digest": sha256_file(depfile),
+                    }
+                ],
+            )
+
+    def test_records_traditional_output_depfile_without_module_mapper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            source.write_text("int x;\n")
+            depfile = Path(tmp) / "model.o.d"
+            depfile.write_text("model.o: model.cpp\n")
+            command = f"g++ -MD -o model.o -c {source}"
+            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            self.assertEqual(
+                document["entries"][0]["depfile"],
+                str(depfile),
+            )
+
+    def test_missing_depfile_is_omitted(self):
+        # A compiled source whose depfile does not exist yet is omitted; the
+        # validator then fails closed with PARITY-6003 for the missing entry.
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            source.write_text("int x;\n")
+            command = f"g++ -MD -o model.o -c {source}"
+            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            self.assertEqual(document["entries"], [])
+
+    def test_config_digest_ties_evidence_to_index_and_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            source.write_text("int x;\n")
+            depfile = Path(tmp) / "model.o.d"
+            depfile.write_text("model.o: model.cpp\n")
+            command = f"g++ -MD -o model.o -c {source}"
+            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            # Same inputs -> same digest.
+            second = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            self.assertEqual(document["config_digest"], second["config_digest"])
+            # A different compile-commands input -> a different digest.
+            index_path = Path(tmp) / "index.json"
+            commands_path = Path(tmp) / "compile_commands.json"
+            commands_path.write_text("changed\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            output_path = Path(tmp) / "depfiles2.json"
+            pg._record_depfiles(
+                valid_manifest(),
+                index,
+                "d" * 64,
+                make_compile_commands([{"file": str(source), "directory": tmp, "command": command}]),
+                str(index_path),
+                str(commands_path),
+                str(output_path),
+            )
+            second_document = json.loads(output_path.read_text())
+            self.assertNotEqual(document["config_digest"], second_document["config_digest"])
 
 
 if __name__ == "__main__":

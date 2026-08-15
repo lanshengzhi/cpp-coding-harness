@@ -344,15 +344,39 @@ target_include_directories(cpp_harness PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
 )
 
-# TEMPORARY non-blocking production audit (see #450; mandatory enforcement and
-# deletion land in #470). The production graph audits clean after the #469
-# contraction; any new violation is reported with its stable rule ID without
-# failing configure, so the build stays green while enforcement is mandatory
-# only in the fixtures.
-cch_parity_run_gate_report(
+# Mandatory fail-closed Parity Architecture Gate at configure time (ADR 0039;
+# issue #470). Configure validates the resolved ownership index and the
+# direct-include evidence against the strict manifest for every supported
+# configuration, including configurations with tests disabled; a rejection
+# fails configuration with the validator's deterministic report. The
+# build-phase Gate (compile commands and active depfile evidence) is wired in
+# after all production targets are declared (cch_parity_add_build_gate below).
+set(CCH_PARITY_EXTERNAL_INCLUDE_ROOTS
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
+cch_parity_run_gate(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
+    EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
 )
+
+# Mandatory build-phase Parity Architecture Gate (ADR 0039; issue #470). The
+# `cch_parity_gate_build` target is a member of `all`, so every normal build
+# runs or depends on the latest applicable Gate phase: it depends on every
+# declared production target, so its command runs after all production
+# compilation has produced fresh depfiles, then records the active dependency
+# evidence and validates manifest, index, direct-include, compile-command, and
+# depfile evidence, failing the build on any rejection. The composition
+# executable additionally carries the same Gate as a POST_BUILD step, so a
+# direct production-target build (`--target cpp_harness`) also requires fresh
+# successful Gate evidence. Test executables depend on
+# ${CCH_PARITY_BUILD_GATE_TARGET} so every CTest entry point requires it.
+cch_parity_add_build_gate(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
+    PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
+    BUILD_DIR "${CMAKE_BINARY_DIR}"
+    EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+)
+cch_parity_attach_build_gate_post_build(cpp_harness)
 
 if(CCH_BUILD_TESTS)
     # Suite-wide default hard timeout (ADR 0039; issue #447). CTest kills any
@@ -404,17 +428,17 @@ if(CCH_BUILD_TESTS)
     # Parity Architecture Gate (ADR 0039). The Python validator uses only the
     # standard library and Python 3.12+; it is a system tool, not a vcpkg
     # dependency. The unit case exercises the strict manifest, the
-    # direct-include lexer and canonical resolution, compile-context, and
-    # depfile-evidence rules directly; the fixture case configures a minimal
-    # legal fixture, an illegal cross-Owner target-edge fixture, and a set of
-    # poison-source fixtures end to end and asserts the stable rule-ID
-    # rejections (PARITY-2001, PARITY-4xxx, PARITY-6001).
+    # direct-include lexer and canonical resolution, compile-context,
+    # depfile-evidence, and evidence-producer rules directly; the fixture case
+    # configures a minimal legal fixture, an illegal cross-Owner target-edge
+    # fixture, and a set of poison-source fixtures end to end and asserts the
+    # stable rule-ID rejections (PARITY-2001, PARITY-4xxx, PARITY-6001).
     find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
     add_test(
         NAME cch_parity_gate_unit
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/parity_gate_test.py
     )
-    set_tests_properties(cch_parity_gate_unit PROPERTIES LABELS "architecture;parity-gate;issue448;issue449")
+    set_tests_properties(cch_parity_gate_unit PROPERTIES LABELS "architecture;parity-gate;issue448;issue449;issue470")
 
     add_test(
         NAME cch_parity_gate_fixture
@@ -423,7 +447,32 @@ if(CCH_BUILD_TESTS)
             -DCCH_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/ParityGateTest.cmake
     )
-    set_tests_properties(cch_parity_gate_fixture PROPERTIES LABELS "architecture;parity-gate;issue448;issue449")
+    set_tests_properties(cch_parity_gate_fixture PROPERTIES LABELS "architecture;parity-gate;issue448;issue449;issue470")
+
+    # Production build-phase Gate self-check (ADR 0039; issue #470): run the
+    # same fail-closed build-phase Gate against the production evidence
+    # (manifest, index, direct-include evidence, compile commands, and fresh
+    # depfile evidence) and assert it passes. This proves the production
+    # repository satisfies every manifest rule after package contraction and
+    # that the deterministic machine-readable report is written. It runs after
+    # the build has produced fresh depfiles; the build-phase Gate custom
+    # target is already a prerequisite of every test shard.
+    add_test(
+        NAME cch_parity_gate_production_build
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DCCH_PARITY_GATE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/parity_gate.py
+            -DCCH_PARITY_MANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json
+            -DCCH_PARITY_INDEX=${CMAKE_BINARY_DIR}/parity-ownership-index.json
+            -DCCH_PARITY_DIRECT_INCLUDES=${CMAKE_BINARY_DIR}/parity-direct-includes.json
+            -DCCH_PARITY_COMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json
+            -DCCH_PARITY_PROJECT_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DCCH_PARITY_DEPFILES=${CMAKE_BINARY_DIR}/parity-build-gate-depfiles.json
+            -DCCH_PARITY_REPORT=${CMAKE_BINARY_DIR}/parity-build-gate.json
+            -DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/run-build-gate.cmake
+    )
+    set_tests_properties(cch_parity_gate_production_build PROPERTIES LABELS "architecture;parity-gate;issue470")
 
     # Owner Interface standalone compile (ADR 0039; #469): every Owner
     # Interface header compiles alone with the include path restricted to its
@@ -485,6 +534,9 @@ if(CCH_BUILD_TESTS)
     # timeout instead of waiting out the suite-wide default (ADR 0039; #447).
     catch_discover_tests(cch_tests_support TEST_SPEC "~[fatal]" ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_support TEST_SPEC "[fatal]" PROPERTIES TIMEOUT 60 ADD_TAGS_AS_LABELS)
+    # Every test entry point requires fresh successful build-phase Gate evidence
+    # (ADR 0039; #470): the shard builds the Gate after all production targets.
+    add_dependencies(cch_tests_support ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # TUI
     add_executable(cch_tests_tui
@@ -523,6 +575,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_tui PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_tui ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_tui ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # AI
     add_executable(cch_tests_ai
@@ -563,6 +616,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_ai PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_ai ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_ai ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # agent
     add_executable(cch_tests_agent
@@ -585,6 +639,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_agent PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_agent ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_agent ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # harness and tools
     add_executable(cch_tests_harness_tools
@@ -614,6 +669,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_harness_tools PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_harness_tools ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_harness_tools ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # coding-agent composition (Session, Runtime, Models Runtime)
     add_executable(cch_tests_coding_agent
@@ -678,6 +734,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_coding_agent PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_coding_agent ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_coding_agent ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # coding-agent interactive TUI composition. BootTrustInteractiveTest
     # drives the in-process CLI seam (CliRunFixture) through the one
@@ -725,6 +782,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_coding_agent_interactive PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_coding_agent_interactive ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # CLI and architecture. The only shard that launches the built binary
     # (CliSmokeTest), so it carries the CCH_BINARY definition and a build
@@ -739,8 +797,6 @@ if(CCH_BUILD_TESTS)
         tests/cli/PrintModeTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
         tests/cli/StartupTuiTest.cpp
-        tests/architecture/ArchitectureSurfaceScanTest.cpp
-        tests/architecture/CMakeDependencyTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
 )
@@ -759,6 +815,7 @@ if(CCH_BUILD_TESTS)
     target_compile_options(cch_tests_cli_arch PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cch_tests_cli_arch cpp_harness)
     catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_cli_arch ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # Aggregate target that builds every shard (the Stage 4 entry point that
     # replaces the old single executable's build target).
@@ -772,5 +829,6 @@ if(CCH_BUILD_TESTS)
             cch_tests_coding_agent
             cch_tests_coding_agent_interactive
             cch_tests_cli_arch
+            ${CCH_PARITY_BUILD_GATE_TARGET}
 )
 endif()

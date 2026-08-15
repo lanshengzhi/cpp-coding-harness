@@ -1184,13 +1184,31 @@ def _split_command(command: str) -> list[str]:
         return command.split()
 
 
-def _is_project_path(arg: str, directory: str, project_root: Optional[str]) -> bool:
+def _is_project_path(
+    arg: str,
+    directory: str,
+    project_root: Optional[str],
+    external_include_roots: Sequence[str] = (),
+) -> bool:
+    """True when `arg` names a path under the project source tree.
+
+    Paths under a declared external include root (for example the vcpkg
+    installed-dependency include directory, which lives under the build tree
+    inside the project root) are external dependency locations, not project
+    ownership, so they never count as project paths.
+    """
     if project_root is None:
         return False
     candidate = arg if os.path.isabs(arg) else os.path.join(directory, arg)
     real_root = os.path.realpath(project_root)
     real = os.path.realpath(candidate)
-    return real == real_root or real.startswith(real_root + os.sep)
+    if real == real_root or real.startswith(real_root + os.sep):
+        for external_root in external_include_roots:
+            real_external = os.path.realpath(external_root)
+            if real == real_external or real.startswith(real_external + os.sep):
+                return False
+        return True
+    return False
 
 
 def _scan_compile_tokens(
@@ -1200,6 +1218,7 @@ def _scan_compile_tokens(
     directory: str,
     project_root: Optional[str],
     diagnostics: list[Diagnostic],
+    external_include_roots: Sequence[str] = (),
 ) -> None:
     forced_declared: set[str] = set()
     pch_declared: Optional[str] = None
@@ -1248,7 +1267,7 @@ def _scan_compile_tokens(
             continue
         if tok in unsupported_two_arg:
             arg = tokens[i + 1] if i + 1 < n else ""
-            if _is_project_path(arg, directory, project_root):
+            if _is_project_path(arg, directory, project_root, external_include_roots):
                 diagnostics.append(
                     Diagnostic(
                         RULE_UNSUPPORTED_COMPILE_FLAG,
@@ -1262,7 +1281,7 @@ def _scan_compile_tokens(
         for flag in unsupported_two_arg:
             if tok.startswith(flag + "="):
                 arg = tok[len(flag) + 1:]
-                if _is_project_path(arg, directory, project_root):
+                if _is_project_path(arg, directory, project_root, external_include_roots):
                     diagnostics.append(
                         Diagnostic(
                             RULE_UNSUPPORTED_COMPILE_FLAG,
@@ -1443,6 +1462,7 @@ def _check_compile_commands(
     compile_commands: Optional[CompileCommands],
     project_root: Optional[str],
     diagnostics: list[Diagnostic],
+    external_include_roots: Sequence[str] = (),
 ) -> None:
     if compile_commands is None:
         return
@@ -1495,7 +1515,10 @@ def _check_compile_commands(
                     path=source,
                 )
             )
-        _scan_compile_tokens(tokens, target, source, command.directory, project_root, diagnostics)
+        _scan_compile_tokens(
+            tokens, target, source, command.directory, project_root, diagnostics,
+            external_include_roots,
+        )
 
 
 def _check_depfiles(
@@ -1578,6 +1601,7 @@ def check(
     project_root: Optional[str] = None,
     phase: str = "configure",
     config_digest: Optional[str] = None,
+    external_include_roots: Sequence[str] = (),
 ) -> list[Diagnostic]:
     """Compare the resolved evidence against the strict manifest and return all findings."""
     diagnostics: list[Diagnostic] = []
@@ -1739,7 +1763,9 @@ def check(
         _check_evidence_reference(manifest, depfiles.producer, depfiles.schema_version, diagnostics)
 
     _check_includes(manifest, index, direct_includes, project_root, diagnostics)
-    _check_compile_commands(manifest, index, compile_commands, project_root, diagnostics)
+    _check_compile_commands(
+        manifest, index, compile_commands, project_root, diagnostics, external_include_roots
+    )
     _check_depfiles(index, depfiles, config_digest, phase, diagnostics)
 
     diagnostics.sort(
@@ -1863,6 +1889,135 @@ def _compute_config_digest(
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
+# ---------------------------------------------------------------------------
+# Active dependency (depfile) evidence producer
+# ---------------------------------------------------------------------------
+
+
+def _split_command_tokens(command: str) -> list[str]:
+    """Split a compile command into tokens, honoring shell quoting.
+
+    Reuses the canonical command splitter: compile commands recorded by the
+    CMake File API are already shell-escaped, and `_split_command` (shlex)
+    handles the double-quoted tokens CMake emits for paths that contain
+    spaces.
+    """
+    return _split_command(command)
+
+
+def _depfile_for_command(command: str, directory: str) -> Optional[str]:
+    """Derive the compiler depfile a compile command writes.
+
+    Deterministic over the compile command, which is configured evidence:
+
+    * With the GCC/CMake C++ modules pipeline (`-fmodule-mapper=<base>.modmap`)
+      the dependency file is `<base>.ddi.d`.
+    * With an explicit `-MF <path>` the dependency file is that path.
+    * Otherwise the traditional Ninja depfile is `<output>.d`, where `<output>`
+      comes from `-o <output>`.
+
+    Returns an absolute path; a source whose depfile does not exist is simply
+    omitted from the evidence, and the validator reports the missing entry as
+    contradictory evidence (PARITY-6003).
+    """
+    tokens = _split_command_tokens(command)
+    mapper_base: Optional[str] = None
+    explicit_mf: Optional[str] = None
+    output: Optional[str] = None
+    i = 0
+    n = len(tokens)
+    while i < n:
+        token = tokens[i]
+        if token.startswith("-fmodule-mapper=") and not token.startswith("-fmodule-mapper=:"):
+            mapper_base = token[len("-fmodule-mapper="):]
+        elif token == "-MF" and i + 1 < n:
+            explicit_mf = tokens[i + 1]
+        elif token == "-o" and i + 1 < n:
+            output = tokens[i + 1]
+        elif token.startswith("-o") and len(token) > 2:
+            output = token[2:]
+        i += 1
+
+    if mapper_base is not None:
+        # <base>.modmap -> <base>.ddi.d (the dependency file of the .ddi
+        # intermediate in the GCC modules pipeline).
+        base = mapper_base[:-len(".modmap")] if mapper_base.endswith(".modmap") else mapper_base
+        candidate = os.path.join(directory, base + ".ddi.d")
+        return os.path.normpath(candidate) if os.path.exists(candidate) else None
+    if explicit_mf is not None:
+        candidate = explicit_mf if os.path.isabs(explicit_mf) else os.path.join(directory, explicit_mf)
+        return os.path.normpath(candidate) if os.path.exists(candidate) else None
+    if output is not None:
+        candidate = output if os.path.isabs(output) else os.path.join(directory, output)
+        candidate = os.path.normpath(candidate) + ".d"
+        return candidate if os.path.exists(candidate) else None
+    return None
+
+
+def _record_depfiles(
+    manifest: Manifest,
+    index: Index,
+    manifest_digest: str,
+    compile_commands: CompileCommands,
+    index_path: str,
+    compile_commands_path: str,
+    output_path: str,
+) -> None:
+    """Produce the active dependency (depfile) evidence JSON.
+
+    The evidence carries the configuration identity (config_digest) that ties
+    the depfiles to the current manifest, ownership index, and compile
+    commands, and one entry per compiled project source whose depfile exists.
+    A compiled source with no depfile (not yet compiled, or a depfile the
+    producer cannot locate) is omitted; the validator fails closed on the
+    missing entry with PARITY-6003.
+    """
+    compiled_sources: set[str] = set()
+    for target in index.targets:
+        if target.role == "external":
+            continue
+        for source in target.sources:
+            if _is_compiled_source(source):
+                compiled_sources.add(_norm_path(source))
+
+    entry_by_source: dict[str, str] = {}  # source -> depfile
+    for command in compile_commands.commands:
+        source = _norm_path(command.file)
+        if source not in compiled_sources:
+            continue
+        depfile = _depfile_for_command(command.command, command.directory)
+        if depfile is None:
+            continue
+        # A source compiled more than once is itself a violation; record the
+        # first depfile deterministically and let the validator report the
+        # duplicate compilation (PARITY-5001).
+        entry_by_source.setdefault(source, depfile)
+
+    config_digest = _compute_config_digest(
+        manifest_digest, index_path, compile_commands_path
+    )
+    entries: list[dict[str, str]] = []
+    for source in sorted(entry_by_source):
+        depfile = entry_by_source[source]
+        if os.path.exists(depfile):
+            entries.append(
+                {
+                    "source": source,
+                    "depfile": depfile,
+                    "digest": hashlib.sha256(_read_bytes(depfile)).hexdigest(),
+                }
+            )
+    document = {
+        "producer": PRODUCER_DEPFILES,
+        "schema_version": 1,
+        "config_digest": config_digest,
+        "entries": entries,
+    }
+    with open(output_path, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+
 def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="parity_gate",
@@ -1891,6 +2046,19 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     )
     parser.add_argument("--sources", nargs="*", help="Source files to scan (with --out)")
     parser.add_argument("--out", help="Write direct-include evidence JSON and exit (scan mode)")
+    parser.add_argument(
+        "--record-depfiles",
+        help="Write active dependency (depfile) evidence JSON and exit (requires "
+        "--manifest --index --compile-commands)",
+    )
+    parser.add_argument(
+        "--external-include-root",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="External dependency include root; paths under it are never project paths "
+        "(repeatable)",
+    )
     return parser.parse_args(argv)
 
 
@@ -1903,6 +2071,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 2
         try:
             _emit_scan(args.sources, args.out)
+        except SchemaViolation as exc:
+            print(f"{exc.rule_id}: {exc.message}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.record_depfiles is not None:
+        if not args.manifest or not args.index or not args.compile_commands:
+            print(
+                "parity_gate: --record-depfiles requires --manifest --index --compile-commands",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            manifest_data = _load_json(args.manifest, RULE_INVALID_MANIFEST_VALUE)
+            manifest = parse_manifest(manifest_data)
+            manifest_digest = hashlib.sha256(_read_bytes(args.manifest)).hexdigest()
+            index = parse_index(_load_json(args.index, RULE_MALFORMED_EVIDENCE))
+            compile_commands = parse_compile_commands(
+                _load_json(args.compile_commands, RULE_MALFORMED_EVIDENCE)
+            )
+            _record_depfiles(
+                manifest,
+                index,
+                manifest_digest,
+                compile_commands,
+                args.index,
+                args.compile_commands,
+                args.record_depfiles,
+            )
         except SchemaViolation as exc:
             print(f"{exc.rule_id}: {exc.message}", file=sys.stderr)
             return 1
@@ -1957,6 +2154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             project_root=args.project_root,
             phase=args.phase,
             config_digest=config_digest,
+            external_include_roots=tuple(args.external_include_root),
         )
     except SchemaViolation as exc:
         diagnostics = [Diagnostic(exc.rule_id, exc.message)]

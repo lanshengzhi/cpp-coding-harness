@@ -221,7 +221,7 @@ classification claims are accurate.
 | 11 | Trust presentation: `trust-selector`, the boot trust prompt as a main-TUI overlay (recorded presentation divergence), the untrusted-project chat warning, `/trust` decision UI | `pi:.../components/trust-selector.ts`, `cli/project-trust.ts`, `core/project-trust.ts` | `InteractiveMode.*` (boot trust prompt via `StringListSelector`), `ChatContainer.*` (untrusted-project warning), `ProjectTrust.*` | `BootTrustInteractiveTest`, `ProjectTrustTest`, `CliSmokeTest` (approve/no-approve) |
 | 12 | Footer/status: two-line footer minus extension-statuses (usage-totals + cache-stats data), status-indicator (Working/Compaction/Retry) with the retry countdown | `pi:.../components/{footer,status-indicator,countdown-timer,keybinding-hints}.ts`, `core/{footer-data-provider,usage-totals,cache-stats}.ts` | `src/coding_agent/tui/{Footer,FooterDataProvider,StatusIndicator,KeybindingHints}.*` | `FooterTest`, `FooterStatusInteractiveTest`, `ChatContainerStatusTest`, `KeybindingHints` rows in `InteractiveBootE2ETest` |
 | 13 | Selectors: `model-selector` + `model-search` (Ctrl+L), `scoped-models-selector` (Ctrl+P cycling), `settings-selector` over the [#327] subset + the graduated `hideThinkingBlock`/`outputPad`, `session-selector` + search, `tree-selector` with the thirteen `app.tree.*` actions, `user-message-selector` | `pi:.../components/{model-selector,scoped-models-selector,settings-selector,session-selector,session-selector-search,tree-selector,user-message-selector}.ts`, `modes/interactive/model-search.ts` | `src/coding_agent/tui/{ModelSelector,ModelSearch,ScopedModelsSelector,SettingsSelector,SessionSelector,SessionSelectorSearch,TreeSelector,UserMessageSelector}.*` | `ModelSelectorTest`, `ModelSelectorInteractiveTest`, `ScopedModelsSelectorTest`, `SettingsSelectorTest`, `SessionSelectorComponentTest`, `SessionSelectorInteractiveTest`, `SessionSelectorSearchTest`, `TreeSelectorComponentTest`, `TreeSelectorInteractiveTest`, `SessionForkTest` |
-| 14 | Keybinding catalog: pi's full 42-action `app.*` table, the assembled main-editor subset (15 actions), selector-scoped bindings, `app.session.*` recognized-but-unbound, `/hotkeys` and hints render the assembled subset only | `pi:packages/coding-agent/src/core/keybindings.ts` at `83114817` (`core/keybindings.ts:13-54`, 42 actions) | `src/coding_agent/tui/{KeybindingsManager,SharedKeybindings}.*`, `docs/keybindings.md` | `KeybindingsManagerTest` (`[coding_agent][keybindings][issue57]`), `BuiltinSlashCommandsTest` (`[issue419]`) dispatch rows, `ArchitectureSurfaceScanTest` (known-but-unassembled) |
+| 14 | Keybinding catalog: pi's full 42-action `app.*` table, the assembled main-editor subset (15 actions), selector-scoped bindings, `app.session.*` recognized-but-unbound, `/hotkeys` and hints render the assembled subset only | `pi:packages/coding-agent/src/core/keybindings.ts` at `83114817` (`core/keybindings.ts:13-54`, 42 actions) | `src/coding_agent/tui/{KeybindingsManager,SharedKeybindings}.*`, `docs/keybindings.md` | `KeybindingsManagerTest` (`[coding_agent][keybindings][issue57]`): assembled 15-action subset + recognized-but-unbound `app.session.*` rows, `BuiltinSlashCommandsTest` (`[issue419]`) dispatch rows |
 | 15 | Editor chrome: custom-editor routing, `app.message.copy`, `app.suspend`, external editor via `VISUAL`/`EDITOR` (temp `prompt.md`, resume on exit), paste-image on Ctrl+V with `pi-clipboard-<UUID>.<ext>` under the OS temp dir, editor border-color transitions | `pi:.../modes/interactive/external-editor.ts`, `modes/interactive/interactive-mode.ts` call sites, `utils/clipboard-image.ts` | `src/coding_agent/tui/{ExternalEditor,ClipboardReader,ClipboardWrite}.*`, `InteractiveMode.*` | `ProcessInteractiveModeTest`, `InteractiveModeTest`, `UserBashInteractiveModeTest`, `FooterStatusInteractiveTest` (`app.editor.external` through `VISUAL` + `app.suspend`/SIGTSTP rows, `[issue411]`); the real-`EDITOR` smoke remains manual evidence (see below) |
 | 16 | Tree navigation capability: `navigateTree`-equivalent on the session runtime (active-path switching, tree topology, `label`-entry creation); branch summarization generation stays Deferred | `pi:packages/coding-agent/src/core/session-manager.ts`, `core/agent-session.ts` | `include/cch/harness/session/SessionTree.hpp`, session runtime (`AgentSessionRuntime.*`), `TreeSelector.*` | `TreeNavigationTest` (`[coding_agent][runtime]`), `TreeSelectorComponentTest`, `TreeSelectorInteractiveTest`, `SessionTreeTest` |
 
@@ -244,7 +244,7 @@ classification claims are accurate.
 | 24 | Project Context Files (global + cwd ancestor chain, AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD, linked-worktree shadowing) rendered as `<project_context>`/`<project_instructions path="...">`, **not** Project Trust gated; `--no-context-files`/`-nc` | `pi:packages/coding-agent/src/core/system-prompt.ts` (`loadProjectContextFiles`), `core/resource-loader.ts` | `src/coding_agent/prompt/SystemPromptBuilder.*`, `src/cli/CliParse.*` (`-nc`) | `SystemPromptBuilderTest` project-instructions rows, `ResourceReloadTest` (`[coding_agent][reload][issue418]`), `CliParseTest` |
 | 25 | SYSTEM.md/APPEND_SYSTEM.md discovery (project `.pi/` trust-gated, then global) and repeatable `--system-prompt`/`--append-system-prompt` with pi's text-or-file resolution and `"\n\n"` joining | `pi:packages/coding-agent/src/core/resource-loader.ts`, `core/system-prompt.ts` | `src/coding_agent/ProjectResourceLoader.*`, `src/coding_agent/prompt/SystemPromptBuilder.*` | `ResourceReloadTest`, `ProjectResourceLoaderTest`, `SystemPromptFlowTest` |
 | 26 | Slash dispatch: pi's if-chain over the 22-command catalog with the 17 Supported slashes (`/settings` `/model` `/scoped-models` `/copy` `/name` `/session` `/hotkeys` `/fork` `/tree` `/trust` `/login` `/logout` `/new` `/compact` `/resume` `/reload` `/quit`) with pi's verbatim strings; `/help` `/commands` `/clear` `/exit` deleted | `pi:packages/coding-agent/src/core/slash-commands.ts` | `src/coding_agent/prompt/BuiltinSlashCommands.*`, `InteractiveMode.*` dispatch | `BuiltinSlashCommandsTest` (`[coding_agent][slash-commands][issue419]`): 17 entries, verbatim strings, deleted commands absent, `PromptExpansionTest` |
-| 27 | Slash autocomplete: Supported builtins (names/descriptions/argument hints), loaded prompt templates, `/skill:<name>` while the Skill Commands setting is enabled; Deferred slashes and easter eggs absent | `pi:packages/coding-agent/src/core/slash-commands.ts`, `core/skills.ts` | `src/coding_agent/prompt/BuiltinSlashCommands.*`, `InteractiveMode.*` autocomplete | `BuiltinSlashCommandsTest` autocomplete rows, `ArchitectureSurfaceScanTest` (deferred slashes absent) |
+| 27 | Slash autocomplete: Supported builtins (names/descriptions/argument hints), loaded prompt templates, `/skill:<name>` while the Skill Commands setting is enabled; Deferred slashes and easter eggs absent | `pi:packages/coding-agent/src/core/slash-commands.ts`, `core/skills.ts` | `src/coding_agent/prompt/BuiltinSlashCommands.*`, `InteractiveMode.*` autocomplete | `BuiltinSlashCommandsTest` autocomplete rows (Supported builtins; Deferred slashes and easter eggs absent, no placeholder) |
 | 28 | Skill discovery: user `~/.pi/agent/skills` (pi mode), project `.pi/skills` (trust-gated), CLI `--skill` (repeatable), the `.agents/skills` convention (user + project ancestors to the git root, per-directory baseDir); `--no-skills` drops discovery but keeps explicit paths | `pi:packages/coding-agent/src/core/skills.ts`, `utils/tools-manager.ts` (walk matcher) | `src/coding_agent/{SkillLoader,SkillFormatting,SkillFrontmatterParser,GitIgnoreMatcher}.*`, `ProjectResourceLoader.*` | `SkillTest`, `SkillLoaderTest`, `SkillFormattingTest`, `SkillFrontmatterParserTest`, `SkillIntegrationTest`, `ProjectResourceLoaderTest` |
 | 29 | `/skill:name` reads the file at invocation time with pi's `<skill name="…" location="…">` block, `References are relative to <baseDir>.` preamble, and args appended after a blank line; `enableSkillCommands` (default true, global) gates registration + autocomplete | `pi:packages/coding-agent/src/core/skills.ts`, `core/slash-commands.ts` | `src/coding_agent/prompt/PromptExpansion.*`, `SkillFormatting.*`, `SettingsManager.*` | `SkillIntegrationTest` (read-at-invocation rows), `PromptExpansionTest`, `SettingsManagerTest` (enableSkillCommands) |
 | 30 | Prompt templates: user `~/.pi/agent/prompts` + project `.pi/prompts` (trust-gated) + `--prompt-template`; bash-style `parseCommandArgs`/`substituteArgs` (`$1`…`$9`, `$@`, `$ARGUMENTS`, `${N:-default}`, `${@:-default}`, `${@:N}`, `${@:N:L}`), frontmatter description, dedupe diagnostics | `pi:packages/coding-agent/src/core/prompt-templates.ts` | `src/coding_agent/prompt/{PromptTemplateExpander,PromptExpansion}.*`, `PromptTemplateLoader.*` | `PromptTemplateLoaderTest`, `PromptTemplateProcessingTest`, `PromptExpansionTest`, `CliParseTest` (`--prompt-template`/`--no-prompt-templates`) |
@@ -263,55 +263,59 @@ classification claims are accurate.
 
 ### Removals and strict-subset verification (charted ruling, ADR 0036)
 
-Verified absent-with-no-placeholder by `ArchitectureSurfaceScanTest` (`[architecture]`) and the
-header inventory (the phase deletes every inconsistency rather than recording it as a divergence):
+Verified absent-with-no-placeholder by the fail-closed Parity Architecture Gate (ADR 0039): any
+reintroduced unclassified/unknown target, root, or source fails configure/build (spec user story
+40), plus the behavior tests cited per row (the phase deletes every inconsistency rather than
+recording it as a divergence):
 
 | Removed surface | Frozen pi note | Verification |
 | --- | --- | --- |
-| Embeddable SDK (`Sdk.hpp`/`Sdk.cpp`) | pi `core/sdk.ts` exists at the baseline; the C++ SDK host surface is deleted with no shim | `ArchitectureSurfaceScanTest` (`Sdk.hpp`/`Sdk.cpp` absent, `Sdk*Command` absent), `[sdk]` rows |
-| RPC mode + JSON CLI mode (`RpcMode`/`RpcJsonl`/`JsonCliRenderer`) | pi ships `modes/rpc/*`; the C++ modes are deleted and `--mode json`/`--mode rpc` rejected | `ArchitectureSurfaceScanTest`, `CliParseTest` mode-rejection rows |
-| C++-only flags `--fake`/`--enable-bash`/`--max-turns`/`--workspace` | — (never pi flags) | `ArchitectureSurfaceScanTest` (deleted flags absent), `CliParseTest` (unknown-option rows), `CliSmokeTest` |
-| Own slash-command registry/effects (`CommandRegistry`/`CommandEffect`/`CommandContext`), `/help` `/commands` `/clear` `/exit` | replaced by pi's if-chain | `ArchitectureSurfaceScanTest`, `BuiltinSlashCommandsTest` |
-| Own prompt machinery (`prompt::PromptProcessor` + `transform_context` skills injection) | replaced by `core/system-prompt.ts` subset | `ArchitectureSurfaceScanTest` (PromptProcessor absent) |
-| Own keybinding-catalog seam (`KeybindingCatalog`/`KeybindingHelp`) | replaced by the pi 42-action catalog | `ArchitectureSurfaceScanTest`, `KeybindingsManagerTest` |
-| Own theme catalog/settings surfaces (`ThemeCatalog`/`ThemeSettings`) | replaced by the pi controller + ThemeSubmenu | `ArchitectureSurfaceScanTest`, `ThemeControllerTest` |
-| Own transcript/bash/help/user-bash components (`Transcript`, `BashBlock`, `UserBashPresentation`, `UserBashSyntax`, `KeybindingHelp`, `InteractionPolicy`, `InterruptAdmission`) | behavior folded into the pi-shape routing | `ArchitectureSurfaceScanTest`, `InteractiveModeTest`/`UserBashInteractiveModeTest` (behavior survives on the new surface) |
-| `.cpp-harness/` project markers + `ResourceEnablement` auto/on/off policy | project markers move to `.pi/` (pi `resource-loader.ts`); "trusted means load" | `ArchitectureSurfaceScanTest`, `ProjectResourceLoaderTest` |
-| The standalone theme overlay | pi keeps a standalone theme overlay at the baseline; the C++-only overlay surface is deleted (G5), with the single-mode ThemeSubmenu the only theme-switching surface | `ArchitectureSurfaceScanTest`, `SettingsSelectorTest` |
+| Embeddable SDK (`Sdk.hpp`/`Sdk.cpp`) | pi `core/sdk.ts` exists at the baseline; the C++ SDK host surface is deleted with no shim | the Gate (ADR 0039; user story 40); `PublicHeaderBoundaryTest`/`SdkSessionTest` pin the only remaining `Sdk` surface (the repository-private Session SDK; no `Sdk*Command`) |
+| RPC mode + JSON CLI mode (`RpcMode`/`RpcJsonl`/`JsonCliRenderer`) | pi ships `modes/rpc/*`; the C++ modes are deleted and `--mode json`/`--mode rpc` rejected | the Gate (ADR 0039; user story 40); `CliParseTest` mode-rejection rows (`--mode json was removed`/`--mode rpc was removed`) |
+| C++-only flags `--fake`/`--enable-bash`/`--max-turns`/`--workspace` | — (never pi flags) | the Gate (ADR 0039; user story 40); `CliParseTest` (unknown-option rows), `CliSmokeTest` |
+| Own slash-command registry/effects (`CommandRegistry`/`CommandEffect`/`CommandContext`), `/help` `/commands` `/clear` `/exit` | replaced by pi's if-chain | the Gate (ADR 0039; user story 40); `BuiltinSlashCommandsTest` (`/help` `/commands` `/clear` `/exit` absent, pass-through rows) |
+| Own prompt machinery (`prompt::PromptProcessor` + `transform_context` skills injection) | replaced by `core/system-prompt.ts` subset | the Gate (ADR 0039; user story 40); `SystemPromptBuilderTest`/`SystemPromptGoldenTest` pin the replacement `core/system-prompt.ts` subset |
+| Own keybinding-catalog seam (`KeybindingCatalog`/`KeybindingHelp`) | replaced by the pi 42-action catalog | the Gate (ADR 0039; user story 40); `KeybindingsManagerTest` |
+| Own theme catalog/settings surfaces (`ThemeCatalog`/`ThemeSettings`) | replaced by the pi controller + ThemeSubmenu | the Gate (ADR 0039; user story 40); `ThemeControllerTest` |
+| Own transcript/bash/help/user-bash components (`Transcript`, `BashBlock`, `UserBashPresentation`, `UserBashSyntax`, `KeybindingHelp`, `InteractionPolicy`, `InterruptAdmission`) | behavior folded into the pi-shape routing | the Gate (ADR 0039; user story 40); `InteractiveModeTest`/`UserBashInteractiveModeTest` (behavior survives on the new surface) |
+| `.cpp-harness/` project markers + `ResourceEnablement` auto/on/off policy | project markers move to `.pi/` (pi `resource-loader.ts`); "trusted means load" | the Gate (ADR 0039; user story 40); `ProjectResourceLoaderTest` (`.pi/` markers only, "trusted means load") |
+| The standalone theme overlay | pi keeps a standalone theme overlay at the baseline; the C++-only overlay surface is deleted (G5), with the single-mode ThemeSubmenu the only theme-switching surface | the Gate (ADR 0039; user story 40); `SettingsSelectorTest` (single-mode ThemeSubmenu only) |
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
 One row per Deferred capability: the frozen pi source where the capability lives at `83114817`
 (the surface this phase deliberately does not port), the G record that deferred it, and the
-absence evidence. Every row is verified absent-with-no-placeholder by
-`ArchitectureSurfaceScanTest` and the header inventory; Deferred slash text passes through as an
-ordinary prompt and Deferred settings values read as unset (see the G records).
+absence evidence. Every row is verified absent-with-no-placeholder by the fail-closed Parity
+Architecture Gate (ADR 0039): any reintroduced unclassified/unknown target, root, or source
+fails configure/build (spec user story 40), and by the header inventory; Deferred slash text
+passes through as an ordinary prompt and Deferred settings values read as unset (see the G
+records).
 
 | # | Deferred capability | Frozen pi source (absent) | G-record | Evidence (absence) |
 | --- | --- | --- | --- | --- |
-| D1 | `--no-tools`/`--no-builtin-tools`/`--tools`/`--exclude-tools` (tool-selection flags) | `pi:packages/coding-agent/src/cli/args.ts` | G1 ([#389]) | `ArchitectureSurfaceScanTest`; `CliParseTest` unknown-option rows |
-| D2 | `--export` | `pi:packages/coding-agent/src/core/export-html/` | G1 | `ArchitectureSurfaceScanTest` |
-| D3 | `--extension`/`--no-extensions` + extension-contributed flags | `pi:packages/coding-agent/src/core/extensions/` | G1 | `ArchitectureSurfaceScanTest` |
-| D4 | `--offline` | `pi:packages/coding-agent/src/cli/args.ts` | G1 | `ArchitectureSurfaceScanTest` |
-| D5 | `--ui-mode`/`--alt` | `pi:packages/coding-agent/src/cli/args.ts` | G1 | `ArchitectureSurfaceScanTest` |
-| D6 | `--verbose` | `pi:packages/coding-agent/src/cli/args.ts` | G1 | `ArchitectureSurfaceScanTest` |
-| D7 | Stdout takeover | `pi:packages/coding-agent/src/modes/print-mode.ts` | G1 | `ArchitectureSurfaceScanTest` |
-| D8 | First-run gate | `pi:packages/coding-agent/src/modes/interactive/components/first-time-setup.ts` | G1 (per G3, [#391]) | `ArchitectureSurfaceScanTest` |
-| D9 | `markdown-transform` | `pi:.../components/markdown-transform.ts` | G2 ([#390]) | `ArchitectureSurfaceScanTest` |
-| D10 | `thinking-selector` | `pi:.../components/thinking-selector.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D11 | `theme-selector` | `pi:.../components/theme-selector.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D12 | `show-images-selector` | `pi:.../components/show-images-selector.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D13 | Extension editor/input | `pi:.../components/{extension-editor,extension-input}.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D14 | `config-selector` | `pi:packages/coding-agent/src/cli/config-selector.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D15 | `first-time-setup` | `pi:.../components/first-time-setup.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D16 | `bordered-loader` | `pi:.../components/bordered-loader.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D17 | Easter eggs (`armin`, `daxnuts`, `earendil-announcement`) | `pi:.../components/{armin,daxnuts,earendil-announcement}.ts` | G2 | `ArchitectureSurfaceScanTest` |
-| D18 | `index.ts` barrel + `ui.onDebug` | `pi:.../components/index.ts`, `ui.onDebug` | G2 | `ArchitectureSurfaceScanTest` |
-| D19 | Branch summarization generation | `pi:packages/coding-agent/src/core/compaction/branch-summarization.ts` | G2/G3 | `ArchitectureSurfaceScanTest`; pi-authored `branch_summary` entries still render |
+| D1 | `--no-tools`/`--no-builtin-tools`/`--tools`/`--exclude-tools` (tool-selection flags) | `pi:packages/coding-agent/src/cli/args.ts` | G1 ([#389]) | the Gate (ADR 0039; user story 40); `CliParseTest` unknown-option rows |
+| D2 | `--export` | `pi:packages/coding-agent/src/core/export-html/` | G1 | the Gate (ADR 0039; user story 40) |
+| D3 | `--extension`/`--no-extensions` + extension-contributed flags | `pi:packages/coding-agent/src/core/extensions/` | G1 | the Gate (ADR 0039; user story 40) |
+| D4 | `--offline` | `pi:packages/coding-agent/src/cli/args.ts` | G1 | the Gate (ADR 0039; user story 40) |
+| D5 | `--ui-mode`/`--alt` | `pi:packages/coding-agent/src/cli/args.ts` | G1 | the Gate (ADR 0039; user story 40) |
+| D6 | `--verbose` | `pi:packages/coding-agent/src/cli/args.ts` | G1 | the Gate (ADR 0039; user story 40) |
+| D7 | Stdout takeover | `pi:packages/coding-agent/src/modes/print-mode.ts` | G1 | the Gate (ADR 0039; user story 40) |
+| D8 | First-run gate | `pi:packages/coding-agent/src/modes/interactive/components/first-time-setup.ts` | G1 (per G3, [#391]) | the Gate (ADR 0039; user story 40) |
+| D9 | `markdown-transform` | `pi:.../components/markdown-transform.ts` | G2 ([#390]) | the Gate (ADR 0039; user story 40) |
+| D10 | `thinking-selector` | `pi:.../components/thinking-selector.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D11 | `theme-selector` | `pi:.../components/theme-selector.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D12 | `show-images-selector` | `pi:.../components/show-images-selector.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D13 | Extension editor/input | `pi:.../components/{extension-editor,extension-input}.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D14 | `config-selector` | `pi:packages/coding-agent/src/cli/config-selector.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D15 | `first-time-setup` | `pi:.../components/first-time-setup.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D16 | `bordered-loader` | `pi:.../components/bordered-loader.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D17 | Easter eggs (`armin`, `daxnuts`, `earendil-announcement`) | `pi:.../components/{armin,daxnuts,earendil-announcement}.ts` | G2 | the Gate (ADR 0039; user story 40) |
+| D18 | `index.ts` barrel + `ui.onDebug` | `pi:.../components/index.ts`, `ui.onDebug` | G2 | the Gate (ADR 0039; user story 40) |
+| D19 | Branch summarization generation | `pi:packages/coding-agent/src/core/compaction/branch-summarization.ts` | G2/G3 | the Gate (ADR 0039; user story 40); pi-authored `branch_summary` entries still render (session/rendering goldens) |
 | D20 | `/export` `/import` `/share` `/changelog` `/debug`, the easter eggs, `/clone` | `pi:packages/coding-agent/src/core/slash-commands.ts` | G4 ([#392]) | `BuiltinSlashCommandsTest`; typed text passes through as an ordinary prompt |
 | D21 | Extensions/package-manager loader halves (no Extensions presentation) | `pi:packages/coding-agent/src/core/extensions/`, `core/package-manager.ts` | G4 | `ProjectResourceLoaderTest`; `LoadedResourcesTest` (no Extensions section) |
 | D22 | OSC 11/DSR queries, the automatic `light/dark` pair, auto-sync, the theme file watcher, the Automatic submenu entry | `pi:packages/coding-agent/src/modes/interactive/theme/theme-controller.ts` | G5 ([#393]) | `ThemeControllerTest` (slash values read as unset); no watcher surface |
-| D23 | Phase scope exclusions: other provider families, images providers/legacy registries, the extension system, package manager, export-html, telemetry, remote catalog, `client/` remote sessions, the alt-screen/viewport TUI half | the corresponding pi modules (`packages/coding-agent/src/{core/extensions,core/export-html,core/telemetry,core/remote-catalog-provider,client,modes/interactive/theme}`, `packages/tui/`) | G1–G6 / ADR 0036, ADR 0035 | ADR 0035 scope closed; `ArchitectureSurfaceScanTest` |
+| D23 | Phase scope exclusions: other provider families, images providers/legacy registries, the extension system, package manager, export-html, telemetry, remote catalog, `client/` remote sessions, the alt-screen/viewport TUI half | the corresponding pi modules (`packages/coding-agent/src/{core/extensions,core/export-html,core/telemetry,core/remote-catalog-provider,client,modes/interactive/theme}`, `packages/tui/`) | G1–G6 / ADR 0036, ADR 0035 | ADR 0035 scope closed; the Gate (ADR 0039; user story 40) |
 
 ## Manual evidence (automation-unreachable surfaces)
 
@@ -354,17 +358,19 @@ Real-terminal pass — date, emulator, version:
 Every capability scoped by ADR 0036 is either a **Supported Capability** carrying evidence in the
 checklist above (deterministic lifecycle tests, the CLI-level E2E goldens, the differential
 goldens landing with [#421]/[#422], or the bounded manual checklist), or a **Deferred Capability**
-verified absent by the architecture scan. There are no partial placeholders and no compatibility
-shims, and — per the charted strict-subset ruling — no Intentional Divergence is recorded anywhere
+verified absent by the fail-closed Parity Architecture Gate (ADR 0039). There are no partial
+placeholders and no compatibility shims, and — per the charted strict-subset ruling — no
+Intentional Divergence is recorded anywhere
 in the phase (the boot trust prompt's main-TUI-overlay presentation is the sole recorded
 presentation difference, decided by G2).
 
 Full test suite: **1858 test(s), 0 failure(s)** at the [#424] gate pass — the three
 `SystemPromptGoldenTest` message-level golden cases and the four
 `InteractiveRenderingGoldenTest` rendering-golden cases were added to the [#421] baseline's
-1848 with [#422], and the three `ArchitectureSurfaceScanTest` full-removal-list cases were
-added with [#423]; the gate pass re-ran the full suite green and closes the series per the G6
-record.
+1848 with [#422], and the full-removal-list verification was scan-enforced by `ArchitectureSurfaceScanTest` at the
+time (three cases added with [#423]); it is now enforced fail-closed by the Parity Architecture
+Gate (ADR 0039, issue #470). The gate pass re-ran the full suite green and closes the series per
+the G6 record.
 
 ## Gate report
 
@@ -390,9 +396,11 @@ record.
   `ProjectResourceLoaderTest`, `ResourceReloadTest`, `LoadedResourcesTest`.
 - **Theme (G5)** — `ThemeTest` + `tests/fixtures/themes/` (+ `goldens/`), `ThemeControllerTest`,
   `SettingsSelectorTest` theme rows.
-- **Removal verification** — `ArchitectureSurfaceScanTest` rows for the full G1–G5 removal list
-  (SDK/RPC/JSON, deleted flags, deleted components/seams, `.cpp-harness/` markers, own prompt
-  machinery, own keybinding catalog, own theme surfaces).
+- **Removal verification** — the fail-closed Parity Architecture Gate (ADR 0039): any
+  reintroduced unclassified/unknown target, root, or source fails configure/build (spec user
+  story 40), keeping the full G1–G5 removal list (SDK/RPC/JSON, deleted flags, deleted
+  components/seams, `.cpp-harness/` markers, own prompt machinery, own keybinding catalog, own
+  theme surfaces) absent-with-no-placeholder.
 
 ### Residual notes
 
@@ -427,7 +435,8 @@ The phase's completed surface is the one the checklist above describes: the pi-a
 print mode, the pi 42-action keybinding catalog over the `cch_tui` toolkit, the pi-shaped
 interactive composition, the session-family semantics, the system-prompt/slash/skills/templates
 machinery over the `.pi/` loader subset, and the pi theme asset/controller surface — all verified
-as a strict subset by the architecture scan, with no SDK/RPC/JSON surface, no C++-only flags, no
+as a strict subset by the fail-closed Parity Architecture Gate (ADR 0039), with no SDK/RPC/JSON
+surface, no C++-only flags, no
 own seams, and no Intentional Divergence records. The gate closes per the G6 record when every
 checklist row carries evidence and the full suite passes ([#424]).
 
