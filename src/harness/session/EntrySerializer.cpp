@@ -1,6 +1,6 @@
 #include "EntrySerializer.hpp"
 
-#include "../../ai/glaze/AiJson.hpp"
+#include "ai/glaze/AiJson.hpp"
 #include "util/Json.hpp"
 #include "util/Redactor.hpp"
 

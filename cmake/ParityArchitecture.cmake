@@ -414,15 +414,11 @@ endfunction()
 # Production configure runs the same fail-closed Gate validator as the
 # fixtures (emit the ownership index, scan direct includes, validate against
 # the strict manifest) but reports policy violations instead of failing
-# configuration. The current production graph still carries the known
-# migration violations that the per-Owner contraction tickets resolve:
+# configuration. The per-Owner contraction tickets (#456, #460, #463, #468)
+# resolved the split-target and reverse-edge violations; the only known
+# migration violation class left in the production graph is:
 #
-#   * the legacy `cch_util` target and `cch/util` header root (#469);
-#   * the `cch/harness` and `cch/tools` interface roots (#460);
-#   * the reverse `cch_agent_core -> cch_coding_agent` ModelRuntime edge
-#     (`cch_agent` -> `cch_coding_agent_core`, #456/#460);
-#   * the non-authoritative `cch_coding_agent -> cch_harness/cch_tools` edges
-#     (`cch_coding_agent_runtime` -> `cch_harness`/`cch_tools`, #460).
+#   * the legacy `cch_util` target and `cch/util` header root (#469).
 #
 # Reporting keeps those violations visible under their stable rule IDs without
 # blocking the build, while incomplete or missing evidence still fails loudly

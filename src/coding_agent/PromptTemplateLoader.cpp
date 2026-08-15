@@ -2,7 +2,7 @@
 
 #include "SkillFrontmatterParser.hpp"
 #include "LoaderPath.hpp"
-#include "../harness/WorkspaceFileSystem.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
 #include <filesystem>

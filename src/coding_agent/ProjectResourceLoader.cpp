@@ -6,7 +6,7 @@
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/SkillLoader.hpp"
-#include "../harness/WorkspaceFileSystem.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
 #include <array>

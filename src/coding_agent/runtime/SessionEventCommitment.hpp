@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/agent/AgentEvent.hpp"
+#include <cch/agent/AgentEvent.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>

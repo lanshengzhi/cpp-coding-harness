@@ -140,20 +140,6 @@ cch_parity_declare_target(
 cch_target_defaults(cch_tui)
 
 cch_parity_declare_target(
-    TARGET cch_coding_agent_tui
-    ROLE implementation
-    OWNER cch_coding_agent
-    SOURCES
-        src/coding_agent/tui/KeybindingsManager.cpp
-        src/coding_agent/tui/Theme.cpp
-        src/coding_agent/tui/ThemeController.cpp
-    DEPENDS
-        cch_tui
-        cch_util
-)
-cch_target_defaults(cch_coding_agent_tui)
-
-cch_parity_declare_target(
     TARGET cch_ai
     ROLE owner
     OWNER cch_ai
@@ -196,31 +182,6 @@ cch_parity_declare_target(
 )
 cch_target_defaults(cch_ai)
 
-# ModelRuntime closure (Model/Models composition + Agent Config Directory + auth
-# storage). The stateful Agent no longer depends on the coding-agent ModelRuntime
-# seam: it consumes the AI-owned move-only ModelStream (ADR 0040 / #453), so the
-# former reverse-DAG edge cch_agent -> cch_coding_agent_core is removed (#456).
-cch_parity_declare_target(
-    TARGET cch_coding_agent_core
-    ROLE implementation
-    OWNER cch_coding_agent
-    SOURCES
-        src/coding_agent/ModelRuntime.cpp
-        src/coding_agent/ModelResolver.cpp
-        src/coding_agent/ModelConfig.cpp
-        src/coding_agent/ProviderComposer.cpp
-        src/coding_agent/AgentConfigDir.cpp
-        src/coding_agent/AuthStorage.cpp
-        src/coding_agent/RuntimeApiKeyOverlay.cpp
-    DEPENDS
-        cch_ai
-        cch_util
-    INTERFACE_DEPENDS
-        cch_ai
-        cch_util
-)
-cch_target_defaults(cch_coding_agent_core)
-
 cch_parity_declare_target(
     TARGET cch_agent_core
     ROLE owner
@@ -260,71 +221,55 @@ cch_parity_declare_target(
 )
 cch_target_defaults(cch_agent_core)
 
+# Repository-private coding-agent Owner Package (ADR 0039; #468). One
+# authoritative compiled static library owns every coding-agent composition
+# production source exactly once: Models Runtime (Model/Models composition,
+# Agent Config Directory, auth storage), Session, Runtime, Native TUI
+# composition, and CLI composition. Its only cross-Owner dependencies are the
+# legal edges to cch_agent_core, cch_ai, and cch_tui, plus the pi-neutral
+# support package; no other Owner depends on it. The stateful Agent consumes
+# the AI-owned move-only ModelStream (ADR 0040 / #453), so no reverse
+# cch_agent_core -> cch_coding_agent edge exists (#456/#460). cch_util
+# remains the temporary legacy alias until #469 deletes it.
 cch_parity_declare_target(
-    TARGET cch_coding_agent_runtime
-    ROLE composition
+    TARGET cch_coding_agent
+    ROLE owner
     OWNER cch_coding_agent
     SOURCES
+        src/coding_agent/AgentConfigDir.cpp
+        src/coding_agent/AgentSession.cpp
+        src/coding_agent/AuthStorage.cpp
+        src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
-        src/cli/InitialPrompt.cpp
-        src/coding_agent/SessionDiscovery.cpp
-        src/coding_agent/SessionPathPolicy.cpp
-        src/coding_agent/SettingsManager.cpp
+        src/coding_agent/ModelConfig.cpp
+        src/coding_agent/ModelResolver.cpp
+        src/coding_agent/ModelRuntime.cpp
         src/coding_agent/ProjectResourceLoader.cpp
         src/coding_agent/ProjectResources.cpp
         src/coding_agent/ProjectTrust.cpp
-        src/coding_agent/prompt/SystemPromptBuilder.cpp
-        src/coding_agent/prompt/PromptExpansion.cpp
-        src/coding_agent/prompt/PromptTemplateExpander.cpp
-        src/coding_agent/prompt/BuiltinSlashCommands.cpp
-        src/coding_agent/AgentSession.cpp
+        src/coding_agent/PromptTemplateLoader.cpp
+        src/coding_agent/ProviderComposer.cpp
+        src/coding_agent/RuntimeApiKeyOverlay.cpp
+        src/coding_agent/SessionDiscovery.cpp
+        src/coding_agent/SessionPathPolicy.cpp
+        src/coding_agent/SettingsManager.cpp
+        src/coding_agent/SkillFormatting.cpp
         src/coding_agent/SkillFrontmatterParser.cpp
         src/coding_agent/SkillLoader.cpp
-        src/coding_agent/GitIgnoreMatcher.cpp
-        src/coding_agent/PromptTemplateLoader.cpp
-        src/coding_agent/SkillFormatting.cpp
+        src/coding_agent/prompt/BuiltinSlashCommands.cpp
+        src/coding_agent/prompt/PromptExpansion.cpp
+        src/coding_agent/prompt/PromptTemplateExpander.cpp
+        src/coding_agent/prompt/SystemPromptBuilder.cpp
         src/coding_agent/runtime/AgentSessionRuntime.cpp
+        src/coding_agent/runtime/AsyncCliRuntime.cpp
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
         src/coding_agent/runtime/SessionEventCommitment.cpp
-        src/coding_agent/runtime/SessionPersistence.cpp
-        src/coding_agent/runtime/UserBashOutputAccumulator.cpp
-        src/cli/PrintMode.cpp
-        src/cli/SessionFamily.cpp
         src/coding_agent/runtime/SessionFactory.cpp
         src/coding_agent/runtime/SessionFork.cpp
         src/coding_agent/runtime/SessionLifecycle.cpp
-    DEPENDS
-        cch_agent_core
-        cch_coding_agent_core
-        cch_ai
-        cch_util
-        WebP::webpdecoder@webp
-    INTERFACE_DEPENDS
-        cch_agent_core
-        cch_coding_agent_core
-        cch_ai
-        cch_util
-)
-cch_target_defaults(cch_coding_agent_runtime)
-target_include_directories(cch_coding_agent_runtime
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
-)
-# The System Prompt's identity-adjusted documentation block resolves the C++
-# binary's own docs paths from the source tree (pi `config.ts`
-# getReadmePath/getDocsPath/getExamplesPath resolve the pi package).
-target_compile_definitions(cch_coding_agent_runtime PRIVATE
-    CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-cch_parity_declare_target(
-    TARGET cch_coding_agent_interactive
-    ROLE implementation
-    OWNER cch_coding_agent
-    SOURCES
-        src/coding_agent/tui/InteractiveMode.cpp
+        src/coding_agent/runtime/SessionPersistence.cpp
+        src/coding_agent/runtime/UserBashOutputAccumulator.cpp
         src/coding_agent/tui/AssistantMessageComponent.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp
         src/coding_agent/tui/ChatContainer.cpp
@@ -333,63 +278,65 @@ cch_parity_declare_target(
         src/coding_agent/tui/ExternalEditor.cpp
         src/coding_agent/tui/Footer.cpp
         src/coding_agent/tui/FooterDataProvider.cpp
+        src/coding_agent/tui/InteractiveMode.cpp
         src/coding_agent/tui/KeybindingHints.cpp
+        src/coding_agent/tui/KeybindingsManager.cpp
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/LoginDialog.cpp
-        src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/LoginPresentation.cpp
         src/coding_agent/tui/ModelSelector.cpp
         src/coding_agent/tui/OAuthSelector.cpp
         src/coding_agent/tui/OpenBrowser.cpp
+        src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp
-        src/coding_agent/tui/SettingsSelector.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
+        src/coding_agent/tui/SettingsSelector.cpp
         src/coding_agent/tui/StatusIndicator.cpp
         src/coding_agent/tui/StringListSelector.cpp
+        src/coding_agent/tui/Theme.cpp
+        src/coding_agent/tui/ThemeController.cpp
         src/coding_agent/tui/ToolExecutionComponent.cpp
         src/coding_agent/tui/TreeSelector.cpp
         src/coding_agent/tui/UserMessageComponent.cpp
         src/coding_agent/tui/UserMessageSelector.cpp
-    DEPENDS
-        cch_coding_agent_runtime
-        cch_coding_agent_tui
-        cch_tui
-        cch_util
-)
-cch_target_defaults(cch_coding_agent_interactive)
-
-# One authoritative CMake owner for the CLI/runtime composition shared by the
-# executable and the tests (build-performance-plan Stage 3, item 2). Sits above
-# the private interactive composition so the non-interactive runtime target
-# keeps no TUI dependency.
-cch_parity_declare_target(
-    TARGET cch_cli
-    ROLE composition
-    OWNER cch_coding_agent
-    SOURCES
         src/cli/CliParse.cpp
         src/cli/FrontendSelection.cpp
+        src/cli/InitialPrompt.cpp
         src/cli/ListModels.cpp
+        src/cli/PrintMode.cpp
+        src/cli/SessionFamily.cpp
         src/cli/StartupTui.cpp
-        src/coding_agent/runtime/AsyncCliRuntime.cpp
     DEPENDS
-        cch_coding_agent_interactive
+        cch_agent_core
+        cch_ai
+        cch_tui
+        cch_support
+        cch_util
+        WebP::webpdecoder@webp
         CLI11::CLI11@cli11
+    INTERFACE_DEPENDS
+        cch_agent_core
+        cch_ai
+        cch_support
+        cch_util
 )
-cch_target_defaults(cch_cli)
-target_compile_definitions(cch_cli PRIVATE CCH_PROJECT_VERSION="${PROJECT_VERSION}")
-
-# Transitional aggregate target for the executable/tests while the runtime is being split.
-cch_parity_declare_target(
-    TARGET cpp_harness_lib
-    ROLE composition
-    OWNER cch_coding_agent
-    KIND interface
-    DEPENDS
-        cch_coding_agent_runtime
+cch_target_defaults(cch_coding_agent)
+target_include_directories(cch_coding_agent
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
+)
+# The System Prompt's identity-adjusted documentation block resolves the C++
+# binary's own docs paths from the source tree (pi `config.ts`
+# getReadmePath/getDocsPath/getExamplesPath resolve the pi package).
+target_compile_definitions(cch_coding_agent PRIVATE
+    CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    CCH_PROJECT_VERSION="${PROJECT_VERSION}"
 )
 
+# The executable is a thin closure over the repository-private
+# cch_coding_agent library (#468): it compiles only the entry point and links
+# the one authoritative Owner library.
 cch_parity_declare_target(
     TARGET cpp_harness
     ROLE composition
@@ -398,8 +345,7 @@ cch_parity_declare_target(
     SOURCES
         src/main.cpp
     DEPENDS
-        cpp_harness_lib
-        cch_cli
+        cch_coding_agent
 )
 target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -663,7 +609,7 @@ if(CCH_BUILD_TESTS)
     target_compile_options(cch_tests_harness_tools PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_harness_tools ADD_TAGS_AS_LABELS)
 
-    # coding-agent core/runtime
+    # coding-agent composition (Session, Runtime, Models Runtime)
     add_executable(cch_tests_coding_agent
         tests/Catch2Main.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
@@ -717,7 +663,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cch_tests_coding_agent PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_coding_agent
         PRIVATE
-            cch_coding_agent_runtime
+            cch_coding_agent
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_coding_agent PRIVATE
@@ -726,8 +672,9 @@ if(CCH_BUILD_TESTS)
     target_compile_options(cch_tests_coding_agent PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_coding_agent ADD_TAGS_AS_LABELS)
 
-    # coding-agent interactive TUI. Links the authoritative cch_cli owner too:
-    # BootTrustInteractiveTest drives the in-process CLI seam (CliRunFixture).
+    # coding-agent interactive TUI composition. BootTrustInteractiveTest
+    # drives the in-process CLI seam (CliRunFixture) through the one
+    # repository-private cch_coding_agent library (#468).
     add_executable(cch_tests_coding_agent_interactive
         tests/Catch2Main.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
@@ -762,8 +709,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cch_tests_coding_agent_interactive PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_coding_agent_interactive
         PRIVATE
-            cch_cli
-            cch_coding_agent_interactive
+            cch_coding_agent
             Boost::headers
             Catch2::Catch2
 )
@@ -794,8 +740,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cch_tests_cli_arch PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_cli_arch
         PRIVATE
-            cpp_harness_lib
-            cch_cli
+            cch_coding_agent
             CLI11::CLI11
             Catch2::Catch2
 )

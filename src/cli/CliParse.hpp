@@ -2,7 +2,7 @@
 
 #include "CliConfig.hpp"
 
-#include "../../include/cch/util/Error.hpp"
+#include <cch/util/Error.hpp>
 
 namespace cch::cli {
 

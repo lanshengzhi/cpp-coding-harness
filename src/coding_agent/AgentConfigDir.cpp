@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/AgentConfigDir.hpp"
+#include <cch/coding_agent/AgentConfigDir.hpp>
 
 #include <cstdlib>
 
