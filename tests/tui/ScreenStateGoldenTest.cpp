@@ -20,9 +20,9 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -39,18 +39,18 @@ using namespace cch;
 
 namespace {
 
-[[nodiscard]] util::Expected<util::JsonValue> read_screen_state() {
+[[nodiscard]] support::Expected<support::JsonValue> read_screen_state() {
     const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-tui/screen-state.json";
     std::ifstream input{path, std::ios::binary};
     if (!input) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Failed to open screen-state fixture: " + path.string()));
     }
     const std::string json{
         std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
-    return util::read_json(json);
+    return support::read_json(json);
 }
 
 /// A fixed-line component for renderer scenarios (pi's test-local `Lines`).
@@ -63,7 +63,7 @@ public:
         cache_valid_ = false;
     }
 
-    [[nodiscard]] util::Expected<tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
         if (cache_valid_) return tui::RenderResult{.lines = cached_};
         cached_ = lines_;
         cache_valid_ = true;
@@ -87,7 +87,7 @@ class InputRecorder final
       public tui::InputHandler,
       public tui::Focusable {
 public:
-    [[nodiscard]] util::Expected<tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
         return tui::RenderResult{.lines = {""}};
     }
 
@@ -454,16 +454,16 @@ public:
 TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots", "[tui][differential][issue386]") {
     const auto fixture = read_screen_state();
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& scenarios = root.at("scenarios").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& scenarios = root.at("scenarios").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(scenarios.empty());
 
     for (const auto& entry : scenarios) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto name = object.at("name").get_string();
         const auto columns = static_cast<std::size_t>(object.at("columns").get_number());
         const auto rows = static_cast<std::size_t>(object.at("rows").get_number());
-        const auto& expected = object.at("expected").get<util::JsonValue::array_t>();
+        const auto& expected = object.at("expected").get<support::JsonValue::array_t>();
 
         const auto context = std::string{"scenario "} + name;
         INFO(context);

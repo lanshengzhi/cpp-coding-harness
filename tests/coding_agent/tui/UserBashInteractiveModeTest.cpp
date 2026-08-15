@@ -16,9 +16,9 @@
 #include "support/GatedChatProvider.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
-#include "util/Redactor.hpp"
+#include "ai/Redactor.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -61,7 +61,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("provider reply");
         response.api = "fake";
@@ -135,7 +135,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         if (request_count > 1) {
             auto recovered = ai::assistant_text_message("recovery reply");
@@ -199,8 +199,8 @@ public:
             }
             co_return partial;
         }
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "abort-gated fake released without cancellation"));
                 });
     }
@@ -226,7 +226,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         if (options.stop_token.stop_requested() || request_count > 1) {
             auto aborted = ai::assistant_text_message("");
@@ -254,7 +254,7 @@ public:
             "delayed-call",
             "delayed",
             "{}",
-            util::JsonValue::object_t{}));
+            support::JsonValue::object_t{}));
         response.stop_reason = ai::AssistantStopReason::ToolUse;
         co_return response;
                 });
@@ -287,13 +287,13 @@ struct GatedCloseToolHandle {
     ai::Tool definition;
     definition.name = "delayed";
     definition.description = "Wait until close cancellation is observable";
-    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return GatedCloseToolHandle{
         tests::make_fake_tool(
             std::move(definition),
             agent::ToolConcurrency::Exclusive,
             [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 const auto executor = co_await boost::asio::this_coro::executor;
                 {
                     std::lock_guard lock(state->mutex);
@@ -313,8 +313,8 @@ struct GatedCloseToolHandle {
                 }
 
                 if (stop_token.stop_requested()) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Cancelled,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Cancelled,
                         "gated tool aborted by close"));
                 }
                 co_return agent::AsyncToolExecutionResult{};
@@ -356,14 +356,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -446,7 +446,7 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
@@ -456,7 +456,7 @@ TEST_CASE(
                 .agent_config_directory = workspace.path(),
                 .initial_prompt = "! positional input",
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -511,7 +511,7 @@ TEST_CASE(
 
     std::size_t lifecycle_events = 0;
     auto subscription = created->session->subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++lifecycle_events;
             return {};
         });
@@ -519,14 +519,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -557,7 +557,7 @@ TEST_CASE(
     // output's tail sits beyond the block's presentation bound.)
     const auto rendered_screen = visible_screen(terminal);
     CHECK(rendered_screen.find("$ " + raw_command) != std::string::npos);
-    CHECK(rendered_screen.find(util::kRedactionMarker) == std::string::npos);
+    CHECK(rendered_screen.find(ai::kRedactionMarker) == std::string::npos);
 
     // The spill artifact holds the complete sanitized stream and is never
     // substituted for the bounded model-context value.
@@ -610,8 +610,8 @@ TEST_CASE(
     shell->enqueue({
         .updates = {},
         .result = {.exit_code = 0},
-        .infrastructure_failure = util::make_error(
-            util::ErrorCode::Process,
+        .infrastructure_failure = support::make_error(
+            support::ErrorCode::Process,
             "spawn failed",
             "api_key=" + secret),
         .gated = false,
@@ -627,14 +627,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -686,7 +686,7 @@ TEST_CASE(
     REQUIRE(created);
 
     boost::asio::io_context io;
-    std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>> completion;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
     boost::asio::co_spawn(
         io,
         coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
@@ -694,16 +694,16 @@ TEST_CASE(
             "callback failure",
             false,
             [&secret](const coding_agent::runtime::UserBashProgress& progress)
-                -> util::ExpectedVoid {
+                -> support::ExpectedVoid {
                 if (progress.output.empty()) return {};
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Process,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Process,
                     "progress rejected",
                     "api_key=" + secret + " " +
                         std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x')));
             }),
         [&](std::exception_ptr exception,
-            util::Expected<coding_agent::runtime::UserBashCompletion> result) {
+            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
             REQUIRE(exception == nullptr);
             completion.emplace(std::move(result));
         });
@@ -717,11 +717,11 @@ TEST_CASE(
         "api_key=" + secret + " " +
             std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x'));
 
-    std::optional<util::ExpectedVoid> prompt_result;
+    std::optional<support::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(
         io,
         created->session->prompt("later prompt"),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             prompt_result.emplace(std::move(result));
         });
@@ -756,14 +756,14 @@ TEST_CASE(
 
     std::size_t lifecycle_events = 0;
     auto subscription = created->session->subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++lifecycle_events;
             return {};
         });
     REQUIRE(subscription);
 
     boost::asio::io_context io;
-    std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>> completion;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
     boost::asio::co_spawn(
         io,
         coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
@@ -771,10 +771,10 @@ TEST_CASE(
             "long command",
             false,
             [](const coding_agent::runtime::UserBashProgress&) {
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             }),
         [&](std::exception_ptr exception,
-            util::Expected<coding_agent::runtime::UserBashCompletion> result) {
+            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
             REQUIRE(exception == nullptr);
             completion.emplace(std::move(result));
         });
@@ -825,7 +825,7 @@ TEST_CASE(
     REQUIRE(created);
 
     boost::asio::io_context io;
-    std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>> completion;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
     std::string streamed_tail;
     boost::asio::co_spawn(
         io,
@@ -834,12 +834,12 @@ TEST_CASE(
             "huge output",
             false,
             [&streamed_tail](const coding_agent::runtime::UserBashProgress& progress)
-                -> util::ExpectedVoid {
+                -> support::ExpectedVoid {
                 if (!progress.output.empty()) streamed_tail = progress.output;
                 return {};
             }),
         [&](std::exception_ptr exception,
-            util::Expected<coding_agent::runtime::UserBashCompletion> result) {
+            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
             REQUIRE(exception == nullptr);
             completion.emplace(std::move(result));
         });
@@ -894,14 +894,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1005,14 +1005,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1118,14 +1118,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1224,14 +1224,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1303,14 +1303,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1378,14 +1378,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1458,14 +1458,14 @@ TEST_CASE(
     // full expanded bash block in the chat viewport.
     tui::VirtualTerminal terminal({.columns = 72, .rows = 54});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1572,14 +1572,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1646,14 +1646,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1669,7 +1669,7 @@ TEST_CASE(
     auto screen = visible_screen(terminal);
     CHECK(screen.find("$ watch out") != std::string::npos);
     CHECK(screen.find("streamed partial api_key=" + secret) != std::string::npos);
-    CHECK(screen.find(util::kRedactionMarker) == std::string::npos);
+    CHECK(screen.find(ai::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") != std::string::npos);
     CHECK(screen.find("(escape to cancel)") != std::string::npos);
     CHECK(created->session->snapshot().agent_state.messages.empty());
@@ -1681,7 +1681,7 @@ TEST_CASE(
     screen = visible_screen(terminal);
     CHECK(count_occurrences(screen, "$ watch out") == 1);
     CHECK(screen.find("streamed partial api_key=" + secret) != std::string::npos);
-    CHECK(screen.find(util::kRedactionMarker) == std::string::npos);
+    CHECK(screen.find(ai::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") == std::string::npos);
     CHECK(screen.find("(exit") == std::string::npos);
     CHECK(created->session->snapshot().agent_state.messages.size() == 1);
@@ -1732,14 +1732,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1796,14 +1796,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1890,14 +1890,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1952,14 +1952,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 40, .rows = 60});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2028,14 +2028,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2119,14 +2119,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2172,14 +2172,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = workspace.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });

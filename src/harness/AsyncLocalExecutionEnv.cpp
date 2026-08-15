@@ -4,7 +4,7 @@
 #include "RuntimeRoot.hpp"
 #include "SyncLocalExecutionEnv.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/Process.hpp"
+#include "harness/Process.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 
@@ -57,7 +57,7 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
     };
 }
 
-[[nodiscard]] ExecutionError classify_terminal_process_error(const util::Error& error) {
+[[nodiscard]] ExecutionError classify_terminal_process_error(const support::Error& error) {
     auto classified = classify_process_execution_error(error);
     if (classified.code == ExecutionErrorCode::Aborted) {
         classified.message = "Operation aborted; already-performed process side effects may remain";
@@ -181,7 +181,7 @@ struct ShellOperationState final : std::enable_shared_from_this<ShellOperationSt
     support::AsyncCompletion<ShellExecResult, ExecutionError> completion;
     std::shared_ptr<RuntimeTarget> runtime_target;
     std::shared_ptr<SyncLocalExecutionEnv> sync;
-    std::optional<std::expected<util::ProcessRequest, ExecutionError>> request;
+    std::optional<std::expected<harness::ProcessRequest, ExecutionError>> request;
 
     ShellOperationState(
         RuntimeTarget::Admission admission,
@@ -470,7 +470,7 @@ support::AsyncResult<ShellExecResult, ExecutionError> AsyncLocalExecutionEnv::ex
                                             runner->run(std::move(**state->request)),
                                             [state](
                                                 std::exception_ptr exception,
-                                                util::Expected<util::ProcessResult> process) mutable noexcept {
+                                                support::Expected<harness::ProcessResult> process) mutable noexcept {
                                                 if (exception) {
                                                     state->complete(std::unexpected(unknown_execution_error()));
                                                 } else if (!process) {

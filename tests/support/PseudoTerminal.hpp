@@ -2,7 +2,7 @@
 
 #if defined(__linux__) || defined(__APPLE__)
 
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -22,19 +22,19 @@
 namespace cch::tests {
 
 struct PseudoTerminal {
-    util::UniqueFd master;
-    util::UniqueFd slave;
+    support::UniqueFd master;
+    support::UniqueFd slave;
     std::string slave_name;
 };
 
 [[nodiscard]] inline std::optional<PseudoTerminal> open_pseudo_terminal(
     std::size_t columns = 80,
     std::size_t rows = 24) {
-    util::UniqueFd master(::posix_openpt(O_RDWR | O_NOCTTY));
+    support::UniqueFd master(::posix_openpt(O_RDWR | O_NOCTTY));
     if (!master || ::grantpt(master.get()) != 0 || ::unlockpt(master.get()) != 0) return std::nullopt;
     const auto* slave_name = ::ptsname(master.get());
     if (slave_name == nullptr) return std::nullopt;
-    util::UniqueFd slave(::open(slave_name, O_RDWR | O_NOCTTY));
+    support::UniqueFd slave(::open(slave_name, O_RDWR | O_NOCTTY));
     if (!slave) return std::nullopt;
 
     winsize dimensions{

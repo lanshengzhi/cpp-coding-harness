@@ -3,7 +3,7 @@
 #include <cch/ai/Model.hpp>
 
 #include "ai/ModelThinkingLevel.hpp"
-#include "util/JsonGlaze.hpp"
+#include "support/JsonGlaze.hpp"
 
 #include <cstdint>
 #include <map>
@@ -57,22 +57,22 @@ struct ModelDto {
 namespace detail {
 
 template <typename T>
-[[nodiscard]] inline util::Expected<T> required(
+[[nodiscard]] inline support::Expected<T> required(
     const std::optional<T>& value,
     std::string_view field,
     std::string_view context) {
     if (value) {
         return *value;
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::JsonParse,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::JsonParse,
         "missing required Model field",
         std::string{field},
         context.empty() ? std::nullopt : std::optional<std::string>{std::string{context}}));
 }
 
 template <typename T>
-[[nodiscard]] inline util::ExpectedVoid assign_required(
+[[nodiscard]] inline support::ExpectedVoid assign_required(
     T& destination,
     const std::optional<T>& value,
     std::string_view field,
@@ -89,15 +89,15 @@ template <typename T>
     return input == ModelInput::Text ? "text" : "image";
 }
 
-[[nodiscard]] inline util::Expected<ModelInput> input_from_string(std::string_view input) {
+[[nodiscard]] inline support::Expected<ModelInput> input_from_string(std::string_view input) {
     if (input == "text") {
         return ModelInput::Text;
     }
     if (input == "image") {
         return ModelInput::Image;
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::JsonParse,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::JsonParse,
         "invalid Model input capability",
         std::string{input}));
 }
@@ -109,13 +109,13 @@ template <typename T>
     return {};
 }
 
-[[nodiscard]] inline util::Expected<ModelThinkingLevel> thinking_level_from_string(
+[[nodiscard]] inline support::Expected<ModelThinkingLevel> thinking_level_from_string(
     std::string_view level) {
     if (const auto parsed = ai::detail::parse_model_thinking_level(level)) {
         return *parsed;
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::JsonParse,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::JsonParse,
         "invalid Model thinking level",
         std::string{level}));
 }
@@ -134,7 +134,7 @@ template <typename T>
     return dto;
 }
 
-[[nodiscard]] inline util::Expected<ThinkingLevelMap> from_dto(const ThinkingLevelMapDto& dto) {
+[[nodiscard]] inline support::Expected<ThinkingLevelMap> from_dto(const ThinkingLevelMapDto& dto) {
     ThinkingLevelMap levels;
     for (const auto& [name, value] : dto) {
         if (auto level = thinking_level_from_string(name); !level) {
@@ -149,8 +149,8 @@ template <typename T>
                 continue;
             }
         }
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::JsonParse,
             "invalid Model thinking level mapping",
             name));
     }
@@ -220,7 +220,7 @@ template <typename T>
     return dto;
 }
 
-[[nodiscard]] inline util::Expected<ModelCostTier> tier_from_dto(
+[[nodiscard]] inline support::Expected<ModelCostTier> tier_from_dto(
     const ModelCostTierDto& dto,
     std::string_view context) {
     double input{0};
@@ -257,7 +257,7 @@ template <typename T>
     };
 }
 
-[[nodiscard]] inline util::Expected<ModelCost> cost_from_dto(
+[[nodiscard]] inline support::Expected<ModelCost> cost_from_dto(
     const ModelCostDto& dto,
     std::string_view context) {
     ModelCost cost;
@@ -287,7 +287,7 @@ template <typename T>
     return cost;
 }
 
-[[nodiscard]] inline util::Expected<Model> from_dto(const ModelDto& dto, std::string_view context) {
+[[nodiscard]] inline support::Expected<Model> from_dto(const ModelDto& dto, std::string_view context) {
     std::string id;
     std::string name;
     std::string api;
@@ -382,15 +382,15 @@ template <typename T>
 
 } // namespace detail
 
-[[nodiscard]] inline util::Expected<std::string> write_model_json(const Model& model) {
+[[nodiscard]] inline support::Expected<std::string> write_model_json(const Model& model) {
     if (auto valid = validate_model(model); !valid) {
         return std::unexpected(valid.error());
     }
-    return util::write_json(detail::to_dto(model));
+    return support::write_json(detail::to_dto(model));
 }
 
-[[nodiscard]] inline util::Expected<Model> read_model_json(std::string_view json) {
-    if (auto dto = util::read_json<ModelDto>(json); !dto) {
+[[nodiscard]] inline support::Expected<Model> read_model_json(std::string_view json) {
+    if (auto dto = support::read_json<ModelDto>(json); !dto) {
         return std::unexpected(dto.error());
     } else {
         return detail::from_dto(*dto, json);

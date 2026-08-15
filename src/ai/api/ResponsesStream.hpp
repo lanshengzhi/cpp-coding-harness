@@ -10,8 +10,8 @@
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -33,8 +33,8 @@
 namespace cch::ai::api {
 namespace responses_stream {
 
-using JsonObject = util::JsonValue::object_t;
-using JsonArray = util::JsonValue::array_t;
+using JsonObject = support::JsonValue::object_t;
+using JsonArray = support::JsonValue::array_t;
 
 struct OutputSlot {
     enum class Kind { Thinking, Text, ToolCall };
@@ -49,11 +49,11 @@ struct OutputSlot {
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-[[nodiscard]] inline const JsonObject* object(const util::JsonValue& value) {
+[[nodiscard]] inline const JsonObject* object(const support::JsonValue& value) {
     return value.get_if<JsonObject>();
 }
 
-[[nodiscard]] inline const util::JsonValue* member(
+[[nodiscard]] inline const support::JsonValue* member(
     const JsonObject& value,
     std::string_view name) {
     const auto found = value.find(std::string{name});
@@ -143,23 +143,23 @@ template <typename Headers>
     });
 }
 
-[[nodiscard]] inline util::Error stream_error(
+[[nodiscard]] inline support::Error stream_error(
     std::string message,
     std::string detail = {}) {
-    return util::make_error(
-        util::ErrorCode::Stream,
+    return support::make_error(
+        support::ErrorCode::Stream,
         providers::bounded_provider_error_detail(std::move(message)),
         providers::bounded_provider_error_detail(std::move(detail)));
 }
 
-[[nodiscard]] inline util::JsonValue parse_streaming_arguments(
+[[nodiscard]] inline support::JsonValue parse_streaming_arguments(
     std::string_view raw_arguments) {
     // Streaming-tolerant argument parsing matching pi's `parseStreamingJson`
     // (partial-json semantics), shared with the Anthropic adapter.
     return parse_streaming_json(raw_arguments);
 }
 
-[[nodiscard]] inline util::ExpectedVoid finalize_tool_arguments(ToolCallContent& tool) {
+[[nodiscard]] inline support::ExpectedVoid finalize_tool_arguments(ToolCallContent& tool) {
     tool.arguments = parse_streaming_arguments(tool.raw_arguments);
     tool.arguments_valid = true;
     tool.argument_error = std::nullopt;
@@ -214,8 +214,8 @@ template <typename Headers>
 }
 
 /// Text signature v1: {"id": <item-id>, "v": 1, "phase": "commentary"|"final_answer"}
-[[nodiscard]] inline util::Expected<std::string> text_signature(const JsonObject& item) {
-    util::JsonValue::object_t signature{
+[[nodiscard]] inline support::Expected<std::string> text_signature(const JsonObject& item) {
+    support::JsonValue::object_t signature{
         {"id", std::string{string_member(item, "id").value_or("")}},
         {"v", 1},
     };
@@ -223,7 +223,7 @@ template <typename Headers>
         phase == "commentary" || phase == "final_answer") {
         signature.emplace("phase", std::string{*phase});
     }
-    return util::write_json(util::JsonValue{std::move(signature)});
+    return support::write_json(support::JsonValue{std::move(signature)});
 }
 
 inline void apply_message_phase_stop_reason(
@@ -241,7 +241,7 @@ inline void apply_message_phase_stop_reason(
     }
 }
 
-[[nodiscard]] inline util::ExpectedVoid emit_start(
+[[nodiscard]] inline support::ExpectedVoid emit_start(
     AssistantEventSink& sink,
     AssistantMessage& assistant,
     bool& started) {
@@ -252,7 +252,7 @@ inline void apply_message_phase_stop_reason(
     return providers::emit(sink, AssistantStartEvent{.partial = assistant});
 }
 
-[[nodiscard]] inline util::ExpectedVoid create_slot(
+[[nodiscard]] inline support::ExpectedVoid create_slot(
     std::size_t index,
     const JsonObject& item,
     std::map<std::size_t, OutputSlot>& slots,
@@ -301,7 +301,7 @@ inline void apply_message_phase_stop_reason(
             .name = std::string{string_member(item, "name").value_or("")},
             // pi constructs every tool call with an empty arguments object
             // (parseStreamingJson("")) and fills it from the raw arguments.
-            .arguments = util::JsonValue{util::JsonValue::object_t{}},
+            .arguments = support::JsonValue{support::JsonValue::object_t{}},
             .raw_arguments = arguments,
             .thought_signature = std::nullopt,
             .arguments_valid = true,
@@ -320,7 +320,7 @@ inline void apply_message_phase_stop_reason(
     return {};
 }
 
-[[nodiscard]] inline util::ExpectedVoid append_delta(
+[[nodiscard]] inline support::ExpectedVoid append_delta(
     const JsonObject& event,
     std::string_view type,
     std::map<std::size_t, OutputSlot>& slots,
@@ -374,7 +374,7 @@ inline void apply_message_phase_stop_reason(
     return {};
 }
 
-[[nodiscard]] inline util::ExpectedVoid append_reasoning_separator(
+[[nodiscard]] inline support::ExpectedVoid append_reasoning_separator(
     const JsonObject& event,
     std::map<std::size_t, OutputSlot>& slots,
     AssistantMessage& assistant,
@@ -397,7 +397,7 @@ inline void apply_message_phase_stop_reason(
     });
 }
 
-[[nodiscard]] inline util::ExpectedVoid finish_argument_stream(
+[[nodiscard]] inline support::ExpectedVoid finish_argument_stream(
     const JsonObject& event,
     std::map<std::size_t, OutputSlot>& slots,
     AssistantMessage& assistant,
@@ -429,7 +429,7 @@ inline void apply_message_phase_stop_reason(
     return {};
 }
 
-[[nodiscard]] inline util::ExpectedVoid finish_output_item(
+[[nodiscard]] inline support::ExpectedVoid finish_output_item(
     const JsonObject& event,
     std::map<std::size_t, OutputSlot>& slots,
     AssistantMessage& assistant,
@@ -457,7 +457,7 @@ inline void apply_message_phase_stop_reason(
         if (!content.empty()) {
             block.thinking = std::move(content);
         }
-        auto signature = util::write_json(util::JsonValue{*item});
+        auto signature = support::write_json(support::JsonValue{*item});
         if (!signature) {
             return std::unexpected(signature.error());
         }
@@ -515,9 +515,9 @@ inline void apply_message_phase_stop_reason(
 
 /// Emits one terminal error event carrying the final assistant value and turns
 /// the failure into the stream/cancelled category.
-[[nodiscard]] inline util::Expected<AssistantMessage> complete_failure(
+[[nodiscard]] inline support::Expected<AssistantMessage> complete_failure(
     AssistantMessage assistant,
-    util::Error failure,
+    support::Error failure,
     AssistantEventSink& sink) {
     for (auto& block : assistant.content) {
         auto* tool = std::get_if<ToolCallContent>(&block);
@@ -527,14 +527,14 @@ inline void apply_message_phase_stop_reason(
             }
         }
     }
-    const auto aborted = failure.code == util::ErrorCode::Cancelled;
+    const auto aborted = failure.code == support::ErrorCode::Cancelled;
     assistant.stop_reason = aborted
         ? AssistantStopReason::Aborted
         : AssistantStopReason::Error;
     if (aborted) {
         assistant.error_message = "Request was aborted";
-        failure = util::make_error(
-            util::ErrorCode::Cancelled,
+        failure = support::make_error(
+            support::ErrorCode::Cancelled,
             *assistant.error_message);
     } else {
         std::string diagnostic = failure.message;
@@ -546,8 +546,8 @@ inline void apply_message_phase_stop_reason(
         }
         assistant.error_message = providers::bounded_provider_error_detail(
             std::move(diagnostic));
-        failure = util::make_error(
-            util::ErrorCode::Stream,
+        failure = support::make_error(
+            support::ErrorCode::Stream,
             *assistant.error_message);
     }
     auto emitted = providers::emit(sink, AssistantErrorEvent{
@@ -574,26 +574,26 @@ inline void apply_message_phase_stop_reason(
 }
 
 [[nodiscard]] inline providers::ProviderFailure transport_failure(
-    const util::Error& error) {
+    const support::Error& error) {
     return providers::ProviderFailure{
-        .network_error = error.code == util::ErrorCode::Network ||
-                         error.code == util::ErrorCode::Timeout,
+        .network_error = error.code == support::ErrorCode::Network ||
+                         error.code == support::ErrorCode::Timeout,
         .status = std::nullopt,
         .headers = {},
         .message = error.detail.empty() ? error.message : error.detail,
     };
 }
 
-[[nodiscard]] inline boost::asio::awaitable<util::ExpectedVoid> wait_before_retry(
+[[nodiscard]] inline boost::asio::awaitable<support::ExpectedVoid> wait_before_retry(
     std::uint64_t delay_ms,
     std::stop_token stop_token) {
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if (delay_ms == 0) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     auto executor = co_await boost::asio::this_coro::executor;
     boost::asio::steady_timer timer(executor, std::chrono::milliseconds{delay_ms});
@@ -602,20 +602,20 @@ inline void apply_message_phase_stop_reason(
     co_await timer.async_wait(boost::asio::redirect_error(
         boost::asio::use_awaitable, error));
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if (error) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Stream,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Stream,
             "Responses retry wait failed",
             error.message()));
     }
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
-[[nodiscard]] inline boost::asio::awaitable<util::Expected<bool>> retry_provider_failure(
+[[nodiscard]] inline boost::asio::awaitable<support::Expected<bool>> retry_provider_failure(
     providers::ProviderFailure failure,
     std::uint32_t attempt,
     std::uint32_t max_retries,

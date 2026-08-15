@@ -59,7 +59,7 @@ std::string user_text_at(const std::vector<ai::MessageVariant>& messages, std::s
 }
 
 /// Build a linear session: user, assistant, user, assistant, user, assistant.
-util::Expected<harness::session::JsonlSessionStore> build_linear_session(
+support::Expected<harness::session::JsonlSessionStore> build_linear_session(
     const std::filesystem::path& path,
     const tests::TempWorkspace& workspace) {
     auto created = harness::session::JsonlSessionStore::create_new(
@@ -97,7 +97,7 @@ util::Expected<harness::session::JsonlSessionStore> build_linear_session(
 /// A session with a label on the first user message and a label entry
 /// BETWEEN the second user message and its assistant response, so the branch
 /// writer must re-chain the assistant's parent past the removed label.
-util::Expected<harness::session::JsonlSessionStore> build_labeled_session(
+support::Expected<harness::session::JsonlSessionStore> build_labeled_session(
     const std::filesystem::path& path,
     const tests::TempWorkspace& workspace) {
     auto created = harness::session::JsonlSessionStore::create_new(

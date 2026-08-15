@@ -3,7 +3,7 @@
 #include "ai/AsyncResultBridge.hpp"
 #include "harness/ShellEnvironment.hpp"
 #include "harness/ShellResolver.hpp"
-#include "util/Process.hpp"
+#include "harness/Process.hpp"
 
 #include <chrono>
 #include <exception>
@@ -15,7 +15,7 @@
 namespace cch::coding_agent::runtime {
 namespace {
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<UserShellResult>> run_local_user_shell(
+[[nodiscard]] boost::asio::awaitable<support::Expected<UserShellResult>> run_local_user_shell(
     std::filesystem::path workspace,
     std::vector<std::string> secret_environment_names,
     harness::ShellConfig shell_config,
@@ -42,9 +42,9 @@ namespace {
     const std::stop_callback forward_cancellation{
         stop_token,
         [&cancel_source] { cancel_source.request_stop(); }};
-    std::optional<util::Error> sink_error;
+    std::optional<support::Error> sink_error;
 
-    util::ProcessRequest request;
+    harness::ProcessRequest request;
     request.executable = std::move(*shell);
     request.arguments = {"-c", std::move(script)};
     request.working_directory = std::move(workspace);
@@ -66,22 +66,22 @@ namespace {
                         cancel_source.request_stop();
                     }
                 } catch (...) {
-                    sink_error = util::make_error(
-                        util::ErrorCode::Unknown,
+                    sink_error = support::make_error(
+                        support::ErrorCode::Unknown,
                         "User Shell update sink failed");
                     cancel_source.request_stop();
                 }
             });
     }
 
-    util::DefaultAsyncProcessRunner runner;
+    harness::DefaultAsyncProcessRunner runner;
     auto process = co_await runner.run(std::move(request));
 
     if (sink_error) {
         co_return std::unexpected(std::move(*sink_error));
     }
     if (!process) {
-        if (process.error().code == util::ErrorCode::Cancelled) {
+        if (process.error().code == support::ErrorCode::Cancelled) {
             co_return UserShellResult{.cancelled = true};
         }
         co_return std::unexpected(std::move(process.error()));

@@ -19,7 +19,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
@@ -106,7 +106,7 @@ struct Running {
     // the interactive-mode coroutine frame (and its Tui) last.
     tui::VirtualTerminal terminal{tui::VirtualTerminalOptions{.columns = 100, .rows = 40}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
 };
 
 void drain_ready(boost::asio::io_context& io) {
@@ -143,7 +143,7 @@ void drain_ready(boost::asio::io_context& io) {
 
     actions->replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
             request.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
@@ -159,7 +159,7 @@ void drain_ready(boost::asio::io_context& io) {
             *created->session,
             running.terminal,
             std::move(config)),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
@@ -312,7 +312,7 @@ TEST_CASE(
     coding_agent::tui::testing::ActionSinkRecorder actions;
     actions.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
             request.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
@@ -326,7 +326,7 @@ TEST_CASE(
                 .agent_config_directory = fixture.agent_dir.path(),
                 .action_sink = actions.make_sink(),
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });

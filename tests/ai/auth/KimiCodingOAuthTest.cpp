@@ -4,7 +4,7 @@
 #include "ai/auth/Pkce.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -84,7 +84,7 @@ public:
         std::string body;
     };
 
-    boost::asio::awaitable<util::Expected<ai::auth::OAuthHttpResponse>> post(
+    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> post(
         std::string url,
         std::map<std::string, std::string, std::less<>> headers,
         std::string body,
@@ -98,12 +98,12 @@ public:
         if (fail_first_n_requests > 0) {
             --fail_first_n_requests;
             if (stop_token.stop_requested()) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Cancelled,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled,
                     "fake client cancelled"));
             }
-            co_return std::unexpected(failure_error.value_or(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(failure_error.value_or(support::make_error(
+                support::ErrorCode::Network,
                 "connection reset")));
         }
         if (respond_delay > std::chrono::milliseconds::zero()) {
@@ -115,22 +115,22 @@ public:
             co_await timer.async_wait(boost::asio::redirect_error(
                 boost::asio::use_awaitable, error));
             if (stop_token.stop_requested()) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Cancelled,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled,
                     "fake client cancelled"));
             }
         }
         auto& queue = responses[requests.back().url];
         if (queue.empty()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "no scripted response for " + requests.back().url));
         }
         auto scripted = std::move(queue.front());
         queue.pop_front();
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "fake client cancelled"));
         }
         co_return ai::auth::OAuthHttpResponse{
@@ -141,7 +141,7 @@ public:
 
     std::map<std::string, std::deque<ScriptedResponse>, std::less<>> responses;
     std::vector<Request> requests;
-    std::optional<util::Error> failure_error;
+    std::optional<support::Error> failure_error;
     int fail_first_n_requests{0};
     std::chrono::milliseconds respond_delay{0};
 };
@@ -275,7 +275,7 @@ TEST_CASE("Kimi login rejects a non-http(s) verification_uri_complete", "[ai][au
     auto result = run_async_result(auth.login(make_interaction(nullptr)));
 
     REQUIRE(!result);
-    CHECK(result.error().code == util::ErrorCode::OAuth);
+    CHECK(result.error().code == support::ErrorCode::OAuth);
     CHECK(result.error().message.find(
               "Invalid Kimi Code device authorization response") !=
           std::string::npos);
@@ -336,7 +336,7 @@ TEST_CASE("Kimi login cancellation normalizes to Login cancelled", "[ai][auth][i
         auth.login(make_interaction(nullptr, login_stop.get_token())));
 
     REQUIRE(!result);
-    CHECK(result.error().code == util::ErrorCode::Cancelled);
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
     CHECK(result.error().message == "Login cancelled");
 }
 
@@ -368,7 +368,7 @@ TEST_CASE("device poll helper surfaces the frozen slow_down timeout message verb
             .expires_in_seconds = 1,
             .wait_before_first_poll = false,
             .poll = []()
-                -> boost::asio::awaitable<util::Expected<ai::auth::DevicePollResult<int>>> {
+                -> boost::asio::awaitable<support::Expected<ai::auth::DevicePollResult<int>>> {
                 co_return ai::auth::DevicePollResult<int>{
                     .kind = ai::auth::DevicePollResult<int>::SlowDown{},
                 };
@@ -398,7 +398,7 @@ TEST_CASE("Kimi per-request timeout composes with the login cancellation token",
     auto result = run_async_result(auth.login(make_interaction(nullptr)));
 
     REQUIRE(!result);
-    CHECK(result.error().code == util::ErrorCode::Timeout);
+    CHECK(result.error().code == support::ErrorCode::Timeout);
     CHECK(result.error().message == "Kimi Code OAuth request timed out");
 }
 
@@ -521,7 +521,7 @@ TEST_CASE("Kimi refresh gives up after the retry ceiling on persistent 5xx", "[a
     }));
 
     REQUIRE(!result);
-    CHECK(result.error().code == util::ErrorCode::OAuth);
+    CHECK(result.error().code == support::ErrorCode::OAuth);
     CHECK(result.error().message.find("Kimi Code token refresh failed") !=
           std::string::npos);
     // attempts 0..3 inclusive = 4 requests total.
@@ -531,8 +531,8 @@ TEST_CASE("Kimi refresh gives up after the retry ceiling on persistent 5xx", "[a
 TEST_CASE("Kimi refresh retries transport failures up to the retry ceiling", "[ai][auth][issue344]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->fail_first_n_requests = 3;
-    http->failure_error = util::make_error(
-        util::ErrorCode::Network, "connection reset");
+    http->failure_error = support::make_error(
+        support::ErrorCode::Network, "connection reset");
     http->responses["https://auth.kimi.com/api/oauth/token"] = {
         {200, token_json()},
     };

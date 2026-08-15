@@ -3,7 +3,7 @@
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/tui/Fuzzy.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <algorithm>
 #include <array>

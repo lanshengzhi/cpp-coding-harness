@@ -8,8 +8,8 @@
 #include "ai/providers/StreamTransport.hpp"
 #include "ai/providers/WebSocketTransport.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
-#include <cch/util/Error.hpp>
-#include "util/Process.hpp"
+#include <cch/support/Error.hpp>
+#include "harness/Process.hpp"
 
 #include <map>
 #include <memory>
@@ -26,7 +26,7 @@ struct ProviderComposerOptions {
     std::shared_ptr<ai::providers::StreamTransport> http_transport{nullptr};
     std::shared_ptr<ai::providers::WebSocketTransport> ws_transport{nullptr};
     ai::providers::CodexWebSocketCacheConfig codex_cache_config{};
-    std::shared_ptr<util::AsyncProcessRunner> process_runner{nullptr};
+    std::shared_ptr<harness::AsyncProcessRunner> process_runner{nullptr};
 };
 
 /// Built-in Providers in the supported subset, keyed by provider id

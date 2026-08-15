@@ -3,7 +3,7 @@
 #include "KimiCatalog.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/api/AnthropicMessagesAdapter.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -49,10 +49,10 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<AssistantMessage>> {
                 if (model.api != "anthropic-messages") {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Stream,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Stream,
                         "Provider kimi-coding has no API implementation for \"" +
                             model.api + "\""));
                 }

@@ -2,7 +2,7 @@
 
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstdlib>
 #include <cmath>
@@ -50,10 +50,10 @@ std::string format_cwd_for_footer(
     return text.empty() ? "~" : "~" + std::string{std::filesystem::path::preferred_separator} + text;
 }
 
-util::Expected<cch::tui::RenderResult> Footer::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> Footer::render(std::size_t width) {
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Footer requires a positive visible width"));
     }
 

@@ -1,6 +1,6 @@
 #include "coding_agent/tui/ExternalEditor.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <array>
 #include <cerrno>
@@ -126,20 +126,20 @@ std::string external_editor_command() {
 #endif
 }
 
-boost::asio::awaitable<util::Expected<std::optional<std::string>>>
+boost::asio::awaitable<support::Expected<std::optional<std::string>>>
 edit_in_external_editor(std::string command, std::string content) {
     const auto parts = split_command(command);
     if (parts.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "external editor command is empty"));
     }
 
     std::error_code error;
     auto base = std::filesystem::temp_directory_path(error);
     if (error || base.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "external editor temporary directory is unavailable",
             error.message()));
     }
@@ -154,8 +154,8 @@ edit_in_external_editor(std::string command, std::string content) {
         error.clear();
     }
     if (directory.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "could not create the external editor temporary directory"));
     }
 
@@ -172,8 +172,8 @@ edit_in_external_editor(std::string command, std::string content) {
     {
         std::ofstream output(file_path, std::ios::binary | std::ios::trunc);
         if (!output) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "could not write the external editor prompt file"));
         }
         output << content;
@@ -187,14 +187,14 @@ edit_in_external_editor(std::string command, std::string content) {
 
     const auto exit_code = run_editor(parts, file_path);
     if (!exit_code || *exit_code != 0) {
-        co_return util::Expected<std::optional<std::string>>{std::nullopt};
+        co_return support::Expected<std::optional<std::string>>{std::nullopt};
     }
 
     auto edited = read_file(file_path);
     if (!edited.empty() && edited.back() == '\n') {
         edited.pop_back();
     }
-    co_return util::Expected<std::optional<std::string>>{std::move(edited)};
+    co_return support::Expected<std::optional<std::string>>{std::move(edited)};
 }
 
 } // namespace cch::coding_agent::tui

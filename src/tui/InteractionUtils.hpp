@@ -3,7 +3,7 @@
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/Style.hpp>
 #include <cch/tui/Utils.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -71,7 +71,7 @@ struct VisibleRange {
 }
 
 template <typename Hook, typename Invoker>
-[[nodiscard]] util::Expected<std::string> apply_style(
+[[nodiscard]] support::Expected<std::string> apply_style(
     Hook& hook,
     std::string text,
     std::string_view owner,
@@ -81,25 +81,25 @@ template <typename Hook, typename Invoker>
     try {
         text = invoke(hook, std::move(text));
     } catch (const std::exception&) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             std::format("TUI {} style hook failed", owner),
             "the style callback threw an exception"));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             std::format("TUI {} style hook failed", owner),
             "the style callback threw an unknown exception"));
     }
     if (visible_width(text) != input_width) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             std::format("TUI {} style hook changed visible width", owner)));
     }
     return text;
 }
 
-[[nodiscard]] inline util::Expected<std::string> apply_text_style(
+[[nodiscard]] inline support::Expected<std::string> apply_text_style(
     TextStyleHook& hook,
     std::string text,
     std::string_view owner) {
@@ -108,7 +108,7 @@ template <typename Hook, typename Invoker>
     });
 }
 
-[[nodiscard]] inline util::Expected<std::string> apply_selection_style(
+[[nodiscard]] inline support::Expected<std::string> apply_selection_style(
     SelectionStyleHook& hook,
     std::string text,
     bool selected,

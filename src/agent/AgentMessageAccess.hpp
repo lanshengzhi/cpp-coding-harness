@@ -2,7 +2,7 @@
 
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 namespace cch::agent::detail {
 
@@ -10,14 +10,14 @@ namespace cch::agent::detail {
 /// Agent-owned Live Session State without synthesizing lifecycle events.
 class AgentMessageAccess {
 public:
-    [[nodiscard]] static util::ExpectedVoid append_bash_execution(
+    [[nodiscard]] static support::ExpectedVoid append_bash_execution(
         Agent& agent,
         ai::BashExecutionMessage message);
 
     /// Replace the Agent's entire Live Session State message list with a
     /// rebuilt context (pi `agent.state.messages = sessionContext.messages`
     /// after compaction). Requires an idle Agent: an active run is rejected.
-    [[nodiscard]] static util::ExpectedVoid replace_messages(
+    [[nodiscard]] static support::ExpectedVoid replace_messages(
         Agent& agent,
         std::vector<ai::MessageVariant> messages);
 
@@ -27,7 +27,7 @@ public:
     /// history; only the live context drops it so the retry does not re-send
     /// it. No-op when the last message is not an assistant message. Requires
     /// an idle Agent.
-    [[nodiscard]] static util::ExpectedVoid pop_trailing_assistant(
+    [[nodiscard]] static support::ExpectedVoid pop_trailing_assistant(
         Agent& agent);
 };
 

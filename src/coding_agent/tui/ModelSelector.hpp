@@ -5,7 +5,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/any_io_executor.hpp>
@@ -67,7 +67,7 @@ public:
     ModelSelectorComponent(const ModelSelectorComponent&) = delete;
     ModelSelectorComponent& operator=(const ModelSelectorComponent&) = delete;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
     void handle_input(const cch::tui::InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override { return false; }
@@ -89,7 +89,7 @@ private:
     void close();
     void set_scope(bool scoped);
     void filter_models(std::string query);
-    [[nodiscard]] util::ExpectedVoid update_list(std::vector<std::string>& out_lines, std::size_t width) const;
+    [[nodiscard]] support::ExpectedVoid update_list(std::vector<std::string>& out_lines, std::size_t width) const;
     [[nodiscard]] bool is_current(const ai::Model& model) const;
     [[nodiscard]] std::string scope_text() const;
     [[nodiscard]] std::string scope_hint_text() const;

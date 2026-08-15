@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <optional>
 #include <string>
@@ -48,7 +48,7 @@ struct DisplayDiff {
 /// matched against the original content (not incrementally), fuzzy matching
 /// only when exact matching fails, duplicates and overlaps are rejected, and
 /// an unchanged result is an error. Error messages reproduce pi's.
-[[nodiscard]] util::Expected<AppliedEdits> apply_edits_to_normalized_content(
+[[nodiscard]] support::Expected<AppliedEdits> apply_edits_to_normalized_content(
     std::string_view normalized_content,
     const std::vector<EditReplacement>& edits,
     std::string_view path);

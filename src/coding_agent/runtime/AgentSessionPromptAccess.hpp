@@ -19,75 +19,75 @@ namespace cch::coding_agent::detail {
 /// co_await without invalidating the returned lazy awaitable.
 class AgentSessionPromptAccess {
 public:
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt(
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> prompt(
         AgentSession& session,
         std::string text,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates,
-        std::move_only_function<util::ExpectedVoid()> on_preflight_accepted);
+        std::move_only_function<support::ExpectedVoid()> on_preflight_accepted);
 
-    [[nodiscard]] static util::ExpectedVoid prompt_blocking(
+    [[nodiscard]] static support::ExpectedVoid prompt_blocking(
         AgentSession& session,
         std::string text,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates,
-        std::move_only_function<util::ExpectedVoid()> on_preflight_accepted);
+        std::move_only_function<support::ExpectedVoid()> on_preflight_accepted);
 
     /// Manual compaction (pi `AgentSession.compact`). Same impl_ copying
     /// contract as prompt(): the returned lazy awaitable survives moving or
     /// destroying the public handle before its first co_await.
-    [[nodiscard]] static boost::asio::awaitable<util::Expected<CompactionResult>>
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<CompactionResult>>
     compact(
         AgentSession& session,
         std::string custom_instructions);
 
     /// pi `waitForIdle` (see AgentSession::wait_for_idle). Same impl_
     /// copying contract as prompt().
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> wait_for_idle(
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> wait_for_idle(
         AgentSession& session);
 
     /// Runtime model switch (pi `AgentSession.setModel`). Same impl_ copying
     /// contract as prompt().
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model(
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> set_model(
         AgentSession& session,
         ai::Model model);
     /// Blocking facade driving the async path on a temporary executor.
-    [[nodiscard]] static util::ExpectedVoid set_model_blocking(
+    [[nodiscard]] static support::ExpectedVoid set_model_blocking(
         AgentSession& session,
         ai::Model model);
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`). Same impl_
     /// copying contract as prompt().
     [[nodiscard]] static boost::asio::awaitable<
-        util::Expected<std::optional<ModelCycleResult>>>
+        support::Expected<std::optional<ModelCycleResult>>>
     cycle_model(AgentSession& session, std::string direction);
     /// Blocking facade driving the async path on a temporary executor.
-    [[nodiscard]] static util::Expected<std::optional<ModelCycleResult>>
+    [[nodiscard]] static support::Expected<std::optional<ModelCycleResult>>
     cycle_model_blocking(AgentSession& session, std::string direction);
 
 private:
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt_impl(
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> prompt_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         std::string text,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates,
-        std::move_only_function<util::ExpectedVoid()> on_preflight_accepted);
+        std::move_only_function<support::ExpectedVoid()> on_preflight_accepted);
 
-    [[nodiscard]] static boost::asio::awaitable<util::Expected<CompactionResult>>
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<CompactionResult>>
     compact_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         std::string custom_instructions);
 
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid>
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid>
     wait_for_idle_impl(
         std::shared_ptr<AgentSession::Impl> impl);
 
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model_impl(
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> set_model_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         ai::Model model);
 
     [[nodiscard]] static boost::asio::awaitable<
-        util::Expected<std::optional<ModelCycleResult>>>
+        support::Expected<std::optional<ModelCycleResult>>>
     cycle_model_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         std::string direction);

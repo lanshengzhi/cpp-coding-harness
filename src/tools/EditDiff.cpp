@@ -16,9 +16,9 @@
 namespace cch::tools {
 namespace {
 
-[[nodiscard]] util::Error edit_error(std::string message) {
-    return util::make_error(
-        util::ErrorCode::Validation,
+[[nodiscard]] support::Error edit_error(std::string message) {
+    return support::make_error(
+        support::ErrorCode::Validation,
         std::move(message));
 }
 
@@ -615,7 +615,7 @@ std::pair<std::string, std::string> strip_bom(std::string_view content) {
     return {{}, std::string(content)};
 }
 
-util::Expected<AppliedEdits> apply_edits_to_normalized_content(
+support::Expected<AppliedEdits> apply_edits_to_normalized_content(
     std::string_view normalized_content,
     const std::vector<EditReplacement>& edits,
     std::string_view path) {
@@ -716,7 +716,7 @@ util::Expected<AppliedEdits> apply_edits_to_normalized_content(
             .new_text = matched.new_text,
         });
     }
-    util::Expected<std::string> new_content;
+    support::Expected<std::string> new_content;
     if (used_fuzzy_match) {
         auto overlaid = apply_replacements_preserving_unchanged_lines(
             base_content, replacement_base_content, replacements);

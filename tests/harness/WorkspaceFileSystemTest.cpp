@@ -39,7 +39,7 @@ TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when reading", "[h
 
     auto content = guard->read_existing_file("fake/target.txt");
     REQUIRE_FALSE(content);
-    CHECK(content.error().code == util::ErrorCode::Workspace);
+    CHECK(content.error().code == support::ErrorCode::Workspace);
 }
 
 TEST_CASE("WorkspaceFileSystem writes a file inside workspace", "[harness][filesystem][u2]") {
@@ -85,7 +85,7 @@ TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when writing", "[h
 
     auto written = guard->write_file("fake/new.txt", "x", true);
     REQUIRE_FALSE(written);
-    CHECK(written.error().code == util::ErrorCode::Workspace);
+    CHECK(written.error().code == support::ErrorCode::Workspace);
 }
 
 TEST_CASE("WorkspaceFileSystem rejects missing parent when create_parents is false", "[harness][filesystem][u2]") {

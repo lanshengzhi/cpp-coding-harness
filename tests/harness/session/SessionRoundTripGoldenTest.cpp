@@ -12,16 +12,16 @@
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include "agent/AgentLoop.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "harness/session/EntrySerializer.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -69,10 +69,10 @@ namespace {
 /// object (keys are map-sorted, so input key order never matters). pi custom
 /// messages carry `content` as a plain string; the C++ `CustomMessage` carries
 /// a text block — both normalize to a `[{type:"text",text}]` block array.
-[[nodiscard]] util::JsonValue canonical_message(const util::JsonValue& message) {
-    const auto* object = message.get_if<util::JsonValue::object_t>();
+[[nodiscard]] support::JsonValue canonical_message(const support::JsonValue& message) {
+    const auto* object = message.get_if<support::JsonValue::object_t>();
     REQUIRE(object != nullptr);
-    util::JsonValue::object_t out;
+    support::JsonValue::object_t out;
     const auto copy_field = [&](const char* key) {
         if (const auto it = object->find(key); it != object->end()) {
             out.emplace(key, it->second);
@@ -92,59 +92,59 @@ namespace {
     copy_field("timestamp");
 
     if (const auto it = object->find("content"); it != object->end()) {
-        util::JsonValue::array_t blocks;
+        support::JsonValue::array_t blocks;
         if (const auto* text = it->second.get_if<std::string>()) {
-            blocks.push_back(util::JsonValue{util::JsonValue::object_t{
-                {"type", util::JsonValue{"text"}},
-                {"text", util::JsonValue{*text}},
+            blocks.push_back(support::JsonValue{support::JsonValue::object_t{
+                {"type", support::JsonValue{"text"}},
+                {"text", support::JsonValue{*text}},
             }});
-        } else if (const auto* array = it->second.get_if<util::JsonValue::array_t>()) {
+        } else if (const auto* array = it->second.get_if<support::JsonValue::array_t>()) {
             for (const auto& block : *array) {
-                const auto* block_object = block.get_if<util::JsonValue::object_t>();
+                const auto* block_object = block.get_if<support::JsonValue::object_t>();
                 REQUIRE(block_object != nullptr);
-                util::JsonValue::object_t normalized;
+                support::JsonValue::object_t normalized;
                 for (const char* key : {"type", "text", "data", "mimeType"}) {
                     if (const auto found = block_object->find(key);
                         found != block_object->end()) {
                         normalized.emplace(key, found->second);
                     }
                 }
-                blocks.push_back(util::JsonValue{std::move(normalized)});
+                blocks.push_back(support::JsonValue{std::move(normalized)});
             }
         }
-        out.emplace("content", util::JsonValue{std::move(blocks)});
+        out.emplace("content", support::JsonValue{std::move(blocks)});
     }
-    return util::JsonValue{std::move(out)};
+    return support::JsonValue{std::move(out)};
 }
 
-[[nodiscard]] util::JsonValue canonical_messages(const util::JsonValue& messages) {
-    const auto* array = messages.get_if<util::JsonValue::array_t>();
+[[nodiscard]] support::JsonValue canonical_messages(const support::JsonValue& messages) {
+    const auto* array = messages.get_if<support::JsonValue::array_t>();
     REQUIRE(array != nullptr);
-    util::JsonValue::array_t out;
+    support::JsonValue::array_t out;
     for (const auto& message : *array) {
         out.push_back(canonical_message(message));
     }
-    return util::JsonValue{std::move(out)};
+    return support::JsonValue{std::move(out)};
 }
 
-[[nodiscard]] util::JsonValue cpp_message_json(const ai::MessageVariant& message) {
-    auto serialized = util::write_json(ai::glaze::to_message_dto(message));
+[[nodiscard]] support::JsonValue cpp_message_json(const ai::MessageVariant& message) {
+    auto serialized = support::write_json(ai::glaze::to_message_dto(message));
     REQUIRE(serialized);
-    auto parsed = util::read_json(*serialized);
+    auto parsed = support::read_json(*serialized);
     REQUIRE(parsed);
     return std::move(*parsed);
 }
 
-[[nodiscard]] util::JsonValue cpp_messages_canonical(const std::vector<ai::MessageVariant>& messages) {
-    util::JsonValue::array_t out;
+[[nodiscard]] support::JsonValue cpp_messages_canonical(const std::vector<ai::MessageVariant>& messages) {
+    support::JsonValue::array_t out;
     for (const auto& message : messages) {
         out.push_back(canonical_message(cpp_message_json(message)));
     }
-    return util::JsonValue{std::move(out)};
+    return support::JsonValue{std::move(out)};
 }
 
-[[nodiscard]] std::string canonical_json(const util::JsonValue& value) {
-    auto serialized = util::write_json(value);
+[[nodiscard]] std::string canonical_json(const support::JsonValue& value) {
+    auto serialized = support::write_json(value);
     REQUIRE(serialized);
     return *serialized;
 }
@@ -174,9 +174,9 @@ namespace {
     return converted;
 }
 
-util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
+support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -186,8 +186,8 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
         boost::asio::detached);
     io.run();
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
@@ -317,7 +317,7 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics",
         }
         const auto& custom = std::get<harness::session::CustomEntryValue>(entry.value);
         if (custom.data.has_value() &&
-            custom.data->get_if<util::JsonValue::null_t>() != nullptr) {
+            custom.data->get_if<support::JsonValue::null_t>() != nullptr) {
             null_data_custom = &entry;
             break;
         }
@@ -335,7 +335,7 @@ TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custo
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    const auto expected = util::read_json(
+    const auto expected = support::read_json(
         read_fixture_text("projection-context.json"));
     REQUIRE(expected);
     const auto actual = cpp_messages_canonical(context.messages);
@@ -359,7 +359,7 @@ TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    const auto expected = util::read_json(
+    const auto expected = support::read_json(
         read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
     const auto actual = cpp_messages_canonical(context.messages);
@@ -426,7 +426,7 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     // custom_message → CustomMessage, then the prompt.
     std::vector<ai::MessageVariant> session_messages(
         recorded.begin(), recorded.end() - 1);
-    const auto expected = util::read_json(
+    const auto expected = support::read_json(
         read_fixture_text("projection-context.json"));
     REQUIRE(expected);
     auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
@@ -439,7 +439,7 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
 
     // The model-visible messages (pi convertToLlm semantics, the same
     // conversion the provider adapters run) match pi's captured LLM view.
-    const auto expected_llm = util::read_json(
+    const auto expected_llm = support::read_json(
         read_fixture_text("projection-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
@@ -477,7 +477,7 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     std::vector<ai::MessageVariant> session_messages(
         recorded.begin(), recorded.end() - 1);
 
-    const auto expected = util::read_json(
+    const auto expected = support::read_json(
         read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
     auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
@@ -488,7 +488,7 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     }
     CHECK(actual_json == expected_json);
 
-    const auto expected_llm = util::read_json(
+    const auto expected_llm = support::read_json(
         read_fixture_text("projection-branch-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
@@ -508,28 +508,28 @@ namespace {
 /// Serialize the pi-derived session state (`thinkingLevel`, `model
 /// {provider, modelId} | null`, `activeToolNames | null`) into the stable JSON
 /// object the committed golden pins.
-[[nodiscard]] util::JsonValue derived_state_to_json(
+[[nodiscard]] support::JsonValue derived_state_to_json(
     const harness::session::SessionContext& context) {
-    util::JsonValue::object_t out;
-    out.emplace("thinkingLevel", util::JsonValue{context.thinking_level});
+    support::JsonValue::object_t out;
+    out.emplace("thinkingLevel", support::JsonValue{context.thinking_level});
     if (context.provider.has_value() && context.model.has_value()) {
-        util::JsonValue::object_t model;
-        model.emplace("provider", util::JsonValue{*context.provider});
-        model.emplace("modelId", util::JsonValue{*context.model});
-        out.emplace("model", util::JsonValue{std::move(model)});
+        support::JsonValue::object_t model;
+        model.emplace("provider", support::JsonValue{*context.provider});
+        model.emplace("modelId", support::JsonValue{*context.model});
+        out.emplace("model", support::JsonValue{std::move(model)});
     } else {
-        out.emplace("model", util::JsonValue{nullptr});
+        out.emplace("model", support::JsonValue{nullptr});
     }
     if (context.active_tool_names.has_value()) {
-        util::JsonValue::array_t tools;
+        support::JsonValue::array_t tools;
         for (const auto& name : *context.active_tool_names) {
-            tools.push_back(util::JsonValue{name});
+            tools.push_back(support::JsonValue{name});
         }
-        out.emplace("activeToolNames", util::JsonValue{std::move(tools)});
+        out.emplace("activeToolNames", support::JsonValue{std::move(tools)});
     } else {
-        out.emplace("activeToolNames", util::JsonValue{nullptr});
+        out.emplace("activeToolNames", support::JsonValue{nullptr});
     }
-    return util::JsonValue{std::move(out)};
+    return support::JsonValue{std::move(out)};
 }
 
 /// One linear branch with a user root, a `model_change` (openai/gpt-4.1), a
@@ -625,11 +625,11 @@ TEST_CASE(
     CHECK_FALSE(empty_context.model.has_value());
     CHECK_FALSE(empty_context.active_tool_names.has_value());
 
-    util::JsonValue golden{util::JsonValue::object_t{}};
+    support::JsonValue golden{support::JsonValue::object_t{}};
     golden.get_object().emplace("fullBranch", derived_state_to_json(full_branch));
     golden.get_object().emplace("defaults", derived_state_to_json(empty_context));
 
-    auto serialized = util::write_json(golden);
+    auto serialized = support::write_json(golden);
     REQUIRE(serialized);
     const auto expected = read_fixture_text("derived-session-state.json");
     if (*serialized != expected) {

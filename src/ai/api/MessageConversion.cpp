@@ -1,7 +1,7 @@
 #include "MessageConversion.hpp"
 
 #include "ai/SimpleOptions.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -325,19 +325,19 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
     return result;
 }
 
-[[nodiscard]] util::JsonValue response_image(const ImageContent& image) {
-    return util::JsonValue::object_t{
+[[nodiscard]] support::JsonValue response_image(const ImageContent& image) {
+    return support::JsonValue::object_t{
         {"detail", "auto"},
         {"image_url", "data:" + image.mime_type + ";base64," + image.data},
         {"type", "input_image"},
     };
 }
 
-[[nodiscard]] util::JsonValue::array_t response_content(const std::vector<Content>& content) {
-    util::JsonValue::array_t result;
+[[nodiscard]] support::JsonValue::array_t response_content(const std::vector<Content>& content) {
+    support::JsonValue::array_t result;
     for (const auto& block : content) {
         if (const auto* text = std::get_if<TextContent>(&block)) {
-            result.emplace_back(util::JsonValue::object_t{
+            result.emplace_back(support::JsonValue::object_t{
                 {"text", sanitize_text(text->text)},
                 {"type", "input_text"},
             });
@@ -348,7 +348,7 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
     return result;
 }
 
-[[nodiscard]] util::JsonValue response_tool_output(
+[[nodiscard]] support::JsonValue response_tool_output(
     const Model& model,
     const std::vector<Content>& content) {
     std::string text;
@@ -369,9 +369,9 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
         }
         return images.empty() ? "(no tool output)" : "(see attached image)";
     }
-    util::JsonValue::array_t output;
+    support::JsonValue::array_t output;
     if (!text.empty()) {
-        output.emplace_back(util::JsonValue::object_t{
+        output.emplace_back(support::JsonValue::object_t{
             {"text", sanitize_text(text)},
             {"type", "input_text"},
         });
@@ -393,9 +393,9 @@ struct ParsedTextSignature {
         return std::nullopt;
     }
     if (signature->starts_with('{')) {
-        const auto parsed = util::read_json(*signature);
+        const auto parsed = support::read_json(*signature);
         if (parsed) {
-            const auto* object = parsed->get_if<util::JsonValue::object_t>();
+            const auto* object = parsed->get_if<support::JsonValue::object_t>();
             if (object) {
                 const auto version = object->find("v");
                 const auto id = object->find("id");
@@ -526,14 +526,14 @@ struct ParsedTextSignature {
     return call_id + "|" + item_id;
 }
 
-[[nodiscard]] util::Expected<util::JsonValue::array_t> convert_responses_messages(
+[[nodiscard]] support::Expected<support::JsonValue::array_t> convert_responses_messages(
     AdapterKind adapter,
     const Model& model,
     const AiContext& context) {
-    util::JsonValue::array_t result;
+    support::JsonValue::array_t result;
     if (adapter == AdapterKind::OpenAIResponses && context.system_prompt &&
         !context.system_prompt->empty()) {
-        result.emplace_back(util::JsonValue::object_t{
+        result.emplace_back(support::JsonValue::object_t{
             {"content", sanitize_text(*context.system_prompt)},
             {"role", model.reasoning ? "developer" : "system"},
         });
@@ -547,8 +547,8 @@ struct ParsedTextSignature {
                 // pi `openai-responses-shared.ts`: a string alternative emits
                 // exactly one sanitized input_text item, unconditionally
                 // (empty string included).
-                result.emplace_back(util::JsonValue::object_t{
-                    {"content", util::JsonValue::array_t{util::JsonValue::object_t{
+                result.emplace_back(support::JsonValue::object_t{
+                    {"content", support::JsonValue::array_t{support::JsonValue::object_t{
                         {"text", sanitize_text(*text)},
                         {"type", "input_text"},
                     }}},
@@ -557,7 +557,7 @@ struct ParsedTextSignature {
             } else {
                 auto content = response_content(std::get<std::vector<Content>>(user->content));
                 if (!content.empty()) {
-                    result.emplace_back(util::JsonValue::object_t{
+                    result.emplace_back(support::JsonValue::object_t{
                         {"content", std::move(content)},
                         {"role", "user"},
                     });
@@ -571,11 +571,11 @@ struct ParsedTextSignature {
                         if (thinking->thinking_signature->empty()) {
                             continue;
                         }
-                        auto replay = util::read_json(
+                        auto replay = support::read_json(
                             *thinking->thinking_signature);
                         if (!replay) {
-                            return std::unexpected(util::make_error(
-                                util::ErrorCode::Stream,
+                            return std::unexpected(support::make_error(
+                                support::ErrorCode::Stream,
                                 "Invalid Responses thinking signature",
                                 replay.error().detail));
                         }
@@ -590,9 +590,9 @@ struct ParsedTextSignature {
                             : "msg_pi_" + std::to_string(message_index) + "_" +
                                   std::to_string(text_index);
                     ++text_index;
-                    util::JsonValue::object_t output{
-                        {"content", util::JsonValue::array_t{util::JsonValue::object_t{
-                            {"annotations", util::JsonValue::array_t{}},
+                    support::JsonValue::object_t output{
+                        {"content", support::JsonValue::array_t{support::JsonValue::object_t{
+                            {"annotations", support::JsonValue::array_t{}},
                             {"text", sanitize_text(text->text)},
                             {"type", "output_text"},
                         }}},
@@ -614,12 +614,12 @@ struct ParsedTextSignature {
                         ? std::optional<std::string>{}
                         : std::optional<std::string>{call->id.substr(separator + 1)};
                     const auto arguments = call->arguments
-                        ? util::write_json(*call->arguments)
-                        : util::Expected<std::string>{call->raw_arguments.empty() ? "{}" : call->raw_arguments};
+                        ? support::write_json(*call->arguments)
+                        : support::Expected<std::string>{call->raw_arguments.empty() ? "{}" : call->raw_arguments};
                     if (!arguments) {
                         return std::unexpected(arguments.error());
                     }
-                    util::JsonValue::object_t output{
+                    support::JsonValue::object_t output{
                         {"arguments", *arguments},
                         {"call_id", call_id},
                         {"name", call->name},
@@ -639,7 +639,7 @@ struct ParsedTextSignature {
             const auto call_id = separator == std::string::npos
                 ? tool_result->tool_call_id
                 : tool_result->tool_call_id.substr(0, separator);
-            result.emplace_back(util::JsonValue::object_t{
+            result.emplace_back(support::JsonValue::object_t{
                 {"call_id", call_id},
                 {"output", response_tool_output(model, tool_result->content)},
                 {"type", "function_call_output"},
@@ -650,12 +650,12 @@ struct ParsedTextSignature {
     return result;
 }
 
-[[nodiscard]] util::JsonValue::array_t responses_tools(
+[[nodiscard]] support::JsonValue::array_t responses_tools(
     AdapterKind adapter,
     const std::vector<Tool>& tools) {
-    util::JsonValue::array_t result;
+    support::JsonValue::array_t result;
     for (const auto& tool : tools) {
-        util::JsonValue::object_t converted{
+        support::JsonValue::object_t converted{
             {"description", sanitize_text(tool.description)},
             {"name", tool.name},
             {"parameters", tool.parameters},
@@ -709,7 +709,7 @@ struct ParsedTextSignature {
     return std::nullopt;
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> build_responses_payload(
+[[nodiscard]] support::Expected<support::JsonValue> build_responses_payload(
     AdapterKind adapter,
     const Model& model,
     const AiContext& context,
@@ -718,7 +718,7 @@ struct ParsedTextSignature {
     if (!input) {
         return std::unexpected(input.error());
     }
-    util::JsonValue::object_t payload{
+    support::JsonValue::object_t payload{
         {"input", std::move(*input)},
         {"model", model.id},
         {"store", false},
@@ -727,14 +727,14 @@ struct ParsedTextSignature {
     if (adapter == AdapterKind::OpenAICodexResponses) {
         payload.emplace(
             "include",
-            util::JsonValue::array_t{"reasoning.encrypted_content"});
+            support::JsonValue::array_t{"reasoning.encrypted_content"});
         payload.emplace(
             "instructions",
             context.system_prompt && !context.system_prompt->empty()
                 ? sanitize_text(*context.system_prompt)
                 : "You are a helpful assistant.");
         payload.emplace("parallel_tool_calls", true);
-        payload.emplace("text", util::JsonValue::object_t{{"verbosity", "low"}});
+        payload.emplace("text", support::JsonValue::object_t{{"verbosity", "low"}});
         payload.emplace("tool_choice", "auto");
     } else {
         payload.emplace("max_output_tokens", static_cast<double>(std::max<std::uint64_t>(16, options.max_tokens)));
@@ -764,7 +764,7 @@ struct ParsedTextSignature {
             }
         }
         if (effort) {
-            util::JsonValue::object_t reasoning{{"effort", *effort}};
+            support::JsonValue::object_t reasoning{{"effort", *effort}};
             if (options.reasoning) {
                 reasoning.emplace("summary", "auto");
             }
@@ -773,16 +773,16 @@ struct ParsedTextSignature {
                 options.reasoning && options.reasoning != ModelThinkingLevel::Off) {
                 payload.emplace(
                     "include",
-                    util::JsonValue::array_t{"reasoning.encrypted_content"});
+                    support::JsonValue::array_t{"reasoning.encrypted_content"});
             }
         }
     }
-    return util::JsonValue{std::move(payload)};
+    return support::JsonValue{std::move(payload)};
 }
 
-[[nodiscard]] util::JsonValue anthropic_image(const ImageContent& image) {
-    return util::JsonValue::object_t{
-        {"source", util::JsonValue::object_t{
+[[nodiscard]] support::JsonValue anthropic_image(const ImageContent& image) {
+    return support::JsonValue::object_t{
+        {"source", support::JsonValue::object_t{
             {"data", image.data},
             {"media_type", image.mime_type},
             {"type", "base64"},
@@ -791,13 +791,13 @@ struct ParsedTextSignature {
     };
 }
 
-[[nodiscard]] util::JsonValue::array_t anthropic_user_content(
+[[nodiscard]] support::JsonValue::array_t anthropic_user_content(
     const std::vector<Content>& content) {
-    util::JsonValue::array_t result;
+    support::JsonValue::array_t result;
     for (const auto& block : content) {
         if (const auto* text = std::get_if<TextContent>(&block)) {
             if (!blank(text->text)) {
-                result.emplace_back(util::JsonValue::object_t{
+                result.emplace_back(support::JsonValue::object_t{
                     {"text", sanitize_text(text->text)},
                     {"type", "text"},
                 });
@@ -809,7 +809,7 @@ struct ParsedTextSignature {
     return result;
 }
 
-[[nodiscard]] util::JsonValue anthropic_tool_result_content(
+[[nodiscard]] support::JsonValue anthropic_tool_result_content(
     const std::vector<Content>& content) {
     const bool has_images = std::ranges::any_of(content, [](const Content& block) {
         return std::holds_alternative<ImageContent>(block);
@@ -826,12 +826,12 @@ struct ParsedTextSignature {
         }
         return sanitize_text(text);
     }
-    util::JsonValue::array_t blocks;
+    support::JsonValue::array_t blocks;
     bool has_text = false;
     for (const auto& block : content) {
         if (const auto* text = std::get_if<TextContent>(&block)) {
             has_text = true;
-            blocks.emplace_back(util::JsonValue::object_t{
+            blocks.emplace_back(support::JsonValue::object_t{
                 {"text", sanitize_text(text->text)},
                 {"type", "text"},
             });
@@ -842,16 +842,16 @@ struct ParsedTextSignature {
     if (!has_text) {
         blocks.insert(
             blocks.begin(),
-            util::JsonValue::object_t{{"text", "(see attached image)"}, {"type", "text"}});
+            support::JsonValue::object_t{{"text", "(see attached image)"}, {"type", "text"}});
     }
     return blocks;
 }
 
-[[nodiscard]] util::Expected<util::JsonValue::array_t> convert_anthropic_messages(
+[[nodiscard]] support::Expected<support::JsonValue::array_t> convert_anthropic_messages(
     const Model& model,
     const AiContext& context) {
     const auto messages = normalize_history(AdapterKind::AnthropicMessages, model, context);
-    util::JsonValue::array_t result;
+    support::JsonValue::array_t result;
     for (std::size_t index = 0; index < messages.size(); ++index) {
         if (const auto* user = std::get_if<UserMessage>(&messages[index])) {
             if (const auto* text = std::get_if<std::string>(&user->content)) {
@@ -859,7 +859,7 @@ struct ParsedTextSignature {
                 // is sent as a raw sanitized JSON string; blank strings drop
                 // the message entirely.
                 if (!blank(*text)) {
-                    result.emplace_back(util::JsonValue::object_t{
+                    result.emplace_back(support::JsonValue::object_t{
                         {"content", sanitize_text(*text)},
                         {"role", "user"},
                     });
@@ -867,25 +867,25 @@ struct ParsedTextSignature {
             } else {
                 auto content = anthropic_user_content(std::get<std::vector<Content>>(user->content));
                 if (!content.empty()) {
-                    result.emplace_back(util::JsonValue::object_t{
+                    result.emplace_back(support::JsonValue::object_t{
                         {"content", std::move(content)},
                         {"role", "user"},
                     });
                 }
             }
         } else if (const auto* assistant = std::get_if<AssistantMessage>(&messages[index])) {
-            util::JsonValue::array_t content;
+            support::JsonValue::array_t content;
             for (const auto& block : assistant->content) {
                 if (const auto* text = std::get_if<TextContent>(&block)) {
                     if (!blank(text->text)) {
-                        content.emplace_back(util::JsonValue::object_t{
+                        content.emplace_back(support::JsonValue::object_t{
                             {"text", sanitize_text(text->text)},
                             {"type", "text"},
                         });
                     }
                 } else if (const auto* thinking = std::get_if<ThinkingContent>(&block)) {
                     if (thinking->redacted) {
-                        content.emplace_back(util::JsonValue::object_t{
+                        content.emplace_back(support::JsonValue::object_t{
                             {"data", thinking->thinking_signature.value_or("")},
                             {"type", "redacted_thinking"},
                         });
@@ -898,12 +898,12 @@ struct ParsedTextSignature {
                         const bool allow_empty = model.compat &&
                             model.compat->allow_empty_signature.value_or(false);
                         if (!has_signature && !allow_empty) {
-                            content.emplace_back(util::JsonValue::object_t{
+                            content.emplace_back(support::JsonValue::object_t{
                                 {"text", sanitize_text(thinking->thinking)},
                                 {"type", "text"},
                             });
                         } else {
-                            content.emplace_back(util::JsonValue::object_t{
+                            content.emplace_back(support::JsonValue::object_t{
                                 {"signature", has_signature ? *thinking->thinking_signature : ""},
                                 {"thinking", sanitize_text(thinking->thinking)},
                                 {"type", "thinking"},
@@ -911,29 +911,29 @@ struct ParsedTextSignature {
                         }
                     }
                 } else if (const auto* call = std::get_if<ToolCallContent>(&block)) {
-                    content.emplace_back(util::JsonValue::object_t{
+                    content.emplace_back(support::JsonValue::object_t{
                         {"id", call->id},
-                        {"input", call->arguments.value_or(util::JsonValue::object_t{})},
+                        {"input", call->arguments.value_or(support::JsonValue::object_t{})},
                         {"name", call->name},
                         {"type", "tool_use"},
                     });
                 }
             }
             if (!content.empty()) {
-                result.emplace_back(util::JsonValue::object_t{
+                result.emplace_back(support::JsonValue::object_t{
                     {"content", std::move(content)},
                     {"role", "assistant"},
                 });
             }
         } else if (std::holds_alternative<ToolResultMessage>(messages[index])) {
-            util::JsonValue::array_t content;
+            support::JsonValue::array_t content;
             std::size_t result_index = index;
             while (result_index < messages.size()) {
                 const auto* tool_result = std::get_if<ToolResultMessage>(&messages[result_index]);
                 if (!tool_result) {
                     break;
                 }
-                content.emplace_back(util::JsonValue::object_t{
+                content.emplace_back(support::JsonValue::object_t{
                     {"content", anthropic_tool_result_content(tool_result->content)},
                     {"is_error", tool_result->is_error},
                     {"tool_use_id", tool_result->tool_call_id},
@@ -942,7 +942,7 @@ struct ParsedTextSignature {
                 ++result_index;
             }
             index = result_index - 1;
-            result.emplace_back(util::JsonValue::object_t{
+            result.emplace_back(support::JsonValue::object_t{
                 {"content", std::move(content)},
                 {"role", "user"},
             });
@@ -951,8 +951,8 @@ struct ParsedTextSignature {
     return result;
 }
 
-[[nodiscard]] util::JsonValue cache_control(CacheRetention retention) {
-    util::JsonValue::object_t result{{"type", "ephemeral"}};
+[[nodiscard]] support::JsonValue cache_control(CacheRetention retention) {
+    support::JsonValue::object_t result{{"type", "ephemeral"}};
     if (retention == CacheRetention::Long) {
         result.emplace("ttl", "1h");
     }
@@ -960,17 +960,17 @@ struct ParsedTextSignature {
 }
 
 void attach_cache_control_to_last_user(
-    util::JsonValue::array_t& messages,
+    support::JsonValue::array_t& messages,
     CacheRetention retention) {
     if (retention == CacheRetention::None || messages.empty()) {
         return;
     }
-    auto* object = messages.back().get_if<util::JsonValue::object_t>();
+    auto* object = messages.back().get_if<support::JsonValue::object_t>();
     if (!object || object->at("role").get_string() != "user") {
         return;
     }
     auto& content = object->at("content");
-    if (auto* blocks = content.get_if<util::JsonValue::array_t>()) {
+    if (auto* blocks = content.get_if<support::JsonValue::array_t>()) {
         if (!blocks->empty()) {
             blocks->back().get_object().insert_or_assign(
                 "cache_control", cache_control(retention));
@@ -978,7 +978,7 @@ void attach_cache_control_to_last_user(
     } else if (auto* text = content.get_if<std::string>()) {
         // pi `anthropic-messages.ts`: a trailing string user param is promoted
         // to a one-element cache-marked block array under cache retention.
-        content = util::JsonValue{util::JsonValue::array_t{util::JsonValue::object_t{
+        content = support::JsonValue{support::JsonValue::array_t{support::JsonValue::object_t{
             {"cache_control", cache_control(retention)},
             {"text", std::move(*text)},
             {"type", "text"},
@@ -986,28 +986,28 @@ void attach_cache_control_to_last_user(
     }
 }
 
-[[nodiscard]] util::JsonValue::array_t anthropic_tools(
+[[nodiscard]] support::JsonValue::array_t anthropic_tools(
     const std::vector<Tool>& tools,
     CacheRetention retention) {
-    util::JsonValue::array_t result;
+    support::JsonValue::array_t result;
     for (std::size_t index = 0; index < tools.size(); ++index) {
         const auto& tool = tools[index];
-        util::JsonValue::object_t schema{{"type", "object"}};
-        if (const auto* parameters = tool.parameters.get_if<util::JsonValue::object_t>()) {
+        support::JsonValue::object_t schema{{"type", "object"}};
+        if (const auto* parameters = tool.parameters.get_if<support::JsonValue::object_t>()) {
             if (const auto properties = parameters->find("properties");
                 properties != parameters->end()) {
                 schema.emplace("properties", properties->second);
             } else {
-                schema.emplace("properties", util::JsonValue::object_t{});
+                schema.emplace("properties", support::JsonValue::object_t{});
             }
             if (const auto required = parameters->find("required");
                 required != parameters->end()) {
                 schema.emplace("required", required->second);
             } else {
-                schema.emplace("required", util::JsonValue::array_t{});
+                schema.emplace("required", support::JsonValue::array_t{});
             }
         }
-        util::JsonValue::object_t converted{
+        support::JsonValue::object_t converted{
             {"description", sanitize_text(tool.description)},
             {"eager_input_streaming", true},
             {"input_schema", std::move(schema)},
@@ -1041,7 +1041,7 @@ void attach_cache_control_to_last_user(
     }
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> build_anthropic_payload(
+[[nodiscard]] support::Expected<support::JsonValue> build_anthropic_payload(
     const Model& model,
     const AiContext& context,
     const ProviderStreamOptions& options) {
@@ -1050,14 +1050,14 @@ void attach_cache_control_to_last_user(
         return std::unexpected(messages.error());
     }
     attach_cache_control_to_last_user(*messages, options.cache_retention);
-    util::JsonValue::object_t payload{
+    support::JsonValue::object_t payload{
         {"max_tokens", static_cast<double>(options.max_tokens)},
         {"messages", std::move(*messages)},
         {"model", model.id},
         {"stream", true},
     };
     if (context.system_prompt && !context.system_prompt->empty()) {
-        util::JsonValue::object_t system_block{
+        support::JsonValue::object_t system_block{
             {"text", sanitize_text(*context.system_prompt)},
             {"type", "text"},
         };
@@ -1067,36 +1067,36 @@ void attach_cache_control_to_last_user(
         }
         payload.emplace(
             "system",
-            util::JsonValue::array_t{std::move(system_block)});
+            support::JsonValue::array_t{std::move(system_block)});
     }
     bool thinking_enabled = false;
     if (model.reasoning && !options.reasoning) {
         if (reasoning_off_supported(model)) {
             payload.emplace(
-                "thinking", util::JsonValue::object_t{{"type", "disabled"}});
+                "thinking", support::JsonValue::object_t{{"type", "disabled"}});
         }
     } else if (model.reasoning && options.reasoning) {
         const auto level = clamp_thinking_level(model, *options.reasoning);
         if (level == ModelThinkingLevel::Off) {
             if (reasoning_off_supported(model)) {
                 payload.emplace(
-                    "thinking", util::JsonValue::object_t{{"type", "disabled"}});
+                    "thinking", support::JsonValue::object_t{{"type", "disabled"}});
             }
         } else if (model.compat &&
                    model.compat->force_adaptive_thinking.value_or(false)) {
             thinking_enabled = true;
             payload.emplace(
                 "thinking",
-                util::JsonValue::object_t{
+                support::JsonValue::object_t{
                     {"display", "summarized"},
                     {"type", "adaptive"},
                 });
             payload.emplace(
                 "output_config",
-                util::JsonValue::object_t{{"effort", anthropic_effort(model, level)}});
+                support::JsonValue::object_t{{"effort", anthropic_effort(model, level)}});
         } else {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::ModelValidation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::ModelValidation,
                 "Budget-based Anthropic thinking is outside the supported adapter surface"));
         }
     }
@@ -1107,12 +1107,12 @@ void attach_cache_control_to_last_user(
         payload.emplace(
             "tools", anthropic_tools(context.tools, options.cache_retention));
     }
-    return util::JsonValue{std::move(payload)};
+    return support::JsonValue{std::move(payload)};
 }
 
 } // namespace
 
-util::Expected<util::JsonValue> build_adapter_payload(
+support::Expected<support::JsonValue> build_adapter_payload(
     AdapterKind adapter,
     const Model& model,
     const AiContext& context,
@@ -1123,7 +1123,7 @@ util::Expected<util::JsonValue> build_adapter_payload(
     return build_responses_payload(adapter, model, context, options);
 }
 
-util::Expected<util::JsonValue::array_t> build_responses_continuation_items(
+support::Expected<support::JsonValue::array_t> build_responses_continuation_items(
     const Model& model,
     const AssistantMessage& assistant) {
     AiContext context;

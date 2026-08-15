@@ -15,7 +15,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>

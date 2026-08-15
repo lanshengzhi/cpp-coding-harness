@@ -33,11 +33,11 @@ struct ParsedUrl {
     std::string target{"/"};
 };
 
-[[nodiscard]] util::Expected<ParsedUrl> parse_https_url(const std::string& url) {
+[[nodiscard]] support::Expected<ParsedUrl> parse_https_url(const std::string& url) {
     constexpr std::string_view scheme = "https://";
     if (!url.starts_with(scheme)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "unsupported URL scheme",
             "OAuth HTTP client only supports https URLs"));
     }
@@ -54,19 +54,19 @@ struct ParsedUrl {
         parsed.host = authority;
     }
     if (parsed.host.empty() || parsed.port.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid HTTPS authority",
             "https URL has invalid host or port"));
     }
     return parsed;
 }
 
-[[nodiscard]] util::Error network_error(std::string message, boost::system::error_code ec) {
+[[nodiscard]] support::Error network_error(std::string message, boost::system::error_code ec) {
     auto code = ec == boost::asio::error::operation_aborted
-        ? util::ErrorCode::Cancelled
-        : util::ErrorCode::Network;
-    return util::make_error(
+        ? support::ErrorCode::Cancelled
+        : support::ErrorCode::Network;
+    return support::make_error(
         code,
         std::move(message),
         ec ? ec.message() : std::string{});
@@ -74,7 +74,7 @@ struct ParsedUrl {
 
 } // namespace
 
-boost::asio::awaitable<util::Expected<OAuthHttpResponse>>
+boost::asio::awaitable<support::Expected<OAuthHttpResponse>>
 BoostBeastOAuthHttpClient::post(
     std::string url,
     std::map<std::string, std::string, std::less<>> headers,
@@ -94,8 +94,8 @@ BoostBeastOAuthHttpClient::post(
     try {
         auto executor = co_await asio::this_coro::executor;
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "OAuth HTTP request cancelled"));
         }
 
@@ -123,8 +123,8 @@ BoostBeastOAuthHttpClient::post(
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds{30});
 
         if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "TLS SNI setup failed",
                 "OpenSSL rejected the host name"));
         }
@@ -176,8 +176,8 @@ BoostBeastOAuthHttpClient::post(
             co_return std::unexpected(network_error("TLS shutdown failure", shutdown_ec));
         }
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "OAuth HTTP request cancelled"));
         }
 
@@ -190,8 +190,8 @@ BoostBeastOAuthHttpClient::post(
             "OAuth HTTP request failure",
             error.code()));
     } catch (const std::exception& error) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Network,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Network,
             "OAuth HTTP request failure",
             error.what()));
     }

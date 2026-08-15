@@ -6,7 +6,7 @@
 #include "support/JsonCompare.hpp"
 #include "support/PiFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -89,11 +89,11 @@ TEST_CASE(
                                 std::string_view api) {
         const auto shard = tests::read_pi_fixture(shard_fixture);
         REQUIRE(shard);
-        const auto* by_api = shard->get_if<util::JsonValue::object_t>();
+        const auto* by_api = shard->get_if<support::JsonValue::object_t>();
         REQUIRE(by_api);
         const auto found = by_api->find(std::string{api});
         REQUIRE(found != by_api->end());
-        const auto* golden = found->second.get_if<util::JsonValue::object_t>();
+        const auto* golden = found->second.get_if<support::JsonValue::object_t>();
         REQUIRE(golden);
 
         REQUIRE(models.size() == golden->size());
@@ -106,7 +106,7 @@ TEST_CASE(
             }
             auto serialized = ai::glaze::write_model_json(model);
             REQUIRE(serialized);
-            const auto actual = util::read_json(*serialized);
+            const auto actual = support::read_json(*serialized);
             REQUIRE(actual);
             if (auto mismatch = tests::json_mismatch(expected, *actual); mismatch) {
                 // The vendored fallback test header has no INFO macro; print

@@ -3,7 +3,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/EntrySerializer.hpp"
 #include "harness/session/SessionJournal.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <fstream>
 #include <iterator>
@@ -29,9 +29,9 @@ namespace {
 /// pi `createBranchedSession` failure mapping: the runtime wraps every
 /// session-file failure in pi's verbatim "Failed to create forked session"
 /// with the underlying reason as detail.
-[[nodiscard]] util::Error fork_session_error(const util::Error& error) {
-    return util::make_error(
-        util::ErrorCode::Session,
+[[nodiscard]] support::Error fork_session_error(const support::Error& error) {
+    return support::make_error(
+        support::ErrorCode::Session,
         "Failed to create forked session",
         error.message);
 }
@@ -39,18 +39,18 @@ namespace {
 /// pi `SessionManager.forkFrom` load failures, verbatim (G3 pins the strings
 /// for the fork surface; the in-session branch of a missing/invalid source
 /// reports them the same way).
-[[nodiscard]] util::Error invalid_fork_source_error(
+[[nodiscard]] support::Error invalid_fork_source_error(
     const std::filesystem::path& source_path) {
-    return util::make_error(
-        util::ErrorCode::Session,
+    return support::make_error(
+        support::ErrorCode::Session,
         "Cannot fork: source session file is empty or invalid: " +
             source_path.string());
 }
 
-[[nodiscard]] util::Error missing_fork_header_error(
+[[nodiscard]] support::Error missing_fork_header_error(
     const std::filesystem::path& source_path) {
-    return util::make_error(
-        util::ErrorCode::Session,
+    return support::make_error(
+        support::ErrorCode::Session,
         "Cannot fork: source session has no header: " +
             source_path.string());
 }
@@ -60,7 +60,7 @@ namespace {
 /// but is not a session header is "has no header" (the C++ loader rejects
 /// both with one internal error, so the classification re-reads the first
 /// non-empty line).
-[[nodiscard]] util::Error fork_source_load_error(
+[[nodiscard]] support::Error fork_source_load_error(
     const std::filesystem::path& source_path) {
     std::ifstream input(source_path, std::ios::binary);
     if (!input) {
@@ -76,14 +76,14 @@ namespace {
         if (first >= last) {
             continue;
         }
-        auto parsed = util::read_json(
+        auto parsed = support::read_json(
             line.substr(
                 static_cast<std::size_t>(first - line.begin()),
                 static_cast<std::size_t>(last - first)));
         if (!parsed) {
             return invalid_fork_source_error(source_path);
         }
-        const auto* object = parsed->get_if<util::JsonValue::object_t>();
+        const auto* object = parsed->get_if<support::JsonValue::object_t>();
         const auto type = object != nullptr ? object->find("type") : object->end();
         if (type == object->end() || !type->second.holds<std::string>() ||
             type->second.get_string() != "session") {
@@ -96,15 +96,15 @@ namespace {
     return invalid_fork_source_error(source_path);
 }
 
-[[nodiscard]] util::Error invalid_entry_error() {
-    return util::make_error(
-        util::ErrorCode::Session,
+[[nodiscard]] support::Error invalid_entry_error() {
+    return support::make_error(
+        support::ErrorCode::Session,
         "Invalid entry ID for forking");
 }
 
-[[nodiscard]] util::Error unsaved_session_error() {
-    return util::make_error(
-        util::ErrorCode::Session,
+[[nodiscard]] support::Error unsaved_session_error() {
+    return support::make_error(
+        support::ErrorCode::Session,
         "This session has not been saved yet. Wait for the first assistant "
         "response before cloning or forking it.");
 }
@@ -246,7 +246,7 @@ struct LabelFacts {
 
 /// Write one new session file at `session_path` from a header line and the
 /// retained entry lines; failures map to pi's verbatim fork error.
-[[nodiscard]] util::ExpectedVoid write_session_file(
+[[nodiscard]] support::ExpectedVoid write_session_file(
     const std::filesystem::path& session_path,
     const std::string& header_line,
     const std::vector<std::string>& entry_lines) {
@@ -273,7 +273,7 @@ struct LabelFacts {
 /// #331 new-session initial-entries contract — the session store writes the
 /// header and the resume path appends the restored thinking entry), so the
 /// branched file exists immediately after the fork.
-[[nodiscard]] util::Expected<std::filesystem::path> create_branched_session_file(
+[[nodiscard]] support::Expected<std::filesystem::path> create_branched_session_file(
     const std::filesystem::path& source_path,
     const std::filesystem::path& session_dir,
     const std::filesystem::path& workspace,
@@ -304,8 +304,8 @@ struct LabelFacts {
     // Filter labels and re-chain parents (pi `pathWithoutLabels`).
     const auto retained = branch_path_without_labels(leaf_to_root);
     if (retained.empty()) {
-        return std::unexpected(fork_session_error(util::make_error(
-            util::ErrorCode::Session, "entry not found in session")));
+        return std::unexpected(fork_session_error(support::make_error(
+            support::ErrorCode::Session, "entry not found in session")));
     }
 
     // Re-create the label entries for retained targets, chained after the
@@ -369,7 +369,7 @@ struct LabelFacts {
 
 /// pi `createBranchedSession` no-target-leaf path (a root user message):
 /// a fresh empty session file with the `parentSession` pointer.
-[[nodiscard]] util::Expected<std::filesystem::path> create_empty_branch_session(
+[[nodiscard]] support::Expected<std::filesystem::path> create_empty_branch_session(
     const std::filesystem::path& session_dir,
     const std::filesystem::path& workspace,
     const std::filesystem::path& source_path) {
@@ -402,7 +402,7 @@ struct InMemoryBranchResult {
     std::string selected_text;
 };
 
-[[nodiscard]] util::Expected<InMemoryBranchResult> in_memory_branch_seed(
+[[nodiscard]] support::Expected<InMemoryBranchResult> in_memory_branch_seed(
     const ForkSource& source,
     std::string_view entry_id,
     ForkPosition position) {
@@ -472,7 +472,7 @@ std::vector<UserForkMessage> user_messages_for_forking(
     return {};
 }
 
-util::Expected<ForkPreparation> prepare_fork(
+support::Expected<ForkPreparation> prepare_fork(
     const ForkSource& source,
     std::string_view entry_id,
     ForkPosition position) {

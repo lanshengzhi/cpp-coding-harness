@@ -1,8 +1,8 @@
 #pragma once
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -12,30 +12,30 @@
 
 namespace cch::tests {
 
-[[nodiscard]] inline util::Expected<util::JsonValue> read_pi_fixture(
+[[nodiscard]] inline support::Expected<support::JsonValue> read_pi_fixture(
     std::string_view relative_path) {
     const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-ai" /
                       relative_path;
     std::ifstream input{path, std::ios::binary};
     if (!input) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Failed to open pi fixture: " + path.string()));
     }
     const std::string json{
         std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
-    return util::read_json(json);
+    return support::read_json(json);
 }
 
-[[nodiscard]] inline util::Expected<std::string> read_pi_fixture_text(
+[[nodiscard]] inline support::Expected<std::string> read_pi_fixture_text(
     std::string_view relative_path) {
     const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-ai" /
                       relative_path;
     std::ifstream input{path, std::ios::binary};
     if (!input) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Failed to open pi fixture: " + path.string()));
     }
     return std::string{

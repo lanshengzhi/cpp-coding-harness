@@ -1,13 +1,13 @@
 #include <cch/ai/Content.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "agent/AgentLoop.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -51,7 +51,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -85,7 +85,7 @@ public:
     }
 
     std::deque<ai::AssistantMessage> responses;
-    std::optional<util::Error> failure;
+    std::optional<support::Error> failure;
     std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
@@ -101,7 +101,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -120,8 +120,8 @@ public:
         }
 
         if (responses.empty()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Provider,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Provider,
                 "no scripted policy response"));
         }
         auto response = responses.front();
@@ -172,7 +172,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -207,7 +207,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -242,7 +242,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -281,7 +281,7 @@ struct FakeToolHandle {
             std::move(definition),
             agent::ToolConcurrency::Exclusive,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 state->invocations.push_back(invocation);
                 co_return agent::AsyncToolExecutionResult{
                     .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
@@ -311,7 +311,7 @@ struct CancellableFakeToolHandle {
             std::move(definition),
             agent::ToolConcurrency::Exclusive,
             [state](agent::ToolInvocation invocation, std::stop_token stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 state->invocations.push_back(std::move(invocation));
                 state->observed_stop_token = stop_token;
                 boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
@@ -324,8 +324,8 @@ struct CancellableFakeToolHandle {
                     boost::asio::use_awaitable,
                     error));
                 if (stop_token.stop_requested()) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Cancelled,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Cancelled,
                         "Operation aborted"));
                 }
                 co_return agent::AsyncToolExecutionResult{};
@@ -335,7 +335,7 @@ struct CancellableFakeToolHandle {
 }
 
 struct RunResult {
-    util::Expected<agent::AsyncAgentRunResult> result;
+    support::Expected<agent::AsyncAgentRunResult> result;
     std::vector<agent::AgentLifecycleEvent> events;
 };
 
@@ -345,7 +345,7 @@ RunResult run_loop(
     std::vector<ai::MessageVariant> history = {},
     std::stop_token stop_token = {}) {
     boost::asio::io_context io;
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
 
     boost::asio::co_spawn(
@@ -356,7 +356,7 @@ RunResult run_loop(
                 std::move(prompt),
                 [&](const agent::AgentLifecycleEvent& event) {
                     events.push_back(event);
-                    return util::ExpectedVoid{};
+                    return support::ExpectedVoid{};
                 },
                 stop_token);
             co_return;
@@ -380,7 +380,7 @@ std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) 
 }
 
 ai::AssistantMessage tool_call_response(std::string raw_arguments = R"({"path":"README.md"})") {
-    auto args = util::read_json(raw_arguments);
+    auto args = support::read_json(raw_arguments);
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::ToolUse;
     ai::ToolCallContent call;
@@ -720,7 +720,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     REQUIRE(tool_ptr->invocations.size() == 1);
     CHECK(tool_ptr->invocations[0].call_id == "call-1");
     CHECK(tool_ptr->invocations[0].name == "read_file");
-    CHECK(tool_ptr->invocations[0].arguments.get<util::JsonValue::object_t>().at("path").get_string() == "README.md");
+    CHECK(tool_ptr->invocations[0].arguments.get<support::JsonValue::object_t>().at("path").get_string() == "README.md");
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].context.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
@@ -789,7 +789,7 @@ TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][as
     auto run = run_loop(loop, "read");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().code == support::ErrorCode::Validation);
     CHECK(run.result.error().message == "max turns exceeded");
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
@@ -831,7 +831,7 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     options.model = tests::make_model("gpt-test");
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
+            [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
         return agent::BeforeToolCallResult{true, "blocked by policy"};
     });
 
@@ -876,9 +876,9 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
     options.model = tests::make_model("gpt-test");
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
+            [](const agent::BeforeToolCallContext& ctx) -> support::Expected<agent::BeforeToolCallResult> {
         REQUIRE(ctx.tool_call.name == "read_file");
-        REQUIRE(ctx.args.get<util::JsonValue::object_t>().at("path").get_string() == "README.md");
+        REQUIRE(ctx.args.get<support::JsonValue::object_t>().at("path").get_string() == "README.md");
         REQUIRE(!ctx.context.messages.empty());
         return agent::BeforeToolCallResult{false, std::nullopt};
     });
@@ -904,8 +904,8 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async]
     options.model = tests::make_model("gpt-test");
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
-        return std::unexpected(util::make_error(util::ErrorCode::Tool, "policy rejected"));
+            [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
+        return std::unexpected(support::make_error(support::ErrorCode::Tool, "policy rejected"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -938,7 +938,7 @@ TEST_CASE("beforeToolCall hook exception becomes a per-call tool error", "[agent
     options.model = tests::make_model("gpt-test");
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
+            [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
         throw std::runtime_error("boom");
     });
 
@@ -970,7 +970,7 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{
             std::vector<ai::Content>{ai::text_content("overridden")}, std::nullopt, std::nullopt, std::nullopt};
     });
@@ -999,7 +999,7 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, std::nullopt};
     });
 
@@ -1029,7 +1029,7 @@ TEST_CASE(
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 
@@ -1074,7 +1074,7 @@ struct ConfigurableFakeToolHandle {
             std::move(definition),
             concurrency,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 state->invocations.push_back(invocation);
                 co_return agent::AsyncToolExecutionResult{
                     .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
@@ -1108,7 +1108,7 @@ struct DelayedFakeToolHandle {
             std::move(definition),
             agent::ToolConcurrency::ParallelSafe,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 auto timer = boost::asio::steady_timer(
                     co_await boost::asio::this_coro::executor,
                     state->delay);
@@ -1139,9 +1139,9 @@ struct FailingFakeToolHandle {
             std::move(definition),
             agent::ToolConcurrency::ParallelSafe,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 state->invocations.push_back(invocation);
-                co_return std::unexpected(util::make_error(util::ErrorCode::Tool, "tool failed", "boom"));
+                co_return std::unexpected(support::make_error(support::ErrorCode::Tool, "tool failed", "boom"));
             }),
         state,
     };
@@ -1175,7 +1175,7 @@ struct ProbedFakeToolHandle {
             std::move(definition),
             concurrency,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 state->invocations.push_back(invocation);
                 const int current = ++state->probe->active;
                 int observed = state->probe->max_active.load();
@@ -1196,7 +1196,7 @@ struct ProbedFakeToolHandle {
 
 RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
     boost::asio::thread_pool pool{4};
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
     std::mutex events_mutex;
 
@@ -1208,7 +1208,7 @@ RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
                 [&](const agent::AgentLifecycleEvent& event) {
                     std::lock_guard lock(events_mutex);
                     events.push_back(event);
-                    return util::ExpectedVoid{};
+                    return support::ExpectedVoid{};
                 });
             co_return;
         },
@@ -1239,7 +1239,7 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext& ctx) -> support::Expected<agent::AfterToolCallResult> {
         if (ctx.tool_call.name == "alpha") {
             return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
         }
@@ -1270,7 +1270,7 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     options.model = tests::make_model("gpt-test");
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
+            [](const agent::BeforeToolCallContext& ctx) -> support::Expected<agent::BeforeToolCallResult> {
         if (ctx.tool_call.name == "alpha") {
             return agent::BeforeToolCallResult{true, "no alpha"};
         }
@@ -1278,7 +1278,7 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     });
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 
@@ -1304,7 +1304,7 @@ TEST_CASE("an error result with an explicit terminate hint still terminates the 
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext& ctx) -> support::Expected<agent::AfterToolCallResult> {
         if (ctx.tool_call.name == "alpha") {
             return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, true};
         }
@@ -1338,8 +1338,8 @@ TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[ag
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
-        return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
+        return std::unexpected(support::make_error(support::ErrorCode::Tool, "post-processor failed"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -1372,7 +1372,7 @@ TEST_CASE("afterToolCall hook exception becomes a per-call tool error", "[agent]
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
         throw std::runtime_error("after boom");
     });
 
@@ -1429,7 +1429,7 @@ TEST_CASE(
              &gate,
              messages = std::move(messages),
              stop_token]() mutable
-                -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
                 const auto executor = co_await boost::asio::this_coro::executor;
                 CHECK(*owned == 41);
                 ordering.push_back("transform-start");
@@ -1453,7 +1453,7 @@ TEST_CASE(
 
     agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
     std::stop_source stop_source;
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -1499,7 +1499,7 @@ TEST_CASE(
         agent::adapt_sync_transform_context(
             [&transform_stop_possible](std::vector<ai::MessageVariant> messages,
                                        std::stop_token stop_token)
-                -> util::Expected<std::vector<ai::MessageVariant>> {
+                -> support::Expected<std::vector<ai::MessageVariant>> {
                 transform_stop_possible = stop_token.stop_possible();
                 return messages;
             });
@@ -1507,7 +1507,7 @@ TEST_CASE(
         agent::adapt_sync_before_tool_call(
             [&before_stop_possible](agent::BeforeToolCallContext,
                                     std::stop_token stop_token)
-                -> util::Expected<agent::BeforeToolCallResult> {
+                -> support::Expected<agent::BeforeToolCallResult> {
                 before_stop_possible = stop_token.stop_possible();
                 return agent::BeforeToolCallResult{};
             });
@@ -1515,7 +1515,7 @@ TEST_CASE(
         agent::adapt_sync_after_tool_call(
             [&after_stop_possible](agent::AfterToolCallContext,
                                    std::stop_token stop_token)
-                -> util::Expected<agent::AfterToolCallResult> {
+                -> support::Expected<agent::AfterToolCallResult> {
                 after_stop_possible = stop_token.stop_possible();
                 return agent::AfterToolCallResult{};
             });
@@ -1558,13 +1558,13 @@ TEST_CASE(
     std::vector<agent::AgentLifecycleEvent> events;
     auto future = boost::asio::co_spawn(
         io,
-        [&]() -> boost::asio::awaitable<util::Expected<agent::AsyncAgentRunResult>> {
+        [&]() -> boost::asio::awaitable<support::Expected<agent::AsyncAgentRunResult>> {
             co_return co_await loop.continue_with(
                 {},
                 "cancel active tool",
                 [&](const agent::AgentLifecycleEvent& event) {
                     events.push_back(event);
-                    return util::ExpectedVoid{};
+                    return support::ExpectedVoid{};
                 },
                 stop_source.get_token());
         },
@@ -1607,8 +1607,8 @@ TEST_CASE(
                                     std::stop_token) {
         (void)stop_source.request_stop();
         return support::AsyncResult<std::vector<ai::MessageVariant>>{
-            std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "transform policy cancelled"))};
     };
 
@@ -1636,8 +1636,8 @@ TEST_CASE(
     options.before_tool_call = [&stop_source](agent::BeforeToolCallContext, std::stop_token) {
         (void)stop_source.request_stop();
         return support::AsyncResult<agent::BeforeToolCallResult>{
-            std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "before-tool policy cancelled"))};
     };
 
@@ -1673,8 +1673,8 @@ TEST_CASE(
     options.after_tool_call = [&stop_source](agent::AfterToolCallContext, std::stop_token) {
         (void)stop_source.request_stop();
         return support::AsyncResult<agent::AfterToolCallResult>{
-            std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "after-tool policy cancelled"))};
     };
 
@@ -1709,7 +1709,7 @@ TEST_CASE(
     options.transform_context = [](std::vector<ai::MessageVariant> messages, std::stop_token) {
         return ai::detail::make_async_result(
             [messages = std::move(messages)]() mutable
-                -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+                -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
                 auto timer = boost::asio::steady_timer(
                     co_await boost::asio::this_coro::executor);
                 timer.expires_after(std::chrono::milliseconds{0});
@@ -1723,7 +1723,7 @@ TEST_CASE(
     auto run = run_loop(loop, "hello");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().code == support::ErrorCode::Tool);
     CHECK(run.result.error().message == "transformContext hook failed");
     CHECK(run.result.error().detail.find("suspended transform boom") != std::string::npos);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
@@ -1740,7 +1740,7 @@ TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent]
     options.transform_context =
         agent::adapt_sync_transform_context(
             [](const std::vector<ai::MessageVariant>& messages)
-        -> util::Expected<std::vector<ai::MessageVariant>> {
+        -> support::Expected<std::vector<ai::MessageVariant>> {
         if (messages.size() <= 1) {
             return messages;
         }
@@ -1768,7 +1768,7 @@ TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
     options.convert_to_llm =
         agent::adapt_sync_convert_to_llm(
             [](const std::vector<ai::MessageVariant>& messages)
-        -> util::Expected<std::vector<ai::MessageVariant>> {
+        -> support::Expected<std::vector<ai::MessageVariant>> {
         std::vector<ai::MessageVariant> result;
         for (const auto& message : messages) {
             if (std::holds_alternative<ai::UserMessage>(message) ||
@@ -1799,13 +1799,13 @@ TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][
     options.convert_to_llm =
         agent::adapt_sync_convert_to_llm(
             [](const std::vector<ai::MessageVariant>&)
-        -> util::Expected<std::vector<ai::MessageVariant>> { return std::vector<ai::MessageVariant>{}; });
+        -> support::Expected<std::vector<ai::MessageVariant>> { return std::vector<ai::MessageVariant>{}; });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().code == support::ErrorCode::Validation);
     const auto* end_event = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(end_event);
 }
@@ -1821,15 +1821,15 @@ TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
     options.transform_context =
         agent::adapt_sync_transform_context(
             [](const std::vector<ai::MessageVariant>&)
-        -> util::Expected<std::vector<ai::MessageVariant>> {
-        return std::unexpected(util::make_error(util::ErrorCode::Tool, "context transform failed"));
+        -> support::Expected<std::vector<ai::MessageVariant>> {
+        return std::unexpected(support::make_error(support::ErrorCode::Tool, "context transform failed"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().code == support::ErrorCode::Tool);
     CHECK(run.result.error().message == "context transform failed");
 }
 
@@ -1844,15 +1844,15 @@ TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
     options.convert_to_llm =
         agent::adapt_sync_convert_to_llm(
             [](const std::vector<ai::MessageVariant>&)
-        -> util::Expected<std::vector<ai::MessageVariant>> {
-        return std::unexpected(util::make_error(util::ErrorCode::Tool, "conversion failed"));
+        -> support::Expected<std::vector<ai::MessageVariant>> {
+        return std::unexpected(support::make_error(support::ErrorCode::Tool, "conversion failed"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().code == support::ErrorCode::Tool);
     CHECK(run.result.error().message == "conversion failed");
 }
 
@@ -1868,7 +1868,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
         options.transform_context =
             agent::adapt_sync_transform_context(
                 [](const std::vector<ai::MessageVariant>&)
-            -> util::Expected<std::vector<ai::MessageVariant>> {
+            -> support::Expected<std::vector<ai::MessageVariant>> {
             throw std::runtime_error("transform boom");
         });
 
@@ -1876,7 +1876,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
         auto run = run_loop(loop, "hi");
 
         REQUIRE_FALSE(run.result);
-        CHECK(run.result.error().code == util::ErrorCode::Tool);
+        CHECK(run.result.error().code == support::ErrorCode::Tool);
         CHECK(run.result.error().message == "transformContext hook failed");
         CHECK(run.result.error().detail.find("transform boom") != std::string::npos);
     }
@@ -1892,7 +1892,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
         options.convert_to_llm =
             agent::adapt_sync_convert_to_llm(
                 [](const std::vector<ai::MessageVariant>&)
-            -> util::Expected<std::vector<ai::MessageVariant>> {
+            -> support::Expected<std::vector<ai::MessageVariant>> {
             throw std::runtime_error("convert boom");
         });
 
@@ -1900,7 +1900,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
         auto run = run_loop(loop, "hi");
 
         REQUIRE_FALSE(run.result);
-        CHECK(run.result.error().code == util::ErrorCode::Tool);
+        CHECK(run.result.error().code == support::ErrorCode::Tool);
         CHECK(run.result.error().message == "convertToLlm hook failed");
         CHECK(run.result.error().detail.find("convert boom") != std::string::npos);
     }
@@ -1965,16 +1965,16 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
     });
     options.validate_turn_update =
         agent::adapt_sync_validate_turn_update(
-            [](const agent::AgentLoopTurnUpdate& update) -> util::ExpectedVoid {
+            [](const agent::AgentLoopTurnUpdate& update) -> support::ExpectedVoid {
         if (update.model && update.model->id == "gpt-swapped") {
             return {};
         }
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "unknown model"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "unknown model"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -1999,7 +1999,7 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
     });
 
@@ -2007,7 +2007,7 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     auto run = run_loop(loop, "read");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().code == support::ErrorCode::Validation);
     CHECK(run.result.error().message == "model update requires validation");
 }
 
@@ -2023,7 +2023,7 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"invalid"}};
     });
 
@@ -2031,7 +2031,7 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().code == support::ErrorCode::Validation);
 }
 
 TEST_CASE("prepareNextTurn rejected update does not persist partial model changes", "[agent][async][u8]") {
@@ -2049,7 +2049,7 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [&](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         if (prepare_calls == 1) {
             return agent::AgentLoopTurnUpdate{
@@ -2061,12 +2061,12 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     });
     options.validate_turn_update =
         agent::adapt_sync_validate_turn_update(
-            [](const agent::AgentLoopTurnUpdate&) -> util::ExpectedVoid { return {}; });
+            [](const agent::AgentLoopTurnUpdate&) -> support::ExpectedVoid { return {}; });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto first = run_loop(loop, "read");
     REQUIRE_FALSE(first.result);
-    CHECK(first.result.error().code == util::ErrorCode::Validation);
+    CHECK(first.result.error().code == support::ErrorCode::Validation);
 
     auto second = run_loop(loop, "hi again");
     REQUIRE(second.result);
@@ -2093,7 +2093,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [&](const agent::PrepareNextTurnContext& context)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         if (prepared) {
             return std::nullopt;
         }
@@ -2108,7 +2108,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     options.should_stop_after_turn =
         agent::adapt_sync_should_stop_after_turn(
             [&](const agent::PrepareNextTurnContext& context)
-        -> util::Expected<bool> {
+        -> support::Expected<bool> {
         if (context.context.system_prompt &&
             *context.context.system_prompt == "replacement prompt" &&
             context.context.messages.size() == 1) {
@@ -2164,7 +2164,7 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> { return std::nullopt; });
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> { return std::nullopt; });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
@@ -2191,7 +2191,7 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"high"}};
     });
 
@@ -2216,14 +2216,14 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{.model = tests::make_model("missing-model")};
     });
     options.validate_turn_update =
         agent::adapt_sync_validate_turn_update(
-            [](const agent::AgentLoopTurnUpdate& update) -> util::ExpectedVoid {
+            [](const agent::AgentLoopTurnUpdate& update) -> support::ExpectedVoid {
         if (update.model && update.model->id != "gpt-test") {
-            return std::unexpected(util::make_error(util::ErrorCode::Validation, "unknown model", update.model->id));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "unknown model", update.model->id));
         }
         return {};
     });
@@ -2232,7 +2232,7 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     auto run = run_loop(loop, "read");
 
     REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().code == support::ErrorCode::Validation);
     CHECK(run.result.error().message == "unknown model");
 }
 
@@ -2248,7 +2248,7 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
         options.prepare_next_turn =
             agent::adapt_sync_prepare_next_turn(
                 [](const agent::PrepareNextTurnContext&)
-            -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+            -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
             throw std::runtime_error("prepare boom");
         });
 
@@ -2271,12 +2271,12 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
         options.prepare_next_turn =
             agent::adapt_sync_prepare_next_turn(
                 [](const agent::PrepareNextTurnContext&)
-            -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+            -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
             return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-next")};
         });
         options.validate_turn_update =
             agent::adapt_sync_validate_turn_update(
-                [](const agent::AgentLoopTurnUpdate&) -> util::ExpectedVoid {
+                [](const agent::AgentLoopTurnUpdate&) -> support::ExpectedVoid {
             throw std::runtime_error("validator boom");
         });
 
@@ -2415,7 +2415,7 @@ TEST_CASE(
     REQUIRE(registry.add(std::move(beta.tool)));
 
     std::vector<std::string> before_hook_names;
-    std::vector<util::JsonValue> before_hook_arguments;
+    std::vector<support::JsonValue> before_hook_arguments;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -2423,7 +2423,7 @@ TEST_CASE(
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         before_hook_names.push_back(context.tool_call.name);
         before_hook_arguments.push_back(context.args);
         return agent::BeforeToolCallResult{};
@@ -2558,7 +2558,7 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         if (context.tool_call.name == "alpha") {
             return agent::BeforeToolCallResult{true, "blocked alpha"};
         }
@@ -2607,8 +2607,8 @@ TEST_CASE("bounded parallel before-hook failure finalizes every call without sta
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext&)
-        -> util::Expected<agent::BeforeToolCallResult> {
-        return std::unexpected(util::make_error(util::ErrorCode::Tool, "preflight failed"));
+        -> support::Expected<agent::BeforeToolCallResult> {
+        return std::unexpected(support::make_error(support::ErrorCode::Tool, "preflight failed"));
     });
 
     // pi prepareToolCall: every failing before hook finalizes its own call's
@@ -2690,7 +2690,7 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     boost::asio::thread_pool pool{4};
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     std::atomic<int> agent_end_events{0};
     std::vector<agent::AgentLifecycleEvent> events;
     std::mutex events_mutex;
@@ -2699,7 +2699,7 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
         [&]() -> boost::asio::awaitable<void> {
             result = co_await loop.run(
                 "read",
-                [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
                     {
                         std::lock_guard lock(events_mutex);
                         events.push_back(event);
@@ -2747,9 +2747,9 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext& context)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         if (context.tool_call.name == "alpha") {
-            return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
+            return std::unexpected(support::make_error(support::ErrorCode::Tool, "post-processor failed"));
         }
         return agent::AfterToolCallResult{};
     });
@@ -2853,14 +2853,14 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext&)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         ++before_calls;
         return agent::BeforeToolCallResult{};
     });
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
             [&](const agent::AfterToolCallContext&)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         ++after_calls;
         return agent::AfterToolCallResult{};
     });
@@ -3079,7 +3079,7 @@ TEST_CASE("all-true terminate batch ends the loop after one turn", "[agent][asyn
     options.model = tests::make_model("gpt-test");
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+            [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 

@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/ProjectTrust.hpp"
+#include <cch/coding_agent/ProjectTrust.hpp>
 #include "../support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>

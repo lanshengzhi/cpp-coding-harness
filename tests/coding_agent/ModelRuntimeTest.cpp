@@ -9,7 +9,7 @@
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -151,7 +151,7 @@ public:
         ai::ProviderStreamOptions) override {
         return ai::detail::make_model_stream(
             [this](ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ai::AssistantMessage message;
         message.api = "unknown";
         message.provider = "login-provider";
@@ -185,11 +185,11 @@ private:
     context.tools.push_back(ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     });
@@ -322,7 +322,7 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
             *model,
             request_context(),
             std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -506,7 +506,7 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
     auto result = run_async_result(
         (*runtime)->ai_models()->stream(
             *model, {}, std::move(options)).run(
-        [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
+        [](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-env-key");
@@ -650,7 +650,7 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     auto result = run_async_result(
         (*runtime)->ai_models()->stream(
             *model, {}, std::move(options)).run(
-        [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
+        [](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");

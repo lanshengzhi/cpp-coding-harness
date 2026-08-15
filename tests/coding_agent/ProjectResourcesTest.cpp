@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/ProjectResources.hpp"
+#include <cch/coding_agent/ProjectResources.hpp>
 #include "harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
 

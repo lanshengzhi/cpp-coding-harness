@@ -1,7 +1,7 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Text.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -16,7 +16,7 @@ public:
     explicit RawLineComponent(std::string line)
         : line_(std::move(line)) {}
 
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {line_}};
     }
 
@@ -68,7 +68,7 @@ TEST_CASE("Container rejects null child", "[tui][issue46][container]") {
     cch::tui::Container container;
     auto result = container.add_child(nullptr);
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
 }
 
 TEST_CASE("Container requires positive width", "[tui][issue46][container]") {

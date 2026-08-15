@@ -10,11 +10,11 @@
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -89,7 +89,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         if (gate_request_number &&
@@ -112,8 +112,8 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = terminal.stop_reason,
                     .error = terminal,
-                    .failure = util::make_error(
-                        util::ErrorCode::Cancelled, "Request was aborted"),
+                    .failure = support::make_error(
+                        support::ErrorCode::Cancelled, "Request was aborted"),
                 }));
             }
             co_return terminal;
@@ -330,7 +330,7 @@ TEST_CASE(
     REQUIRE(session->prompt_blocking(big + " u2").has_value());
 
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> prompt_result;
+    std::optional<support::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -342,7 +342,7 @@ TEST_CASE(
         REQUIRE(io.poll_one() == 1);
     }
 
-    std::optional<util::Expected<coding_agent::CompactionResult>> compact_result;
+    std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -400,7 +400,7 @@ TEST_CASE(
     REQUIRE(created->session->prompt_blocking("small prompt").has_value());
     auto rejected = run_awaitable(created->session->compact());
     REQUIRE_FALSE(rejected.has_value());
-    CHECK(rejected.error().code == util::ErrorCode::Validation);
+    CHECK(rejected.error().code == support::ErrorCode::Validation);
     CHECK(rejected.error().message == "Nothing to compact (session too small)");
     created->session->close();
 
@@ -448,7 +448,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         if (options.stop_token.stop_requested()) {
@@ -463,8 +463,8 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = terminal.stop_reason,
                     .error = terminal,
-                    .failure = util::make_error(
-                        util::ErrorCode::Cancelled, "Request was aborted"),
+                    .failure = support::make_error(
+                        support::ErrorCode::Cancelled, "Request was aborted"),
                 }));
             }
             co_return terminal;
@@ -486,8 +486,8 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = response.stop_reason,
                     .error = response,
-                    .failure = util::make_error(
-                        util::ErrorCode::Stream,
+                    .failure = support::make_error(
+                        support::ErrorCode::Stream,
                         response.error_message.value_or("terminal error")),
                 }));
             } else {

@@ -63,8 +63,8 @@ RuntimeApiKeyOverlay::list() {
             cch::support::AsyncCompletion<std::vector<ai::CredentialInfo>, cch::support::Error> completion) mutable noexcept {
             auto locked = base.lock();
             if (!locked) {
-                completion(std::unexpected(util::make_error(
-                    util::ErrorCode::Unknown,
+                completion(std::unexpected(support::make_error(
+                    support::ErrorCode::Unknown,
                     "credential store is unavailable")));
                 return;
             }

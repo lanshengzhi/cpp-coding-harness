@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -39,7 +39,7 @@ struct StreamResponse {
     std::string body;
 };
 
-using BodyChunkHandler = std::move_only_function<util::ExpectedVoid(std::string_view)>;
+using BodyChunkHandler = std::move_only_function<support::ExpectedVoid(std::string_view)>;
 
 class StreamTransport {
 public:
@@ -52,7 +52,7 @@ public:
     /// Executor contract: the transport is driven by the calling executor and
     /// is not internally synchronized; drive it from a single-threaded executor
     /// and do not run `async_stream` on the same transport from two threads.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<StreamResponse>> async_stream(
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<StreamResponse>> async_stream(
         const StreamRequest& request,
         BodyChunkHandler on_body_chunk) = 0;
 };

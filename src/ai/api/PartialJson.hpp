@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -128,7 +128,7 @@ inline void skip_blank(PartialJsonContext& context) {
     return literal.starts_with(remaining);
 }
 
-[[nodiscard]] inline std::optional<util::JsonValue> parse_any(PartialJsonContext& context);
+[[nodiscard]] inline std::optional<support::JsonValue> parse_any(PartialJsonContext& context);
 
 [[nodiscard]] inline std::optional<std::string> parse_str(PartialJsonContext& context) {
     const auto start = context.index;
@@ -144,7 +144,7 @@ inline void skip_blank(PartialJsonContext& context) {
         const auto end = context.index + 1 - (escape ? 1 : 0);
         context.index += 1;
         const auto substring = context.json.substr(start, end - start);
-        if (auto parsed = util::read_json(substring)) {
+        if (auto parsed = support::read_json(substring)) {
             if (const auto* text = parsed->get_if<std::string>()) {
                 return *text;
             }
@@ -155,7 +155,7 @@ inline void skip_blank(PartialJsonContext& context) {
     // escape it retries from the last backslash.
     const auto end = context.index - (escape ? 1 : 0);
     auto candidate = std::string{context.json.substr(start, end - start)} + '"';
-    if (auto parsed = util::read_json(candidate)) {
+    if (auto parsed = support::read_json(candidate)) {
         if (const auto* text = parsed->get_if<std::string>()) {
             return *text;
         }
@@ -163,7 +163,7 @@ inline void skip_blank(PartialJsonContext& context) {
     const auto last_backslash = candidate.rfind('\\');
     if (last_backslash != std::string::npos) {
         const auto retry = candidate.substr(0, last_backslash) + '"';
-        if (auto parsed = util::read_json(retry)) {
+        if (auto parsed = support::read_json(retry)) {
             if (const auto* text = parsed->get_if<std::string>()) {
                 return *text;
             }
@@ -172,29 +172,29 @@ inline void skip_blank(PartialJsonContext& context) {
     return std::nullopt; // unterminated string literal
 }
 
-[[nodiscard]] inline std::optional<util::JsonValue> parse_obj(PartialJsonContext& context) {
+[[nodiscard]] inline std::optional<support::JsonValue> parse_obj(PartialJsonContext& context) {
     ++context.index; // skip the opening brace
-    util::JsonValue::object_t object;
+    support::JsonValue::object_t object;
     while (true) {
         skip_blank(context);
         if (context.index >= context.json.size()) {
-            return util::JsonValue{std::move(object)}; // Allow.OBJ
+            return support::JsonValue{std::move(object)}; // Allow.OBJ
         }
         if (context.json[context.index] == '}') {
             break;
         }
         auto key = parse_str(context);
         if (!key) {
-            return util::JsonValue{std::move(object)}; // Allow.OBJ
+            return support::JsonValue{std::move(object)}; // Allow.OBJ
         }
         skip_blank(context);
         if (context.index >= context.json.size()) {
-            return util::JsonValue{std::move(object)}; // Allow.OBJ
+            return support::JsonValue{std::move(object)}; // Allow.OBJ
         }
         ++context.index; // skip the colon
         auto value = parse_any(context);
         if (!value) {
-            return util::JsonValue{std::move(object)}; // Allow.OBJ
+            return support::JsonValue{std::move(object)}; // Allow.OBJ
         }
         object.emplace(std::move(*key), std::move(*value));
         skip_blank(context);
@@ -203,22 +203,22 @@ inline void skip_blank(PartialJsonContext& context) {
         }
     }
     ++context.index; // skip the closing brace
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
-[[nodiscard]] inline std::optional<util::JsonValue> parse_arr(PartialJsonContext& context) {
+[[nodiscard]] inline std::optional<support::JsonValue> parse_arr(PartialJsonContext& context) {
     ++context.index; // skip the opening bracket
-    util::JsonValue::array_t array;
+    support::JsonValue::array_t array;
     while (true) {
         if (context.index >= context.json.size()) {
-            return util::JsonValue{std::move(array)}; // Allow.ARR
+            return support::JsonValue{std::move(array)}; // Allow.ARR
         }
         if (context.json[context.index] == ']') {
             break;
         }
         auto value = parse_any(context);
         if (!value) {
-            return util::JsonValue{std::move(array)}; // Allow.ARR
+            return support::JsonValue{std::move(array)}; // Allow.ARR
         }
         array.push_back(std::move(*value));
         skip_blank(context);
@@ -227,11 +227,11 @@ inline void skip_blank(PartialJsonContext& context) {
         }
     }
     ++context.index; // skip the closing bracket
-    return util::JsonValue{std::move(array)};
+    return support::JsonValue{std::move(array)};
 }
 
 [[nodiscard]] inline std::optional<double> parse_number_token(std::string_view token) {
-    if (auto parsed = util::read_json(token)) {
+    if (auto parsed = support::read_json(token)) {
         if (const auto* number = parsed->get_if<double>()) {
             return *number;
         }
@@ -282,7 +282,7 @@ inline void skip_blank(PartialJsonContext& context) {
     return std::nullopt;
 }
 
-[[nodiscard]] inline std::optional<util::JsonValue> parse_any(PartialJsonContext& context) {
+[[nodiscard]] inline std::optional<support::JsonValue> parse_any(PartialJsonContext& context) {
     skip_blank(context);
     if (context.index >= context.json.size()) {
         return std::nullopt; // "Unexpected end of input"
@@ -293,7 +293,7 @@ inline void skip_blank(PartialJsonContext& context) {
         if (!text) {
             return std::nullopt;
         }
-        return util::JsonValue{std::move(*text)};
+        return support::JsonValue{std::move(*text)};
     }
     if (current == '{') {
         return parse_obj(context);
@@ -303,18 +303,18 @@ inline void skip_blank(PartialJsonContext& context) {
     }
     if (literal_prefix(context, "null")) {
         context.index += 4;
-        return util::JsonValue{nullptr};
+        return support::JsonValue{nullptr};
     }
     if (literal_prefix(context, "true")) {
         context.index += 4;
-        return util::JsonValue{true};
+        return support::JsonValue{true};
     }
     if (literal_prefix(context, "false")) {
         context.index += 5;
-        return util::JsonValue{false};
+        return support::JsonValue{false};
     }
     if (auto number = parse_num(context)) {
-        return util::JsonValue{*number};
+        return support::JsonValue{*number};
     }
     return std::nullopt;
 }
@@ -323,7 +323,7 @@ inline void skip_blank(PartialJsonContext& context) {
 
 /// Port of `partial-json` `parse` with `Allow.ALL`: best-effort prefix parse
 /// of incomplete JSON. Returns nullopt where the library would throw.
-[[nodiscard]] inline std::optional<util::JsonValue> parse_partial_json(std::string_view input) {
+[[nodiscard]] inline std::optional<support::JsonValue> parse_partial_json(std::string_view input) {
     std::size_t begin = 0;
     std::size_t end = input.size();
     while (begin < end && (input[begin] == ' ' || input[begin] == '\n' ||
@@ -345,12 +345,12 @@ inline void skip_blank(PartialJsonContext& context) {
 /// parse, then repaired-JSON parse, then the `partial-json` tolerant parse on
 /// both the raw and repaired input, falling back to an empty object. This is
 /// the parsing semantics pi applies to streaming tool-call arguments.
-[[nodiscard]] inline util::JsonValue parse_streaming_json(std::string_view raw) {
-    if (auto parsed = util::read_json(raw)) {
+[[nodiscard]] inline support::JsonValue parse_streaming_json(std::string_view raw) {
+    if (auto parsed = support::read_json(raw)) {
         return std::move(*parsed);
     }
     auto repaired = repair_json_strings(raw);
-    if (auto parsed = util::read_json(repaired)) {
+    if (auto parsed = support::read_json(repaired)) {
         return std::move(*parsed);
     }
     if (auto parsed = parse_partial_json(raw)) {
@@ -359,7 +359,7 @@ inline void skip_blank(PartialJsonContext& context) {
     if (auto parsed = parse_partial_json(repaired)) {
         return std::move(*parsed);
     }
-    return util::JsonValue::object_t{};
+    return support::JsonValue::object_t{};
 }
 
 } // namespace cch::ai::api

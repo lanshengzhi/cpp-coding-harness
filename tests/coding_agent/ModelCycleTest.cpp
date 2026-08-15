@@ -13,7 +13,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -217,7 +217,7 @@ TEST_CASE(
 
     // The global settings default follows the last cycle (pi
     // setDefaultModelAndProvider).
-    const auto settings = util::read_json(fixture.read_settings());
+    const auto settings = support::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
     const auto& object = settings->get_object();
     const auto provider = object.find("defaultProvider");

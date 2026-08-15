@@ -87,7 +87,7 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 requests.push_back(
                     tests::RecordedProviderRequest{model, context, options});
                 const auto turn = requests.size();
@@ -144,7 +144,7 @@ TEST_CASE(
     std::vector<std::size_t> counts_at_message_end;
     auto subscription = session->subscribe(
         [session, &counts_at_message_end](const agent::AgentLifecycleEvent& event)
-            -> util::ExpectedVoid {
+            -> support::ExpectedVoid {
             if (std::holds_alternative<agent::MessageEndEvent>(event)) {
                 counts_at_message_end.push_back(session->message_count());
             }
@@ -207,7 +207,7 @@ TEST_CASE(
     harness::session::testing::fail_nth_append_for_test(fixture.session_path, 2);
     auto failed = session.prompt_blocking("keep live state");
     REQUIRE_FALSE(failed.has_value());
-    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(failed.error().code == support::ErrorCode::Session);
     CHECK(failed.error().message == "could not persist session entry");
 
     // No rollback theatre: the observed live state stays.
@@ -217,7 +217,7 @@ TEST_CASE(
     // Later prompts are rejected with the typed session failure.
     auto rejected = session.prompt_blocking("rejected prompt");
     REQUIRE_FALSE(rejected.has_value());
-    CHECK(rejected.error().code == util::ErrorCode::Session);
+    CHECK(rejected.error().code == support::ErrorCode::Session);
     CHECK(
         rejected.error().message ==
         "session persistence failed; rejecting new prompt");

@@ -3,7 +3,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/AsyncResult.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/AsyncResultBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -21,7 +21,7 @@ namespace cch::agent {
 /// Invoke one weak agent event sink with exception containment (ADR 0017).
 /// The single event-emit path shared by the agent loop and the tool-call
 /// executor.
-[[nodiscard]] inline util::ExpectedVoid emit_agent_event(
+[[nodiscard]] inline support::ExpectedVoid emit_agent_event(
     AgentEventSink& sink,
     const AgentLifecycleEvent& event) {
     if (!sink) {
@@ -30,20 +30,20 @@ namespace cch::agent {
     try {
         return sink(event);
     } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
             "agent event sink failed",
             e.what()));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
             "agent event sink failed",
             "unknown exception"));
     }
 }
 
 /// Emit the message lifecycle pair for one tool result message.
-[[nodiscard]] inline util::ExpectedVoid emit_tool_result_message(
+[[nodiscard]] inline support::ExpectedVoid emit_tool_result_message(
     AgentEventSink& sink,
     const ai::ToolResultMessage& message) {
     if (auto r = emit_agent_event(sink, MessageStartEvent{ai::MessageVariant{message}}); !r) {
@@ -76,13 +76,13 @@ template <typename Hook, typename... Args>
     try {
         return hook(std::forward<Args>(args)...);
     } catch (const std::exception& e) {
-        return Result(std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
+        return Result(std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
             std::string(hook_name) + " hook failed",
             e.what())));
     } catch (...) {
-        return Result(std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
+        return Result(std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
             std::string(hook_name) + " hook failed",
             "unknown exception")));
     }
@@ -111,20 +111,20 @@ invoke_agent_hook(
         auto result = co_await ai::detail::await_async_result(
             hook(std::forward<Args>(args)...));
         if (!result && result.error().message == "async operation failed") {
-            co_return Result(std::unexpected(util::make_error(
-                util::ErrorCode::Tool,
+            co_return Result(std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
                 std::string(hook_name) + " hook failed",
                 result.error().detail)));
         }
         co_return result;
     } catch (const std::exception& e) {
-        co_return Result(std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
+        co_return Result(std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
             std::string(hook_name) + " hook failed",
             e.what())));
     } catch (...) {
-        co_return Result(std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
+        co_return Result(std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
             std::string(hook_name) + " hook failed",
             "unknown exception")));
     }

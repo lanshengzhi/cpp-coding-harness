@@ -5,7 +5,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Loader.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -36,7 +36,7 @@ public:
     /// message on every tick).
     void set_message(std::string message);
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:
@@ -48,7 +48,7 @@ private:
 /// pi `IdleStatus`: the status container's empty state (two blank rows).
 class IdleStatus final : public cch::tui::Component {
 public:
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         return cch::tui::RenderResult{
             .lines = {std::string(width, ' '), std::string(width, ' ')},
         };

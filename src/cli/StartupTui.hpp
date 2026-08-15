@@ -4,7 +4,7 @@
 
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Terminal.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -52,7 +52,7 @@ struct StartupPickerResult {
 /// without one (pi's `selectSession` cancel → null, exit → process exit 0).
 /// The host stops and clears the screen before returning (pi
 /// `clearStartupTui` + `ui.stop()`).
-[[nodiscard]] boost::asio::awaitable<util::Expected<StartupPickerResult>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<StartupPickerResult>>
 run_startup_session_picker(
     cch::tui::Terminal& terminal,
     StartupTuiOptions options,
@@ -63,7 +63,7 @@ run_startup_session_picker(
 /// prompt: the generic string-list selector over pi's verbatim
 /// `formatMissingSessionCwdPrompt` text with the Continue/Cancel options.
 /// Returns true on Continue, false on Cancel (pi main.ts exits 0 on cancel).
-[[nodiscard]] boost::asio::awaitable<util::Expected<bool>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<bool>>
 run_startup_missing_cwd_prompt(
     cch::tui::Terminal& terminal,
     StartupTuiOptions options,
@@ -74,7 +74,7 @@ run_startup_missing_cwd_prompt(
 /// terminal + io_context and returns the picked session path, or nullopt on
 /// cancel/exit. Fails cleanly when the descriptors are not terminals (pi's
 /// ProcessTerminal throws on piped stdin the same way).
-[[nodiscard]] util::Expected<std::optional<std::filesystem::path>>
+[[nodiscard]] support::Expected<std::optional<std::filesystem::path>>
 run_process_terminal_resume_picker(
     StartupTuiOptions options,
     coding_agent::tui::SessionListLoader current_loader,
@@ -82,7 +82,7 @@ run_process_terminal_resume_picker(
 
 /// The ProcessTerminal-backed boot missing-cwd Continue/Cancel prompt (pi
 /// main.ts `promptForMissingSessionCwd` → `showStartupSelector`).
-[[nodiscard]] util::Expected<bool> run_process_terminal_missing_cwd_prompt(
+[[nodiscard]] support::Expected<bool> run_process_terminal_missing_cwd_prompt(
     StartupTuiOptions options,
     std::string title);
 

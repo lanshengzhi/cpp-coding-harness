@@ -1,6 +1,6 @@
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionResume.hpp>
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 #include "../../support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -53,57 +53,57 @@ void make_private(const std::filesystem::path& path) {
 #endif
 }
 
-util::JsonValue complete_assistant_value() {
-    return util::JsonValue{util::JsonValue::object_t{
-        {"role", util::JsonValue{"assistant"}},
-        {"content", util::JsonValue{util::JsonValue::array_t{
-            util::JsonValue{util::JsonValue::object_t{
-                {"type", util::JsonValue{"text"}},
-                {"text", util::JsonValue{"persisted answer"}},
+support::JsonValue complete_assistant_value() {
+    return support::JsonValue{support::JsonValue::object_t{
+        {"role", support::JsonValue{"assistant"}},
+        {"content", support::JsonValue{support::JsonValue::array_t{
+            support::JsonValue{support::JsonValue::object_t{
+                {"type", support::JsonValue{"text"}},
+                {"text", support::JsonValue{"persisted answer"}},
             }},
         }}},
-        {"api", util::JsonValue{"openai-completions"}},
-        {"provider", util::JsonValue{"openai-compatible"}},
-        {"model", util::JsonValue{"gpt-test"}},
-        {"usage", util::JsonValue{util::JsonValue::object_t{
-            {"input", util::JsonValue{11}},
-            {"output", util::JsonValue{7}},
-            {"cacheRead", util::JsonValue{3}},
-            {"cacheWrite", util::JsonValue{2}},
-            {"reasoning", util::JsonValue{5}},
-            {"totalTokens", util::JsonValue{23}},
-            {"cost", util::JsonValue{util::JsonValue::object_t{
-                {"input", util::JsonValue{0.11}},
-                {"output", util::JsonValue{0.07}},
-                {"cacheRead", util::JsonValue{0.03}},
-                {"cacheWrite", util::JsonValue{0.02}},
-                {"total", util::JsonValue{0.23}},
+        {"api", support::JsonValue{"openai-completions"}},
+        {"provider", support::JsonValue{"openai-compatible"}},
+        {"model", support::JsonValue{"gpt-test"}},
+        {"usage", support::JsonValue{support::JsonValue::object_t{
+            {"input", support::JsonValue{11}},
+            {"output", support::JsonValue{7}},
+            {"cacheRead", support::JsonValue{3}},
+            {"cacheWrite", support::JsonValue{2}},
+            {"reasoning", support::JsonValue{5}},
+            {"totalTokens", support::JsonValue{23}},
+            {"cost", support::JsonValue{support::JsonValue::object_t{
+                {"input", support::JsonValue{0.11}},
+                {"output", support::JsonValue{0.07}},
+                {"cacheRead", support::JsonValue{0.03}},
+                {"cacheWrite", support::JsonValue{0.02}},
+                {"total", support::JsonValue{0.23}},
             }}},
         }}},
-        {"stopReason", util::JsonValue{"stop"}},
-        {"timestamp", util::JsonValue{1718000000123.0}},
+        {"stopReason", support::JsonValue{"stop"}},
+        {"timestamp", support::JsonValue{1718000000123.0}},
     }};
 }
 
 void write_resume_fixture(
     const std::filesystem::path& path,
-    util::JsonValue assistant) {
-    util::JsonValue header{util::JsonValue::object_t{
-        {"type", util::JsonValue{"session"}},
-        {"version", util::JsonValue{3}},
-        {"id", util::JsonValue{"session-usage"}},
-        {"timestamp", util::JsonValue{"2026-06-10T00:00:00.000Z"}},
-        {"cwd", util::JsonValue{path.parent_path().string()}},
-        {"provider", util::JsonValue{"openai-compatible"}},
-        {"model", util::JsonValue{"gpt-test"}},
+    support::JsonValue assistant) {
+    support::JsonValue header{support::JsonValue::object_t{
+        {"type", support::JsonValue{"session"}},
+        {"version", support::JsonValue{3}},
+        {"id", support::JsonValue{"session-usage"}},
+        {"timestamp", support::JsonValue{"2026-06-10T00:00:00.000Z"}},
+        {"cwd", support::JsonValue{path.parent_path().string()}},
+        {"provider", support::JsonValue{"openai-compatible"}},
+        {"model", support::JsonValue{"gpt-test"}},
     }};
-    util::JsonValue entry{util::JsonValue::object_t{
-        {"type", util::JsonValue{"message"}},
-        {"entryId", util::JsonValue{"msg00001"}},
+    support::JsonValue entry{support::JsonValue::object_t{
+        {"type", support::JsonValue{"message"}},
+        {"entryId", support::JsonValue{"msg00001"}},
         {"message", std::move(assistant)},
     }};
-    auto header_json = util::write_json(header);
-    auto entry_json = util::write_json(entry);
+    auto header_json = support::write_json(header);
+    auto entry_json = support::write_json(entry);
     REQUIRE(header_json);
     REQUIRE(entry_json);
 
@@ -141,7 +141,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}));
     REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")));
 
-    auto arguments = util::read_json(
+    auto arguments = support::read_json(
         R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","nested":{"kimi_api_key":"kimi-nested-argument"},"path":"secret.txt"})");
     REQUIRE(arguments);
     ai::AssistantMessage assistant;
@@ -162,7 +162,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     assistant.timestamp = 1718000000123;
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
-    auto details = util::read_json(
+    auto details = support::read_json(
         R"({"token":"sk-detailsecret123","safe":"kept","nested":{"KIMI_API_KEY":"kimi-detail-secret","array":[{"kimi_api_key":"kimi-array-secret"}]}})");
     REQUIRE(details);
     ai::ToolResultMessage tool;
@@ -286,13 +286,13 @@ TEST_CASE(
     "[harness][session][resume][issue19]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
-    const auto rejected = [&](util::JsonValue message, std::string expected_detail) {
+    const auto rejected = [&](support::JsonValue message, std::string expected_detail) {
         const auto path = workspace.path() /
             ("incomplete-identity-" + std::to_string(fixture_index++) + ".jsonl");
         write_resume_fixture(path, std::move(message));
         auto resumed = harness::session::resume_session(path);
         REQUIRE_FALSE(resumed);
-        CHECK(resumed.error().code == util::ErrorCode::JsonParse);
+        CHECK(resumed.error().code == support::ErrorCode::JsonParse);
         CHECK(resumed.error().detail.find(expected_detail) != std::string::npos);
     };
 
@@ -302,7 +302,7 @@ TEST_CASE(
         rejected(std::move(missing), field);
 
         auto empty = complete_assistant_value();
-        empty.at(field) = util::JsonValue{""};
+        empty.at(field) = support::JsonValue{""};
         rejected(std::move(empty), field);
     }
 
@@ -312,7 +312,7 @@ TEST_CASE(
 
     for (const auto timestamp : {0, -1, 1718000000}) {
         auto invalid = complete_assistant_value();
-        invalid.at("timestamp") = util::JsonValue{timestamp};
+        invalid.at("timestamp") = support::JsonValue{timestamp};
         rejected(std::move(invalid), "timestamp");
     }
 }
@@ -322,13 +322,13 @@ TEST_CASE(
     "[harness][session][resume][issue17]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
-    const auto rejected = [&](util::JsonValue message, std::string expected_field) {
+    const auto rejected = [&](support::JsonValue message, std::string expected_field) {
         const auto path = workspace.path() /
             ("incomplete-usage-" + std::to_string(fixture_index++) + ".jsonl");
         write_resume_fixture(path, std::move(message));
         auto resumed = harness::session::resume_session(path);
         REQUIRE_FALSE(resumed);
-        CHECK(resumed.error().code == util::ErrorCode::JsonParse);
+        CHECK(resumed.error().code == support::ErrorCode::JsonParse);
         CHECK(resumed.error().detail.find(expected_field) != std::string::npos);
     };
 
@@ -358,13 +358,13 @@ TEST_CASE(
     "[harness][session][resume][issue18]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
-    const auto rejected = [&](util::JsonValue message, std::string expected_detail) {
+    const auto rejected = [&](support::JsonValue message, std::string expected_detail) {
         const auto path = workspace.path() /
             ("invalid-stop-reason-" + std::to_string(fixture_index++) + ".jsonl");
         write_resume_fixture(path, std::move(message));
         auto resumed = harness::session::resume_session(path);
         REQUIRE_FALSE(resumed);
-        CHECK(resumed.error().code == util::ErrorCode::JsonParse);
+        CHECK(resumed.error().code == support::ErrorCode::JsonParse);
         CHECK(resumed.error().detail.find(expected_detail) != std::string::npos);
     };
 
@@ -373,7 +373,7 @@ TEST_CASE(
     rejected(std::move(missing), "stopReason");
 
     auto unsupported = complete_assistant_value();
-    unsupported.at("stopReason") = util::JsonValue{"future_reason"};
+    unsupported.at("stopReason") = support::JsonValue{"future_reason"};
     rejected(std::move(unsupported), "future_reason");
 }
 
@@ -461,7 +461,7 @@ TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][sessi
     auto loaded = harness::session::JsonlSessionStore::load(path);
 
     REQUIRE_FALSE(loaded);
-    CHECK(loaded.error().code == util::ErrorCode::Session);
+    CHECK(loaded.error().code == support::ErrorCode::Session);
     CHECK(loaded.error().detail.find("line 2") != std::string::npos);
 }
 
@@ -478,7 +478,7 @@ TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][
     auto loaded = harness::session::JsonlSessionStore::load(path);
 
     REQUIRE_FALSE(loaded);
-    CHECK(loaded.error().code == util::ErrorCode::Session);
+    CHECK(loaded.error().code == support::ErrorCode::Session);
     CHECK(loaded.error().message == "session entry missing type");
     CHECK(loaded.error().detail.find("line 2") != std::string::npos);
 }
@@ -630,7 +630,7 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
     REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
     REQUIRE(store->append_active_tools_change(std::nullopt, {"read"}));
-    REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", util::JsonValue{nullptr}));
+    REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", support::JsonValue{nullptr}));
     REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "context", true, std::nullopt));
     REQUIRE(store->append_label_change(std::nullopt, "target-entry", std::string{"checkpoint"}));
     REQUIRE(store->append_compaction(std::nullopt, "summary", "first-kept", 123, std::nullopt, true));
@@ -747,7 +747,7 @@ TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
     auto path = workspace.path() / "custom.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto data = util::JsonValue{util::JsonValue::object_t{{"count", util::JsonValue{42}}, {"name", util::JsonValue{"test"}}}};
+    auto data = support::JsonValue{support::JsonValue::object_t{{"count", support::JsonValue{42}}, {"name", support::JsonValue{"test"}}}};
     REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", std::move(data)));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -757,7 +757,7 @@ TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
     const auto& value = require_entry_value<harness::session::CustomEntryValue>(loaded->entries[1]);
     CHECK(value.custom_type == "my-ext");
     REQUIRE(value.data.has_value());
-    CHECK(value.data->get<util::JsonValue::object_t>().at("count").get<double>() == 42.0);
+    CHECK(value.data->get<support::JsonValue::object_t>().at("count").get<double>() == 42.0);
     // pi `data?` is present on the wire for a provided value.
     CHECK(read_all(path).find(R"("data":{"count":42,"name":"test"})") != std::string::npos);
 }
@@ -767,7 +767,7 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
     auto path = workspace.path() / "custom-msg.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto details = util::JsonValue{util::JsonValue::object_t{{"key", util::JsonValue{"val"}}}};
+    auto details = support::JsonValue{support::JsonValue::object_t{{"key", support::JsonValue{"val"}}}};
     REQUIRE(store->append_custom_message_entry("parent99", "my-ext", "injected content", true, std::move(details)));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -780,7 +780,7 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
     CHECK(std::get<std::string>(value.content) == "injected content");
     CHECK(value.display == true);
     REQUIRE(value.details.has_value());
-    CHECK(value.details->get<util::JsonValue::object_t>().at("key").get<std::string>() == "val");
+    CHECK(value.details->get<support::JsonValue::object_t>().at("key").get<std::string>() == "val");
     REQUIRE(loaded->entries[1].parent_id.has_value());
     CHECK(*loaded->entries[1].parent_id == "parent99");
     CHECK(read_all(path).find("\"content\":\"injected content\"") != std::string::npos);
@@ -868,7 +868,7 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
     auto path = workspace.path() / "compaction.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto details = util::JsonValue{util::JsonValue::object_t{{"readFiles", util::JsonValue{util::JsonValue::array_t{util::JsonValue{"a.txt"}}}}}};
+    auto details = support::JsonValue{support::JsonValue::object_t{{"readFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"a.txt"}}}}}};
     REQUIRE(store->append_compaction(std::nullopt, "summary text", "first-kept", 50000, std::move(details), true));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -883,9 +883,9 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
     CHECK_FALSE(value.retained_tail.has_value());
     CHECK_FALSE(value.usage.has_value());
     REQUIRE(value.details.has_value());
-    const auto& read_files = value.details->get<util::JsonValue::object_t>()
+    const auto& read_files = value.details->get<support::JsonValue::object_t>()
         .at("readFiles")
-        .get<util::JsonValue::array_t>();
+        .get<support::JsonValue::array_t>();
     REQUIRE(read_files.size() == 1);
     CHECK(read_files[0].get<std::string>() == "a.txt");
     REQUIRE(value.from_hook.has_value());
@@ -897,7 +897,7 @@ TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
     auto path = workspace.path() / "branch-summary.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto details = util::JsonValue{util::JsonValue::object_t{{"modifiedFiles", util::JsonValue{util::JsonValue::array_t{util::JsonValue{"b.txt"}}}}}};
+    auto details = support::JsonValue{support::JsonValue::object_t{{"modifiedFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"b.txt"}}}}}};
     REQUIRE(store->append_branch_summary("from-branch", "branch-id", "branch explored X", std::move(details), std::nullopt));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -909,9 +909,9 @@ TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
     CHECK(value.summary == "branch explored X");
     CHECK_FALSE(value.usage.has_value());
     REQUIRE(value.details.has_value());
-    const auto& modified_files = value.details->get<util::JsonValue::object_t>()
+    const auto& modified_files = value.details->get<support::JsonValue::object_t>()
         .at("modifiedFiles")
-        .get<util::JsonValue::array_t>();
+        .get<support::JsonValue::array_t>();
     REQUIRE(modified_files.size() == 1);
     CHECK(modified_files[0].get<std::string>() == "b.txt");
     CHECK_FALSE(value.from_hook.has_value());

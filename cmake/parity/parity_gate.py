@@ -358,6 +358,24 @@ def parse_manifest(data: Any) -> Manifest:
             owner_context,
             RULE_INVALID_MANIFEST_VALUE,
         )
+        # An interface root is owner-local: it may live anywhere inside the
+        # repository, but it must terminate in the `cch/<subdir>` directory
+        # that gives the canonical <cch/...> include spelling. A root without
+        # that tail cannot provide the canonical spelling and is rejected.
+        interface_parts = interface_root.replace("\\", "/").split("/")
+        if (
+            os.path.isabs(interface_root)
+            or ".." in interface_parts
+            or len(interface_parts) < 2
+            or interface_parts[-2] != "cch"
+            or interface_parts[-1] in ("", "cch")
+        ):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"owner '{name}' declares interface_root '{interface_root}'; an interface root "
+                f"must be a repository-relative path ending in 'cch/<subdir>' so the canonical "
+                f"<cch/...> spelling resolves through it",
+            )
 
         legal_raw = _require_member(
             entry, "legal_owner_dependencies", owner_context, RULE_MISSING_MANIFEST_FIELD
@@ -911,11 +929,15 @@ def _norm_path(path: str) -> str:
 
 
 def _interface_prefixes(manifest: Manifest) -> dict[str, str]:
-    """Map owner name to its canonical include prefix (e.g. ``cch_ai`` -> ``cch/ai``)."""
+    """Map owner name to its canonical include prefix (e.g. ``cch_ai`` -> ``cch/ai``).
+
+    The prefix is the trailing ``cch/<subdir>`` of the declared interface
+    root; manifest validation guarantees that shape.
+    """
     result: dict[str, str] = {}
     for name, owner in manifest.owners.items():
-        root = owner.interface_root
-        result[name] = root[len("include/"):] if root.startswith("include/") else root
+        parts = owner.interface_root.replace("\\", "/").split("/")
+        result[name] = "/".join(parts[-2:])
     return result
 
 

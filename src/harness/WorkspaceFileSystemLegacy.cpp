@@ -19,7 +19,7 @@ namespace cch::harness {
 WorkspaceFileSystem::WorkspaceFileSystem(std::filesystem::path workspace)
     : root_(canonicalized(std::move(workspace))) {}
 
-util::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::filesystem::path& workspace) {
+support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::filesystem::path& workspace) {
     std::error_code ec;
     if (!std::filesystem::exists(workspace, ec) || !std::filesystem::is_directory(workspace, ec)) {
         return std::unexpected(workspace_error("workspace does not exist or is not a directory"));
@@ -27,7 +27,7 @@ util::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::files
     return WorkspaceFileSystem(workspace);
 }
 
-util::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_path(
+support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_path(
     const std::string& requested) const {
     if (requested.empty()) {
         return std::unexpected(workspace_error("path is required"));
@@ -49,7 +49,7 @@ util::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_pat
     return target;
 }
 
-util::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std::string& requested) const {
+support::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std::string& requested) const {
     auto target = resolve_addressed_path(requested);
     if (!target) {
         return std::unexpected(target.error());
@@ -62,7 +62,7 @@ util::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std::s
     }
 
     auto filename = target->filename().string();
-    util::UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+    support::UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
     if (!fd) {
         if (errno == ELOOP) {
             return std::unexpected(workspace_error("refusing to read through symlink: " + requested));
@@ -107,7 +107,7 @@ util::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std::s
 #endif
 }
 
-util::Expected<std::size_t> WorkspaceFileSystem::write_file(
+support::Expected<std::size_t> WorkspaceFileSystem::write_file(
     const std::string& requested,
     const std::string& content,
     bool create_parents) const {
@@ -159,20 +159,20 @@ util::Expected<std::size_t> WorkspaceFileSystem::write_file(
     return content.size();
 }
 
-util::Error WorkspaceFileSystem::workspace_error(std::string message) {
-    return util::make_error(util::ErrorCode::Workspace, message, message);
+support::Error WorkspaceFileSystem::workspace_error(std::string message) {
+    return support::make_error(support::ErrorCode::Workspace, message, message);
 }
 
-FileError WorkspaceFileSystem::util_error_to_file_error(const util::Error& error, const std::string& path) {
+FileError WorkspaceFileSystem::util_error_to_file_error(const support::Error& error, const std::string& path) {
     FileErrorCode code = FileErrorCode::Unknown;
     switch (error.code) {
-    case util::ErrorCode::Workspace:
+    case support::ErrorCode::Workspace:
         code = FileErrorCode::PermissionDenied;
         break;
-    case util::ErrorCode::Validation:
+    case support::ErrorCode::Validation:
         code = FileErrorCode::Invalid;
         break;
-    case util::ErrorCode::Cancelled:
+    case support::ErrorCode::Cancelled:
         code = FileErrorCode::Aborted;
         break;
     default:
@@ -231,7 +231,7 @@ bool WorkspaceFileSystem::has_symlink_component(const std::filesystem::path& lex
     return false;
 }
 
-util::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_for_write(
+support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_for_write(
     const std::string& requested,
     bool create_parents) const {
     auto target = resolve_addressed_path(requested);

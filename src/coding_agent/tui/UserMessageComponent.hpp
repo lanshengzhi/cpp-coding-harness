@@ -5,7 +5,7 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Image.hpp>
 #include <cch/tui/Markdown.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -34,7 +34,7 @@ public:
     UserMessageComponent(const UserMessageComponent&) = delete;
     UserMessageComponent& operator=(const UserMessageComponent&) = delete;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

@@ -3,8 +3,8 @@
 #include <cch/agent/harness/session/SessionEntry.hpp>
 
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <optional>
 #include <string>
@@ -22,75 +22,75 @@ public:
         std::string entry_id;
     };
 
-    [[nodiscard]] util::Expected<std::string> serialize_header(const SessionMetadata& metadata) const;
+    [[nodiscard]] support::Expected<std::string> serialize_header(const SessionMetadata& metadata) const;
 
-    [[nodiscard]] util::Expected<LoadedSession> parse_lines(const std::vector<std::string>& lines) const;
+    [[nodiscard]] support::Expected<LoadedSession> parse_lines(const std::vector<std::string>& lines) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_message(const ai::MessageVariant& message) const;
-    [[nodiscard]] util::Expected<SerializedMessageEntry> serialize_message_entry(
+    [[nodiscard]] support::Expected<std::string> serialize_message(const ai::MessageVariant& message) const;
+    [[nodiscard]] support::Expected<SerializedMessageEntry> serialize_message_entry(
         const ai::MessageVariant& message,
         std::optional<std::string> parent_id) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_model_change(
+    [[nodiscard]] support::Expected<std::string> serialize_model_change(
         std::optional<std::string> parent_id,
         std::string provider,
         std::string model_id) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_thinking_level_change(
+    [[nodiscard]] support::Expected<std::string> serialize_thinking_level_change(
         std::optional<std::string> parent_id,
         std::string thinking_level) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_active_tools_change(
+    [[nodiscard]] support::Expected<std::string> serialize_active_tools_change(
         std::optional<std::string> parent_id,
         std::vector<std::string> tools) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_custom_entry(
+    [[nodiscard]] support::Expected<std::string> serialize_custom_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,
-        std::optional<util::JsonValue> data) const;
+        std::optional<support::JsonValue> data) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_custom_message_entry(
+    [[nodiscard]] support::Expected<std::string> serialize_custom_message_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,
         CustomMessageEntryContent content,
         bool display,
-        std::optional<util::JsonValue> details) const;
+        std::optional<support::JsonValue> details) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_label_change(
+    [[nodiscard]] support::Expected<std::string> serialize_label_change(
         std::optional<std::string> parent_id,
         std::string target_id,
         std::optional<std::string> label) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_compaction(
+    [[nodiscard]] support::Expected<std::string> serialize_compaction(
         std::optional<std::string> parent_id,
         std::string summary,
         std::optional<std::string> first_kept_entry_id,
         std::size_t tokens_before,
-        std::optional<util::JsonValue> details,
+        std::optional<support::JsonValue> details,
         std::optional<bool> from_hook,
         std::vector<ai::MessageVariant> retained_tail = {},
         std::optional<ai::Usage> usage = std::nullopt) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_branch_summary(
+    [[nodiscard]] support::Expected<std::string> serialize_branch_summary(
         std::optional<std::string> parent_id,
         std::string from_id,
         std::string summary,
-        std::optional<util::JsonValue> details,
+        std::optional<support::JsonValue> details,
         std::optional<bool> from_hook,
         std::optional<ai::Usage> usage = std::nullopt) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_session_info(
+    [[nodiscard]] support::Expected<std::string> serialize_session_info(
         std::optional<std::string> parent_id,
         std::optional<std::string> name) const;
 
-    [[nodiscard]] util::Expected<std::string> serialize_leaf(
+    [[nodiscard]] support::Expected<std::string> serialize_leaf(
         std::optional<std::string> parent_id,
         std::optional<std::string> target_id) const;
 
     /// Round-trip writer: re-emit a parsed `SessionEntry` as its pi wire line
     /// (byte-identical to the source line for pi-captured files) using the
     /// stored entry id/timestamp. Header and Unknown entries are rejected.
-    [[nodiscard]] util::Expected<std::string> serialize_entry(const SessionEntry& entry) const;
+    [[nodiscard]] support::Expected<std::string> serialize_entry(const SessionEntry& entry) const;
 };
 
 } // namespace cch::harness::session

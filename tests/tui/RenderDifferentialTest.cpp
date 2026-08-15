@@ -2,7 +2,7 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -22,7 +22,7 @@ public:
         cache_valid_ = false;
     }
 
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         if (cache_valid_) return cch::tui::RenderResult{.lines = cached_};
         cached_ = lines_;
         cache_valid_ = true;
@@ -52,7 +52,7 @@ public:
         cursor_row_ = row;
     }
 
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{};
     }
 

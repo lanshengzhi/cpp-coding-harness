@@ -12,7 +12,7 @@ using namespace cch;
 
 namespace {
 
-void check_usage_fixture(const ai::Usage& usage, const util::JsonValue& expected) {
+void check_usage_fixture(const ai::Usage& usage, const support::JsonValue& expected) {
     const auto& object = expected.get_object();
     CHECK(usage.input == static_cast<std::int64_t>(object.at("input").get_number()));
     CHECK(usage.output == static_cast<std::int64_t>(object.at("output").get_number()));

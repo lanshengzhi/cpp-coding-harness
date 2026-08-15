@@ -5,7 +5,7 @@
 
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -317,10 +317,10 @@ bool Image::has_content() const {
     return impl_->present;
 }
 
-util::Expected<RenderResult> Image::render(std::size_t width) {
+support::Expected<RenderResult> Image::render(std::size_t width) {
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Image requires a positive visible width"));
     }
     if (!impl_->present) return RenderResult{};
@@ -365,19 +365,19 @@ util::Expected<RenderResult> Image::render(std::size_t width) {
         try {
             fallback = impl_->options.fallback_style(std::move(fallback));
         } catch (const std::exception&) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "TUI Image fallback style failed",
                 "the style callback threw an exception"));
         } catch (...) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "TUI Image fallback style failed",
                 "the style callback threw an unknown exception"));
         }
         if (visible_width(fallback) != original_width) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "TUI Image fallback style changed visible width"));
         }
     }

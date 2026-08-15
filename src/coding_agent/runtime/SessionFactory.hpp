@@ -51,19 +51,19 @@ struct CreateAgentSessionResult {
 /// never supply a settings snapshot.
 class SessionFactory {
 public:
-    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+    [[nodiscard]] static support::Expected<CreateAgentSessionResult> create(
         AgentSessionCreationRequest request);
     /// Private test-support assembly seam for the scripted fake provider: the
     /// injected Models carries the scripted fake provider, and the request
     /// model is fabricated from it (the deterministic provider surface the
     /// deleted fake-provider CLI flag used to drive). Models never appears in
     /// the installed contract surface.
-    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+    [[nodiscard]] static support::Expected<CreateAgentSessionResult> create(
         AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models);
     /// Private test-support assembly seam with an injected Session-owned User
     /// Shell (User Bash overlap/cancellation tests).
-    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+    [[nodiscard]] static support::Expected<CreateAgentSessionResult> create(
         AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models,
         std::unique_ptr<AsyncUserShell> user_shell);

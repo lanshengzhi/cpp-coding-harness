@@ -1,6 +1,6 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -19,9 +19,9 @@
 namespace cch::coding_agent {
 namespace {
 
-[[nodiscard]] util::Error trust_error(std::string message, std::string detail = {}) {
-    return util::make_error(
-        util::ErrorCode::Validation,
+[[nodiscard]] support::Error trust_error(std::string message, std::string detail = {}) {
+    return support::make_error(
+        support::ErrorCode::Validation,
         std::move(message),
         detail.empty() ? message : std::move(detail));
 }
@@ -41,7 +41,7 @@ namespace {
 
 using TrustMap = std::map<std::string, std::optional<bool>>;
 
-[[nodiscard]] util::Expected<TrustMap> read_trust_map(const std::filesystem::path& path) {
+[[nodiscard]] support::Expected<TrustMap> read_trust_map(const std::filesystem::path& path) {
     TrustMap data;
     if (path.empty()) {
         return std::unexpected(trust_error("trust store path is empty"));
@@ -81,18 +81,18 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
     }
     std::stringstream buffer;
     buffer << input.rdbuf();
-    auto parsed = util::read_json(buffer.str());
+    auto parsed = support::read_json(buffer.str());
     if (!parsed) {
         return std::unexpected(trust_error("failed to parse trust store", parsed.error().detail));
     }
-    if (!parsed->holds<util::JsonValue::object_t>()) {
+    if (!parsed->holds<support::JsonValue::object_t>()) {
         return std::unexpected(trust_error("invalid trust store: expected object", path.string()));
     }
 
     for (const auto& [key, value] : parsed->get_object()) {
         if (const auto* flag = value.get_if<bool>()) {
             data[key] = *flag;
-        } else if (value.holds<util::JsonValue::null_t>()) {
+        } else if (value.holds<support::JsonValue::null_t>()) {
             data[key] = std::nullopt;
         } else {
             return std::unexpected(trust_error("invalid trust store value for path: " + key, path.string()));
@@ -101,7 +101,7 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
     return data;
 }
 
-[[nodiscard]] util::ExpectedVoid write_trust_map(const std::filesystem::path& path, const TrustMap& data) {
+[[nodiscard]] support::ExpectedVoid write_trust_map(const std::filesystem::path& path, const TrustMap& data) {
     if (path.empty()) {
         return std::unexpected(trust_error("trust store path is empty"));
     }
@@ -122,14 +122,14 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
         return std::unexpected(trust_error("refusing to write symlinked trust store", path.string()));
     }
 
-    util::JsonValue::object_t object;
+    support::JsonValue::object_t object;
     for (const auto& [key, value] : data) {
         if (!value.has_value()) {
             continue;
         }
-        object.emplace(key, util::JsonValue{*value});
+        object.emplace(key, support::JsonValue{*value});
     }
-    auto serialized = util::write_json(util::JsonValue{std::move(object)});
+    auto serialized = support::write_json(support::JsonValue{std::move(object)});
     if (!serialized) {
         return std::unexpected(serialized.error());
     }
@@ -186,7 +186,7 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
 ProjectTrustStore::ProjectTrustStore(std::filesystem::path trust_path)
     : trust_path_(std::move(trust_path)) {}
 
-util::Expected<std::optional<ProjectTrustStoreEntry>> ProjectTrustStore::getEntry(
+support::Expected<std::optional<ProjectTrustStoreEntry>> ProjectTrustStore::getEntry(
     const std::filesystem::path& cwd) const {
     auto data = read_trust_map(trust_path_);
     if (!data) {
@@ -195,7 +195,7 @@ util::Expected<std::optional<ProjectTrustStoreEntry>> ProjectTrustStore::getEntr
     return find_nearest(*data, cwd);
 }
 
-util::ExpectedVoid ProjectTrustStore::setMany(const std::vector<ProjectTrustUpdate>& updates) const {
+support::ExpectedVoid ProjectTrustStore::setMany(const std::vector<ProjectTrustUpdate>& updates) const {
     auto data = read_trust_map(trust_path_);
     if (!data) {
         return std::unexpected(data.error());

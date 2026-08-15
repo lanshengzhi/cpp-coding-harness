@@ -3,7 +3,7 @@
 #include <cch/tui/Fuzzy.hpp>
 
 #include "tui/InteractionUtils.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -285,8 +285,8 @@ struct ScopedQuery {
 
     int pipes[2];
     if (pipe(pipes) != 0) return {};
-    cch::util::UniqueFd read_end(pipes[0]);
-    cch::util::UniqueFd write_end(pipes[1]);
+    cch::support::UniqueFd read_end(pipes[0]);
+    cch::support::UniqueFd write_end(pipes[1]);
     const auto pid = fork();
     if (pid < 0) return {};
     if (pid == 0) {

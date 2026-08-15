@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/agent/AgentEvent.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -39,8 +39,8 @@ public:
     /// The run's single final verdict, after the persistence channel has
     /// drained: a recorded persistence failure first, then an unfinished
     /// Agent prompt, then the Agent prompt result.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> conclude(
-        std::optional<util::ExpectedVoid> agent_result);
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> conclude(
+        std::optional<support::ExpectedVoid> agent_result);
 
 private:
     std::shared_ptr<SessionPersistence> persistence_;

@@ -2,7 +2,7 @@
 #include "SessionJournalTestHooks.hpp"
 
 #include "harness/PosixWrite.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <algorithm>
 #include <array>
@@ -31,12 +31,12 @@
 namespace cch::harness::session {
 namespace {
 
-[[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
-    return util::make_error(util::ErrorCode::Session, std::move(message), std::move(detail));
+[[nodiscard]] support::Error session_error(std::string message, std::string detail = {}) {
+    return support::make_error(support::ErrorCode::Session, std::move(message), std::move(detail));
 }
 
 #if defined(__unix__) || defined(__APPLE__)
-[[nodiscard]] util::Expected<util::UniqueFd> open_parent_directory(
+[[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
     const std::filesystem::path& path,
     bool create_missing) {
     int open_flags = O_RDONLY | O_DIRECTORY;
@@ -51,7 +51,7 @@ namespace {
         ? std::filesystem::path{"."}
         : path.parent_path();
     const auto start = parent.is_absolute() ? parent.root_path() : std::filesystem::path{"."};
-    util::UniqueFd current(::open(start.c_str(), open_flags));
+    support::UniqueFd current(::open(start.c_str(), open_flags));
     if (!current) {
         return std::unexpected(session_error(
             "could not open session directory root", std::strerror(errno)));
@@ -73,7 +73,7 @@ namespace {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error("could not create session directory", reason));
         }
-        util::UniqueFd next(::openat(current.get(), component.c_str(), open_flags));
+        support::UniqueFd next(::openat(current.get(), component.c_str(), open_flags));
         if (!next) {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error(
@@ -85,7 +85,7 @@ namespace {
     return current;
 }
 
-[[nodiscard]] util::Expected<util::UniqueFd> open_session_path(
+[[nodiscard]] support::Expected<support::UniqueFd> open_session_path(
     const std::filesystem::path& path,
     int flags,
     int mode = 0,
@@ -102,7 +102,7 @@ namespace {
 #ifdef O_NOFOLLOW
     final_flags |= O_NOFOLLOW;
 #endif
-    util::UniqueFd descriptor(::openat(parent->get(), path.filename().c_str(), final_flags, mode));
+    support::UniqueFd descriptor(::openat(parent->get(), path.filename().c_str(), final_flags, mode));
     if (!descriptor) {
         return std::unexpected(session_error("could not open session file", std::strerror(errno)));
     }
@@ -117,7 +117,7 @@ void remove_session_file(const std::filesystem::path& path) {
     ::unlinkat(parent->get(), path.filename().c_str(), 0);
 }
 
-[[nodiscard]] util::Expected<std::string> read_file_contents(int fd) {
+[[nodiscard]] support::Expected<std::string> read_file_contents(int fd) {
     std::string contents;
     std::array<char, 8192> buffer{};
     for (;;) {
@@ -133,7 +133,7 @@ void remove_session_file(const std::filesystem::path& path) {
     return contents;
 }
 
-[[nodiscard]] util::ExpectedVoid set_fd_private_permissions(int fd) {
+[[nodiscard]] support::ExpectedVoid set_fd_private_permissions(int fd) {
     struct stat st {};
     if (::fstat(fd, &st) != 0) {
         return std::unexpected(session_error("could not inspect session permissions", std::strerror(errno)));
@@ -148,7 +148,7 @@ void remove_session_file(const std::filesystem::path& path) {
     return {};
 }
 #elif defined(_WIN32)
-[[nodiscard]] util::ExpectedVoid reject_windows_reparse_parents(
+[[nodiscard]] support::ExpectedVoid reject_windows_reparse_parents(
     const std::filesystem::path& path) {
     std::filesystem::path cursor = path.parent_path().root_path();
     for (const auto& component : path.parent_path().relative_path()) {
@@ -173,7 +173,7 @@ void remove_session_file(const std::filesystem::path& path) {
     return {};
 }
 
-[[nodiscard]] util::Expected<HANDLE> open_windows_session_file(
+[[nodiscard]] support::Expected<HANDLE> open_windows_session_file(
     const std::filesystem::path& path,
     DWORD access,
     DWORD creation,
@@ -339,7 +339,7 @@ std::vector<std::thread::id> recorded_append_threads_for_test(
 
 } // namespace testing
 
-util::Expected<SessionJournal> SessionJournal::create_new(
+support::Expected<SessionJournal> SessionJournal::create_new(
     const std::filesystem::path& path, std::string_view header_line) {
     auto validation = validate_session_path_for_open(path, false);
     if (!validation) {
@@ -411,7 +411,7 @@ util::Expected<SessionJournal> SessionJournal::create_new(
     return journal;
 }
 
-util::Expected<SessionJournal> SessionJournal::open_existing(const std::filesystem::path& path) {
+support::Expected<SessionJournal> SessionJournal::open_existing(const std::filesystem::path& path) {
     auto validation = validate_session_path_for_open(path, true);
     if (!validation) {
         return std::unexpected(validation.error());
@@ -426,7 +426,7 @@ util::Expected<SessionJournal> SessionJournal::open_existing(const std::filesyst
     return journal;
 }
 
-util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
+support::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
     apply_append_test_hooks(path_);
     if (consume_injected_append_failure(path_)) {
         return std::unexpected(session_error(
@@ -503,7 +503,7 @@ util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
 #endif
 }
 
-util::Expected<std::vector<std::string>> SessionJournal::read_lines() const {
+support::Expected<std::vector<std::string>> SessionJournal::read_lines() const {
 #if defined(__unix__) || defined(__APPLE__)
     auto opened = open_session_path(path_, O_RDONLY);
     if (!opened) {
@@ -571,7 +571,7 @@ util::Expected<std::vector<std::string>> SessionJournal::read_lines() const {
     return lines;
 }
 
-util::ExpectedVoid SessionJournal::validate_session_path_for_open(
+support::ExpectedVoid SessionJournal::validate_session_path_for_open(
     const std::filesystem::path& path, bool must_exist) {
     std::error_code ec;
     if (path.empty()) {
@@ -587,7 +587,7 @@ util::ExpectedVoid SessionJournal::validate_session_path_for_open(
     return {};
 }
 
-util::ExpectedVoid SessionJournal::ensure_private_permissions(
+support::ExpectedVoid SessionJournal::ensure_private_permissions(
     const std::filesystem::path& path, bool existing) {
 #if defined(__unix__) || defined(__APPLE__)
     auto opened = open_session_path(path, O_RDONLY);
@@ -622,7 +622,7 @@ util::ExpectedVoid SessionJournal::ensure_private_permissions(
 #endif
 }
 
-util::ExpectedVoid SessionJournal::write_new_file_exclusive(
+support::ExpectedVoid SessionJournal::write_new_file_exclusive(
     const std::filesystem::path& path, std::string_view content) {
 #if defined(__unix__) || defined(__APPLE__)
     auto opened = open_session_path(

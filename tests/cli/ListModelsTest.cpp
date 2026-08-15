@@ -50,9 +50,9 @@ public:
         return ai::detail::make_model_stream(
             [this](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Stream, "catalog provider has no stream"));
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Stream, "catalog provider has no stream"));
                 });
     }
 

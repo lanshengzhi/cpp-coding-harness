@@ -1,7 +1,7 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
@@ -128,7 +128,7 @@ TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui
 TEST_CASE("wrap_text rejects a grapheme wider than the line", "[tui][issue46][unicode]") {
     const auto result = wrap_text("\xe4\xb8\xad", 1);
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
 }
 
 TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue46][unicode]") {

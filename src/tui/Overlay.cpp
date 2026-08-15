@@ -3,7 +3,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <format>
@@ -61,7 +61,7 @@ Overlay::Overlay(Overlay&&) noexcept = default;
 Overlay& Overlay::operator=(Overlay&&) noexcept = default;
 Overlay::~Overlay() = default;
 
-util::Expected<std::reference_wrapper<Component>> Overlay::add_child(
+support::Expected<std::reference_wrapper<Component>> Overlay::add_child(
     std::unique_ptr<Component> component) {
     return detail::attach_child(impl_->children_, std::move(component), "Overlay");
 }
@@ -94,11 +94,11 @@ void Overlay::set_anchor(std::size_t column, std::size_t row, std::size_t width,
     impl_->anchor_height = height;
 }
 
-util::ExpectedVoid Overlay::focus_first() {
+support::ExpectedVoid Overlay::focus_first() {
     auto* focusable = impl_->first_focusable();
     if (focusable == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Overlay has no focusable children"));
     }
     if (impl_->focused_child_ != nullptr && impl_->focused_child_ != focusable) {
@@ -110,7 +110,7 @@ util::ExpectedVoid Overlay::focus_first() {
     return {};
 }
 
-util::Expected<RenderResult> Overlay::render(std::size_t width) {
+support::Expected<RenderResult> Overlay::render(std::size_t width) {
     if (!impl_->visible_) return RenderResult{};
 
     std::size_t effective_width = width;

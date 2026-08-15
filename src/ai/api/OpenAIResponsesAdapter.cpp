@@ -8,8 +8,8 @@
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -35,8 +35,8 @@ namespace {
 
 namespace stream = responses_stream;
 
-using JsonObject = util::JsonValue::object_t;
-using JsonArray = util::JsonValue::array_t;
+using JsonObject = support::JsonValue::object_t;
+using JsonArray = support::JsonValue::array_t;
 
 [[nodiscard]] std::string responses_url(std::string_view base_url) {
     std::string result{base_url};
@@ -46,7 +46,7 @@ using JsonArray = util::JsonValue::array_t;
     return result + "/responses";
 }
 
-[[nodiscard]] util::Expected<providers::StreamRequest> build_stream_request(
+[[nodiscard]] support::Expected<providers::StreamRequest> build_stream_request(
     const Model& model,
     const AiContext& context,
     const ProviderStreamOptions& options) {
@@ -55,7 +55,7 @@ using JsonArray = util::JsonValue::array_t;
     if (!payload) {
         return std::unexpected(payload.error());
     }
-    auto body = util::write_json(*payload);
+    auto body = support::write_json(*payload);
     if (!body) {
         return std::unexpected(body.error());
     }
@@ -87,11 +87,11 @@ using JsonArray = util::JsonValue::array_t;
     return request;
 }
 
-[[nodiscard]] util::Error normalize_transport_error(const util::Error& error) {
-    if (error.code == util::ErrorCode::Cancelled) {
-        return util::make_error(util::ErrorCode::Cancelled, "Request was aborted");
+[[nodiscard]] support::Error normalize_transport_error(const support::Error& error) {
+    if (error.code == support::ErrorCode::Cancelled) {
+        return support::make_error(support::ErrorCode::Cancelled, "Request was aborted");
     }
-    if (error.code == util::ErrorCode::Unknown) {
+    if (error.code == support::ErrorCode::Unknown) {
         return error;
     }
     return stream::stream_error(
@@ -122,7 +122,7 @@ void apply_usage(
     }
 }
 
-[[nodiscard]] util::ExpectedVoid finalize_response(
+[[nodiscard]] support::ExpectedVoid finalize_response(
     const Model& model,
     const JsonObject& event,
     std::string_view event_type,
@@ -177,7 +177,7 @@ void apply_usage(
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid process_json_event(
+[[nodiscard]] support::ExpectedVoid process_json_event(
     const Model& model,
     const JsonObject& event,
     AssistantMessage& assistant,
@@ -201,7 +201,7 @@ void apply_usage(
         const auto* item = stream::object_member(event, "item");
         return index && item
             ? stream::create_slot(*index, *item, slots, assistant, sink)
-            : util::ExpectedVoid{};
+            : support::ExpectedVoid{};
     }
     if (*type == "response.reasoning_summary_text.delta" ||
         *type == "response.reasoning_text.delta" ||
@@ -232,7 +232,7 @@ void apply_usage(
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid process_sse_event(
+[[nodiscard]] support::ExpectedVoid process_sse_event(
     const providers::SseEvent& event,
     const Model& model,
     AssistantMessage& assistant,
@@ -245,7 +245,7 @@ void apply_usage(
     if (event.event == "error") {
         return std::unexpected(stream::stream_error(event.data));
     }
-    auto parsed = util::read_json(event.data);
+    auto parsed = support::read_json(event.data);
     if (!parsed) {
         if (event.event != "message" && !event.event.starts_with("response.")) {
             return {};
@@ -274,7 +274,7 @@ OpenAIResponsesAdapter::OpenAIResponsesAdapter(OpenAIResponsesAdapter&&) noexcep
 OpenAIResponsesAdapter& OpenAIResponsesAdapter::operator=(OpenAIResponsesAdapter&&) noexcept = default;
 OpenAIResponsesAdapter::~OpenAIResponsesAdapter() = default;
 
-boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter::stream(
+boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapter::stream(
     const Model& model,
     const AiContext& context,
     ProviderStreamOptions options,
@@ -292,8 +292,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
             "OpenAI Responses Model base URL is required"));
     }
     if (options.stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if ((!options.auth.api_key || options.auth.api_key->empty()) &&
@@ -312,9 +312,9 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
     assistant.stop_reason = AssistantStopReason::Pending;
     assistant.timestamp = stream::current_timestamp_ms();
 
-    std::optional<util::Error> sink_failure;
+    std::optional<support::Error> sink_failure;
     AssistantEventSink guarded_sink =
-        [&sink, &sink_failure](const AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&sink, &sink_failure](const AssistantStreamEvent& event) -> support::ExpectedVoid {
             auto emitted = providers::emit(sink, event);
             if (!emitted) {
                 sink_failure = emitted.error();
@@ -328,9 +328,9 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
         bool saw_terminal = false;
         bool started = false;
         bool saw_body = false;
-        std::optional<util::Error> handler_failure;
+        std::optional<support::Error> handler_failure;
 
-        auto handle_chunk = [&](std::string_view bytes) -> util::ExpectedVoid {
+        auto handle_chunk = [&](std::string_view bytes) -> support::ExpectedVoid {
             saw_body = true;
             if (auto emitted = stream::emit_start(guarded_sink, assistant, started); !emitted) {
                 handler_failure = emitted.error();
@@ -361,12 +361,12 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
                 co_return stream::complete_failure(
                     assistant, *handler_failure, guarded_sink);
             }
-            if (response.error().code == util::ErrorCode::Cancelled ||
+            if (response.error().code == support::ErrorCode::Cancelled ||
                 options.stop_token.stop_requested()) {
                 co_return stream::complete_failure(
                     assistant,
-                    util::make_error(
-                        util::ErrorCode::Cancelled,
+                    support::make_error(
+                        support::ErrorCode::Cancelled,
                         "Request was aborted"),
                     guarded_sink);
             }
@@ -437,8 +437,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
         if (options.stop_token.stop_requested()) {
             co_return stream::complete_failure(
                 assistant,
-                util::make_error(
-                    util::ErrorCode::Cancelled,
+                support::make_error(
+                    support::ErrorCode::Cancelled,
                     "Request was aborted"),
                 guarded_sink);
         }

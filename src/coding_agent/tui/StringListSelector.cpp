@@ -6,7 +6,7 @@
 
 #include <cch/tui/Text.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <exception>
 #include <utility>
 
@@ -28,9 +28,9 @@ StringListSelector::StringListSelector(
       on_cancel_(std::move(on_cancel)),
       selector_options_(std::move(selector_options)) {}
 
-util::Expected<cch::tui::RenderResult> StringListSelector::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> StringListSelector::render(std::size_t width) {
     cch::tui::RenderResult result;
-    const auto append = [&result, width](cch::tui::Component& component) -> util::ExpectedVoid {
+    const auto append = [&result, width](cch::tui::Component& component) -> support::ExpectedVoid {
         auto rendered = component.render(width);
         if (!rendered) return std::unexpected(rendered.error());
         for (auto& line : rendered->lines) result.lines.push_back(std::move(line));

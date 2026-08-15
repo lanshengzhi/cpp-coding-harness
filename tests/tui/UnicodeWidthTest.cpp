@@ -4,7 +4,7 @@
 
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
@@ -141,7 +141,7 @@ TEST_CASE("normalize_terminal_output replaces malformed UTF-8", "[tui][issue46][
 TEST_CASE("normalize_terminal_output rejects unsupported control chars", "[tui][issue46][unicode]") {
     auto r = normalize_terminal_output("a\x01""b");
     REQUIRE_FALSE(r);
-    CHECK(r.error().code == cch::util::ErrorCode::Validation);
+    CHECK(r.error().code == cch::support::ErrorCode::Validation);
 }
 
 TEST_CASE("split_graphemes splits ASCII", "[tui][issue46][unicode]") {

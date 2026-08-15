@@ -1,6 +1,6 @@
 #include "ToolArgumentPreparation.hpp"
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <boost/multiprecision/cpp_int.hpp>
 
@@ -76,8 +76,8 @@ enum class FormatKind {
 struct CompiledSchema {
     bool reject_all{false};
     std::vector<JsonType> types;
-    std::optional<util::JsonValue::array_t> enum_values;
-    std::optional<util::JsonValue> constant;
+    std::optional<support::JsonValue::array_t> enum_values;
+    std::optional<support::JsonValue> constant;
 
     std::optional<double> minimum;
     std::optional<double> maximum;
@@ -126,11 +126,11 @@ struct ValidationFailure {
     std::string reason;
 };
 
-[[nodiscard]] util::Error preparation_error(
+[[nodiscard]] support::Error preparation_error(
     const std::string& tool_name,
     std::string reason,
-    util::ErrorCode code = util::ErrorCode::Validation) {
-    return util::make_error(
+    support::ErrorCode code = support::ErrorCode::Validation) {
+    return support::make_error(
         code,
         "tool argument preparation failed",
         bounded_tool_argument_diagnostic(
@@ -139,7 +139,7 @@ struct ValidationFailure {
             bounded_tool_argument_component(std::move(reason), 3500)));
 }
 
-[[nodiscard]] util::Error malformed_arguments_error(
+[[nodiscard]] support::Error malformed_arguments_error(
     const std::string& tool_name,
     std::string parser_detail) {
     std::string diagnostic =
@@ -149,10 +149,10 @@ struct ValidationFailure {
     if (!parser_detail.empty()) {
         diagnostic += " (parser detail: " + std::move(parser_detail) + ")";
     }
-    return util::make_error(
-        util::ErrorCode::JsonParse,
+    return support::make_error(
+        support::ErrorCode::JsonParse,
         "tool argument preparation failed",
-        util::bounded_redacted_text(
+        ai::bounded_redacted_text(
             std::move(diagnostic),
             4096,
             " [diagnostic truncated]"));
@@ -183,11 +183,11 @@ struct ValidationFailure {
     return result;
 }
 
-[[nodiscard]] bool json_equal(const util::JsonValue& left, const util::JsonValue& right) {
+[[nodiscard]] bool json_equal(const support::JsonValue& left, const support::JsonValue& right) {
     if (left.data.index() != right.data.index()) {
         return false;
     }
-    if (left.holds<util::JsonValue::null_t>()) {
+    if (left.holds<support::JsonValue::null_t>()) {
         return true;
     }
     if (const auto* number = left.get_if<double>()) {
@@ -199,14 +199,14 @@ struct ValidationFailure {
     if (const auto* flag = left.get_if<bool>()) {
         return *flag == right.get<bool>();
     }
-    if (const auto* array = left.get_if<util::JsonValue::array_t>()) {
-        const auto& other = right.get<util::JsonValue::array_t>();
+    if (const auto* array = left.get_if<support::JsonValue::array_t>()) {
+        const auto& other = right.get<support::JsonValue::array_t>();
         return array->size() == other.size() &&
                std::equal(array->begin(), array->end(), other.begin(), json_equal);
     }
 
-    const auto& object = left.get<util::JsonValue::object_t>();
-    const auto& other = right.get<util::JsonValue::object_t>();
+    const auto& object = left.get<support::JsonValue::object_t>();
+    const auto& other = right.get<support::JsonValue::object_t>();
     if (object.size() != other.size()) {
         return false;
     }
@@ -307,28 +307,28 @@ struct ValidationFailure {
     return std::find(unsupported.begin(), unsupported.end(), keyword) != unsupported.end();
 }
 
-[[nodiscard]] util::Expected<std::vector<JsonType>> compile_types(
-    const util::JsonValue& value,
+[[nodiscard]] support::Expected<std::vector<JsonType>> compile_types(
+    const support::JsonValue& value,
     const std::string& schema_path) {
     std::vector<JsonType> result;
-    auto add_type = [&](const util::JsonValue& candidate) -> util::ExpectedVoid {
+    auto add_type = [&](const support::JsonValue& candidate) -> support::ExpectedVoid {
         const auto* type_name = candidate.get_if<std::string>();
         if (type_name == nullptr) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "invalid Tool Argument Contract",
                 schema_path + " must contain only JSON type names"));
         }
         const auto type = json_type_from_name(*type_name);
         if (!type) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "invalid Tool Argument Contract",
                 schema_path + " contains unsupported JSON type \"" + *type_name + "\""));
         }
         if (std::find(result.begin(), result.end(), *type) != result.end()) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "invalid Tool Argument Contract",
                 schema_path + " contains a duplicate JSON type"));
         }
@@ -342,10 +342,10 @@ struct ValidationFailure {
         }
         return result;
     }
-    const auto* values = value.get_if<util::JsonValue::array_t>();
+    const auto* values = value.get_if<support::JsonValue::array_t>();
     if (values == nullptr || values->empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid Tool Argument Contract",
             schema_path + " must be a JSON type name or a non-empty array of unique type names"));
     }
@@ -357,11 +357,11 @@ struct ValidationFailure {
     return result;
 }
 
-[[nodiscard]] util::Error schema_compile_error(
+[[nodiscard]] support::Error schema_compile_error(
     std::string message,
     std::string detail) {
-    return util::make_error(
-        util::ErrorCode::Validation,
+    return support::make_error(
+        support::ErrorCode::Validation,
         std::move(message),
         std::move(detail));
 }
@@ -425,8 +425,8 @@ struct ValidationFailure {
     return std::nullopt;
 }
 
-[[nodiscard]] util::Expected<std::optional<double>> compile_number_keyword(
-    const util::JsonValue::object_t& object,
+[[nodiscard]] support::Expected<std::optional<double>> compile_number_keyword(
+    const support::JsonValue::object_t& object,
     std::string_view keyword,
     const std::string& schema_path,
     bool positive = false) {
@@ -445,8 +445,8 @@ struct ValidationFailure {
     return std::optional<double>{*number};
 }
 
-[[nodiscard]] util::Expected<std::optional<std::size_t>> compile_size_keyword(
-    const util::JsonValue::object_t& object,
+[[nodiscard]] support::Expected<std::optional<std::size_t>> compile_size_keyword(
+    const support::JsonValue::object_t& object,
     std::string_view keyword,
     const std::string& schema_path) {
     const auto it = object.find(std::string(keyword));
@@ -464,8 +464,8 @@ struct ValidationFailure {
     return std::optional<std::size_t>{static_cast<std::size_t>(*number)};
 }
 
-[[nodiscard]] util::Expected<CompiledSchema> compile_schema(
-    const util::JsonValue& schema,
+[[nodiscard]] support::Expected<CompiledSchema> compile_schema(
+    const support::JsonValue& schema,
     std::string schema_path,
     std::size_t depth,
     CompilationState& state,
@@ -481,7 +481,7 @@ struct ValidationFailure {
         compiled.reject_all = !*boolean_schema;
         return compiled;
     }
-    const auto* object = schema.get_if<util::JsonValue::object_t>();
+    const auto* object = schema.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return std::unexpected(schema_compile_error(
             "invalid Tool Argument Contract",
@@ -497,7 +497,7 @@ struct ValidationFailure {
         }
     }
     if (const auto it = object->find("$vocabulary"); it != object->end()) {
-        const auto* vocabularies = it->second.get_if<util::JsonValue::object_t>();
+        const auto* vocabularies = it->second.get_if<support::JsonValue::object_t>();
         if (vocabularies == nullptr) {
             return std::unexpected(schema_compile_error(
                 "invalid Tool Argument Contract",
@@ -541,7 +541,7 @@ struct ValidationFailure {
     }
 
     if (const auto it = object->find("enum"); it != object->end()) {
-        const auto* values = it->second.get_if<util::JsonValue::array_t>();
+        const auto* values = it->second.get_if<support::JsonValue::array_t>();
         if (values == nullptr || values->empty()) {
             return std::unexpected(schema_compile_error(
                 "invalid Tool Argument Contract",
@@ -646,7 +646,7 @@ struct ValidationFailure {
     }
 
     if (const auto it = object->find("properties"); it != object->end()) {
-        const auto* properties = it->second.get_if<util::JsonValue::object_t>();
+        const auto* properties = it->second.get_if<support::JsonValue::object_t>();
         if (properties == nullptr) {
             return std::unexpected(schema_compile_error(
                 "invalid Tool Argument Contract",
@@ -664,7 +664,7 @@ struct ValidationFailure {
         }
     }
     if (const auto it = object->find("required"); it != object->end()) {
-        const auto* required = it->second.get_if<util::JsonValue::array_t>();
+        const auto* required = it->second.get_if<support::JsonValue::array_t>();
         if (required == nullptr) {
             return std::unexpected(schema_compile_error(
                 "invalid Tool Argument Contract",
@@ -702,7 +702,7 @@ struct ValidationFailure {
     }
 
     if (const auto it = object->find("items"); it != object->end()) {
-        if (const auto* tuple = it->second.get_if<util::JsonValue::array_t>()) {
+        if (const auto* tuple = it->second.get_if<support::JsonValue::array_t>()) {
             compiled.items = ItemsMode::Tuple;
             for (std::size_t index = 0; index < tuple->size(); ++index) {
                 auto nested = compile_schema(
@@ -754,10 +754,10 @@ struct ValidationFailure {
     }
 
     auto compile_schema_list = [&](std::string_view keyword, std::vector<CompiledSchema>& output)
-        -> util::ExpectedVoid {
+        -> support::ExpectedVoid {
         const auto it = object->find(std::string(keyword));
         if (it == object->end()) return {};
-        const auto* schemas = it->second.get_if<util::JsonValue::array_t>();
+        const auto* schemas = it->second.get_if<support::JsonValue::array_t>();
         if (schemas == nullptr) {
             return std::unexpected(schema_compile_error(
                 "invalid Tool Argument Contract",
@@ -790,10 +790,10 @@ struct ValidationFailure {
     return compiled;
 }
 
-[[nodiscard]] bool matches_type(const util::JsonValue& value, JsonType type) {
+[[nodiscard]] bool matches_type(const support::JsonValue& value, JsonType type) {
     switch (type) {
     case JsonType::Null:
-        return value.holds<util::JsonValue::null_t>();
+        return value.holds<support::JsonValue::null_t>();
     case JsonType::Boolean:
         return value.holds<bool>();
     case JsonType::Number:
@@ -804,9 +804,9 @@ struct ValidationFailure {
     case JsonType::String:
         return value.holds<std::string>();
     case JsonType::Array:
-        return value.holds<util::JsonValue::array_t>();
+        return value.holds<support::JsonValue::array_t>();
     case JsonType::Object:
-        return value.holds<util::JsonValue::object_t>();
+        return value.holds<support::JsonValue::object_t>();
     }
     return false;
 }
@@ -983,75 +983,75 @@ struct ValidationFailure {
            (exponent >= 0 ? "+" : "") + std::to_string(exponent);
 }
 
-[[nodiscard]] util::JsonValue coerce_primitive(const util::JsonValue& value, JsonType type) {
+[[nodiscard]] support::JsonValue coerce_primitive(const support::JsonValue& value, JsonType type) {
     switch (type) {
     case JsonType::Number:
-        if (value.holds<util::JsonValue::null_t>()) {
-            return util::JsonValue{0};
+        if (value.holds<support::JsonValue::null_t>()) {
+            return support::JsonValue{0};
         }
         if (const auto* text = value.get_if<std::string>()) {
             if (const auto parsed = parse_finite_number(*text)) {
-                return util::JsonValue{*parsed};
+                return support::JsonValue{*parsed};
             }
         }
         if (const auto* flag = value.get_if<bool>()) {
-            return util::JsonValue{*flag ? 1 : 0};
+            return support::JsonValue{*flag ? 1 : 0};
         }
         break;
     case JsonType::Integer:
-        if (value.holds<util::JsonValue::null_t>()) {
-            return util::JsonValue{0};
+        if (value.holds<support::JsonValue::null_t>()) {
+            return support::JsonValue{0};
         }
         if (const auto* text = value.get_if<std::string>()) {
             if (const auto parsed = parse_finite_number(*text); parsed && std::trunc(*parsed) == *parsed) {
-                return util::JsonValue{*parsed};
+                return support::JsonValue{*parsed};
             }
         }
         if (const auto* flag = value.get_if<bool>()) {
-            return util::JsonValue{*flag ? 1 : 0};
+            return support::JsonValue{*flag ? 1 : 0};
         }
         break;
     case JsonType::Boolean:
-        if (value.holds<util::JsonValue::null_t>()) {
-            return util::JsonValue{false};
+        if (value.holds<support::JsonValue::null_t>()) {
+            return support::JsonValue{false};
         }
         if (const auto* text = value.get_if<std::string>()) {
             if (*text == "true") {
-                return util::JsonValue{true};
+                return support::JsonValue{true};
             }
             if (*text == "false") {
-                return util::JsonValue{false};
+                return support::JsonValue{false};
             }
         }
         if (const auto* number = value.get_if<double>()) {
             if (*number == 1) {
-                return util::JsonValue{true};
+                return support::JsonValue{true};
             }
             if (*number == 0) {
-                return util::JsonValue{false};
+                return support::JsonValue{false};
             }
         }
         break;
     case JsonType::String:
-        if (value.holds<util::JsonValue::null_t>()) {
-            return util::JsonValue{""};
+        if (value.holds<support::JsonValue::null_t>()) {
+            return support::JsonValue{""};
         }
         if (const auto* number = value.get_if<double>()) {
-            return util::JsonValue{number_to_string(*number)};
+            return support::JsonValue{number_to_string(*number)};
         }
         if (const auto* flag = value.get_if<bool>()) {
-            return util::JsonValue{*flag ? "true" : "false"};
+            return support::JsonValue{*flag ? "true" : "false"};
         }
         break;
     case JsonType::Null:
         if (const auto* text = value.get_if<std::string>(); text != nullptr && text->empty()) {
-            return util::JsonValue{nullptr};
+            return support::JsonValue{nullptr};
         }
         if (const auto* number = value.get_if<double>(); number != nullptr && *number == 0) {
-            return util::JsonValue{nullptr};
+            return support::JsonValue{nullptr};
         }
         if (const auto* flag = value.get_if<bool>(); flag != nullptr && !*flag) {
-            return util::JsonValue{nullptr};
+            return support::JsonValue{nullptr};
         }
         break;
     case JsonType::Array:
@@ -1873,19 +1873,19 @@ template <typename T>
 }
 
 void validate_value(
-    const util::JsonValue& value,
+    const support::JsonValue& value,
     const CompiledSchema& schema,
     std::string location,
     std::vector<ValidationFailure>& failures);
 
 [[nodiscard]] bool value_satisfies(
-    const util::JsonValue& value,
+    const support::JsonValue& value,
     const CompiledSchema& schema);
 
-void coerce_value(util::JsonValue& value, const CompiledSchema& schema);
+void coerce_value(support::JsonValue& value, const CompiledSchema& schema);
 
 void coerce_with_union(
-    util::JsonValue& value,
+    support::JsonValue& value,
     const std::vector<CompiledSchema>& alternatives) {
     for (const auto& alternative : alternatives) {
         auto candidate = value;
@@ -1897,7 +1897,7 @@ void coerce_with_union(
     }
 }
 
-void coerce_value(util::JsonValue& value, const CompiledSchema& schema) {
+void coerce_value(support::JsonValue& value, const CompiledSchema& schema) {
     for (const auto& conjunct : schema.all_of) {
         coerce_value(value, conjunct);
     }
@@ -1922,7 +1922,7 @@ void coerce_value(util::JsonValue& value, const CompiledSchema& schema) {
         }
     }
 
-    if (auto* object = value.get_if<util::JsonValue::object_t>();
+    if (auto* object = value.get_if<support::JsonValue::object_t>();
         object != nullptr && includes_type(schema, JsonType::Object)) {
         for (auto& [name, property_schema] : schema.properties) {
             if (auto it = object->find(name); it != object->end()) {
@@ -1938,7 +1938,7 @@ void coerce_value(util::JsonValue& value, const CompiledSchema& schema) {
         }
     }
 
-    if (auto* array = value.get_if<util::JsonValue::array_t>();
+    if (auto* array = value.get_if<support::JsonValue::array_t>();
         array != nullptr && includes_type(schema, JsonType::Array)) {
         if (schema.items == ItemsMode::Schema) {
             for (auto& item : *array) {
@@ -1971,7 +1971,7 @@ void add_failure(
 }
 
 void validate_value(
-    const util::JsonValue& value,
+    const support::JsonValue& value,
     const CompiledSchema& schema,
     std::string location,
     std::vector<ValidationFailure>& failures) {
@@ -2033,7 +2033,7 @@ void validate_value(
         }
     }
 
-    if (const auto* object = value.get_if<util::JsonValue::object_t>()) {
+    if (const auto* object = value.get_if<support::JsonValue::object_t>()) {
         if (schema.min_properties && object->size() < *schema.min_properties) {
             add_failure(failures, location, "object has fewer members than minProperties");
         }
@@ -2074,7 +2074,7 @@ void validate_value(
         }
     }
 
-    if (const auto* array = value.get_if<util::JsonValue::array_t>()) {
+    if (const auto* array = value.get_if<support::JsonValue::array_t>()) {
         if (schema.min_items && array->size() < *schema.min_items) {
             add_failure(failures, location, "array has fewer elements than minItems");
         }
@@ -2147,7 +2147,7 @@ void validate_value(
 }
 
 [[nodiscard]] bool value_satisfies(
-    const util::JsonValue& value,
+    const support::JsonValue& value,
     const CompiledSchema& schema) {
     std::vector<ValidationFailure> failures;
     validate_value(value, schema, "root", failures);
@@ -2170,7 +2170,7 @@ void validate_value(
     return bounded_tool_argument_diagnostic(std::move(diagnostic));
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> parse_and_clone_arguments(
+[[nodiscard]] support::Expected<support::JsonValue> parse_and_clone_arguments(
     const ai::Tool& tool,
     const ai::ToolCallContent& call) {
     if (!call.arguments_valid) {
@@ -2179,7 +2179,7 @@ void validate_value(
             call.argument_error.value_or(std::string{})));
     }
     if (!call.raw_arguments.empty()) {
-        auto parsed = util::read_json(call.raw_arguments);
+        auto parsed = support::read_json(call.raw_arguments);
         if (!parsed) {
             return std::unexpected(malformed_arguments_error(
                 tool.name,
@@ -2190,7 +2190,7 @@ void validate_value(
     if (call.arguments) {
         return *call.arguments;
     }
-    auto parsed = util::read_json("{}");
+    auto parsed = support::read_json("{}");
     if (!parsed) {
         return std::unexpected(parsed.error());
     }
@@ -2199,7 +2199,7 @@ void validate_value(
 
 } // namespace
 
-util::Expected<util::JsonValue> prepare_tool_arguments(
+support::Expected<support::JsonValue> prepare_tool_arguments(
     const ai::Tool& tool,
     const ai::ToolCallContent& call) {
     auto arguments = parse_and_clone_arguments(tool, call);
@@ -2222,8 +2222,8 @@ util::Expected<util::JsonValue> prepare_tool_arguments(
     std::vector<ValidationFailure> failures;
     validate_value(*arguments, *schema, "root", failures);
     if (!failures.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "tool arguments do not satisfy their contract",
             validation_diagnostic(tool.name, failures)));
     }

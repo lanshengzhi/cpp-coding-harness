@@ -126,7 +126,14 @@ std::vector<std::string> coding_agent_children(const std::string& block) {
 TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56][issue57][issue58]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
-    CHECK(block_mentions(cmake, "TARGET cch_util\n"));
+    // The pi-neutral support package is one compiled library; the legacy
+    // cch_util alias target is deleted (#469).
+    CHECK(block_mentions(cmake, "TARGET cch_support\n"));
+    CHECK(target_decl_block(cmake, "cch_util").empty());
+    const auto support_sources = target_decl_block(cmake, "cch_support");
+    CHECK(block_mentions(support_sources, "src/support/Json.cpp"));
+    CHECK(cch::tests::count_occurrences(cmake, "src/support/Json.cpp") == 1);
+    CHECK(cmake.find("cch_util") == std::string::npos);
     CHECK(block_mentions(cmake, "TARGET cch_tui\n"));
     const auto tui_sources = target_decl_block(cmake, "cch_tui");
     CHECK(block_mentions(tui_sources, "src/tui/Autocomplete.cpp"));
@@ -278,7 +285,6 @@ TEST_CASE(
     // private. No reverse or cross-Owner capability edge exists.
     const auto tui_links = depends_section(cmake, "cch_tui");
     CHECK(block_mentions(tui_links, "cch_support"));
-    CHECK(block_mentions(tui_links, "cch_util"));
     CHECK(block_mentions(tui_links, "md4c::md4c"));
     CHECK(block_mentions(tui_links, "utf8proc::utf8proc"));
     CHECK_FALSE(block_mentions(tui_links, "cch_ai"));
@@ -294,7 +300,6 @@ TEST_CASE(
     CHECK(interface_start != std::string::npos);
     const auto interface_section = tui_block.substr(interface_start);
     CHECK(interface_section.find("cch_support") != std::string::npos);
-    CHECK_FALSE(interface_section.find("cch_util") != std::string::npos);
 
     // The coding-agent TUI configuration (theme/keybindings) is not a TUI
     // Toolkit capability: it lives in the one repository-private
@@ -408,14 +413,12 @@ TEST_CASE(
     }
 
     // The only cross-Owner edges are the legal ones to cch_agent_core,
-    // cch_ai, and cch_tui; cch_support is the pi-neutral support package and
-    // cch_util remains the temporary legacy alias until #469.
+    // cch_ai, and cch_tui; cch_support is the pi-neutral support package.
     const auto links = depends_section(cmake, "cch_coding_agent");
     CHECK(block_mentions(links, "cch_agent_core"));
     CHECK(block_mentions(links, "cch_ai"));
     CHECK(block_mentions(links, "cch_tui"));
     CHECK(block_mentions(links, "cch_support"));
-    CHECK(block_mentions(links, "cch_util"));
     CHECK(block_mentions(links, "WebP::webpdecoder@webp"));
     CHECK(block_mentions(links, "CLI11::CLI11@cli11"));
     CHECK_FALSE(block_mentions(links, "cch_coding_agent_"));
@@ -425,7 +428,7 @@ TEST_CASE(
 
     // No other Owner or support target depends on the repository-private
     // coding-agent library or on the executable closure.
-    for (const auto& other : {"cch_ai", "cch_agent_core", "cch_tui", "cch_util", "cch_support"}) {
+    for (const auto& other : {"cch_ai", "cch_agent_core", "cch_tui", "cch_support"}) {
         const auto other_links = depends_section(cmake, other);
         CHECK_FALSE(block_mentions(other_links, "cch_coding_agent"));
         CHECK_FALSE(block_mentions(other_links, "cch_cli"));
@@ -452,7 +455,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     const auto tui_links = depends_section(cmake, "cch_tui");
-    CHECK(block_mentions(tui_links, "cch_util"));
+    CHECK(block_mentions(tui_links, "cch_support"));
     CHECK_FALSE(block_mentions(tui_links, "cch_ai"));
     CHECK_FALSE(block_mentions(tui_links, "cch_agent"));
     CHECK_FALSE(block_mentions(tui_links, "cch_harness"));
@@ -460,7 +463,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent"));
 
     const auto ai_links = depends_section(cmake, "cch_ai");
-    CHECK(block_mentions(ai_links, "cch_util"));
+    CHECK(block_mentions(ai_links, "cch_support"));
     CHECK_FALSE(block_mentions(ai_links, "cch_agent"));
     CHECK_FALSE(block_mentions(ai_links, "cch_harness"));
     CHECK_FALSE(block_mentions(ai_links, "cch_tools"));
@@ -470,7 +473,6 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     const auto agent_core_links = depends_section(cmake, "cch_agent_core");
     CHECK(block_mentions(agent_core_links, "cch_ai"));
     CHECK(block_mentions(agent_core_links, "cch_support"));
-    CHECK(block_mentions(agent_core_links, "cch_util"));
     CHECK_FALSE(block_mentions(agent_core_links, "cch_tui"));
     CHECK_FALSE(block_mentions(agent_core_links, "cch_coding_agent"));
 
@@ -482,7 +484,6 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK(block_mentions(coding_agent_links, "cch_ai"));
     CHECK(block_mentions(coding_agent_links, "cch_tui"));
     CHECK(block_mentions(coding_agent_links, "cch_support"));
-    CHECK(block_mentions(coding_agent_links, "cch_util"));
     CHECK(block_mentions(coding_agent_links, "WebP::webpdecoder"));
     CHECK(block_mentions(coding_agent_links, "CLI11::CLI11"));
     CHECK_FALSE(block_mentions(coding_agent_links, "cch_harness"));
@@ -511,7 +512,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     // sources; they link the repository-private cch_coding_agent library.
     const auto aggregate = cmake_command_block(cmake, "add_custom_target(cpp_harness_tests");
     CHECK(block_mentions(aggregate, "DEPENDS"));
-    CHECK(block_mentions(aggregate, "cch_tests_util"));
+    CHECK(block_mentions(aggregate, "cch_tests_support"));
     CHECK(block_mentions(aggregate, "cch_tests_tui"));
     CHECK(block_mentions(aggregate, "cch_tests_ai"));
     CHECK(block_mentions(aggregate, "cch_tests_agent"));
@@ -521,7 +522,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK(block_mentions(aggregate, "cch_tests_cli_arch"));
 
     const std::vector<std::string> shards{
-        "cch_tests_util", "cch_tests_tui", "cch_tests_ai", "cch_tests_agent",
+        "cch_tests_support", "cch_tests_tui", "cch_tests_ai", "cch_tests_agent",
         "cch_tests_harness_tools", "cch_tests_coding_agent",
         "cch_tests_coding_agent_interactive", "cch_tests_cli_arch",
     };
@@ -538,9 +539,12 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
         CHECK(block_mentions(cmake, "catch_discover_tests(" + shard));
     }
 
+    // The legacy util shard is deleted with cch_util (#469); its cases moved
+    // to their owning packages (support, ai, harness).
+    CHECK(cmake_command_block(cmake, "add_executable(cch_tests_util").empty());
     CHECK(test_modules_in(
-              cmake_command_block(cmake, "add_executable(cch_tests_util")) ==
-          std::vector<std::string>{"tests/util"});
+              cmake_command_block(cmake, "add_executable(cch_tests_support")) ==
+          std::vector<std::string>{"tests/support"});
     CHECK(test_modules_in(
               cmake_command_block(cmake, "add_executable(cch_tests_tui")) ==
           std::vector<std::string>{"tests/tui"});

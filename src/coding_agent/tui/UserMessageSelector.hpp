@@ -2,7 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -48,7 +48,7 @@ public:
     UserMessageSelectorComponent(const UserMessageSelectorComponent&) = delete;
     UserMessageSelectorComponent& operator=(const UserMessageSelectorComponent&) = delete;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
     void handle_input(const cch::tui::InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override { return false; }

@@ -64,7 +64,7 @@ namespace {
 
 } // namespace
 
-util::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content) {
+support::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content) {
     std::string normalized = normalizeLineEndings(content);
 
     // Must start with "---\n" to have frontmatter.
@@ -158,8 +158,8 @@ util::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content) {
         // Find the first colon.
         std::size_t colonPos = line.find(':');
         if (colonPos == std::string_view::npos) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "YAML frontmatter parse error",
                 std::string("line has no colon: '") + std::string(line) + "'"));
         }

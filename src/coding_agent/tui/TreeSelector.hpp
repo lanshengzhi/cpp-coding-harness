@@ -6,8 +6,8 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -75,7 +75,7 @@ public:
     TreeSelectorComponent(const TreeSelectorComponent&) = delete;
     TreeSelectorComponent& operator=(const TreeSelectorComponent&) = delete;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
     void handle_input(const cch::tui::InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override { return false; }
@@ -121,7 +121,7 @@ public:
     /// Tool call info for the toolResult display lookup (pi `ToolCallInfo`).
     struct ToolCallInfo {
         std::string name;
-        util::JsonValue arguments;
+        support::JsonValue arguments;
     };
 
     /// One horizontal row of the tree viewport (pi `HorizontalViewportRow`).
@@ -163,7 +163,7 @@ private:
         const harness::session::SessionTreeNode& node) const;
     [[nodiscard]] std::string extract_content(
         const harness::session::SessionTreeNode& node) const;
-    [[nodiscard]] std::string format_tool_call(std::string_view name, const util::JsonValue& arguments) const;
+    [[nodiscard]] std::string format_tool_call(std::string_view name, const support::JsonValue& arguments) const;
     [[nodiscard]] std::string normalize(std::string text) const;
 
     const LiveTheme& theme_; // must outlive this component.

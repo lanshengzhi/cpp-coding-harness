@@ -4,7 +4,7 @@
 
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -111,7 +111,7 @@ void UserMessageSelectorComponent::handle_input(const cch::tui::InputEventVarian
     }
 }
 
-util::Expected<cch::tui::RenderResult> UserMessageSelectorComponent::render(
+support::Expected<cch::tui::RenderResult> UserMessageSelectorComponent::render(
     std::size_t width) {
     std::vector<std::string> lines;
     lines.push_back("");

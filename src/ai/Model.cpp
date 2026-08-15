@@ -1,6 +1,6 @@
 #include <cch/ai/Model.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include "ai/ModelThinkingLevel.hpp"
 
@@ -11,22 +11,22 @@
 namespace cch::ai {
 namespace {
 
-[[nodiscard]] util::ExpectedVoid validate_identity(std::string_view value, std::string_view field) {
+[[nodiscard]] support::ExpectedVoid validate_identity(std::string_view value, std::string_view field) {
     if (!value.empty()) {
         return {};
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "invalid model",
         std::format("{} must not be empty", field)));
 }
 
-[[nodiscard]] util::ExpectedVoid validate_rate(double value, std::string_view field) {
+[[nodiscard]] support::ExpectedVoid validate_rate(double value, std::string_view field) {
     if (std::isfinite(value) && value >= 0) {
         return {};
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "invalid model cost",
         std::format("{} must be finite and non-negative", field)));
 }
@@ -40,7 +40,7 @@ namespace {
     return false;
 }
 
-[[nodiscard]] util::ExpectedVoid validate_rates(
+[[nodiscard]] support::ExpectedVoid validate_rates(
     double input,
     double output,
     double cache_read,
@@ -60,7 +60,7 @@ namespace {
 
 } // namespace
 
-util::ExpectedVoid validate_model(const Model& model) {
+support::ExpectedVoid validate_model(const Model& model) {
     if (auto result = validate_identity(model.id, "id"); !result) {
         return result;
     }
@@ -84,16 +84,16 @@ util::ExpectedVoid validate_model(const Model& model) {
     }
     for (const auto& input : model.input) {
         if (!is_valid_input(input)) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "invalid model input capability"));
         }
     }
     if (model.thinking_level_map) {
         for (const auto& [level, _] : *model.thinking_level_map) {
             if (!detail::model_thinking_level_name(level)) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Validation,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation,
                     "invalid model thinking level"));
             }
         }
@@ -112,8 +112,8 @@ util::ExpectedVoid validate_model(const Model& model) {
         }
     }
     if (model.compat && model.api != "anthropic-messages") {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid model compat",
             "AnthropicMessagesCompat requires api 'anthropic-messages'"));
     }

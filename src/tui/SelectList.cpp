@@ -5,7 +5,7 @@
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -77,7 +77,7 @@ struct SelectList::Impl {
     std::shared_ptr<SelectCancelSink> on_cancel;
     std::shared_ptr<SelectItemSink> on_selection_change;
     std::shared_ptr<const KeybindingRegistry> keybindings;
-    std::optional<util::Error> callback_error;
+    std::optional<support::Error> callback_error;
     bool focused{false};
 
     [[nodiscard]] const SelectItem* selected() const {
@@ -86,8 +86,8 @@ struct SelectList::Impl {
     }
 
     void report_callback_failure(std::string message) {
-        callback_error = util::make_error(
-            util::ErrorCode::Unknown,
+        callback_error = support::make_error(
+            support::ErrorCode::Unknown,
             std::move(message),
             "the interaction callback threw an exception");
     }
@@ -123,7 +123,7 @@ struct SelectList::Impl {
         return std::clamp(widest, minimum, maximum);
     }
 
-    [[nodiscard]] util::Expected<std::string> truncate_primary(
+    [[nodiscard]] support::Expected<std::string> truncate_primary(
         const SelectItem& item,
         bool is_selected,
         std::size_t max_width,
@@ -139,8 +139,8 @@ struct SelectList::Impl {
                     item,
                     is_selected);
             } catch (...) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Unknown,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Unknown,
                     "TUI SelectList truncation hook failed",
                     "the truncation callback threw an exception"));
             }
@@ -148,7 +148,7 @@ struct SelectList::Impl {
         return truncate_text(transformed, max_width, "");
     }
 
-    [[nodiscard]] util::Expected<std::string> render_item(
+    [[nodiscard]] support::Expected<std::string> render_item(
         const SelectItem& item,
         bool is_selected,
         std::size_t width,
@@ -247,11 +247,11 @@ std::optional<SelectItem> SelectList::selected_item() const {
     return item == nullptr ? std::nullopt : std::optional<SelectItem>(*item);
 }
 
-util::Expected<RenderResult> SelectList::render(std::size_t width) {
+support::Expected<RenderResult> SelectList::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI SelectList requires a positive visible width"));
     }
     if (impl->callback_error) return std::unexpected(*impl->callback_error);

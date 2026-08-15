@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../../include/cch/ai/Tool.hpp"
-#include "util/JsonGlaze.hpp"
+#include <cch/ai/Tool.hpp>
+#include "support/JsonGlaze.hpp"
 
 #include <string>
 
@@ -17,7 +17,7 @@ struct FunctionToolDto {
     return FunctionToolDto{
         tool.name,
         tool.description,
-        util::json_to_glaze(tool.parameters),
+        support::json_to_glaze(tool.parameters),
     };
 }
 
@@ -25,12 +25,12 @@ struct FunctionToolDto {
     return Tool{
         .name = dto.name,
         .description = dto.description,
-        .parameters = util::json_from_glaze(dto.parameters),
+        .parameters = support::json_from_glaze(dto.parameters),
     };
 }
 
-[[nodiscard]] inline util::Expected<std::string> write_function_tool_json(const Tool& tool) {
-    return util::write_json(to_function_tool_dto(tool));
+[[nodiscard]] inline support::Expected<std::string> write_function_tool_json(const Tool& tool) {
+    return support::write_json(to_function_tool_dto(tool));
 }
 
 } // namespace cch::ai::glaze

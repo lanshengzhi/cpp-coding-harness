@@ -5,7 +5,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -98,7 +98,7 @@ struct ReportBootDiagnosticsAction {
 /// Report boot-session creation failure (pi `print_creation_failure`); the
 /// host wires this to stderr so the boot reports the error before exiting.
 struct ReportBootCreationFailureAction {
-    util::Error error;
+    support::Error error;
 };
 
 /// One closed application-level Native TUI operation. Each alternative is an
@@ -118,7 +118,7 @@ using TuiActionVariant = std::variant<
 using TuiActionResultVariant = std::variant<
     std::monostate,
     bool,
-    util::Expected<coding_agent::CreateAgentSessionResult>>;
+    support::Expected<coding_agent::CreateAgentSessionResult>>;
 
 /// Move-only sink carrying closed Native TUI actions to the composition host.
 /// The host dispatches on `TuiActionVariant` and returns the matching
@@ -130,7 +130,7 @@ using TuiActionResultVariant = std::variant<
 /// falls back to the TUI-local platform defaults for environment operations;
 /// session replacement reports an unavailable host.
 using TuiActionSink = std::move_only_function<
-    util::Expected<TuiActionResultVariant>(std::size_t action_generation,
+    support::Expected<TuiActionResultVariant>(std::size_t action_generation,
                                            TuiActionVariant action)>;
 struct InteractiveModeConfig {
     std::filesystem::path agent_config_directory;
@@ -161,7 +161,7 @@ struct InteractiveModeConfig {
 
 /// Run the private Native TUI composition until its exit binding is received.
 /// The borrowed Agent Session and Terminal must outlive the returned coroutine.
-[[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode(
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
     AgentSession& session,
     cch::tui::Terminal& terminal,
     InteractiveModeConfig config = {});
@@ -173,7 +173,7 @@ struct InteractiveModeConfig {
 /// created through the config's `boot_request`/`action_sink` with the
 /// decided trust, bound, and the initial prompt submitted. The Terminal must
 /// outlive the returned coroutine.
-[[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode_boot(
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode_boot(
     cch::tui::Terminal& terminal,
     InteractiveModeConfig config);
 

@@ -1,7 +1,7 @@
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -319,7 +319,7 @@ TEST_CASE("Markdown converts injected callback exceptions to render errors", "[t
     const auto result = markdown.render(20);
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == util::ErrorCode::Unknown);
+    CHECK(result.error().code == support::ErrorCode::Unknown);
     CHECK(result.error().message == "TUI Markdown callback failed");
 }
 

@@ -4,7 +4,7 @@
 #include <cch/ai/StreamEvent.hpp>
 #include "ai/providers/StreamTransport.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -65,7 +65,7 @@ template <typename T, typename E>
 /// fakes use this to consume a modifier hook inside a plain `AsyncResult`-returning
 /// method; real hooks used by fakes are deterministic and never perform blocking I/O.
 template <typename T>
-[[nodiscard]] util::Expected<T> run_hook(cch::support::AsyncResult<T> hook) {
+[[nodiscard]] support::Expected<T> run_hook(cch::support::AsyncResult<T> hook) {
     return run_async_result(std::move(hook));
 }
 
@@ -120,12 +120,12 @@ struct TransportAttempt {
         .headers = {},
     };
     std::vector<std::string> chunks;
-    std::optional<util::Error> failure{std::nullopt};
+    std::optional<support::Error> failure{std::nullopt};
 };
 
 class ScriptedTransport final : public ai::providers::StreamTransport {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> async_stream(
         const ai::providers::StreamRequest& request,
         ai::providers::BodyChunkHandler on_body_chunk) override {
         requests.push_back(request);
@@ -133,8 +133,8 @@ public:
             on_request();
         }
         if (attempt_index >= attempts.size()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "no scripted transport attempt"));
         }
         auto attempt = attempts[attempt_index++];

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/BoundedText.hpp"
+#include "ai/BoundedText.hpp"
 
 #include <cstddef>
 #include <string>
@@ -12,7 +12,7 @@ inline constexpr std::size_t kMaxResourceDiagnostics = 64;
 inline constexpr std::size_t kMaxResourceDiagnosticTextBytes = 1024;
 
 inline void bound_resource_diagnostic_text(std::string& text) {
-    text = util::bounded_redacted_text(
+    text = ai::bounded_redacted_text(
         std::move(text),
         kMaxResourceDiagnosticTextBytes,
         "...[truncated]");

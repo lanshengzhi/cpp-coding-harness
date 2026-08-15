@@ -10,7 +10,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
@@ -21,7 +21,7 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "harness/WorkspaceFileSystem.hpp"
 #include "ai/providers/FakeProvider.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -195,8 +195,8 @@ struct SettingsSnapshot {
 
 /// Failed creation keeps the primary error and carries any settings load
 /// warnings through the error context field.
-[[nodiscard]] util::Error with_settings_fallback_context(
-    util::Error error,
+[[nodiscard]] support::Error with_settings_fallback_context(
+    support::Error error,
     const SettingsSnapshot& snapshot) {
     for (const auto& settings_error : snapshot.manager.errors()) {
         std::string warning = std::string{"could not load "} +
@@ -304,12 +304,12 @@ void add_project_resource_loading_diagnostics(
     return std::nullopt;
 }
 
-[[nodiscard]] util::ExpectedVoid validate_trust_store_path(
+[[nodiscard]] support::ExpectedVoid validate_trust_store_path(
     const std::filesystem::path& trust_path,
     const std::filesystem::path& workspace) {
     if (trust_path.is_absolute() == false) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "trust_store_path must be absolute",
             "supply an absolute filesystem path outside the workspace"));
     }
@@ -317,23 +317,23 @@ void add_project_resource_loading_diagnostics(
     std::error_code ec;
     auto trust_canonical = std::filesystem::weakly_canonical(trust_path, ec);
     if (ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "trust_store_path cannot be canonicalized",
             trust_path.string()));
     }
 
     auto ws_canonical = std::filesystem::weakly_canonical(workspace, ec);
     if (ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "workspace cannot be canonicalized",
             workspace.string()));
     }
 
     if (trust_canonical == ws_canonical) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "trust_store_path must be outside the workspace",
             trust_path.string()));
     }
@@ -342,8 +342,8 @@ void add_project_resource_loading_diagnostics(
         trust_canonical.begin(), trust_canonical.end(),
         ws_canonical.begin(), ws_canonical.end());
     if (ws_it == ws_canonical.end()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "trust_store_path cannot be inside the workspace",
             trust_path.string()));
     }
@@ -398,14 +398,14 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
 /// `--api-key` can enable first-time setup (pi `resolveCliModel` subset).
 /// Supports `--provider <name> --model <pattern>` and `--model <provider>/<pattern>`;
 /// exact id / `provider/id` matches win, then partial id/name matches.
-[[nodiscard]] util::Expected<ai::Model> resolve_cli_model_pattern(
+[[nodiscard]] support::Expected<ai::Model> resolve_cli_model_pattern(
     const ModelRuntime& runtime,
     const std::optional<std::string>& cli_provider,
     std::string_view cli_model) {
     const auto all_models = runtime.models();
     if (all_models.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::ModelValidation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::ModelValidation,
             "No models available. Check your installation or add models to models.json."));
     }
 
@@ -433,8 +433,8 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
     if (cli_provider) {
         const auto found = provider_map.find(lowercase(*cli_provider));
         if (found == provider_map.end()) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::ModelValidation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::ModelValidation,
                 "Unknown provider \"" + *cli_provider +
                     "\". Use --list-models to see available providers/models."));
         }
@@ -484,8 +484,8 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
         }
     }
 
-    return std::unexpected(util::make_error(
-        util::ErrorCode::ModelValidation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::ModelValidation,
         "Unknown model \"" + std::string{cli_model} +
             "\". Use --list-models to see available models."));
 }
@@ -564,7 +564,7 @@ void refresh_availability_sync(
 /// Build the session's ModelRuntime: the injected/adopted runtime wins; a
 /// default-created runtime derives its Agent Config Directory from the
 /// environment default.
-[[nodiscard]] util::Expected<std::shared_ptr<ModelRuntime>> build_runtime(
+[[nodiscard]] support::Expected<std::shared_ptr<ModelRuntime>> build_runtime(
     std::shared_ptr<ModelRuntime> injected) {
     if (injected) {
         return injected;
@@ -584,11 +584,11 @@ void refresh_availability_sync(
 /// Resolve one canonical physical workspace directory shared by execution,
 /// Session Metadata, and default storage so symbolic-link aliases collapse to
 /// a single identity.
-[[nodiscard]] util::Expected<std::filesystem::path> resolve_canonical_workspace(
+[[nodiscard]] support::Expected<std::filesystem::path> resolve_canonical_workspace(
     const std::filesystem::path& workspace) {
     if (workspace.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "workspace is required for new sessions",
             "supply a non-empty workspace path"));
     }
@@ -596,14 +596,14 @@ void refresh_availability_sync(
     std::error_code ec;
     auto resolved = std::filesystem::canonical(workspace, ec);
     if (ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "workspace cannot be resolved",
             workspace.string() + ": " + ec.message()));
     }
     if (!std::filesystem::is_directory(resolved, ec) || ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "workspace is not a directory",
             workspace.string() + (ec ? ": " + ec.message() : std::string{})));
     }
@@ -614,7 +614,7 @@ void refresh_availability_sync(
 /// PI_CODING_AGENT_SESSION_DIR, then settings sessionDir, then the
 /// workspace-keyed default). The first non-empty value wins and resolves
 /// against the final canonical workspace.
-[[nodiscard]] util::Expected<std::optional<std::filesystem::path>> resolve_cli_session_dir_override(
+[[nodiscard]] support::Expected<std::optional<std::filesystem::path>> resolve_cli_session_dir_override(
     const std::optional<std::string>& flag_value,
     const std::optional<std::string>& settings_value,
     const std::filesystem::path& canonical_workspace) {
@@ -635,7 +635,7 @@ struct SessionTargetNormalizationOptions {
     std::optional<std::string> settings_session_dir{std::nullopt};
 };
 
-[[nodiscard]] util::Expected<NormalizedSessionTarget> normalize_session_target(
+[[nodiscard]] support::Expected<NormalizedSessionTarget> normalize_session_target(
     coding_agent::SessionTarget target,
     SessionTargetNormalizationOptions options) {
     auto workspace = resolve_canonical_workspace(options.workspace);
@@ -713,12 +713,12 @@ struct SessionTargetNormalizationOptions {
             .session_id = in_memory->session_id,
         }};
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "unsupported session target"));
 }
 
-[[nodiscard]] util::Expected<AssemblyPlan> normalize_cli(
+[[nodiscard]] support::Expected<AssemblyPlan> normalize_cli(
     AgentSessionCreationRequest request,
     const SettingsManager& settings) {
     AssemblyPlan plan;
@@ -796,7 +796,7 @@ struct SessionTargetNormalizationOptions {
 /// first scoped entry's explicit `:level` when the scope selects the initial
 /// model (pi main.ts `buildSessionOptions`), regardless of which chain step
 /// selected the model.
-[[nodiscard]] util::Expected<ai::Model> resolve_cli_request_model(
+[[nodiscard]] support::Expected<ai::Model> resolve_cli_request_model(
     const AssemblyPlan& plan,
     const ModelRuntime& runtime,
     bool is_resume,
@@ -887,13 +887,13 @@ struct SessionTargetNormalizationOptions {
 /// header cwd no longer exists. The CLI prints the message alone (no
 /// "could not resume session:" prefix) and exits 1; the interactive
 /// Continue/Cancel prompt lands with the startup-TUI host.
-[[nodiscard]] util::Error missing_session_cwd_error(
+[[nodiscard]] support::Error missing_session_cwd_error(
     const std::filesystem::path& session_file,
     const std::filesystem::path& session_cwd,
     const std::filesystem::path& fallback_cwd) {
     // pi `MissingSessionCwdError.message` (session-cwd.ts), verbatim.
-    return util::make_error(
-        util::ErrorCode::MissingSessionCwd,
+    return support::make_error(
+        support::ErrorCode::MissingSessionCwd,
         format_missing_session_cwd_error(MissingSessionCwdIssue{
             .session_file = session_file,
             .session_cwd = session_cwd,
@@ -901,7 +901,7 @@ struct SessionTargetNormalizationOptions {
         }));
 }
 
-[[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(
+[[nodiscard]] support::Expected<CreateAgentSessionResult> run_assembly(
     AssemblyPlan plan,
     SettingsSnapshot& snapshot,
     std::unique_ptr<AsyncUserShell> user_shell) {
@@ -940,8 +940,8 @@ struct SessionTargetNormalizationOptions {
         const bool regular =
             exists && std::filesystem::is_regular_file(target->session_path, ec);
         if (exists && !regular) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 "session target is not a regular file",
                 target->session_path.string()));
         }
@@ -960,8 +960,8 @@ struct SessionTargetNormalizationOptions {
                 std::error_code remove_ec;
                 if (!std::filesystem::remove(target->session_path, remove_ec) ||
                     remove_ec) {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Session,
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Session,
                         "could not initialize session file",
                         target->session_path.string() +
                             (remove_ec ? ": " + remove_ec.message()
@@ -1024,8 +1024,8 @@ struct SessionTargetNormalizationOptions {
         workspace = target->workspace;
         new_publication = InMemoryPublication{workspace, target->session_id};
     } else {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "unsupported session target"));
     }
 
@@ -1137,8 +1137,8 @@ struct SessionTargetNormalizationOptions {
             const auto retained_request_copy = resource_request;
             auto resource_loading = load_project_resources(*fs, trust_store, std::move(resource_request));
             if (!resource_loading.fatal_errors.empty()) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Validation,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation,
                     "explicit resource failed to load",
                     resource_loading.fatal_errors.front().message));
             }
@@ -1374,15 +1374,15 @@ struct SessionTargetNormalizationOptions {
 
     if (auto dup = find_duplicate_tool_name(plan.custom_tools)) {
         cleanup_on_failure();
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             std::format("duplicate custom tool name: '{}'", *dup),
             "each custom tool must have a unique name"));
     }
     if (auto collision = find_builtin_custom_collision(builtin_names, plan.custom_tools)) {
         cleanup_on_failure();
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             std::format("custom tool name '{}' collides with built-in tool", *collision),
             "rename the custom tool or disable the conflicting built-in tool"));
     }
@@ -1579,8 +1579,8 @@ struct SessionTargetNormalizationOptions {
 /// Shared creation tail: normalize produced a plan (or the attempt's first
 /// error), assembly runs against the same snapshot, and any failure carries
 /// the settings load warnings through the error context field.
-[[nodiscard]] util::Expected<CreateAgentSessionResult> finish_creation(
-    util::Expected<AssemblyPlan> plan,
+[[nodiscard]] support::Expected<CreateAgentSessionResult> finish_creation(
+    support::Expected<AssemblyPlan> plan,
     SettingsSnapshot& snapshot,
     std::unique_ptr<AsyncUserShell> user_shell = {}) {
     if (!plan) {
@@ -1596,13 +1596,13 @@ struct SessionTargetNormalizationOptions {
 
 } // namespace
 
-util::Expected<CreateAgentSessionResult> SessionFactory::create(
+support::Expected<CreateAgentSessionResult> SessionFactory::create(
     AgentSessionCreationRequest request) {
     auto snapshot = load_settings_snapshot(request.workspace);
     return finish_creation(normalize_cli(std::move(request), snapshot.manager), snapshot);
 }
 
-util::Expected<CreateAgentSessionResult> SessionFactory::create(
+support::Expected<CreateAgentSessionResult> SessionFactory::create(
     AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models) {
     auto snapshot = load_settings_snapshot(request.workspace);
@@ -1632,7 +1632,7 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     return finish_creation(std::move(plan), snapshot);
 }
 
-util::Expected<CreateAgentSessionResult> SessionFactory::create(
+support::Expected<CreateAgentSessionResult> SessionFactory::create(
     AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models,
     std::unique_ptr<AsyncUserShell> user_shell) {

@@ -57,14 +57,14 @@
 #include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/TreeSelector.hpp"
 #include "coding_agent/tui/UserMessageSelector.hpp"
-#include "util/UniqueFd.hpp"
-#include "util/TerminalText.hpp"
+#include "support/UniqueFd.hpp"
+#include "tools/TerminalText.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include "harness/compaction/Compaction.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
@@ -217,7 +217,7 @@ struct InteractiveStartupDiagnostics {
     std::vector<ResourceDiagnostic> themes;
 };
 
-[[nodiscard]] std::string combined_error_text(const util::Error& error) {
+[[nodiscard]] std::string combined_error_text(const support::Error& error) {
     std::string text = error.message;
     if (!error.detail.empty() && error.detail != error.message) {
         text = std::format("{}: {}", text, error.detail);
@@ -249,10 +249,10 @@ struct InteractiveStartupDiagnostics {
         current_text.size() - prefix - suffix)};
 }
 
-[[nodiscard]] util::Error presentation_error(
-    const util::Error& error,
+[[nodiscard]] support::Error presentation_error(
+    const support::Error& error,
     std::string message) {
-    return util::make_error(
+    return support::make_error(
         error.code,
         std::move(message),
         bounded_redacted_presentation(combined_error_text(error)));
@@ -286,15 +286,15 @@ struct InteractiveStartupDiagnostics {
     return value;
 }
 
-[[nodiscard]] util::Expected<std::filesystem::path> write_clipboard_image(
+[[nodiscard]] support::Expected<std::filesystem::path> write_clipboard_image(
     std::span<const std::uint8_t> bytes,
     std::string_view extension) {
 #if defined(__unix__) || defined(__APPLE__)
     std::error_code temp_error;
     const auto temp_directory = std::filesystem::temp_directory_path(temp_error);
     if (temp_error || temp_directory.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "clipboard temporary directory is unavailable",
             temp_error.message()));
     }
@@ -305,23 +305,23 @@ struct InteractiveStartupDiagnostics {
             path = temp_directory /
                 std::format("pi-clipboard-{}{}", clipboard_uuid(), extension);
         } catch (const std::exception& error) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "could not generate a clipboard image path",
                 error.what()));
         } catch (...) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "could not generate a clipboard image path"));
         }
-        util::UniqueFd fd(::open(
+        support::UniqueFd fd(::open(
             path.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
             0600));
         if (!fd) {
             if (errno == EEXIST) continue;
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "could not create clipboard image file",
                 std::error_code(errno, std::generic_category()).message()));
         }
@@ -338,8 +338,8 @@ struct InteractiveStartupDiagnostics {
                 (void)fd.close();
                 std::error_code remove_error;
                 std::filesystem::remove(path, remove_error);
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Process,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Process,
                     "could not write clipboard image file",
                     std::error_code(write_error, std::generic_category()).message()));
             }
@@ -349,21 +349,21 @@ struct InteractiveStartupDiagnostics {
             const auto close_error = errno;
             std::error_code remove_error;
             std::filesystem::remove(path, remove_error);
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "could not finish clipboard image file",
                 std::error_code(close_error, std::generic_category()).message()));
         }
         return path;
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Process,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Process,
         "could not allocate a unique clipboard image path"));
 #else
     (void)bytes;
     (void)extension;
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Process,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Process,
         "clipboard image files are unavailable on this platform"));
 #endif
 }
@@ -393,7 +393,7 @@ struct InteractiveStartupDiagnostics {
     return text;
 }
 
-[[nodiscard]] util::Expected<std::vector<std::string>> queued_editor_texts(
+[[nodiscard]] support::Expected<std::vector<std::string>> queued_editor_texts(
     const agent::AgentInputQueues& queues) {
     std::vector<std::string> restored;
     restored.reserve(
@@ -407,21 +407,21 @@ struct InteractiveStartupDiagnostics {
         return true;
     };
     if (!append(queues.steering.messages) || !append(queues.follow_up.messages)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "queued input contains content that the editor cannot restore"));
     }
     return restored;
 }
 
-[[nodiscard]] util::Error startup_error(const util::Error& error) {
+[[nodiscard]] support::Error startup_error(const support::Error& error) {
     return presentation_error(error, "Native TUI startup failed");
 }
 
 /// pi's stable login-cancellation error: the cancelled kind travels on the
 /// error so the login flows suppress failure UI on kind, not string (#328).
-[[nodiscard]] util::Error prompt_cancelled_error() {
-    return util::make_error(util::ErrorCode::Cancelled, "Login cancelled");
+[[nodiscard]] support::Error prompt_cancelled_error() {
+    return support::make_error(support::ErrorCode::Cancelled, "Login cancelled");
 }
 
 /// pi `formatProjectTrustPrompt` (`core/project-trust.ts`): the boot trust
@@ -478,7 +478,7 @@ struct AuthPromptSlot : std::enable_shared_from_this<AuthPromptSlot> {
     explicit AuthPromptSlot(boost::asio::any_io_executor executor)
         : executor(std::move(executor)), channel(this->executor, 1) {}
 
-    void resolve(util::Expected<std::string> value) {
+    void resolve(support::Expected<std::string> value) {
         if (resolved.exchange(true)) return;
         const auto self = shared_from_this();
         boost::asio::post(executor, [self, value = std::move(value)]() mutable {
@@ -488,18 +488,18 @@ struct AuthPromptSlot : std::enable_shared_from_this<AuthPromptSlot> {
 
     boost::asio::any_io_executor executor;
     boost::asio::experimental::concurrent_channel<
-        void(boost::system::error_code, util::Expected<std::string>)>
+        void(boost::system::error_code, support::Expected<std::string>)>
         channel;
 
 private:
     std::atomic<bool> resolved{false};
 };
 
-[[nodiscard]] util::Error aggregate_presentation_errors(
-    const util::Error& primary,
-    const util::Error& restoration,
+[[nodiscard]] support::Error aggregate_presentation_errors(
+    const support::Error& primary,
+    const support::Error& restoration,
     std::string message) {
-    return util::make_error(
+    return support::make_error(
         primary.code,
         std::move(message),
         bounded_redacted_presentation(std::format(
@@ -806,7 +806,7 @@ public:
     DismissibleView(const DismissibleView&) = delete;
     DismissibleView& operator=(const DismissibleView&) = delete;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         if (callback_error_) return std::unexpected(*callback_error_);
         return content_->render(width);
     }
@@ -820,13 +820,13 @@ public:
         try {
             on_cancel_();
         } catch (const std::exception& error) {
-            callback_error_ = util::make_error(
-                util::ErrorCode::Unknown,
+            callback_error_ = support::make_error(
+                support::ErrorCode::Unknown,
                 "Hotkey help cancellation failed",
                 error.what());
         } catch (...) {
-            callback_error_ = util::make_error(
-                util::ErrorCode::Unknown,
+            callback_error_ = support::make_error(
+                support::ErrorCode::Unknown,
                 "Hotkey help cancellation failed");
         }
     }
@@ -841,7 +841,7 @@ private:
     std::unique_ptr<cch::tui::Component> content_;
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     ActionSink on_cancel_;
-    std::optional<util::Error> callback_error_;
+    std::optional<support::Error> callback_error_;
     bool focused_{false};
 };
 
@@ -1222,7 +1222,7 @@ public:
         chat_.append_committed_message(std::move(message));
     }
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         std::lock_guard lock(mutex_);
         if (callback_error_) return std::unexpected(*callback_error_);
 
@@ -1646,8 +1646,8 @@ private:
     void record_callback_error(
         std::string message,
         std::string detail = {}) {
-        callback_error_ = util::make_error(
-            util::ErrorCode::Unknown,
+        callback_error_ = support::make_error(
+            support::ErrorCode::Unknown,
             std::move(message),
             std::move(detail));
     }
@@ -1761,7 +1761,7 @@ private:
     /// source must not re-enter the view.
     std::move_only_function<FooterData()> footer_data_source_;
     bool user_bash_available_{false};
-    std::optional<util::Error> callback_error_;
+    std::optional<support::Error> callback_error_;
     mutable std::mutex mutex_;
     // pi's main-screen containers.
     KeybindingHints header_;
@@ -1812,7 +1812,7 @@ public:
     InteractiveState(const InteractiveState&) = delete;
     InteractiveState& operator=(const InteractiveState&) = delete;
 
-    [[nodiscard]] util::ExpectedVoid start(InteractiveModeConfig config) {
+    [[nodiscard]] support::ExpectedVoid start(InteractiveModeConfig config) {
         clipboard_reader_ = std::move(config.clipboard_reader);
         model_fallback_message_ = std::move(config.model_fallback_message);
         action_sink_ = std::move(config.action_sink);
@@ -1883,7 +1883,7 @@ public:
     /// override is set), creates the boot session through the config's
     /// `boot_request`/`action_sink` with the decided trust, then binds
     /// it (subscribe, initialize view, render, initial prompt).
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> boot_session() {
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> boot_session() {
         // pi main.ts `autoTrustOnReloadCwd`: no `--approve`-style override
         // AND the boot workspace had no trust-requiring resources → the
         // implicit-trust save may fire on a later `/reload` (when the
@@ -1913,7 +1913,7 @@ public:
         request.project_trust_override = decision;
         auto created = request_session_replacement(action_generation_, std::move(request));
         if (!created) {
-            const util::Error failure = created.error();
+            const support::Error failure = created.error();
             // pi `print_creation_failure`: the host reports the failure
             // through the closed action seam before the boot exits.
             (void)deliver_action(
@@ -1979,7 +1979,7 @@ public:
                 std::move(initial_prompt_options_),
                 SubmissionOrigin::InitialPrompt);
         }
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
 
     /// pi `resolveProjectTrusted` + `selectProjectTrustOption` for the boot:
@@ -2092,7 +2092,7 @@ public:
         return exit_wait_;
     }
 
-    [[nodiscard]] util::ExpectedVoid finish() {
+    [[nodiscard]] support::ExpectedVoid finish() {
         running_ = false;
         // Retire the action generation so late deliveries from captured
         // hooks are rejected after Close (ADR 0040).
@@ -2189,7 +2189,7 @@ private:
     /// re-run `load_keybindings_manager` with the same assembled action list
     /// and swap the shared slot + editor (ADR 0035). Diagnostics render like
     /// startup.
-    [[nodiscard]] util::ExpectedVoid re_catalog_keybindings() {
+    [[nodiscard]] support::ExpectedVoid re_catalog_keybindings() {
         const auto actions = assemble_keybinding_actions();
         std::vector<std::string_view> action_views;
         action_views.reserve(actions.size());
@@ -2219,7 +2219,7 @@ private:
         return {};
     }
 
-    [[nodiscard]] util::Expected<InteractiveStartupDiagnostics> load_startup_resources(
+    [[nodiscard]] support::Expected<InteractiveStartupDiagnostics> load_startup_resources(
         const InteractiveModeConfig& config) {
         InteractiveStartupDiagnostics diagnostics;
         keybinding_platform_ = config.platform;
@@ -2263,8 +2263,8 @@ private:
             /* project_trusted */ false));
         for (const auto& settings_error : settings_manager_->errors()) {
             if (settings_error.scope == coding_agent::SettingsScope::Global) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::JsonParse,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::JsonParse,
                     "could not load global settings",
                     settings_error.message));
             }
@@ -2453,10 +2453,10 @@ private:
         view_->set_autocomplete_provider(build_autocomplete_provider());
     }
 
-    [[nodiscard]] util::ExpectedVoid subscribe_to_session(
+    [[nodiscard]] support::ExpectedVoid subscribe_to_session(
         std::weak_ptr<InteractiveState> weak) {
         if (auto subscribed = session_->subscribe(
-                [weak](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                [weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
                     if (const auto self = weak.lock()) self->on_event(event);
                     return {};
                 });
@@ -2466,7 +2466,7 @@ private:
             subscription_.emplace(std::move(*subscribed));
         }
         if (auto subscribed = session_->subscribe_session(
-                [weak](const AgentSessionEvent& event) -> util::ExpectedVoid {
+                [weak](const AgentSessionEvent& event) -> support::ExpectedVoid {
                     if (const auto self = weak.lock()) self->on_session_event(event);
                     return {};
                 });
@@ -2586,12 +2586,12 @@ private:
         return needs_project_trust_resolution(detection);
     }
 
-    [[nodiscard]] util::ExpectedVoid fail_start(const util::Error& error) {
+    [[nodiscard]] support::ExpectedVoid fail_start(const support::Error& error) {
         running_ = false;
         if (session_ != nullptr) {
             session_->close();
         }
-        util::ExpectedVoid stopped;
+        support::ExpectedVoid stopped;
         if (tui_started_) stopped = tui_.stop();
         tui_started_ = false;
         if (!stopped) {
@@ -2638,22 +2638,22 @@ private:
             boost::asio::co_spawn(
                 self->executor_,
                 self->paste_from_clipboard(),
-                [weak](std::exception_ptr exception, util::ExpectedVoid result) {
+                [weak](std::exception_ptr exception, support::ExpectedVoid result) {
                     const auto state = weak.lock();
                     if (!state) return;
                     state->clipboard_read_active_ = false;
-                    std::optional<util::Error> ignored_failure;
+                    std::optional<support::Error> ignored_failure;
                     if (exception) {
                         try {
                             std::rethrow_exception(exception);
                         } catch (const std::exception& error) {
-                            ignored_failure = util::make_error(
-                                util::ErrorCode::Unknown,
+                            ignored_failure = support::make_error(
+                                support::ErrorCode::Unknown,
                                 "clipboard paste failed",
                                 error.what());
                         } catch (...) {
-                            ignored_failure = util::make_error(
-                                util::ErrorCode::Unknown,
+                            ignored_failure = support::make_error(
+                                support::ErrorCode::Unknown,
                                 "clipboard paste failed");
                         }
                     } else if (!result) {
@@ -2665,7 +2665,7 @@ private:
         });
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> paste_from_clipboard() {
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> paste_from_clipboard() {
         try {
             auto image = co_await clipboard_reader_->read_image();
             if (image && *image && !(*image)->bytes.empty()) {
@@ -2680,19 +2680,19 @@ private:
                             view_->insert_editor_text(path->string());
                             tui_.invalidate();
                         }
-                        co_return util::ExpectedVoid{};
+                        co_return support::ExpectedVoid{};
                     }
                 }
             }
         } catch (const std::exception& error) {
-            const auto ignored = util::make_error(
-                util::ErrorCode::Unknown,
+            const auto ignored = support::make_error(
+                support::ErrorCode::Unknown,
                 "clipboard image read failed",
                 error.what());
             (void)ignored;
         } catch (...) {
-            const auto ignored = util::make_error(
-                util::ErrorCode::Unknown,
+            const auto ignored = support::make_error(
+                support::ErrorCode::Unknown,
                 "clipboard image read failed");
             (void)ignored;
         }
@@ -2704,18 +2704,18 @@ private:
                 tui_.invalidate();
             }
         } catch (const std::exception& error) {
-            const auto ignored = util::make_error(
-                util::ErrorCode::Unknown,
+            const auto ignored = support::make_error(
+                support::ErrorCode::Unknown,
                 "clipboard text read failed",
                 error.what());
             (void)ignored;
         } catch (...) {
-            const auto ignored = util::make_error(
-                util::ErrorCode::Unknown,
+            const auto ignored = support::make_error(
+                support::ErrorCode::Unknown,
                 "clipboard text read failed");
             (void)ignored;
         }
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
 
     void post_dequeue() {
@@ -2759,13 +2759,13 @@ private:
     }
 
     /// Append one bounded presentation error to the chat diagnostic area.
-    void append_command_error(const util::Error& error) {
+    void append_command_error(const support::Error& error) {
         if (view_ == nullptr) return;
         view_->append_diagnostic(combined_error_text(error));
         tui_.invalidate();
     }
 
-    [[nodiscard]] util::ExpectedVoid attach_overlay(
+    [[nodiscard]] support::ExpectedVoid attach_overlay(
         std::unique_ptr<cch::tui::Overlay> overlay) {
         auto* overlay_pointer = overlay.get();
         if (auto attached = tui_.add_overlay(std::move(overlay)); !attached) {
@@ -3637,9 +3637,9 @@ private:
     // ── Closed action delivery (ADR 0040) ──────────────────────────────────
 
     /// The error a null host returns for `ReplaceSessionAction`.
-    [[nodiscard]] static util::Error session_replacement_unavailable_error() {
-        return util::make_error(
-            util::ErrorCode::Unknown,
+    [[nodiscard]] static support::Error session_replacement_unavailable_error() {
+        return support::make_error(
+            support::ErrorCode::Unknown,
             "Session switching is not available in this host");
     }
 
@@ -3650,12 +3650,12 @@ private:
     /// captured vector and drops those rejections. A null host applies the
     /// TUI-local platform default for the environment operations. Render
     /// state may coalesce, but this path never drops an admitted action.
-    [[nodiscard]] util::Expected<TuiActionResultVariant> deliver_action(
+    [[nodiscard]] support::Expected<TuiActionResultVariant> deliver_action(
         std::size_t captured_generation,
         TuiActionVariant action) {
         if (captured_generation != action_generation_) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "Native TUI action rejected",
                 "retired session generation"));
         }
@@ -3667,7 +3667,7 @@ private:
         // Null host: TUI-local platform defaults for environment operations;
         // diagnostics and reporting are silent; replacement is unavailable.
         return std::visit(
-            [](auto&& payload) -> util::Expected<TuiActionResultVariant> {
+            [](auto&& payload) -> support::Expected<TuiActionResultVariant> {
                 using T = std::decay_t<decltype(payload)>;
                 if constexpr (std::is_same_v<T, OpenBrowserAction>) {
                     open_browser(std::move(payload.url));
@@ -3682,7 +3682,7 @@ private:
                     return TuiActionResultVariant{std::monostate{}};
                 } else if constexpr (std::is_same_v<T, ReplaceSessionAction>) {
                     return TuiActionResultVariant{
-                        util::Expected<coding_agent::CreateAgentSessionResult>{
+                        support::Expected<coding_agent::CreateAgentSessionResult>{
                             std::unexpected(
                                 session_replacement_unavailable_error())}};
                 } else {
@@ -3694,7 +3694,7 @@ private:
 
     /// Create and return a replacement/boot session through the composition
     /// host (pi `createRuntime`); a null host reports it as unavailable.
-    [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult>
+    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
     request_session_replacement(
         std::size_t captured_generation,
         runtime::AgentSessionCreationRequest request) {
@@ -3705,7 +3705,7 @@ private:
             return std::unexpected(result.error());
         }
         auto* created =
-            std::get_if<util::Expected<coding_agent::CreateAgentSessionResult>>(
+            std::get_if<support::Expected<coding_agent::CreateAgentSessionResult>>(
                 &*result);
         if (created == nullptr) {
             return std::unexpected(session_replacement_unavailable_error());
@@ -3727,7 +3727,7 @@ private:
     /// shared Runtime root, and its late completions are retired by the
     /// generation stamp (`prompt_finished`/`user_bash_finished`) so they can
     /// never mutate or render as the new Session.
-    [[nodiscard]] util::ExpectedVoid replace_session(
+    [[nodiscard]] support::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> next) {
         retire_current_session();
         // The retired Session's in-flight prompt and User Bash can no longer
@@ -3972,7 +3972,7 @@ private:
             std::vector<std::string>{"Yes", "No"},
             [slot, fallback_cwd](std::string selected) {
                 slot->resolve(selected == "Yes"
-                    ? util::Expected<std::string>{fallback_cwd.string()}
+                    ? support::Expected<std::string>{fallback_cwd.string()}
                     : std::unexpected(prompt_cancelled_error()));
             },
             [slot] { slot->resolve(std::unexpected(prompt_cancelled_error())); });
@@ -4060,7 +4060,7 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_exit();
             },
-            [weak](std::string session_path, std::string name) -> util::ExpectedVoid {
+            [weak](std::string session_path, std::string name) -> support::ExpectedVoid {
                 // pi `renameSession`: open the session manager and append the
                 // trimmed session_info entry.
                 auto opened = harness::session::JsonlSessionStore::open_existing(
@@ -4766,7 +4766,7 @@ private:
             -> cch::support::AsyncResult<std::string> {
             return cch::ai::detail::make_async_result(
                 [self, dialog, prompt = std::move(prompt)]() mutable
-                    -> boost::asio::awaitable<util::Expected<std::string>> {
+                    -> boost::asio::awaitable<support::Expected<std::string>> {
                     co_return co_await self->show_auth_prompt(dialog, std::move(prompt));
                 });
         };
@@ -4784,7 +4784,7 @@ private:
         }
         // Login Cancellation suppresses failure UI on the stable cancelled
         // kind (#328); every other failure shows pi's failure text.
-        if (result.error().code != util::ErrorCode::Cancelled) {
+        if (result.error().code != support::ErrorCode::Cancelled) {
             show_error(
                 (type == ai::AuthType::OAuth
                      ? "Failed to login to " + provider_name
@@ -4855,7 +4855,7 @@ private:
 
     /// pi `showAuthSelect`: a `select`-type AuthPrompt resolves through the
     /// generic string-list selector swapped into the editor slot.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> show_auth_select(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> show_auth_select(
         std::shared_ptr<LoginDialogComponent> dialog,
         ai::AuthPromptSelect select,
         std::optional<std::stop_token> per_prompt) {
@@ -4911,8 +4911,8 @@ private:
         auto result = co_await slot->channel.async_receive(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
         if (error) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "login select channel failed",
                 error.message()));
         }
@@ -4923,7 +4923,7 @@ private:
     /// manual input; text/secret → the prompt view. The optional per-prompt
     /// token rejects with the stable cancelled error (the Codex
     /// callback-vs-manual-input race).
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> show_auth_prompt(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> show_auth_prompt(
         std::shared_ptr<LoginDialogComponent> dialog,
         ai::AuthPrompt prompt) {
         auto per_prompt = std::move(prompt.stop_token);
@@ -5389,7 +5389,7 @@ private:
                     std::move(invocation->command),
                     invocation->exclude_from_context,
                     [self](
-                        const runtime::UserBashProgress& progress) -> util::ExpectedVoid {
+                        const runtime::UserBashProgress& progress) -> support::ExpectedVoid {
                         if (self->running_ && self->view_ != nullptr) {
                             self->view_->set_user_bash_progress(progress);
                             self->tui_.invalidate();
@@ -5520,17 +5520,17 @@ private:
              text = std::move(text),
              options = std::move(options),
              started_generation]() mutable -> boost::asio::awaitable<void> {
-                util::ExpectedVoid result;
+                support::ExpectedVoid result;
                 try {
                     result = co_await self->session_->prompt(text, std::move(options));
                 } catch (const std::exception& error) {
-                    result = std::unexpected(util::make_error(
-                        util::ErrorCode::Unknown,
+                    result = std::unexpected(support::make_error(
+                        support::ErrorCode::Unknown,
                         "Native TUI prompt failed",
                         error.what()));
                 } catch (...) {
-                    result = std::unexpected(util::make_error(
-                        util::ErrorCode::Unknown,
+                    result = std::unexpected(support::make_error(
+                        support::ErrorCode::Unknown,
                         "Native TUI prompt failed",
                         "unknown exception"));
                 }
@@ -5608,7 +5608,7 @@ private:
 
     void prompt_finished(
         std::size_t started_generation,
-        util::ExpectedVoid result,
+        support::ExpectedVoid result,
         const std::string& submitted_text) {
         if (generation_retired(started_generation)) {
             // A completion from a retired Session generation (the Session was
@@ -5631,7 +5631,7 @@ private:
 
     void user_bash_finished(
         std::size_t started_generation,
-        util::Expected<runtime::UserBashCompletion> result,
+        support::Expected<runtime::UserBashCompletion> result,
         const std::string& recall) {
         if (generation_retired(started_generation)) {
             // A completion from a retired Session generation (the Session was
@@ -5928,8 +5928,8 @@ private:
             (void)exit_wait_.cancel();
         } catch (...) {
             if (!completion_result_) {
-                completion_result_ = std::unexpected(util::make_error(
-                    util::ErrorCode::Unknown,
+                completion_result_ = std::unexpected(support::make_error(
+                    support::ErrorCode::Unknown,
                     "Native TUI exit notification failed"));
             }
         }
@@ -6081,12 +6081,12 @@ private:
     bool tui_started_{false};
     bool exit_requested_{false};
     bool clipboard_read_active_{false};
-    std::optional<util::ExpectedVoid> completion_result_;
+    std::optional<support::ExpectedVoid> completion_result_;
 };
 
 } // namespace
 
-boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode(
+boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
     AgentSession& session,
     cch::tui::Terminal& terminal,
     InteractiveModeConfig config) {
@@ -6102,7 +6102,7 @@ boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode(
     co_return state->finish();
 }
 
-boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode_boot(
+boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode_boot(
     cch::tui::Terminal& terminal,
     InteractiveModeConfig config) {
     const auto executor = co_await boost::asio::this_coro::executor;

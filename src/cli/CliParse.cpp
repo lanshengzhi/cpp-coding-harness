@@ -16,8 +16,8 @@ namespace {
 
 constexpr std::string_view kProjectVersion = CCH_PROJECT_VERSION;
 
-cch::util::Error cli_error(std::string message) {
-    return cch::util::make_error(cch::util::ErrorCode::Validation, message, message);
+cch::support::Error cli_error(std::string message) {
+    return cch::support::make_error(cch::support::ErrorCode::Validation, message, message);
 }
 
 std::string normalize_parse_error(const CLI::ParseError& error) {
@@ -108,7 +108,7 @@ struct NormalizedArgv {
     return normalized;
 }
 
-[[nodiscard]] cch::util::ExpectedVoid validate_output_mode(
+[[nodiscard]] cch::support::ExpectedVoid validate_output_mode(
     const std::string& mode_text) {
     // The internal OutputMode reduces to the text default (pi): only
     // `--mode text` parses; the removed json/rpc values are hard-rejected so
@@ -195,13 +195,13 @@ std::string_view project_version() {
     return kProjectVersion;
 }
 
-cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
+cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     CliConfig config;
     std::error_code cwd_ec;
     config.workspace = std::filesystem::current_path(cwd_ec);
     if (cwd_ec) {
-        return std::unexpected(cch::util::make_error(
-            cch::util::ErrorCode::Validation,
+        return std::unexpected(cch::support::make_error(
+            cch::support::ErrorCode::Validation,
             "could not determine the current working directory",
             "the default workspace is unavailable: " + cwd_ec.message()));
     }
@@ -299,8 +299,8 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         return config;
     } catch (const CLI::ParseError& error) {
         const auto message = normalize_parse_error(error);
-        return std::unexpected(cch::util::make_error(
-            cch::util::ErrorCode::Validation,
+        return std::unexpected(cch::support::make_error(
+            cch::support::ErrorCode::Validation,
             message,
             message + "\n\n" + help_text()));
     }

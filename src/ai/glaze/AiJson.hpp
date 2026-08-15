@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../../../include/cch/ai/Context.hpp"
-#include "../../../include/cch/ai/Message.hpp"
-#include "../../../include/cch/ai/Usage.hpp"
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/Usage.hpp>
 #include "ToolDtos.hpp"
-#include "util/JsonGlaze.hpp"
+#include "support/JsonGlaze.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -140,20 +140,20 @@ namespace detail {
 
 inline constexpr std::int64_t kMinimumRealUnixEpochMilliseconds = 1'000'000'000'000;
 
-[[nodiscard]] inline util::Error json_contract_error(std::string message, std::string detail, std::string_view context) {
-    return util::make_error(
-        util::ErrorCode::JsonParse,
+[[nodiscard]] inline support::Error json_contract_error(std::string message, std::string detail, std::string_view context) {
+    return support::make_error(
+        support::ErrorCode::JsonParse,
         std::move(message),
         std::move(detail),
         context.empty() ? std::nullopt : std::optional<std::string>{std::string(context)});
 }
 
-[[nodiscard]] inline util::Expected<std::vector<Content>> content_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<Content>> content_from_dto(
     const std::vector<ContentDto>& content,
     std::string_view context);
 
 template <typename T>
-[[nodiscard]] inline util::ExpectedVoid require_field(
+[[nodiscard]] inline support::ExpectedVoid require_field(
     const std::optional<T>& field,
     std::string_view discriminator,
     std::string_view field_name,
@@ -167,7 +167,7 @@ template <typename T>
         context));
 }
 
-[[nodiscard]] inline util::ExpectedVoid require_non_empty_string(
+[[nodiscard]] inline support::ExpectedVoid require_non_empty_string(
     const std::optional<std::string>& field,
     std::string_view discriminator,
     std::string_view field_name,
@@ -185,7 +185,7 @@ template <typename T>
         context));
 }
 
-[[nodiscard]] inline util::Expected<std::vector<Content>> required_content_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<Content>> required_content_from_dto(
     const std::optional<MessageContentDto>& content,
     std::string_view role,
     std::string_view context) {
@@ -208,7 +208,7 @@ template <typename T>
 /// User messages accept both alternatives and preserve the caller's choice:
 /// a JSON string loads as the string alternative, a JSON array as the block
 /// array. Never canonicalizes one into the other.
-[[nodiscard]] inline util::Expected<std::variant<std::string, std::vector<Content>>> user_content_from_dto(
+[[nodiscard]] inline support::Expected<std::variant<std::string, std::vector<Content>>> user_content_from_dto(
     const std::optional<MessageContentDto>& content,
     std::string_view context) {
     if (!content) {
@@ -246,7 +246,7 @@ template <typename T>
     };
 }
 
-[[nodiscard]] inline util::Expected<Usage> usage_from_dto(
+[[nodiscard]] inline support::Expected<Usage> usage_from_dto(
     const UsageDto& dto,
     std::string_view context) {
     if (auto required = require_field(dto.input, "assistant usage", "usage.input", context); !required) {
@@ -334,7 +334,7 @@ template <typename T>
         .id = content.id,
         .name = content.name,
         .arguments = content.arguments
-            ? std::optional<glz::generic>{util::json_to_glaze(*content.arguments)}
+            ? std::optional<glz::generic>{support::json_to_glaze(*content.arguments)}
             : std::nullopt,
         .rawArguments = content.raw_arguments,
         .thoughtSignature = content.thought_signature,
@@ -351,7 +351,7 @@ template <typename T>
     return std::visit([](const auto& concrete) { return to_dto(concrete); }, content);
 }
 
-[[nodiscard]] inline util::Expected<Content> content_from_dto(const ContentDto& dto, std::string_view context) {
+[[nodiscard]] inline support::Expected<Content> content_from_dto(const ContentDto& dto, std::string_view context) {
     if (dto.type == "text") {
         if (auto required = require_field(dto.text, "text content", "text", context); !required) {
             return std::unexpected(required.error());
@@ -396,7 +396,7 @@ template <typename T>
         context));
 }
 
-[[nodiscard]] inline util::Expected<std::vector<Content>> content_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<Content>> content_from_dto(
     const std::vector<ContentDto>& content,
     std::string_view context) {
     std::vector<Content> converted;
@@ -411,7 +411,7 @@ template <typename T>
     return converted;
 }
 
-[[nodiscard]] inline util::Expected<AssistantContent> assistant_content_from_dto(
+[[nodiscard]] inline support::Expected<AssistantContent> assistant_content_from_dto(
     const ContentDto& dto,
     std::string_view context) {
     if (dto.type == "text") {
@@ -448,7 +448,7 @@ template <typename T>
         }
         auto raw_arguments = dto.rawArguments.value_or("");
         if (raw_arguments.empty() && dto.arguments) {
-            auto raw = util::write_json(util::json_from_glaze(*dto.arguments));
+            auto raw = support::write_json(support::json_from_glaze(*dto.arguments));
             if (!raw) {
                 return std::unexpected(raw.error());
             }
@@ -458,7 +458,7 @@ template <typename T>
             .id = *dto.id,
             .name = *dto.name,
             .arguments = dto.arguments
-                ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.arguments)}
+                ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.arguments)}
                 : std::nullopt,
             .raw_arguments = std::move(raw_arguments),
             .thought_signature = dto.thoughtSignature,
@@ -479,7 +479,7 @@ template <typename T>
         context));
 }
 
-[[nodiscard]] inline util::Expected<std::vector<AssistantContent>> assistant_content_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<AssistantContent>> assistant_content_from_dto(
     const std::vector<ContentDto>& content,
     std::string_view context) {
     std::vector<AssistantContent> converted;
@@ -494,7 +494,7 @@ template <typename T>
     return converted;
 }
 
-[[nodiscard]] inline util::Expected<std::vector<AssistantContent>> required_assistant_content_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<AssistantContent>> required_assistant_content_from_dto(
     const std::optional<MessageContentDto>& content,
     std::string_view role,
     std::string_view context) {
@@ -560,7 +560,7 @@ template <typename T>
         dto.error = to_dto(*entry.error);
     }
     if (entry.details) {
-        dto.details = util::json_to_glaze(*entry.details);
+        dto.details = support::json_to_glaze(*entry.details);
     }
     return dto;
 }
@@ -574,7 +574,7 @@ template <typename T>
         entry.error = diagnostic_error_info_from_dto(*dto.error);
     }
     if (dto.details) {
-        entry.details = util::json_from_glaze(*dto.details);
+        entry.details = support::json_from_glaze(*dto.details);
     }
     return entry;
 }
@@ -589,7 +589,7 @@ template <typename T>
     return dtos;
 }
 
-[[nodiscard]] inline util::Expected<std::vector<DiagnosticEntry>> diagnostic_entries_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<DiagnosticEntry>> diagnostic_entries_from_dto(
     const std::vector<DiagnosticEntryDto>& dtos,
     std::string_view /*context*/) {
     std::vector<DiagnosticEntry> entries;
@@ -600,7 +600,7 @@ template <typename T>
     return entries;
 }
 
-[[nodiscard]] inline util::Expected<std::vector<DiagnosticEntry>> required_diagnostic_entries_from_dto(
+[[nodiscard]] inline support::Expected<std::vector<DiagnosticEntry>> required_diagnostic_entries_from_dto(
     const std::optional<std::vector<DiagnosticEntryDto>>& dtos,
     std::string_view context) {
     if (!dtos) {
@@ -663,7 +663,7 @@ template <typename T>
         .toolCallId = message.tool_call_id,
         .toolName = message.tool_name,
         .details = message.details
-            ? std::optional<glz::generic>{util::json_to_glaze(*message.details)}
+            ? std::optional<glz::generic>{support::json_to_glaze(*message.details)}
             : std::nullopt,
         .isError = message.is_error,
         .timestamp = message.timestamp,
@@ -691,7 +691,7 @@ template <typename T>
         .role = "custom",
         .content = to_content_dtos(message.content),
         .details = message.details
-            ? std::optional<glz::generic>{util::json_to_glaze(*message.details)}
+            ? std::optional<glz::generic>{support::json_to_glaze(*message.details)}
             : std::nullopt,
         .customType = message.custom_type,
         .display = message.display,
@@ -721,7 +721,7 @@ template <typename T>
     return std::visit([](const auto& concrete) { return to_dto(concrete); }, message);
 }
 
-[[nodiscard]] inline util::Expected<MessageVariant> message_from_dto(const MessageDto& dto, std::string_view context) {
+[[nodiscard]] inline support::Expected<MessageVariant> message_from_dto(const MessageDto& dto, std::string_view context) {
     if (dto.role == "system") {
         auto content = required_content_from_dto(dto.content, dto.role, context);
         if (!content) {
@@ -827,7 +827,7 @@ template <typename T>
             .tool_name = *dto.toolName,
             .content = std::move(*content),
             .details = dto.details
-                ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)}
+                ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.details)}
                 : std::nullopt,
             .is_error = dto.isError.value_or(false),
             .timestamp = dto.timestamp,
@@ -869,7 +869,7 @@ template <typename T>
             .content = std::move(content),
             .display = dto.display.value_or(true),
             .details = dto.details
-                ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)}
+                ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.details)}
                 : std::nullopt,
             .timestamp = dto.timestamp,
         }};
@@ -922,7 +922,7 @@ template <typename T>
     return dto;
 }
 
-[[nodiscard]] inline util::Expected<AiContext> context_from_dto(const ContextDto& dto, std::string_view context_json) {
+[[nodiscard]] inline support::Expected<AiContext> context_from_dto(const ContextDto& dto, std::string_view context_json) {
     AiContext context;
     context.system_prompt = dto.systemPrompt;
     for (const auto& message_dto : dto.messages) {
@@ -946,28 +946,28 @@ template <typename T>
     return detail::to_dto(message);
 }
 
-[[nodiscard]] inline util::Expected<MessageVariant> message_from_dto(const MessageDto& dto, std::string_view context = {}) {
+[[nodiscard]] inline support::Expected<MessageVariant> message_from_dto(const MessageDto& dto, std::string_view context = {}) {
     return detail::message_from_dto(dto, context);
 }
 
-[[nodiscard]] inline util::Expected<std::string> write_message_json(const MessageVariant& message) {
-    return util::write_json(detail::to_dto(message));
+[[nodiscard]] inline support::Expected<std::string> write_message_json(const MessageVariant& message) {
+    return support::write_json(detail::to_dto(message));
 }
 
-[[nodiscard]] inline util::Expected<MessageVariant> read_message_json(std::string_view json) {
-    auto dto = util::read_json<MessageDto>(json);
+[[nodiscard]] inline support::Expected<MessageVariant> read_message_json(std::string_view json) {
+    auto dto = support::read_json<MessageDto>(json);
     if (!dto) {
         return std::unexpected(dto.error());
     }
     return detail::message_from_dto(*dto, json);
 }
 
-[[nodiscard]] inline util::Expected<std::string> write_context_json(const AiContext& context) {
-    return util::write_json(detail::to_dto(context));
+[[nodiscard]] inline support::Expected<std::string> write_context_json(const AiContext& context) {
+    return support::write_json(detail::to_dto(context));
 }
 
-[[nodiscard]] inline util::Expected<AiContext> read_context_json(std::string_view json) {
-    auto dto = util::read_json<ContextDto>(json);
+[[nodiscard]] inline support::Expected<AiContext> read_context_json(std::string_view json) {
+    auto dto = support::read_json<ContextDto>(json);
     if (!dto) {
         return std::unexpected(dto.error());
     }

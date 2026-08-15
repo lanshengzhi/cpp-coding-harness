@@ -1,6 +1,6 @@
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/AsyncResultBridge.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -82,7 +82,7 @@ TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records
     cch::coding_agent::AuthStorage storage(path);
     cch::ai::CredentialStore& credentials = storage;
 
-    const auto listed = run_async<cch::util::Expected<std::vector<cch::ai::CredentialInfo>>>(
+    const auto listed = run_async<cch::support::Expected<std::vector<cch::ai::CredentialInfo>>>(
         [&]() { return credentials.list(); });
     REQUIRE(listed);
     const std::vector<cch::ai::CredentialInfo> expected_metadata{
@@ -92,7 +92,7 @@ TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records
     };
     CHECK(*listed == expected_metadata);
 
-    const auto codex = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>(
+    const auto codex = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
         [&]() { return credentials.read("openai-codex"); });
     REQUIRE(codex);
     REQUIRE(codex->has_value());
@@ -100,7 +100,7 @@ TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records
     REQUIRE(oauth != nullptr);
     CHECK(oauth->account_id == "dummy-account-id");
 
-    const auto updated = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>([&]() {
+    const auto updated = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
         return credentials.modify(
             "openai-codex",
             [](std::optional<cch::ai::Credential> current)
@@ -116,7 +116,7 @@ TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records
     });
     REQUIRE(updated);
 
-    const auto inserted = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>([&]() {
+    const auto inserted = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
         return credentials.modify(
             "kimi-coding",
             [](std::optional<cch::ai::Credential>)
@@ -129,7 +129,7 @@ TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records
     CHECK(read_text(path) == read_fixture("round-trip-expected.json"));
 
     cch::coding_agent::AuthStorage reopened(path);
-    const auto persisted = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>(
+    const auto persisted = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
         [&]() { return reopened.read("openai-codex"); });
     REQUIRE(persisted);
     REQUIRE(persisted->has_value());
@@ -144,8 +144,8 @@ TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding
     cch::coding_agent::AuthStorage second(path);
 
     boost::asio::io_context io;
-    std::optional<cch::util::Expected<std::optional<cch::ai::Credential>>> first_result;
-    std::optional<cch::util::Expected<std::optional<cch::ai::Credential>>> second_result;
+    std::optional<cch::support::Expected<std::optional<cch::ai::Credential>>> first_result;
+    std::optional<cch::support::Expected<std::optional<cch::ai::Credential>>> second_result;
 
     boost::asio::co_spawn(
         io,
@@ -155,15 +155,15 @@ TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding
                 [](std::optional<cch::ai::Credential>)
                     -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
                     return cch::ai::detail::make_async_result(
-                        []() -> boost::asio::awaitable<cch::util::Expected<std::optional<cch::ai::Credential>>> {
+                        []() -> boost::asio::awaitable<cch::support::Expected<std::optional<cch::ai::Credential>>> {
                             auto executor = co_await boost::asio::this_coro::executor;
                             boost::asio::steady_timer timer(executor, 75ms);
                             boost::system::error_code timer_error;
                             co_await timer.async_wait(
                                 boost::asio::redirect_error(boost::asio::use_awaitable, timer_error));
                             if (timer_error) {
-                                co_return std::unexpected(cch::util::make_error(
-                                    cch::util::ErrorCode::Cancelled,
+                                co_return std::unexpected(cch::support::make_error(
+                                    cch::support::ErrorCode::Cancelled,
                                     "test credential modification was cancelled"));
                             }
                             co_return std::optional<cch::ai::Credential>{
@@ -225,7 +225,7 @@ TEST_CASE(
     CHECK(std::filesystem::remove(lock_path, lock_error));
     REQUIRE_FALSE(lock_error);
     storage.reload();
-    const auto loaded = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>(
+    const auto loaded = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
         [&]() { return storage.read("deepseek"); });
     REQUIRE(loaded);
     REQUIRE(loaded->has_value());
@@ -251,7 +251,7 @@ TEST_CASE(
     cch::coding_agent::AuthStorage storage(path);
     CHECK_FALSE(std::filesystem::exists(lock_path, lock_error));
     REQUIRE_FALSE(lock_error);
-    const auto loaded = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>(
+    const auto loaded = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
         [&]() { return storage.read("deepseek"); });
     REQUIRE(loaded);
     REQUIRE(loaded->has_value());
@@ -267,7 +267,7 @@ TEST_CASE(
     write_text(path, original);
     cch::coding_agent::AuthStorage storage(path);
 
-    const auto modified = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>([&]() {
+    const auto modified = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
         return storage.modify(
             "deepseek",
             [&](std::optional<cch::ai::Credential>)
@@ -276,15 +276,15 @@ TEST_CASE(
                 const bool removed = std::filesystem::remove(lock_path, lock_error);
                 if (!removed || lock_error) {
                     return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(
-                        std::unexpected(cch::util::make_error(
-                            cch::util::ErrorCode::Unknown,
+                        std::unexpected(cch::support::make_error(
+                            cch::support::ErrorCode::Unknown,
                             "test could not replace the auth lock")));
                 }
                 const bool created = std::filesystem::create_directory(lock_path, lock_error);
                 if (!created || lock_error) {
                     return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(
-                        std::unexpected(cch::util::make_error(
-                            cch::util::ErrorCode::Unknown,
+                        std::unexpected(cch::support::make_error(
+                            cch::support::ErrorCode::Unknown,
                             "test could not recreate the auth lock")));
                 }
                 std::filesystem::last_write_time(
@@ -293,8 +293,8 @@ TEST_CASE(
                     lock_error);
                 if (lock_error) {
                     return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(
-                        std::unexpected(cch::util::make_error(
-                            cch::util::ErrorCode::Unknown,
+                        std::unexpected(cch::support::make_error(
+                            cch::support::ErrorCode::Unknown,
                             "test could not age the replacement auth lock")));
                 }
                 return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(std::expected<std::optional<cch::ai::Credential>, cch::support::Error>{std::optional<cch::ai::Credential>{api_key_credential("dummy-new-key")}});
@@ -320,13 +320,13 @@ TEST_CASE(
     write_text(path, "{invalid-json");
     storage.reload();
 
-    const auto retained = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>(
+    const auto retained = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
         [&]() { return storage.read("deepseek"); });
     REQUIRE(retained);
     REQUIRE(retained->has_value());
     CHECK(std::get<cch::ai::ApiKeyCredential>(**retained).key == "dummy-stored-key");
 
-    const auto modified = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>([&]() {
+    const auto modified = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
         return storage.modify(
             "openai",
             [](std::optional<cch::ai::Credential>)
@@ -346,7 +346,7 @@ TEST_CASE(
     const auto path = agent_dir / "auth.json";
     cch::coding_agent::AuthStorage storage(path);
 
-    const auto inserted = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>([&]() {
+    const auto inserted = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
         return storage.modify(
             "deepseek",
             [](std::optional<cch::ai::Credential>)
@@ -355,7 +355,7 @@ TEST_CASE(
             });
     });
     REQUIRE(inserted);
-    const auto second = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>([&]() {
+    const auto second = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
         return storage.modify(
             "kimi-coding",
             [](std::optional<cch::ai::Credential>)
@@ -365,9 +365,9 @@ TEST_CASE(
     });
     REQUIRE(second);
 
-    const auto removed = run_async<cch::util::ExpectedVoid>([&]() { return storage.remove("deepseek"); });
+    const auto removed = run_async<cch::support::ExpectedVoid>([&]() { return storage.remove("deepseek"); });
     REQUIRE(removed);
-    const auto remaining = run_async<cch::util::Expected<std::optional<cch::ai::Credential>>>(
+    const auto remaining = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
         [&]() { return storage.read("kimi-coding"); });
     REQUIRE(remaining);
     REQUIRE(remaining->has_value());

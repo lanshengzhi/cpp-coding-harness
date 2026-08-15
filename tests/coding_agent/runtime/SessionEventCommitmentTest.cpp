@@ -99,9 +99,9 @@ struct CommitmentChannel {
         }
     }
 
-    [[nodiscard]] util::ExpectedVoid conclude(
+    [[nodiscard]] support::ExpectedVoid conclude(
         runtime::SessionEventCommitment& commitment,
-        std::optional<util::ExpectedVoid> agent_result) {
+        std::optional<support::ExpectedVoid> agent_result) {
         return run_awaitable(*io, commitment.conclude(std::move(agent_result)));
     }
 
@@ -135,7 +135,7 @@ TEST_CASE(
     REQUIRE(sink(agent::MessageEndEvent{std::move(bash)}).has_value());
 
     REQUIRE(sink(agent::MessageEndEvent{user_msg("hello")}).has_value());
-    CHECK(channel.conclude(commitment, util::ExpectedVoid{}).has_value());
+    CHECK(channel.conclude(commitment, support::ExpectedVoid{}).has_value());
     CHECK(channel.persisted_user_texts() == std::vector<std::string>{"hello"});
 }
 
@@ -151,12 +151,12 @@ TEST_CASE(
     harness::session::testing::fail_nth_append_for_test(channel.session_path, 1);
     REQUIRE(sink(agent::MessageEndEvent{user_msg("one")}).has_value());
 
-    util::ExpectedVoid wrapped = std::unexpected(util::make_error(
-        util::ErrorCode::Unknown,
+    support::ExpectedVoid wrapped = std::unexpected(support::make_error(
+        support::ErrorCode::Unknown,
         "agent event commitment failed"));
     auto verdict = channel.conclude(commitment, std::move(wrapped));
     REQUIRE_FALSE(verdict.has_value());
-    CHECK(verdict.error().code == util::ErrorCode::Session);
+    CHECK(verdict.error().code == support::ErrorCode::Session);
     CHECK(verdict.error().message == "could not persist session entry");
     CHECK(channel.persisted_user_texts().empty());
 }
@@ -170,14 +170,14 @@ TEST_CASE(
 
     harness::session::testing::fail_nth_append_for_test(channel.session_path, 1);
     REQUIRE(sink(agent::MessageEndEvent{user_msg("one")}).has_value());
-    auto verdict = channel.conclude(commitment, util::ExpectedVoid{});
+    auto verdict = channel.conclude(commitment, support::ExpectedVoid{});
     REQUIRE_FALSE(verdict.has_value());
 
     // The recorded failure is session-scoped sticky state: later admissions
     // fail fast with the same typed failure.
     auto rejected = sink(agent::MessageEndEvent{user_msg("two")});
     REQUIRE_FALSE(rejected.has_value());
-    CHECK(rejected.error().code == util::ErrorCode::Session);
+    CHECK(rejected.error().code == support::ErrorCode::Session);
     CHECK(rejected.error().message == "could not persist session entry");
 }
 
@@ -189,7 +189,7 @@ TEST_CASE(
 
     auto verdict = channel.conclude(commitment, std::nullopt);
     REQUIRE_FALSE(verdict.has_value());
-    CHECK(verdict.error().code == util::ErrorCode::Unknown);
+    CHECK(verdict.error().code == support::ErrorCode::Unknown);
     CHECK(verdict.error().message == "stateful Agent prompt did not finish");
 }
 
@@ -201,12 +201,12 @@ TEST_CASE(
     auto sink = commitment.sink();
     REQUIRE(sink(agent::MessageEndEvent{user_msg("hello")}).has_value());
 
-    util::ExpectedVoid failed = std::unexpected(util::make_error(
-        util::ErrorCode::Provider,
+    support::ExpectedVoid failed = std::unexpected(support::make_error(
+        support::ErrorCode::Provider,
         "provider exploded"));
     auto verdict = channel.conclude(commitment, std::move(failed));
     REQUIRE_FALSE(verdict.has_value());
-    CHECK(verdict.error().code == util::ErrorCode::Provider);
+    CHECK(verdict.error().code == support::ErrorCode::Provider);
     CHECK(verdict.error().message == "provider exploded");
 }
 
@@ -220,7 +220,7 @@ TEST_CASE(
     REQUIRE(sink(agent::MessageEndEvent{user_msg("one")}).has_value());
     REQUIRE(sink(agent::MessageEndEvent{user_msg("two")}).has_value());
     REQUIRE(sink(agent::MessageEndEvent{user_msg("three")}).has_value());
-    CHECK(channel.conclude(commitment, util::ExpectedVoid{}).has_value());
+    CHECK(channel.conclude(commitment, support::ExpectedVoid{}).has_value());
 
     CHECK(
         channel.persisted_user_texts() ==
@@ -244,12 +244,12 @@ TEST_CASE(
 
     auto verdict = sink(agent::MessageEndEvent{user_msg("hello")});
     REQUIRE_FALSE(verdict.has_value());
-    CHECK(verdict.error().code == util::ErrorCode::Busy);
+    CHECK(verdict.error().code == support::ErrorCode::Busy);
 
     // The saturation is latched like any persistence failure.
-    auto concluded = channel.conclude(commitment, util::ExpectedVoid{});
+    auto concluded = channel.conclude(commitment, support::ExpectedVoid{});
     REQUIRE_FALSE(concluded.has_value());
-    CHECK(concluded.error().code == util::ErrorCode::Busy);
+    CHECK(concluded.error().code == support::ErrorCode::Busy);
     CHECK(channel.persisted_user_texts().empty());
 }
 
@@ -261,7 +261,7 @@ TEST_CASE(
     auto sink = commitment.sink();
 
     REQUIRE(sink(agent::MessageEndEvent{user_msg("hello")}).has_value());
-    CHECK(channel.conclude(commitment, util::ExpectedVoid{}).has_value());
+    CHECK(channel.conclude(commitment, support::ExpectedVoid{}).has_value());
     CHECK(channel.persisted_user_texts().empty());
 }
 

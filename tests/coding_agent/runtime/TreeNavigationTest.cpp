@@ -135,7 +135,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         (void)model;
         (void)context;
         (void)options;
@@ -199,7 +199,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         (void)model;
         (void)context;
         (void)options;
@@ -239,7 +239,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         (void)model;
         (void)context;
         (void)options;
@@ -374,11 +374,11 @@ TEST_CASE(
     provider_ptr->release_timer_->expires_at(
         std::chrono::steady_clock::time_point::max());
 
-    std::optional<util::ExpectedVoid> prompt_result;
+    std::optional<support::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(
         io,
         session->prompt("first"),
-        [&](std::exception_ptr, util::ExpectedVoid result) {
+        [&](std::exception_ptr, support::ExpectedVoid result) {
             prompt_result.emplace(std::move(result));
         });
     // Drive the io until the stream is in flight.

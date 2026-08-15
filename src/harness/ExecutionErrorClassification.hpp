@@ -1,16 +1,16 @@
 #pragma once
 
 #include <cch/agent/harness/ExecutionEnv.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 namespace cch::harness {
 
 [[nodiscard]] inline ExecutionError classify_process_execution_error(
-    const util::Error& error) {
+    const support::Error& error) {
     auto code = ExecutionErrorCode::SpawnError;
-    if (error.code == util::ErrorCode::Cancelled) {
+    if (error.code == support::ErrorCode::Cancelled) {
         code = ExecutionErrorCode::Aborted;
-    } else if (error.code == util::ErrorCode::Timeout) {
+    } else if (error.code == support::ErrorCode::Timeout) {
         code = ExecutionErrorCode::Timeout;
     } else if (error.detail.find("callback") != std::string::npos) {
         code = ExecutionErrorCode::CallbackError;

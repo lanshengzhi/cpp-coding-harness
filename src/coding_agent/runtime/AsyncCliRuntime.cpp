@@ -69,7 +69,7 @@ void close_runtime(
 /// pi `readPipedStdin`: read all of piped stdin and trim it; empty (or
 /// whitespace-only) content is absent and contributes nothing to the initial
 /// message merge.
-[[nodiscard]] util::Expected<std::string> read_piped_input(
+[[nodiscard]] support::Expected<std::string> read_piped_input(
     std::istream& input,
     bool stdin_is_terminal) {
     if (stdin_is_terminal) return std::string{};
@@ -77,8 +77,8 @@ void close_runtime(
     std::ostringstream collected;
     collected << input.rdbuf();
     if (input.bad()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "could not read piped stdin"));
     }
     auto text = collected.str();
@@ -93,7 +93,7 @@ void close_runtime(
 void print_creation_error(
     bool is_resume_target,
     std::ostream& error_stream,
-    const util::Error& error) {
+    const support::Error& error) {
     error_stream << (is_resume_target
                          ? "could not resume session: "
                          : "could not create session: ")
@@ -217,13 +217,13 @@ void print_session_diagnostics(
          &creation_failure_reported, is_resume_target](
             std::size_t /* action_generation */,
             coding_agent::tui::TuiActionVariant action)
-        -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
+        -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
             // One move-only sink carries every application-level Native TUI
             // operation to the composition host (ADR 0040); dispatch on the
             // closed action value.
             return std::visit(
                 [&](auto&& payload)
-                    -> util::Expected<
+                    -> support::Expected<
                         coding_agent::tui::TuiActionResultVariant> {
                     using T = std::decay_t<decltype(payload)>;
                     if constexpr (std::is_same_v<T, coding_agent::tui::OpenBrowserAction>) {
@@ -471,14 +471,14 @@ void print_session_diagnostics(
     request.models = config.models;
     request.api_key = config.api_key;
 
-    const auto print_creation_failure = [&](const util::Error& error) {
+    const auto print_creation_failure = [&](const support::Error& error) {
         // pi `MissingSessionCwdError`: the resumed session's stored header
         // cwd no longer exists — the stderr error is pi's verbatim text with
         // no "could not resume session:" prefix, and the run exits 1. The
         // missing-cwd recovery above already resolved the interactive
         // prompt and the non-interactive error; this path covers the race
         // where the header changes between the check and session creation.
-        if (error.code == util::ErrorCode::MissingSessionCwd) {
+        if (error.code == support::ErrorCode::MissingSessionCwd) {
             streams.error << error.message << '\n';
         } else {
             print_creation_error(is_resume_target, streams.error, error);

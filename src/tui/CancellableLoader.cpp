@@ -1,6 +1,6 @@
 #include <cch/tui/CancellableLoader.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -25,7 +25,7 @@ struct CancellableLoader::Impl {
     LoaderCompletionSink on_complete;
     LoaderCancellationSink on_cancel;
     std::shared_ptr<const KeybindingRegistry> keybindings;
-    std::optional<util::Error> callback_error;
+    std::optional<support::Error> callback_error;
     bool focused{false};
 
     bool finish(CancellableLoaderState outcome) {
@@ -50,8 +50,8 @@ struct CancellableLoader::Impl {
             if (cancellation) cancellation();
         } catch (...) {
             std::lock_guard lock(mutex);
-            callback_error = util::make_error(
-                util::ErrorCode::Unknown,
+            callback_error = support::make_error(
+                support::ErrorCode::Unknown,
                 outcome == CancellableLoaderState::Cancelled
                     ? "TUI CancellableLoader cancellation callback failed"
                     : "TUI CancellableLoader completion callback failed",
@@ -123,7 +123,7 @@ void CancellableLoader::set_indicator(std::optional<LoaderIndicatorOptions> indi
     if (!still_active) impl->loader.stop();
 }
 
-util::Expected<RenderResult> CancellableLoader::render(std::size_t width) {
+support::Expected<RenderResult> CancellableLoader::render(std::size_t width) {
     auto impl = impl_;
     {
         std::lock_guard lock(impl->mutex);

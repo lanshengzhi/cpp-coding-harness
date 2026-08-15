@@ -46,7 +46,7 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -63,9 +63,9 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
     context.tools.push_back(ai::Tool{
         "read_file",
         "Read",
-        util::JsonValue::object_t{{"type", "object"}, {"additionalProperties", false}},
+        support::JsonValue::object_t{{"type", "object"}, {"additionalProperties", false}},
     });
-    static_assert(std::is_same_v<decltype(ai::Tool::parameters), util::JsonValue>);
+    static_assert(std::is_same_v<decltype(ai::Tool::parameters), support::JsonValue>);
 
     agent::AsyncAgentOptions options;
     options.max_turns = 2;

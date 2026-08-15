@@ -20,7 +20,7 @@ SessionEventCommitment::SessionEventCommitment(
     : persistence_(std::move(persistence)) {}
 
 agent::AgentEventCommitter SessionEventCommitment::sink() {
-    return [this](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+    return [this](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
         if (!persistence_) {
             return {};
         }
@@ -32,8 +32,8 @@ agent::AgentEventCommitter SessionEventCommitment::sink() {
     };
 }
 
-boost::asio::awaitable<util::ExpectedVoid> SessionEventCommitment::conclude(
-    std::optional<util::ExpectedVoid> agent_result) {
+boost::asio::awaitable<support::ExpectedVoid> SessionEventCommitment::conclude(
+    std::optional<support::ExpectedVoid> agent_result) {
     if (persistence_) {
         co_await persistence_->drain();
         if (auto failure = persistence_->failure()) {
@@ -41,8 +41,8 @@ boost::asio::awaitable<util::ExpectedVoid> SessionEventCommitment::conclude(
         }
     }
     if (!agent_result) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "stateful Agent prompt did not finish"));
     }
     co_return *agent_result;

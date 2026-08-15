@@ -100,7 +100,7 @@ namespace {
     // Settles one prompt: a signal preempts everything (pi exits inside the
     // handler), then a prompt rejection keeps the C++ binary's loop-failed
     // report with a non-zero exit.
-    const auto settle = [&](util::ExpectedVoid prompted)
+    const auto settle = [&](support::ExpectedVoid prompted)
         -> std::optional<int> {
         if (signal_exit) {
             return *signal_exit;

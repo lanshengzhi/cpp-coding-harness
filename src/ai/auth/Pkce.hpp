@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <map>
 #include <optional>
@@ -20,11 +20,11 @@ struct PkcePair {
 [[nodiscard]] std::string base64url_encode(std::string_view bytes);
 
 /// Random 32-byte verifier base64url-encoded plus its SHA-256 challenge.
-[[nodiscard]] util::Expected<PkcePair> generate_pkce();
+[[nodiscard]] support::Expected<PkcePair> generate_pkce();
 
 /// Random 16-byte state as a 32-character lowercase hex string (pi
 /// `createState`).
-[[nodiscard]] util::Expected<std::string> create_oauth_state();
+[[nodiscard]] support::Expected<std::string> create_oauth_state();
 
 /// URLSearchParams-style query encoding: unreserved (`A-Za-z0-9*-._`) and
 /// alphanumeric pass through, space becomes `+`, everything else `%XX` with
@@ -53,6 +53,6 @@ struct AuthorizationInput {
 /// `https://api.openai.com/auth` (three-part split, base64url decode, JSON
 /// parse). Fails when the token is not a three-part JWT or the claim is
 /// missing/empty, matching pi's `getAccountId` + `credentialsFromToken`.
-[[nodiscard]] util::Expected<std::string> extract_account_id(std::string_view access_token);
+[[nodiscard]] support::Expected<std::string> extract_account_id(std::string_view access_token);
 
 } // namespace cch::ai::auth

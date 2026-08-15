@@ -2,7 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -43,7 +43,7 @@ struct KeybindingsManagerResult {
 /// action IDs selected by an assembling frontend, drawn from the full
 /// catalog. Unknown IDs fail rather than creating placeholders.
 /// Platform-specific defaults remain explicit in the result.
-[[nodiscard]] util::Expected<std::vector<cch::tui::KeybindingDefinition>>
+[[nodiscard]] support::Expected<std::vector<cch::tui::KeybindingDefinition>>
 app_keybinding_definitions(
     std::span<const std::string_view> assembled_action_ids,
     cch::tui::KeybindingPlatform platform);
@@ -51,7 +51,7 @@ app_keybinding_definitions(
 /// Load exactly <Agent Config Directory>/keybindings.json and resolve one
 /// startup registry (pi `KeybindingsManager.create` + `reload`, ADR 0035).
 /// No pi state directory or project path is discovered.
-[[nodiscard]] util::Expected<KeybindingsManagerResult> load_keybindings_manager(
+[[nodiscard]] support::Expected<KeybindingsManagerResult> load_keybindings_manager(
     KeybindingsManagerRequest request);
 
 // ── /hotkeys presentation (pi interactive-mode.ts `handleHotkeysCommand`

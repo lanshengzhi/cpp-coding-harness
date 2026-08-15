@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <map>
 #include <string>
@@ -24,6 +24,6 @@ struct SkillFrontmatter {
 /// Normalizes \r\n → \n, splits on --- delimiters, and parses the YAML
 /// block as flat key: value pairs. Returns empty frontmatter when no
 /// frontmatter block is present.
-[[nodiscard]] util::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content);
+[[nodiscard]] support::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content);
 
 } // namespace cch::coding_agent

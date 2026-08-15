@@ -8,8 +8,8 @@
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -29,8 +29,8 @@ namespace {
 
 namespace stream = responses_stream;
 
-using JsonObject = util::JsonValue::object_t;
-using JsonArray = util::JsonValue::array_t;
+using JsonObject = support::JsonValue::object_t;
+using JsonArray = support::JsonValue::array_t;
 
 constexpr std::string_view kDefaultCodexBaseUrl =
     "https://chatgpt.com/backend-api";
@@ -48,7 +48,7 @@ struct CodexFailure {
     CodexFailureKind kind{CodexFailureKind::Transport};
     std::string code{};
     std::string message{};
-    util::Error error{};
+    support::Error error{};
 };
 
 template <typename Headers>
@@ -126,7 +126,7 @@ void erase_header(Headers& headers, std::string_view name) {
 /// pi extractAccountId: the Codex token is a ChatGPT JWT whose payload carries
 /// `https://api.openai.com/auth.chatgpt_account_id`. The account id keys the
 /// per-session socket cache and the `chatgpt-account-id` request header.
-[[nodiscard]] util::Expected<std::string> extract_account_id(
+[[nodiscard]] support::Expected<std::string> extract_account_id(
     std::string_view token) {
     const auto failure = [] {
         return std::unexpected(stream::stream_error(
@@ -145,7 +145,7 @@ void erase_header(Headers& headers, std::string_view name) {
     if (!payload) {
         return failure();
     }
-    auto parsed = util::read_json(*payload);
+    auto parsed = support::read_json(*payload);
     if (!parsed) {
         return failure();
     }
@@ -253,7 +253,7 @@ void apply_codex_usage(
         });
 }
 
-[[nodiscard]] util::ExpectedVoid finalize_codex_response(
+[[nodiscard]] support::ExpectedVoid finalize_codex_response(
     const Model& model,
     const JsonObject& event,
     AssistantMessage& assistant,
@@ -312,7 +312,7 @@ void apply_codex_usage(
 
 enum class WsFrameAction { Continue, Terminal };
 
-[[nodiscard]] util::Expected<WsFrameAction> process_codex_json_event(
+[[nodiscard]] support::Expected<WsFrameAction> process_codex_json_event(
     const JsonObject& event,
     const Model& model,
     AssistantMessage& assistant,
@@ -407,7 +407,7 @@ enum class WsFrameAction { Continue, Terminal };
             detail = code.value_or("");
         }
         if (detail.empty()) {
-            detail = util::write_json(util::JsonValue{event}).value_or("{}");
+            detail = support::write_json(support::JsonValue{event}).value_or("{}");
         }
         if (failure) {
             failure->kind = CodexFailureKind::Api;
@@ -419,7 +419,7 @@ enum class WsFrameAction { Continue, Terminal };
     return WsFrameAction::Continue;
 }
 
-[[nodiscard]] util::ExpectedVoid process_codex_sse_event(
+[[nodiscard]] support::ExpectedVoid process_codex_sse_event(
     const providers::SseEvent& event,
     const Model& model,
     AssistantMessage& assistant,
@@ -433,7 +433,7 @@ enum class WsFrameAction { Continue, Terminal };
     if (event.event == "error") {
         return std::unexpected(stream::stream_error(event.data));
     }
-    auto parsed = util::read_json(event.data);
+    auto parsed = support::read_json(event.data);
     if (!parsed) {
         if (event.event != "message" && !event.event.starts_with("response.")) {
             return {};
@@ -455,11 +455,11 @@ enum class WsFrameAction { Continue, Terminal };
     return {};
 }
 
-[[nodiscard]] util::Error normalize_codex_transport_error(const util::Error& error) {
-    if (error.code == util::ErrorCode::Cancelled) {
-        return util::make_error(util::ErrorCode::Cancelled, "Request was aborted");
+[[nodiscard]] support::Error normalize_codex_transport_error(const support::Error& error) {
+    if (error.code == support::ErrorCode::Cancelled) {
+        return support::make_error(support::ErrorCode::Cancelled, "Request was aborted");
     }
-    if (error.code == util::ErrorCode::Unknown) {
+    if (error.code == support::ErrorCode::Unknown) {
         return error;
     }
     return stream::stream_error(
@@ -470,9 +470,9 @@ enum class WsFrameAction { Continue, Terminal };
 // ── WebSocket session cache ───────────────────────────────────────────────
 
 struct CodexContinuation {
-    util::JsonValue last_request_body;
+    support::JsonValue last_request_body;
     std::string last_response_id;
-    util::JsonValue::array_t last_response_items;
+    support::JsonValue::array_t last_response_items;
 };
 
 struct CodexSocketEntry {
@@ -627,24 +627,24 @@ private:
 
 // ── Continuation / delta ──────────────────────────────────────────────────
 
-[[nodiscard]] util::JsonValue body_without_input_and_previous(
-    const util::JsonValue& body) {
+[[nodiscard]] support::JsonValue body_without_input_and_previous(
+    const support::JsonValue& body) {
     auto object = *body.get_if<JsonObject>();
     object.erase("input");
     object.erase("previous_response_id");
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
 [[nodiscard]] bool request_bodies_match_except_input(
-    const util::JsonValue& left,
-    const util::JsonValue& right) {
-    const auto left_bytes = util::write_json(body_without_input_and_previous(left));
-    const auto right_bytes = util::write_json(body_without_input_and_previous(right));
+    const support::JsonValue& left,
+    const support::JsonValue& right) {
+    const auto left_bytes = support::write_json(body_without_input_and_previous(left));
+    const auto right_bytes = support::write_json(body_without_input_and_previous(right));
     return left_bytes && right_bytes && *left_bytes == *right_bytes;
 }
 
 [[nodiscard]] std::optional<JsonArray> cached_input_delta(
-    const util::JsonValue& body,
+    const support::JsonValue& body,
     const CodexContinuation& continuation) {
     if (!request_bodies_match_except_input(body, continuation.last_request_body)) {
         return std::nullopt;
@@ -680,8 +680,8 @@ private:
     if (current.size() < baseline.size()) {
         return std::nullopt;
     }
-    const auto baseline_bytes = util::write_json(util::JsonValue{baseline});
-    const auto prefix_bytes = util::write_json(util::JsonValue{
+    const auto baseline_bytes = support::write_json(support::JsonValue{baseline});
+    const auto prefix_bytes = support::write_json(support::JsonValue{
         JsonArray{current.begin(), current.begin() + baseline.size()}});
     if (!baseline_bytes || !prefix_bytes || *baseline_bytes != *prefix_bytes) {
         return std::nullopt;
@@ -689,8 +689,8 @@ private:
     return JsonArray{current.begin() + baseline.size(), current.end()};
 }
 
-[[nodiscard]] util::Expected<std::string> ws_frame_json(
-    const util::JsonValue& body) {
+[[nodiscard]] support::Expected<std::string> ws_frame_json(
+    const support::JsonValue& body) {
     const auto* body_object = body.get_if<JsonObject>();
     if (!body_object) {
         return std::unexpected(stream::stream_error(
@@ -701,14 +701,14 @@ private:
     for (const auto& [key, value] : *body_object) {
         frame.emplace(key, value);
     }
-    return util::write_json(util::JsonValue{std::move(frame)});
+    return support::write_json(support::JsonValue{std::move(frame)});
 }
 
 // ── Diagnostics ───────────────────────────────────────────────────────────
 
 void append_transport_diagnostic(
     AssistantMessage& assistant,
-    const util::Error& error,
+    const support::Error& error,
     std::string_view configured_transport,
     bool websocket_started,
     std::size_t request_bytes) {
@@ -724,12 +724,12 @@ void append_transport_diagnostic(
             .stack = std::nullopt,
             .code = std::nullopt,
         },
-        .details = util::JsonValue::object_t{
+        .details = support::JsonValue::object_t{
             {"configuredTransport", std::string{configured_transport}},
             {"fallbackTransport",
              websocket_started
-                 ? util::JsonValue{nullptr}
-                 : util::JsonValue{std::string{"sse"}}},
+                 ? support::JsonValue{nullptr}
+                 : support::JsonValue{std::string{"sse"}}},
             {"eventsEmitted", websocket_started},
             {"phase",
              websocket_started
@@ -744,16 +744,16 @@ void append_transport_diagnostic(
 
 struct WsAttemptOutcome {
     bool completed{false};
-    util::Error error{};
+    support::Error error{};
     CodexFailureKind failure_kind{CodexFailureKind::Transport};
     std::string api_code{};
 };
 
-boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
+boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
     const std::shared_ptr<providers::WebSocketTransport>& ws_transport,
     const Model& model,
     const ProviderStreamOptions& options,
-    const util::JsonValue& full_body,
+    const support::JsonValue& full_body,
     const providers::WebSocketConnectRequest& ws_request,
     std::optional<std::string_view> cache_session_id,
     std::string_view account_id,
@@ -764,7 +764,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
     AssistantEventSink& sink) {
     websocket_started = false;
 
-    const auto finish_failed = [](util::Error error,
+    const auto finish_failed = [](support::Error error,
                                   CodexFailureKind kind,
                                   std::string api_code = {}) {
         return WsAttemptOutcome{
@@ -780,7 +780,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
     if (!entry) {
         auto connected = co_await ws_transport->async_connect(ws_request);
         if (!connected) {
-            const auto kind = connected.error().code == util::ErrorCode::Cancelled
+            const auto kind = connected.error().code == support::ErrorCode::Cancelled
                 ? CodexFailureKind::Cancelled
                 : CodexFailureKind::Transport;
             co_return finish_failed(connected.error(), kind);
@@ -800,17 +800,17 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
         }
     };
 
-    util::JsonValue request_body = full_body;
+    support::JsonValue request_body = full_body;
     if (entry && entry->continuation) {
         auto delta = cached_input_delta(full_body, *entry->continuation);
         if (!delta || entry->continuation->last_response_id.empty()) {
             entry->continuation.reset();
         } else {
             auto object = *full_body.get_if<JsonObject>();
-            object.insert_or_assign("input", util::JsonValue{std::move(*delta)});
+            object.insert_or_assign("input", support::JsonValue{std::move(*delta)});
             object.insert_or_assign(
                 "previous_response_id", entry->continuation->last_response_id);
-            request_body = util::JsonValue{std::move(object)};
+            request_body = support::JsonValue{std::move(object)};
         }
     }
     auto frame = ws_frame_json(request_body);
@@ -821,7 +821,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
 
     auto sent = co_await socket->async_send(*frame);
     if (!sent) {
-        const auto kind = sent.error().code == util::ErrorCode::Cancelled
+        const auto kind = sent.error().code == support::ErrorCode::Cancelled
             ? CodexFailureKind::Cancelled
             : CodexFailureKind::Transport;
         release_socket(false);
@@ -835,13 +835,13 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
         if (options.stop_token.stop_requested()) {
             release_socket(false);
             co_return finish_failed(
-                util::make_error(
-                    util::ErrorCode::Cancelled, "Request was aborted"),
+                support::make_error(
+                    support::ErrorCode::Cancelled, "Request was aborted"),
                 CodexFailureKind::Cancelled);
         }
         auto received = co_await socket->async_receive();
         if (!received) {
-            const auto kind = received.error().code == util::ErrorCode::Cancelled
+            const auto kind = received.error().code == support::ErrorCode::Cancelled
                 ? CodexFailureKind::Cancelled
                 : CodexFailureKind::Transport;
             release_socket(false);
@@ -854,7 +854,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
                     "WebSocket stream closed before response.completed"),
                 CodexFailureKind::Transport);
         }
-        auto parsed = util::read_json(**received);
+        auto parsed = support::read_json(**received);
         if (!parsed) {
             failure = CodexFailure{
                 .kind = CodexFailureKind::Protocol,
@@ -899,7 +899,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
     if (options.stop_token.stop_requested()) {
         release_socket(false);
         co_return finish_failed(
-            util::make_error(util::ErrorCode::Cancelled, "Request was aborted"),
+            support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
             CodexFailureKind::Cancelled);
     }
     if (assistant.stop_reason == AssistantStopReason::Error) {
@@ -947,7 +947,7 @@ OpenAICodexResponsesAdapter::OpenAICodexResponsesAdapter(OpenAICodexResponsesAda
 OpenAICodexResponsesAdapter& OpenAICodexResponsesAdapter::operator=(OpenAICodexResponsesAdapter&&) noexcept = default;
 OpenAICodexResponsesAdapter::~OpenAICodexResponsesAdapter() = default;
 
-boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAdapter::stream(
+boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponsesAdapter::stream(
     const Model& model,
     const AiContext& context,
     ProviderStreamOptions options,
@@ -961,8 +961,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
             "Codex Responses adapter received the wrong Model API"));
     }
     if (options.stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if (!options.auth.api_key || options.auth.api_key->empty()) {
@@ -977,9 +977,9 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
     assistant.stop_reason = AssistantStopReason::Pending;
     assistant.timestamp = stream::current_timestamp_ms();
 
-    std::optional<util::Error> sink_failure;
+    std::optional<support::Error> sink_failure;
     AssistantEventSink guarded_sink =
-        [&sink, &sink_failure](const AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&sink, &sink_failure](const AssistantStreamEvent& event) -> support::ExpectedVoid {
             auto emitted = providers::emit(sink, event);
             if (!emitted) {
                 sink_failure = emitted.error();
@@ -990,7 +990,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
     CCH_TRY(account_id, extract_account_id(*options.auth.api_key));
     CCH_TRY(payload, build_adapter_payload(
         AdapterKind::OpenAICodexResponses, model, context, options));
-    CCH_TRY(body_json, util::write_json(payload));
+    CCH_TRY(body_json, support::write_json(payload));
     const auto codex_url = resolve_codex_url(model.base_url);
     const auto cache_session_id = options.session_id;
 
@@ -1045,8 +1045,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
                 if (options.stop_token.stop_requested()) {
                     co_return stream::complete_failure(
                         assistant,
-                        util::make_error(
-                            util::ErrorCode::Cancelled,
+                        support::make_error(
+                            support::ErrorCode::Cancelled,
                             "Request was aborted"),
                         guarded_sink);
                 }
@@ -1116,9 +1116,9 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
         std::map<std::size_t, stream::OutputSlot> slots;
         bool saw_terminal = false;
         bool saw_body = false;
-        std::optional<util::Error> handler_failure;
+        std::optional<support::Error> handler_failure;
 
-        auto handle_chunk = [&](std::string_view bytes) -> util::ExpectedVoid {
+        auto handle_chunk = [&](std::string_view bytes) -> support::ExpectedVoid {
             saw_body = true;
             if (auto emitted = stream::emit_start(guarded_sink, assistant, started);
                 !emitted) {
@@ -1156,12 +1156,12 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
                 co_return stream::complete_failure(
                     assistant, *handler_failure, guarded_sink);
             }
-            if (response.error().code == util::ErrorCode::Cancelled ||
+            if (response.error().code == support::ErrorCode::Cancelled ||
                 options.stop_token.stop_requested()) {
                 co_return stream::complete_failure(
                     assistant,
-                    util::make_error(
-                        util::ErrorCode::Cancelled,
+                    support::make_error(
+                        support::ErrorCode::Cancelled,
                         "Request was aborted"),
                     guarded_sink);
             }
@@ -1234,8 +1234,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
         if (options.stop_token.stop_requested()) {
             co_return stream::complete_failure(
                 assistant,
-                util::make_error(
-                    util::ErrorCode::Cancelled,
+                support::make_error(
+                    support::ErrorCode::Cancelled,
                     "Request was aborted"),
                 guarded_sink);
         }

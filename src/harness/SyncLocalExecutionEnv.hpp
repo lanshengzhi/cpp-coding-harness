@@ -3,7 +3,7 @@
 #include <cch/agent/harness/ExecutionEnv.hpp>
 
 #include "WorkspaceFileSystem.hpp"
-#include "util/Process.hpp"
+#include "harness/Process.hpp"
 
 #include <memory>
 #include <vector>
@@ -17,12 +17,12 @@ public:
         bool bash_enabled = false,
         std::vector<std::string> secret_environment_names = {},
         ShellConfig shell_config = {},
-        std::shared_ptr<util::AsyncProcessRunner> runner =
-            std::make_shared<util::DefaultAsyncProcessRunner>());
+        std::shared_ptr<harness::AsyncProcessRunner> runner =
+            std::make_shared<harness::DefaultAsyncProcessRunner>());
 
     [[nodiscard]] const std::filesystem::path& workspace() const { return workspace_; }
 
-    [[nodiscard]] std::shared_ptr<util::AsyncProcessRunner> process_runner() const { return runner_; }
+    [[nodiscard]] std::shared_ptr<harness::AsyncProcessRunner> process_runner() const { return runner_; }
 
     // -- Pi-shaped filesystem methods ---
 
@@ -51,10 +51,10 @@ public:
 
     // -- Pi-shaped shell methods ---
 
-    [[nodiscard]] std::expected<util::ProcessRequest, ExecutionError> make_exec_request(
+    [[nodiscard]] std::expected<harness::ProcessRequest, ExecutionError> make_exec_request(
         std::string command,
         ExecOptions options) const;
-    [[nodiscard]] ShellExecResult exec_result_from_process(const util::ProcessResult& process) const;
+    [[nodiscard]] ShellExecResult exec_result_from_process(const harness::ProcessResult& process) const;
     [[nodiscard]] std::expected<ShellExecResult, ExecutionError> exec(
         std::string command,
         ExecOptions options = {}) const;
@@ -64,7 +64,7 @@ private:
     bool bash_enabled_{false};
     std::vector<std::string> secret_environment_names_;
     ShellConfig shell_config_;
-    std::shared_ptr<util::AsyncProcessRunner> runner_;
+    std::shared_ptr<harness::AsyncProcessRunner> runner_;
     WorkspaceFileSystem fs_;
 };
 

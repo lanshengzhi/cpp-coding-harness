@@ -6,7 +6,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <format>
@@ -142,7 +142,7 @@ void BashExecutionComponent::start_loader(cch::tui::RenderRequestSink request_re
     loader_->start();
 }
 
-util::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::size_t width) {
     const auto inclusion_token =
         exclude_from_context_ ? ThemeToken::Dim : ThemeToken::BashMode;
     std::vector<std::string> lines;

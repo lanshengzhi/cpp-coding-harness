@@ -2,9 +2,9 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Tool.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
-#include "util/BoundedText.hpp"
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
+#include "ai/BoundedText.hpp"
 
 #include <cstddef>
 #include <string>
@@ -17,7 +17,7 @@ namespace cch::agent {
     std::string text,
     std::size_t max_bytes,
     std::string_view suffix) {
-    return util::bounded_text(text, max_bytes, suffix);
+    return ai::bounded_text(text, max_bytes, suffix);
 }
 
 [[nodiscard]] inline std::string bounded_tool_argument_component(
@@ -37,7 +37,7 @@ namespace cch::agent {
 }
 
 /** Parse, clone, coerce, and validate one call against its private executable profile. */
-[[nodiscard]] util::Expected<util::JsonValue> prepare_tool_arguments(
+[[nodiscard]] support::Expected<support::JsonValue> prepare_tool_arguments(
     const ai::Tool& tool,
     const ai::ToolCallContent& call);
 

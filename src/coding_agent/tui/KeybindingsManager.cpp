@@ -1,11 +1,11 @@
 #include "KeybindingsManager.hpp"
 
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <cch/tui/Text.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <format>
@@ -204,7 +204,7 @@ struct ParsedOverrides {
 };
 
 [[nodiscard]] ParsedOverrides parse_overrides(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     const std::set<std::string, std::less<>>& assembled_ids,
     const std::filesystem::path& path) {
     ParsedOverrides result;
@@ -224,7 +224,7 @@ struct ParsedOverrides {
         bool valid_value = true;
         if (const auto* key = value.get_if<std::string>()) {
             keys.push_back(*key);
-        } else if (value.holds<util::JsonValue::array_t>()) {
+        } else if (value.holds<support::JsonValue::array_t>()) {
             for (const auto& item : value.get_array()) {
                 if (const auto* key = item.get_if<std::string>()) {
                     keys.push_back(*key);
@@ -283,8 +283,8 @@ struct ParsedOverrides {
     }
     std::ostringstream content;
     content << input.rdbuf();
-    if (auto parsed = util::read_json(content.str());
-        !parsed || !parsed->holds<util::JsonValue::object_t>()) {
+    if (auto parsed = support::read_json(content.str());
+        !parsed || !parsed->holds<support::JsonValue::object_t>()) {
         add_diagnostic(
             diagnostics,
             "invalid_keybindings_document",
@@ -303,7 +303,7 @@ struct ParsedOverrides {
 
 } // namespace
 
-util::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_definitions(
+support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_definitions(
     std::span<const std::string_view> assembled_action_ids,
     cch::tui::KeybindingPlatform platform) {
     std::vector<cch::tui::KeybindingDefinition> definitions;
@@ -311,8 +311,8 @@ util::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_defin
     for (const auto id : assembled_action_ids) {
         const auto* source = find_application_template(id);
         if (source == nullptr) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 std::format("unknown baseline application keybinding '{}'", id)));
         }
         auto keys = source->keys;
@@ -345,7 +345,7 @@ util::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_defin
     return definitions;
 }
 
-util::Expected<KeybindingsManagerResult> load_keybindings_manager(
+support::Expected<KeybindingsManagerResult> load_keybindings_manager(
     KeybindingsManagerRequest request) {
     auto definitions = cch::tui::builtin_tui_keybinding_definitions();
     definitions.insert(

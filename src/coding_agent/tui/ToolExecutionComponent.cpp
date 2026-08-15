@@ -6,10 +6,10 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/DiffRenderer.hpp"
 #include "coding_agent/tui/Theme.hpp"
-#include "util/Json.hpp"
-#include "util/JsonGlaze.hpp"
+#include "support/Json.hpp"
+#include "support/JsonGlaze.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <format>
@@ -67,10 +67,10 @@ constexpr std::size_t kCollapsedLogicalLines = 5;
 
 /// Extracts the `path`/`file_path` argument for tool titles.
 [[nodiscard]] std::optional<std::string> argument_path(std::string_view arguments_json) {
-    auto parsed = util::read_json<glz::generic>(arguments_json);
+    auto parsed = support::read_json<glz::generic>(arguments_json);
     if (!parsed) return std::nullopt;
-    auto value = util::json_from_glaze(std::move(*parsed));
-    const auto* object = value.get_if<util::JsonValue::object_t>();
+    auto value = support::json_from_glaze(std::move(*parsed));
+    const auto* object = value.get_if<support::JsonValue::object_t>();
     if (object == nullptr) return std::nullopt;
     const auto find_text = [&](std::string_view key) -> std::optional<std::string> {
         const auto found = object->find(std::string{key});
@@ -85,10 +85,10 @@ constexpr std::size_t kCollapsedLogicalLines = 5;
 
 /// Extracts the `command` argument for the bash tool title.
 [[nodiscard]] std::optional<std::string> argument_command(std::string_view arguments_json) {
-    auto parsed = util::read_json<glz::generic>(arguments_json);
+    auto parsed = support::read_json<glz::generic>(arguments_json);
     if (!parsed) return std::nullopt;
-    auto value = util::json_from_glaze(std::move(*parsed));
-    const auto* object = value.get_if<util::JsonValue::object_t>();
+    auto value = support::json_from_glaze(std::move(*parsed));
+    const auto* object = value.get_if<support::JsonValue::object_t>();
     if (object == nullptr) return std::nullopt;
     const auto found = object->find("command");
     if (found == object->end()) return std::nullopt;
@@ -121,7 +121,7 @@ constexpr std::size_t kCollapsedLogicalLines = 5;
 
 [[nodiscard]] std::optional<std::string> result_diff(const ai::ToolResultMessage& result) {
     if (!result.details) return std::nullopt;
-    const auto* object = result.details->get_if<util::JsonValue::object_t>();
+    const auto* object = result.details->get_if<support::JsonValue::object_t>();
     if (object == nullptr) return std::nullopt;
     const auto found = object->find("diff");
     if (found == object->end()) return std::nullopt;
@@ -294,7 +294,7 @@ void ToolExecutionComponent::rebuild() {
     }
 }
 
-util::Expected<cch::tui::RenderResult> ToolExecutionComponent::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> ToolExecutionComponent::render(std::size_t width) {
     auto rendered = box_.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     for (const auto& slot : image_slots_) {

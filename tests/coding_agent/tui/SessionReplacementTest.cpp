@@ -28,7 +28,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -77,7 +77,7 @@ struct Fixture {
 struct Running {
     tui::VirtualTerminal terminal{tui::VirtualTerminalOptions{.columns = 100, .rows = 40}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
 };
 
 /// The replace-session creator shared by these tests (pi `createRuntime`):
@@ -87,7 +87,7 @@ struct Running {
 [[nodiscard]] coding_agent::tui::testing::TestSessionFactorySink shared_provider_creator(
     const std::shared_ptr<tests::GatedChatProvider>& provider) {
     return [provider](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
         request.no_skills = true;
         request.no_prompt_templates = true;
         request.execution_runtime_target = tests::detail::fixture_runtime_target();
@@ -117,7 +117,7 @@ void boot(
                 .action_sink = actions->make_sink(),
                 .boot_request = std::move(request),
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
@@ -150,7 +150,7 @@ public:
              update_sink = std::move(update_sink),
              stop_token]() mutable
             -> boost::asio::awaitable<
-                util::Expected<coding_agent::runtime::UserShellResult>> {
+                support::Expected<coding_agent::runtime::UserShellResult>> {
                 state->commands.push_back(command);
                 ++state->started;
                 if (update_sink) {
@@ -251,14 +251,14 @@ TEST_CASE(
     actions->replace_session =
         [&replacement_calls, provider](
             coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             ++replacement_calls;
             request.no_skills = true;
             request.no_prompt_templates = true;
             request.execution_runtime_target = tests::detail::fixture_runtime_target();
             if (replacement_calls > 1) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Session,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
                     "host rejected the replacement"));
             }
             return coding_agent::create_agent_session_for_testing(
@@ -404,7 +404,7 @@ TEST_CASE(
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
     actions->replace_session =
         [shell_state](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
             request.no_prompt_templates = true;
             request.execution_runtime_target = tests::detail::fixture_runtime_target();

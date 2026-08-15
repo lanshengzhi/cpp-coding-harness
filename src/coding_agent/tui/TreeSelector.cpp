@@ -1,12 +1,12 @@
 #include "coding_agent/tui/TreeSelector.hpp"
 
 #include "coding_agent/tui/KeybindingHints.hpp"
-#include "util/BoundedText.hpp"
-#include "util/Json.hpp"
+#include "ai/BoundedText.hpp"
+#include "support/Json.hpp"
 
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -27,7 +27,7 @@ constexpr std::size_t kMaxVisibleAnchorContentWidth = 20;
 constexpr std::size_t kMinAnchorContextWidth = 2;
 constexpr std::size_t kMaxAnchorContextWidth = 12;
 /// pi's tree display budgets: 200 chars for entry content, 50 for the bash
-/// command, 40 for tool-argument JSON (through util::bounded_text).
+/// command, 40 for tool-argument JSON (through ai::bounded_text).
 constexpr std::size_t kEntryContentDisplayBytes = 200;
 constexpr std::size_t kBashCommandDisplayBytes = 50;
 constexpr std::size_t kToolArgumentsDisplayBytes = 40;
@@ -98,9 +98,9 @@ constexpr std::size_t kToolArgumentsDisplayBytes = 40;
 /// One argument value from the tool-call arguments object (pi `args.path ||
 /// args.file_path || ""`).
 [[nodiscard]] std::string argument_string(
-    const util::JsonValue& arguments,
+    const support::JsonValue& arguments,
     std::string_view path_key) {
-    if (!arguments.holds<util::JsonValue::object_t>()) return {};
+    if (!arguments.holds<support::JsonValue::object_t>()) return {};
     for (const auto& [key, value] : arguments.get_object()) {
         if (key == path_key) {
             if (const auto* text = value.get_if<std::string>()) {
@@ -273,7 +273,7 @@ void TreeSelectorComponent::flatten_tree() {
                             call->id,
                             ToolCallInfo{
                                 .name = call->name,
-                                .arguments = call->arguments.value_or(util::JsonValue{}),
+                                .arguments = call->arguments.value_or(support::JsonValue{}),
                             });
                     }
                 }
@@ -911,12 +911,12 @@ std::string TreeSelectorComponent::extract_content(
     }
     // pi's 200-char display budget for entry content, through the bounded
     // helper (CODING_STANDARDS 10.3 — no ad-hoc substr truncation).
-    return util::bounded_text(text, kEntryContentDisplayBytes);
+    return ai::bounded_text(text, kEntryContentDisplayBytes);
 }
 
 std::string TreeSelectorComponent::format_tool_call(
     std::string_view name,
-    const util::JsonValue& arguments) const {
+    const support::JsonValue& arguments) const {
     const auto path_argument = [&](std::string_view key) {
         return argument_string(arguments, key);
     };
@@ -926,7 +926,7 @@ std::string TreeSelectorComponent::format_tool_call(
         std::string display = path;
         std::optional<double> offset;
         std::optional<double> limit;
-        if (arguments.holds<util::JsonValue::object_t>()) {
+        if (arguments.holds<support::JsonValue::object_t>()) {
             for (const auto& [key, value] : arguments.get_object()) {
                 if (key == "offset" && value.holds<double>()) {
                     offset = value.get<double>();
@@ -970,7 +970,7 @@ std::string TreeSelectorComponent::format_tool_call(
         }
         // pi's 50-char command budget with the truncation suffix (10.3).
         return std::format(
-            "[bash: {}]", util::bounded_text(raw, kBashCommandDisplayBytes, "..."));
+            "[bash: {}]", ai::bounded_text(raw, kBashCommandDisplayBytes, "..."));
     }
     if (name == "grep") {
         const auto pattern = argument_string(arguments, "pattern");
@@ -991,13 +991,13 @@ std::string TreeSelectorComponent::format_tool_call(
     }
     // Custom tool: name + truncated JSON args (pi's 40-char budget).
     std::string args;
-    if (auto serialized = util::write_json(arguments); serialized) {
+    if (auto serialized = support::write_json(arguments); serialized) {
         args = std::move(*serialized);
     }
     return std::format(
         "[{}: {}]",
         name,
-        util::bounded_text(args, kToolArgumentsDisplayBytes, "..."));
+        ai::bounded_text(args, kToolArgumentsDisplayBytes, "..."));
 }
 
 std::string TreeSelectorComponent::get_entry_display_text(
@@ -1464,7 +1464,7 @@ namespace {
 /// (the start of its entry text after tree indentation/markers) would
 /// otherwise be too far right to see useful content (pi
 /// `renderHorizontalViewport`).
-[[nodiscard]] util::Expected<std::vector<std::string>> render_horizontal_viewport(
+[[nodiscard]] support::Expected<std::vector<std::string>> render_horizontal_viewport(
     const std::vector<TreeSelectorComponent::HorizontalViewportRow>& rows,
     std::size_t width) {
     const std::size_t viewport_width =
@@ -1521,7 +1521,7 @@ namespace {
 }
 
 /// The tree help semantic rows with chunk-aware wrapping (pi `TreeHelp`).
-[[nodiscard]] util::Expected<std::vector<std::string>> render_tree_help(
+[[nodiscard]] support::Expected<std::vector<std::string>> render_tree_help(
     std::size_t width,
     const cch::tui::KeybindingRegistry& keybindings,
     const LiveTheme& theme) {
@@ -1681,7 +1681,7 @@ namespace {
 
 } // namespace
 
-util::Expected<cch::tui::RenderResult> TreeSelectorComponent::render(
+support::Expected<cch::tui::RenderResult> TreeSelectorComponent::render(
     std::size_t width) {
     std::vector<std::string> lines;
     const auto border = [&]() {

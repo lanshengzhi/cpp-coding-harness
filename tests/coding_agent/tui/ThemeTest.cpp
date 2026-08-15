@@ -5,7 +5,7 @@
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -50,7 +50,7 @@ void capture_golden(std::string_view name, const std::string& message) {
 }
 
 /// Byte-compares the error message against the committed pi-verbatim golden.
-void check_parse_error_golden(std::string_view golden_name, const util::Error& error) {
+void check_parse_error_golden(std::string_view golden_name, const support::Error& error) {
     const auto expected = read_text_file(golden_path(golden_name));
     capture_golden(golden_name, error.message);
     CHECK(error.message == expected);
@@ -437,7 +437,7 @@ TEST_CASE("Malformed theme JSON produces a bounded redacted diagnostic", "[codin
         std::string{"{\"name\":\"sk-abcdefghijklmnopqrstuvwxyz123456\","} + std::string(10000, 'x'));
 
     REQUIRE_FALSE(malformed);
-    CHECK(malformed.error().code == util::ErrorCode::JsonParse);
+    CHECK(malformed.error().code == support::ErrorCode::JsonParse);
     CHECK(malformed.error().message.size() <= coding_agent::kMaxPresentationPayloadBytes);
     CHECK(malformed.error().detail.size() <= coding_agent::kMaxPresentationPayloadBytes);
     CHECK(malformed.error().message.starts_with("Failed to parse theme malformed fixture: "));

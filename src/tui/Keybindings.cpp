@@ -1,6 +1,6 @@
 #include <cch/tui/Keybindings.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <format>
 #include <map>
@@ -13,15 +13,15 @@
 namespace cch::tui {
 namespace {
 
-[[nodiscard]] util::Expected<std::vector<std::string>> canonical_keys(
+[[nodiscard]] support::Expected<std::vector<std::string>> canonical_keys(
     const std::vector<std::string>& keys,
     std::string_view action_id) {
     std::vector<std::string> result;
     std::set<std::string, std::less<>> seen;
     for (const auto& key : keys) {
         if (auto parsed = parse_key_id(key); !parsed) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 std::format("keybinding '{}' has invalid key '{}'", action_id, key),
                 key));
         } else {
@@ -48,8 +48,8 @@ namespace {
     return result;
 }
 
-[[nodiscard]] util::Error definition_error(std::string message) {
-    return util::make_error(util::ErrorCode::Validation, std::move(message));
+[[nodiscard]] support::Error definition_error(std::string message) {
+    return support::make_error(support::ErrorCode::Validation, std::move(message));
 }
 
 [[nodiscard]] KeybindingDefinition make_definition(
@@ -117,7 +117,7 @@ const std::vector<EffectiveKeybinding>& KeybindingRegistry::entries() const {
     return entries_;
 }
 
-util::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request) {
+support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request) {
     std::map<std::string, std::size_t, std::less<>> definition_indices;
     std::vector<EffectiveKeybinding> entries;
     entries.reserve(request.definitions.size());

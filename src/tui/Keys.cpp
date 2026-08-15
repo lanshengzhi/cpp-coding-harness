@@ -2,7 +2,7 @@
 
 #include "tui/InputInternal.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <array>
 #include <string>
 
@@ -43,9 +43,9 @@ bool is_baseline_key(std::string_view key) {
 
 } // namespace
 
-util::Expected<KeyEvent> parse_key_id(std::string_view identifier) {
+support::Expected<KeyEvent> parse_key_id(std::string_view identifier) {
     if (identifier.empty()) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "key identifier is empty"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "key identifier is empty"));
     }
 
     std::size_t key_start = 0;
@@ -61,22 +61,22 @@ util::Expected<KeyEvent> parse_key_id(std::string_view identifier) {
     while (start < key_start) {
         const auto separator = identifier.find('+', start);
         if (separator == std::string_view::npos || separator >= key_start) {
-            return std::unexpected(util::make_error(util::ErrorCode::Validation, "key identifier has an empty part"));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "key identifier has an empty part"));
         }
         const auto part = identifier.substr(start, separator - start);
         if (part == "ctrl" && !event.ctrl) event.ctrl = true;
         else if (part == "shift" && !event.shift) event.shift = true;
         else if (part == "alt" && !event.alt) event.alt = true;
         else {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "key identifier has an invalid or repeated modifier"));
         }
         start = separator + 1;
     }
 
     if (!is_baseline_key(event.key)) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "key identifier has an unsupported key"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "key identifier has an unsupported key"));
     }
     return event;
 }

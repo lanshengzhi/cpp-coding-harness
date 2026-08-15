@@ -78,17 +78,17 @@ inline constexpr std::string_view kOverflowRecoveryFailedMessage =
     "Context overflow recovery failed after one compact-and-retry attempt. "
     "Try reducing context or switching to a larger-context model.";
 
-[[nodiscard]] util::ExpectedVoid prompt_exception(std::exception_ptr exception) {
+[[nodiscard]] support::ExpectedVoid prompt_exception(std::exception_ptr exception) {
     try {
         std::rethrow_exception(exception);
     } catch (const std::exception& error) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session prompt coroutine failed",
             error.what()));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session prompt coroutine failed",
             "unknown exception"));
     }
@@ -127,19 +127,19 @@ constexpr std::size_t kMaxSessionObserverDiagnostics = 16;
 constexpr std::size_t kMaxSessionObserverDetailBytes = 1024;
 
 void record_session_observer_diagnostic(
-    std::vector<util::Error>& diagnostics,
-    const util::Error& failure) {
+    std::vector<support::Error>& diagnostics,
+    const support::Error& failure) {
     std::string detail = failure.message;
     if (!failure.detail.empty()) {
         detail += ": ";
         detail += failure.detail;
     }
-    detail = util::bounded_redacted_text(
+    detail = ai::bounded_redacted_text(
         std::move(detail), kMaxSessionObserverDetailBytes, "...");
     if (diagnostics.size() == kMaxSessionObserverDiagnostics) {
         diagnostics.erase(diagnostics.begin());
     }
-    diagnostics.push_back(util::make_error(
+    diagnostics.push_back(support::make_error(
         failure.code,
         "session event observer failed",
         std::move(detail)));
@@ -321,7 +321,7 @@ std::string AgentSessionRuntime::rebuild_system_prompt() const {
     return buildSystemPrompt(prompt_options);
 }
 
-boost::asio::awaitable<util::Expected<AgentSessionReloadResult>>
+boost::asio::awaitable<support::Expected<AgentSessionReloadResult>>
 AgentSessionRuntime::reload() {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
@@ -333,14 +333,14 @@ AgentSessionRuntime::reload() {
         (void)services_.settings_manager->reload();
     }
     if (!config_.resource_loading_request) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session has no retained resource loading request"));
     }
     auto fs = harness::WorkspaceFileSystem::create(session_.workspace);
     if (!fs) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "reload failed: could not open the session workspace",
             fs.error().message));
     }
@@ -352,8 +352,8 @@ AgentSessionRuntime::reload() {
     ProjectTrustStore trust_store{coding_agent::trust_store_file_path()};
     auto loading = load_project_resources(*fs, trust_store, std::move(resource_request));
     if (!loading.fatal_errors.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "reload failed",
             loading.fatal_errors.front().message));
     }
@@ -376,8 +376,8 @@ AgentSessionRuntime::reload() {
     // Rebuild the System Prompt and push it into the live Agent (pi
     // `_rebuildSystemPrompt` → `agent.state.systemPrompt`).
     if (!agent_) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
     agent_->set_system_prompt(rebuild_system_prompt());
@@ -390,10 +390,10 @@ AgentSessionRuntime::reload() {
     co_return result;
 }
 
-util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
+support::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
     if (lifecycle_ != Lifecycle::Open) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is closed"));
     }
     return {};
@@ -422,30 +422,30 @@ void AgentSessionRuntime::refresh_bash_session_environment() {
             : std::optional<std::string>{state.thinking_level};
 }
 
-util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
+support::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
     if (prompt_active_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
     if (compaction_active_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is busy (compaction already in flight)"));
     }
     return {};
 }
 
-util::ExpectedVoid AgentSessionRuntime::reject_if_user_bash_busy() const {
+support::ExpectedVoid AgentSessionRuntime::reject_if_user_bash_busy() const {
     if (user_bash_active_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "a User Bash command is already in flight"));
     }
     return {};
 }
 
-util::ExpectedVoid AgentSessionRuntime::commit_user_bash_completion(
+support::ExpectedVoid AgentSessionRuntime::commit_user_bash_completion(
     UserBashCompletion& completion) {
     // Live Session State advances first; a Session Store failure is reported
     // on the completion diagnostic without rolling the message back.
@@ -469,8 +469,8 @@ void AgentSessionRuntime::flush_pending_user_bash() {
         if (agent_ && session_.store) {
             entry->commit_result = commit_user_bash_completion(entry->completion);
         } else {
-            entry->commit_result = std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            entry->commit_result = std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "session Agent is unavailable"));
         }
         try {
@@ -506,50 +506,50 @@ namespace {
 
 } // namespace
 
-boost::asio::awaitable<util::ExpectedVoid>
+boost::asio::awaitable<support::ExpectedVoid>
 AgentSessionRuntime::preflight_auth_guidance() {
     if (!agent_ || !services_.model_runtime) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     const auto& model = agent_->state().model;
     // The placeholder kDefaultModel is the C++ "no model" state; "no model"
     // is not an auth failure, and streaming it fails through normal provider
     // lookup ("Unknown provider: unknown") exactly like pi.
     if (model.id == agent::detail::kDefaultModel.id) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     // pi `prompt()`: `hasConfiguredAuth(provider) ||
     // (await checkAuth(provider)) !== undefined`. The live `checkAuth` is the
     // authoritative backstop (the snapshot may be stale); it is
     // side-effect-free and never refreshes OAuth.
     if (services_.model_runtime->has_configured_auth(model.provider)) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     auto checked = co_await services_.model_runtime->check_auth(model.provider);
     if (!checked) {
         co_return std::unexpected(std::move(checked.error()));
     }
     if (*checked) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     const std::string provider{model.provider};
     if (services_.model_runtime->is_using_oauth(provider)) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             format_oauth_reauthenticate_message(provider)));
     }
-    co_return std::unexpected(util::make_error(
-        util::ErrorCode::Auth,
+    co_return std::unexpected(support::make_error(
+        support::ErrorCode::Auth,
         format_no_api_key_found_message(
             provider,
             std::filesystem::path{kDefaultAuthGuidanceDocsPath})));
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
+boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_prompt(
     std::string prompt,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
-    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    std::move_only_function<support::ExpectedVoid()> on_preflight_accepted) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
@@ -561,14 +561,14 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     // with the typed failure.
     if (persistence_) {
         if (auto failure = persistence_->failure()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 "session persistence failed; rejecting new prompt",
                 failure->detail.empty() ? failure->message : failure->detail));
         }
     } else if (session_.store && session_.store->path()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Session,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Session,
             "session persistence is unavailable; rejecting new prompt"));
     }
 
@@ -581,7 +581,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     prompt_settled_signal_->expires_at(
         std::chrono::steady_clock::time_point::max());
 
-    util::ExpectedVoid result;
+    support::ExpectedVoid result;
     try {
         ai::UserMessage user_message = make_admitted_user_message(
             std::move(prompt),
@@ -656,7 +656,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     co_return result;
 }
 
-boost::asio::awaitable<util::Expected<UserBashCompletion>>
+boost::asio::awaitable<support::Expected<UserBashCompletion>>
 AgentSessionRuntime::run_user_bash(
     std::string command,
     bool exclude_from_context,
@@ -668,16 +668,16 @@ AgentSessionRuntime::run_user_bash(
         co_return std::unexpected(rejected.error());
     }
     if (!services_.user_shell) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "User Shell is unavailable"));
     }
 
     user_bash_active_ = true;
     active_user_bash_stop_source_.emplace();
     const auto recorded_command = command;
-    util::Expected<UserShellResult> shell_result = std::unexpected(util::make_error(
-        util::ErrorCode::Unknown,
+    support::Expected<UserShellResult> shell_result = std::unexpected(support::make_error(
+        support::ErrorCode::Unknown,
         "User Shell execution did not finish"));
     if (progress_sink) {
         try {
@@ -694,15 +694,15 @@ AgentSessionRuntime::run_user_bash(
         } catch (const std::exception& error) {
             active_user_bash_stop_source_.reset();
             user_bash_active_ = false;
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "User Bash progress callback failed",
                 bounded_redacted_presentation(error.what())));
         } catch (...) {
             active_user_bash_stop_source_.reset();
             user_bash_active_ = false;
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "User Bash progress callback failed"));
         }
     }
@@ -712,7 +712,7 @@ AgentSessionRuntime::run_user_bash(
             services_.user_shell->execute(
                 std::move(command),
             [recorded_command, exclude_from_context, &output, &progress_sink](
-                std::string_view update) -> util::ExpectedVoid {
+                std::string_view update) -> support::ExpectedVoid {
                 output.append(update);
                 if (!progress_sink) return {};
                 try {
@@ -722,13 +722,13 @@ AgentSessionRuntime::run_user_bash(
                         .exclude_from_context = exclude_from_context,
                     });
                 } catch (const std::exception& error) {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Unknown,
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Unknown,
                         "User Bash progress callback failed",
                         error.what()));
                 } catch (...) {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Unknown,
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Unknown,
                         "User Bash progress callback failed"));
                 }
             },
@@ -737,13 +737,13 @@ AgentSessionRuntime::run_user_bash(
             output.finish();
         }
     } catch (const std::exception& error) {
-        shell_result = std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        shell_result = std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "User Shell execution failed",
             error.what()));
     } catch (...) {
-        shell_result = std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        shell_result = std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "User Shell execution failed",
             "unknown exception"));
     }
@@ -820,8 +820,8 @@ AgentSessionRuntime::run_user_bash(
 
     if (!agent_ || !session_.store) {
         co_await finalize_if_last_active_work();
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
     if (auto committed = commit_user_bash_completion(completion); !committed) {
@@ -838,12 +838,12 @@ void AgentSessionRuntime::cancel_user_bash() {
     }
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
+boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
     ai::UserMessage prompt,
     std::stop_source stop_source) {
     if (!agent_) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
 
@@ -857,7 +857,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
         return agent::AgentEventCommitter{
             [this, inner = commitment.sink()](
                 const agent::AgentLifecycleEvent& event) mutable
-                -> util::ExpectedVoid {
+                -> support::ExpectedVoid {
                 if (retry_attempt_ > 0) {
                     if (const auto* end =
                             std::get_if<agent::MessageEndEvent>(&event)) {
@@ -878,7 +878,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             }};
     };
 
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     result = co_await ai::detail::await_async_result(
         agent::detail::AgentPromptAccess::prompt(
             *agent_,
@@ -934,9 +934,9 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             // persisted through the commitment; the prompt fails with pi's
             // verbatim recovery message (the failure the `compaction_end`
             // event carries in pi).
-            co_return co_await commitment.conclude(std::optional<util::ExpectedVoid>{
-                std::unexpected(util::make_error(
-                    util::ErrorCode::Stream,
+            co_return co_await commitment.conclude(std::optional<support::ExpectedVoid>{
+                std::unexpected(support::make_error(
+                    support::ErrorCode::Stream,
                     std::string{kOverflowRecoveryFailedMessage}))});
         }
         if (outcome != AutoCompactionOutcome::OverflowRetry) {
@@ -952,14 +952,14 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
     co_return co_await commitment.conclude(std::move(result));
 }
 
-util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
+support::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
     agent::AgentEventSink sink) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
     if (!agent_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is closed"));
     }
     return agent_->subscribe(std::move(sink));
@@ -1033,14 +1033,14 @@ SessionEventSubscription::operator bool() const {
 
 namespace cch::coding_agent::runtime {
 
-util::Expected<SessionEventSubscription>
+support::Expected<SessionEventSubscription>
 AgentSessionRuntime::subscribe_session(AgentSessionEventSink sink) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
     if (!sink) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session event sink is empty"));
     }
     auto subscriber = std::make_shared<SessionSubscriber>(SessionSubscriber{
@@ -1086,13 +1086,13 @@ void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
         } catch (const std::exception& exception) {
             record_session_observer_diagnostic(
                 session_event_diagnostics_,
-                util::make_error(util::ErrorCode::Unknown, exception.what()));
+                support::make_error(support::ErrorCode::Unknown, exception.what()));
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         } catch (...) {
             record_session_observer_diagnostic(
                 session_event_diagnostics_,
-                util::make_error(util::ErrorCode::Unknown, "unknown exception"));
+                support::make_error(support::ErrorCode::Unknown, "unknown exception"));
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         }
@@ -1104,7 +1104,7 @@ void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
         });
 }
 
-util::ExpectedVoid AgentSessionRuntime::steer(
+support::ExpectedVoid AgentSessionRuntime::steer(
     std::string text,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates) {
@@ -1116,7 +1116,7 @@ util::ExpectedVoid AgentSessionRuntime::steer(
     return agent_->steer(ai::MessageVariant{std::move(message)});
 }
 
-util::ExpectedVoid AgentSessionRuntime::follow_up(
+support::ExpectedVoid AgentSessionRuntime::follow_up(
     std::string text,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates) {
@@ -1128,54 +1128,54 @@ util::ExpectedVoid AgentSessionRuntime::follow_up(
     return agent_->follow_up(ai::MessageVariant{std::move(message)});
 }
 
-util::ExpectedVoid AgentSessionRuntime::set_steering_mode(agent::InputQueueMode mode) {
+support::ExpectedVoid AgentSessionRuntime::set_steering_mode(agent::InputQueueMode mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->set_steering_mode(mode) : std::unexpected(util::make_error(
-        util::ErrorCode::Validation, "session is closed"));
+    return agent_ ? agent_->set_steering_mode(mode) : std::unexpected(support::make_error(
+        support::ErrorCode::Validation, "session is closed"));
 }
 
-util::ExpectedVoid AgentSessionRuntime::set_follow_up_mode(agent::InputQueueMode mode) {
+support::ExpectedVoid AgentSessionRuntime::set_follow_up_mode(agent::InputQueueMode mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->set_follow_up_mode(mode) : std::unexpected(util::make_error(
-        util::ErrorCode::Validation, "session is closed"));
+    return agent_ ? agent_->set_follow_up_mode(mode) : std::unexpected(support::make_error(
+        support::ErrorCode::Validation, "session is closed"));
 }
 
-util::ExpectedVoid AgentSessionRuntime::clear_steering_queue() {
+support::ExpectedVoid AgentSessionRuntime::clear_steering_queue() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_steering_queue() : std::unexpected(util::make_error(
-        util::ErrorCode::Validation, "session is closed"));
+    return agent_ ? agent_->clear_steering_queue() : std::unexpected(support::make_error(
+        support::ErrorCode::Validation, "session is closed"));
 }
 
-util::ExpectedVoid AgentSessionRuntime::clear_follow_up_queue() {
+support::ExpectedVoid AgentSessionRuntime::clear_follow_up_queue() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_follow_up_queue() : std::unexpected(util::make_error(
-        util::ErrorCode::Validation, "session is closed"));
+    return agent_ ? agent_->clear_follow_up_queue() : std::unexpected(support::make_error(
+        support::ErrorCode::Validation, "session is closed"));
 }
 
-util::ExpectedVoid AgentSessionRuntime::clear_input_queues() {
+support::ExpectedVoid AgentSessionRuntime::clear_input_queues() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_input_queues() : std::unexpected(util::make_error(
-        util::ErrorCode::Validation, "session is closed"));
+    return agent_ ? agent_->clear_input_queues() : std::unexpected(support::make_error(
+        support::ErrorCode::Validation, "session is closed"));
 }
 
-util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
+support::Expected<std::string> AgentSessionRuntime::set_thinking_level(
     std::string_view level) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
     if (!agent_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation, "session is closed"));
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session is closed"));
     }
 
     const auto previous = agent_->state().thinking_level;
@@ -1214,14 +1214,14 @@ util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
     return effective;
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::set_model(
+boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::set_model(
     ai::Model model) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
     if (!agent_ || !services_.model_runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation, "session is closed"));
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session is closed"));
     }
 
     // pi setModel: `if (!(await checkAuth(model.provider))) throw`.
@@ -1230,8 +1230,8 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::set_model(
         co_return std::unexpected(std::move(checked.error()));
     }
     if (!*checked) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "No API key for " + model.provider + "/" + model.id));
     }
 
@@ -1263,7 +1263,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::set_model(
 /// (pi `agent.state.model = model`), append the `model_change` entry, write
 /// the global settings default, and re-clamp the thinking level — the same
 /// persistence sequence as `set_model`.
-[[nodiscard]] boost::asio::awaitable<util::ExpectedVoid>
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid>
 AgentSessionRuntime::apply_model_switch(
     ai::Model model,
     std::string thinking_level) {
@@ -1299,17 +1299,17 @@ AgentSessionRuntime::apply_model_switch(
     }
     // The model Bash Tool reads the live model at execution time.
     refresh_bash_session_environment();
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
 AgentSessionRuntime::cycle_model(std::string_view direction) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
     if (!agent_ || !services_.model_runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation, "session is closed"));
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session is closed"));
     }
     const bool forward = direction != "backward";
 
@@ -1389,14 +1389,14 @@ AgentSessionRuntime::cycle_model(std::string_view direction) {
     };
 }
 
-util::Expected<std::optional<std::string>>
+support::Expected<std::optional<std::string>>
 AgentSessionRuntime::cycle_thinking_level() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
     if (!agent_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation, "session is closed"));
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session is closed"));
     }
     // pi `supportsThinking()`: the active model must support reasoning.
     if (!agent_->state().model.reasoning) {
@@ -1511,7 +1511,7 @@ struct TreeLeafDecision {
 }
 
 /// pi `setLeafId(null)` root leaf marker: `targetId: null` on the wire.
-[[nodiscard]] util::ExpectedVoid persist_leaf_marker(
+[[nodiscard]] support::ExpectedVoid persist_leaf_marker(
     harness::session::SessionStore& store,
     const std::optional<std::string>& new_leaf_id) {
     return store.append_leaf(std::nullopt, new_leaf_id);
@@ -1629,23 +1629,23 @@ build_linear_tree(const std::vector<LiveContextEntry>& entries) {
 
 } // namespace
 
-boost::asio::awaitable<util::ExpectedVoid>
+boost::asio::awaitable<support::ExpectedVoid>
 AgentSessionRuntime::wait_for_idle() {
     // pi `waitForIdle`: settle when an Agent run is active. The run in
     // flight continues to its normal terminal; the settled signal is
     // cancelled exactly when the run settles (same waiter-before-cancel
     // ordering as PendingUserBashCommit). The wait itself cannot fail.
     if (!prompt_active_ || !prompt_settled_signal_) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     boost::system::error_code wait_error;
     co_await prompt_settled_signal_->async_wait(
         boost::asio::redirect_error(
             boost::asio::use_awaitable, wait_error));
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
-util::Expected<coding_agent::SessionTreeTopology>
+support::Expected<coding_agent::SessionTreeTopology>
 AgentSessionRuntime::session_tree() const {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
@@ -1675,7 +1675,7 @@ AgentSessionRuntime::session_tree() const {
     };
 }
 
-util::Expected<coding_agent::TreeNavigationResult>
+support::Expected<coding_agent::TreeNavigationResult>
 AgentSessionRuntime::navigate_tree(std::string_view target_id) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
@@ -1685,13 +1685,13 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
     // call while a run is active is rejected verbatim (regression
     // tree-during-streaming).
     if (prompt_active_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Wait for the current response to finish before navigating the session tree."));
     }
     if (!agent_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation, "session is closed"));
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session is closed"));
     }
 
     const auto store_path = session_.store ? session_.store->path() : std::nullopt;
@@ -1707,8 +1707,8 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
         }
         const auto* target = tree->getEntry(target_id);
         if (target == nullptr) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 std::format("Entry {} not found", target_id)));
         }
 
@@ -1761,8 +1761,8 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
         }
     }
     if (target == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Session,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Session,
             std::format("Entry {} not found", target_id)));
     }
     // pi: no-op when already at the target (the in-memory leaf is the last
@@ -1805,7 +1805,7 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
     };
 }
 
-util::ExpectedVoid AgentSessionRuntime::set_entry_label(
+support::ExpectedVoid AgentSessionRuntime::set_entry_label(
     std::string_view entry_id,
     std::optional<std::string> label) {
     if (auto rejected = reject_if_closed(); !rejected) {
@@ -1823,8 +1823,8 @@ util::ExpectedVoid AgentSessionRuntime::set_entry_label(
         return std::unexpected(tree.error());
     }
     if (tree->getEntry(entry_id) == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Session,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Session,
             std::format("Entry {} not found", entry_id)));
     }
     // pi `appendLabelChange`: the label entry hangs under the current leaf
@@ -1837,14 +1837,14 @@ util::ExpectedVoid AgentSessionRuntime::set_entry_label(
         std::move(parent_id), std::string{entry_id}, std::move(label));
 }
 
-boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
 AgentSessionRuntime::compact(std::string custom_instructions) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
     if (compaction_active_) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "compaction is already in flight"));
     }
     // Claim the in-flight guard before any await so concurrent compact()
@@ -1868,7 +1868,7 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
         }
     }
 
-    util::Expected<coding_agent::CompactionResult> result;
+    support::Expected<coding_agent::CompactionResult> result;
     try {
         result = co_await compact_impl(std::move(custom_instructions));
     } catch (...) {
@@ -1896,22 +1896,22 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
 
 namespace {
 
-[[nodiscard]] util::Error no_model_selected_error() {
+[[nodiscard]] support::Error no_model_selected_error() {
     // pi formatNoModelSelectedMessage's login-help tail is Native TUI
     // presentation (auth-guidance); the C++ session carries only the core
     // directive. The placeholder kDefaultModel is the C++ "no model" state.
-    return util::make_error(
-        util::ErrorCode::Validation,
+    return support::make_error(
+        support::ErrorCode::Validation,
         "No model selected.\n\nThen use /model to select a model.");
 }
 
 } // namespace
 
-boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
 AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     if (!agent_ || !session_.store) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
     const auto model = agent_->state().model;
@@ -1922,8 +1922,8 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     if (!store_path) {
         // In-memory sessions have no tree/entry surface: there is no session
         // file to persist a CompactionEntry into or to rebuild context from.
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "compaction requires a persisted session file"));
     }
     const auto session_path = *store_path;
@@ -1945,20 +1945,20 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     if (!*preparation) {
         if (!branch.empty() &&
             branch.back()->kind == harness::session::SessionEntryKind::Compaction) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "Already compacted"));
         }
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Nothing to compact (session too small)"));
     }
     const auto& prep = **preparation;
     // pi AgentSession.compact refuses when neither history nor turn prefix has
     // messages to summarize (a session that fits the keepRecentTokens budget).
     if (prep.messages_to_summarize.empty() && prep.turn_prefix_messages.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Nothing to compact (session too small)"));
     }
 
@@ -1966,22 +1966,22 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
         prep, settings, std::move(custom_instructions));
 }
 
-boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
 AgentSessionRuntime::execute_compaction(
     const harness::session::CompactionPreparation& preparation,
     const harness::session::CompactionSettings& settings,
     std::string custom_instructions) {
     if (!agent_ || !session_.store) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
     const auto store_path = session_.store->path();
     if (!store_path) {
         // In-memory sessions have no tree/entry surface: there is no session
         // file to persist a CompactionEntry into or to rebuild context from.
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "compaction requires a persisted session file"));
     }
     const auto session_path = *store_path;
@@ -1991,7 +1991,7 @@ AgentSessionRuntime::execute_compaction(
         [factory = make_stream_factory(), model](
             ai::AiContext context,
             ai::SimpleStreamOptions options) mutable
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = factory(
             model, std::move(context), std::move(options));
         co_return co_await cch::ai::detail::await_async_result(
@@ -2416,7 +2416,7 @@ std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
     return agent_ ? last_assistant_text_from(agent_->state().messages) : std::nullopt;
 }
 
-util::Expected<std::optional<harness::session::SessionTree>>
+support::Expected<std::optional<harness::session::SessionTree>>
 AgentSessionRuntime::open_session_tree() const {
     const auto store_path = session_.store ? session_.store->path() : std::nullopt;
     if (!store_path) {
@@ -2441,7 +2441,7 @@ std::optional<std::string> AgentSessionRuntime::session_name() const {
     return (*tree)->get_session_name();
 }
 
-util::Expected<std::optional<std::string>>
+support::Expected<std::optional<std::string>>
 AgentSessionRuntime::set_session_name(std::string name) {
     // pi `appendSessionInfo` sanitization: CR/LF runs become one space,
     // then the result is trimmed.

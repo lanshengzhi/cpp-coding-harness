@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cli/CliParse.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <filesystem>
 #include <string>
@@ -736,7 +736,7 @@ TEST_CASE("parse_args exposes the CMake project version", "[cli][parse]") {
 
 #if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("parse_args reports a diagnostic when the working directory is unavailable", "[cli][parse][issue67]") {
-    const cch::util::UniqueFd saved_cwd(::open(".", O_RDONLY | O_DIRECTORY));
+    const cch::support::UniqueFd saved_cwd(::open(".", O_RDONLY | O_DIRECTORY));
     REQUIRE(saved_cwd);
 
     auto dir_template = (std::filesystem::temp_directory_path() / "cch-cli-deleted-cwd-XXXXXX").string();

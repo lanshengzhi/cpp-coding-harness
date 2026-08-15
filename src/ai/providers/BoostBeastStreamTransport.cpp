@@ -36,11 +36,11 @@ struct ParsedUrl {
     std::string target{"/"};
 };
 
-[[nodiscard]] util::Expected<ParsedUrl> parse_https_url(const std::string& url) {
+[[nodiscard]] support::Expected<ParsedUrl> parse_https_url(const std::string& url) {
     constexpr std::string_view scheme = "https://";
     if (!url.starts_with(scheme)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "unsupported URL scheme",
             "BoostBeastStreamTransport only supports https URLs"));
     }
@@ -52,8 +52,8 @@ struct ParsedUrl {
     ParsedUrl parsed;
     parsed.target = slash == std::string::npos ? "/" : rest.substr(slash);
     if (authority.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "missing HTTPS host",
             "https URL is missing host"));
     }
@@ -67,8 +67,8 @@ struct ParsedUrl {
     }
 
     if (parsed.host.empty() || parsed.port.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid HTTPS authority",
             "https URL has invalid host or port"));
     }
@@ -80,30 +80,30 @@ struct ParsedUrl {
     return request.method.empty() ? std::string_view{"POST"} : std::string_view{request.method};
 }
 
-[[nodiscard]] util::Error network_error(std::string message, boost::system::error_code ec) {
-    auto code = ec == boost::asio::error::operation_aborted ? util::ErrorCode::Cancelled : util::ErrorCode::Network;
+[[nodiscard]] support::Error network_error(std::string message, boost::system::error_code ec) {
+    auto code = ec == boost::asio::error::operation_aborted ? support::ErrorCode::Cancelled : support::ErrorCode::Network;
     auto detail = ec ? ec.message() : std::string{};
-    return util::make_error(code, std::move(message), std::move(detail));
+    return support::make_error(code, std::move(message), std::move(detail));
 }
 
-[[nodiscard]] util::Error cancelled_error() {
-    return util::make_error(
-        util::ErrorCode::Cancelled,
+[[nodiscard]] support::Error cancelled_error() {
+    return support::make_error(
+        support::ErrorCode::Cancelled,
         "stream transport cancelled",
         "transport operation was cancelled");
 }
 
-[[nodiscard]] util::Error exception_error(const std::exception& error) {
+[[nodiscard]] support::Error exception_error(const std::exception& error) {
     std::string detail = error.what();
     auto code = detail.find("timeout") != std::string::npos || detail.find("timed out") != std::string::npos
-        ? util::ErrorCode::Timeout
-        : util::ErrorCode::Network;
-    return util::make_error(code, "stream transport failure", std::move(detail));
+        ? support::ErrorCode::Timeout
+        : support::ErrorCode::Network;
+    return support::make_error(code, "stream transport failure", std::move(detail));
 }
 
 } // namespace
 
-boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport::async_stream(
+boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransport::async_stream(
     const StreamRequest& request,
     BodyChunkHandler on_body_chunk) {
     namespace asio = boost::asio;
@@ -121,8 +121,8 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
     try {
         http::verb verb = http::string_to_verb(request_method(request));
         if (verb == http::verb::unknown) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "unsupported HTTP method",
                 std::string(request_method(request))));
         }
@@ -165,8 +165,8 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         beast::get_lowest_layer(stream).expires_after(request.timeout);
 
         if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "TLS SNI setup failed",
                 "OpenSSL rejected the host name"));
         }
@@ -304,8 +304,8 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         co_return response;
     } catch (const boost::system::system_error& error) {
         if (*response_header_timed_out) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Timeout,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Timeout,
                 "response header timeout",
                 error.code().message()));
         }

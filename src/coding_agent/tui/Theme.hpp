@@ -6,7 +6,7 @@
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Style.hpp>
 #include <cch/tui/Terminal.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <array>
 #include <cstddef>
@@ -87,10 +87,10 @@ struct ResolvedTheme {
 [[nodiscard]] std::string_view theme_token_name(ThemeToken token);
 [[nodiscard]] const ResolvedThemeColor& color_for(const ResolvedTheme& theme, ThemeToken token);
 
-[[nodiscard]] util::Expected<ResolvedTheme> parse_theme_json(
+[[nodiscard]] support::Expected<ResolvedTheme> parse_theme_json(
     std::string_view label,
     std::string_view json);
-[[nodiscard]] util::Expected<ResolvedTheme> load_theme_file(const std::filesystem::path& path);
+[[nodiscard]] support::Expected<ResolvedTheme> load_theme_file(const std::filesystem::path& path);
 [[nodiscard]] ResolvedTheme builtin_dark_theme();
 [[nodiscard]] ResolvedTheme builtin_light_theme();
 [[nodiscard]] ResolvedTheme select_builtin_theme(const cch::tui::TerminalCapabilities& capabilities);

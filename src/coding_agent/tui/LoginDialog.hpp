@@ -5,7 +5,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
@@ -86,12 +86,12 @@ public:
     /// previously shown URL). Resolves with the submitted text; rejects with
     /// the stable cancelled error when the dialog or this prompt is
     /// cancelled.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> show_prompt(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> show_prompt(
         std::string message,
         std::optional<std::string> placeholder);
     /// Manual-code input view (pi `showManualInput`): dim prompt + input +
     /// cancel hint. Same resolution contract as show_prompt.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> show_manual_input(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> show_manual_input(
         std::string prompt);
 
     /// Reject only the pending prompt with the stable cancelled error (pi's
@@ -99,7 +99,7 @@ public:
     /// The dialog's stop source and cancel sink are NOT fired.
     void cancel_pending_prompt();
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
     void handle_input(const cch::tui::InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override { return false; }
@@ -115,7 +115,7 @@ private:
     struct InputSlotItem {};
     using ContentItem = std::variant<SpacerItem, TextItem, InputSlotItem>;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> run_prompt(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> run_prompt(
         std::vector<ContentItem> items);
     /// Locked-section cancel: request stop, reject the pending slot, and
     /// report whether the cancel sink should fire.

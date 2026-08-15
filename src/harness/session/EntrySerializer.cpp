@@ -1,8 +1,8 @@
 #include "EntrySerializer.hpp"
 
 #include "ai/glaze/AiJson.hpp"
-#include "util/Json.hpp"
-#include "util/Redactor.hpp"
+#include "support/Json.hpp"
+#include "ai/Redactor.hpp"
 
 #include <chrono>
 #include <random>
@@ -164,12 +164,12 @@ struct LeafDto {
     NullableString targetId;
 };
 
-[[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
-    return util::make_error(util::ErrorCode::Session, std::move(message), std::move(detail));
+[[nodiscard]] support::Error session_error(std::string message, std::string detail = {}) {
+    return support::make_error(support::ErrorCode::Session, std::move(message), std::move(detail));
 }
 
 template <typename Dto>
-[[nodiscard]] util::Expected<std::string> serialize_tree_entry(const Dto& dto) {
+[[nodiscard]] support::Expected<std::string> serialize_tree_entry(const Dto& dto) {
     auto json = glz::write_json(dto);
     if (!json) {
         return std::unexpected(session_error("failed to serialize tree entry"));
@@ -177,7 +177,7 @@ template <typename Dto>
     return *json + '\n';
 }
 
-[[nodiscard]] util::Expected<std::string> entry_type(const glz::generic& parsed, std::size_t line_number) {
+[[nodiscard]] support::Expected<std::string> entry_type(const glz::generic& parsed, std::size_t line_number) {
     try {
         return parsed.get<glz::generic::object_t>().at("type").get<std::string>();
     } catch (const std::exception&) {
@@ -188,7 +188,7 @@ template <typename Dto>
 }
 
 template <typename T>
-[[nodiscard]] util::Expected<T> entry_from_generic(
+[[nodiscard]] support::Expected<T> entry_from_generic(
     const glz::generic& value,
     std::string_view line,
     std::size_t line_number) {
@@ -419,7 +419,7 @@ template <typename T>
 }
 
 [[nodiscard]] std::optional<std::string> optional_string_field(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     const std::string& key) {
     const auto found = object.find(key);
     if (found == object.end()) {
@@ -431,8 +431,8 @@ template <typename T>
     return std::nullopt;
 }
 
-void populate_tree_fields(SessionEntry& entry, const util::JsonValue& value) {
-    if (const auto* object = value.get_if<util::JsonValue::object_t>()) {
+void populate_tree_fields(SessionEntry& entry, const support::JsonValue& value) {
+    if (const auto* object = value.get_if<support::JsonValue::object_t>()) {
         if (auto id = optional_string_field(*object, "entryId")) {
             entry.entry_id = *id;
         } else if (auto id = optional_string_field(*object, "id")) {
@@ -459,10 +459,10 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     }
 }
 
-[[nodiscard]] std::optional<util::JsonValue> optional_json_field(
-    const util::JsonValue& value,
+[[nodiscard]] std::optional<support::JsonValue> optional_json_field(
+    const support::JsonValue& value,
     const std::string& key) {
-    const auto* object = value.get_if<util::JsonValue::object_t>();
+    const auto* object = value.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return std::nullopt;
     }
@@ -482,7 +482,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     return dto.activeToolNames;
 }
 
-[[nodiscard]] util::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
+[[nodiscard]] support::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
     const CustomMessageContentDto& content,
     std::string_view context) {
     if (const auto* text = std::get_if<std::string>(&content)) {
@@ -528,28 +528,28 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     return CustomMessageContentDto{std::move(dtos)};
 }
 
-[[nodiscard]] util::JsonValue redact_json_value(const util::JsonValue& value) {
+[[nodiscard]] support::JsonValue redact_json_value(const support::JsonValue& value) {
     if (const auto* text = value.get_if<std::string>()) {
-        return util::JsonValue{util::redact_text(*text)};
+        return support::JsonValue{ai::redact_text(*text)};
     }
-    if (const auto* values = value.get_if<util::JsonValue::array_t>()) {
-        util::JsonValue::array_t redacted;
+    if (const auto* values = value.get_if<support::JsonValue::array_t>()) {
+        support::JsonValue::array_t redacted;
         redacted.reserve(values->size());
         for (const auto& item : *values) {
             redacted.push_back(redact_json_value(item));
         }
-        return util::JsonValue{std::move(redacted)};
+        return support::JsonValue{std::move(redacted)};
     }
-    if (const auto* object = value.get_if<util::JsonValue::object_t>()) {
-        util::JsonValue::object_t redacted;
+    if (const auto* object = value.get_if<support::JsonValue::object_t>()) {
+        support::JsonValue::object_t redacted;
         for (const auto& [key, item] : *object) {
-            if (util::looks_secret_key(key)) {
-                redacted.emplace(key, util::JsonValue{std::string{util::kRedactionMarker}});
+            if (ai::looks_secret_key(key)) {
+                redacted.emplace(key, support::JsonValue{std::string{ai::kRedactionMarker}});
             } else {
                 redacted.emplace(key, redact_json_value(item));
             }
         }
-        return util::JsonValue{std::move(redacted)};
+        return support::JsonValue{std::move(redacted)};
     }
     return value;
 }
@@ -559,9 +559,9 @@ void redact_content(ai::Content& content) {
         [](auto& block) {
             using T = std::decay_t<decltype(block)>;
             if constexpr (std::is_same_v<T, ai::TextContent>) {
-                block.text = util::redact_text(std::move(block.text));
+                block.text = ai::redact_text(std::move(block.text));
             } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-                block.thinking = util::redact_text(std::move(block.thinking));
+                block.thinking = ai::redact_text(std::move(block.thinking));
             }
         },
         content);
@@ -569,13 +569,13 @@ void redact_content(ai::Content& content) {
 
 void redact_custom_message_entry_content(CustomMessageEntryContent& content) {
     if (auto* text = std::get_if<std::string>(&content)) {
-        *text = util::redact_text(std::move(*text));
+        *text = ai::redact_text(std::move(*text));
         return;
     }
 
     for (auto& block : std::get<std::vector<CustomMessageEntryContentBlock>>(content)) {
         if (auto* text = std::get_if<ai::TextContent>(&block)) {
-            text->text = util::redact_text(std::move(text->text));
+            text->text = ai::redact_text(std::move(text->text));
         }
     }
 }
@@ -585,16 +585,16 @@ void redact_assistant_content(ai::AssistantContent& content) {
         [](auto& block) {
             using T = std::decay_t<decltype(block)>;
             if constexpr (std::is_same_v<T, ai::TextContent>) {
-                block.text = util::redact_text(std::move(block.text));
+                block.text = ai::redact_text(std::move(block.text));
             } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-                block.thinking = util::redact_text(std::move(block.thinking));
+                block.thinking = ai::redact_text(std::move(block.thinking));
             } else if constexpr (std::is_same_v<T, ai::ToolCallContent>) {
                 if (block.arguments) {
                     block.arguments = redact_json_value(*block.arguments);
                 }
-                block.raw_arguments = util::redact_text(std::move(block.raw_arguments));
+                block.raw_arguments = ai::redact_text(std::move(block.raw_arguments));
                 if (block.argument_error) {
-                    block.argument_error = util::redact_text(std::move(*block.argument_error));
+                    block.argument_error = ai::redact_text(std::move(*block.argument_error));
                 }
             }
         },
@@ -607,16 +607,16 @@ void redact_assistant_content(ai::AssistantContent& content) {
         [](auto& concrete) {
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, ai::SystemMessage>) {
-                concrete.content = util::redact_text(std::move(concrete.content));
+                concrete.content = ai::redact_text(std::move(concrete.content));
             } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
                 for (auto& block : concrete.content) {
                     redact_assistant_content(block);
                 }
                 if (concrete.error_message) {
-                    concrete.error_message = util::redact_text(std::move(*concrete.error_message));
+                    concrete.error_message = ai::redact_text(std::move(*concrete.error_message));
                 }
             } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
-                concrete.output = util::redact_text(std::move(concrete.output));
+                concrete.output = ai::redact_text(std::move(concrete.output));
             } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
                 for (auto& block : concrete.content) {
                     redact_content(block);
@@ -630,7 +630,7 @@ void redact_assistant_content(ai::AssistantContent& content) {
                 // Summary text is already plain; no further redaction needed
             } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
                 if (auto* text = std::get_if<std::string>(&concrete.content)) {
-                    *text = util::redact_text(std::move(*text));
+                    *text = ai::redact_text(std::move(*text));
                 } else {
                     for (auto& block :
                          std::get<std::vector<ai::Content>>(concrete.content)) {
@@ -655,11 +655,11 @@ void redact_assistant_content(ai::AssistantContent& content) {
 
 } // namespace
 
-util::Expected<std::string> EntrySerializer::serialize_header(const SessionMetadata& metadata) const {
-    return util::write_json(to_dto(metadata));
+support::Expected<std::string> EntrySerializer::serialize_header(const SessionMetadata& metadata) const {
+    return support::write_json(to_dto(metadata));
 }
 
-util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std::string>& lines) const {
+support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std::string>& lines) const {
     LoadedSession loaded;
     std::size_t line_number = 0;
     bool saw_header = false;
@@ -683,7 +683,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
             return std::unexpected(type.error());
         }
 
-        auto payload = util::json_from_glaze(*generic);
+        auto payload = support::json_from_glaze(*generic);
 
         if (line_number == 1 && (*type == "header" || *type == "session")) {
             auto header = entry_from_generic<ReadHeaderDto>(*generic, stored_line, line_number);
@@ -903,7 +903,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
     return loaded;
 }
 
-util::Expected<std::string> EntrySerializer::serialize_message(const ai::MessageVariant& message) const {
+support::Expected<std::string> EntrySerializer::serialize_message(const ai::MessageVariant& message) const {
     auto serialized = serialize_message_entry(message, std::nullopt);
     if (!serialized) {
         return std::unexpected(serialized.error());
@@ -911,12 +911,12 @@ util::Expected<std::string> EntrySerializer::serialize_message(const ai::Message
     return std::move(serialized->line);
 }
 
-util::Expected<EntrySerializer::SerializedMessageEntry> EntrySerializer::serialize_message_entry(
+support::Expected<EntrySerializer::SerializedMessageEntry> EntrySerializer::serialize_message_entry(
     const ai::MessageVariant& message,
     std::optional<std::string> parent_id) const {
     auto redacted = redacted_message(message);
     auto entry_id = generate_entry_id();
-    auto entry_json = util::write_json(to_dto(entry_id, redacted, std::move(parent_id), ms_since_epoch()));
+    auto entry_json = support::write_json(to_dto(entry_id, redacted, std::move(parent_id), ms_since_epoch()));
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }
@@ -926,7 +926,7 @@ util::Expected<EntrySerializer::SerializedMessageEntry> EntrySerializer::seriali
     };
 }
 
-util::Expected<std::string> EntrySerializer::serialize_model_change(
+support::Expected<std::string> EntrySerializer::serialize_model_change(
     std::optional<std::string> parent_id,
     std::string provider,
     std::string model_id) const {
@@ -939,7 +939,7 @@ util::Expected<std::string> EntrySerializer::serialize_model_change(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
+support::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) const {
     ThinkingLevelChangeDto dto;
@@ -950,7 +950,7 @@ util::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_active_tools_change(
+support::Expected<std::string> EntrySerializer::serialize_active_tools_change(
     std::optional<std::string> parent_id,
     std::vector<std::string> tools) const {
     ActiveToolsChangeDto dto;
@@ -961,17 +961,17 @@ util::Expected<std::string> EntrySerializer::serialize_active_tools_change(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_custom_entry(
+support::Expected<std::string> EntrySerializer::serialize_custom_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
-    std::optional<util::JsonValue> data) const {
+    std::optional<support::JsonValue> data) const {
     CustomDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.customType = std::move(custom_type);
     if (data) {
-        auto data_json = util::write_json(*data);
+        auto data_json = support::write_json(*data);
         if (!data_json) {
             return std::unexpected(session_error("failed to serialize custom entry data"));
         }
@@ -980,12 +980,12 @@ util::Expected<std::string> EntrySerializer::serialize_custom_entry(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
+support::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
     CustomMessageEntryContent content,
     bool display,
-    std::optional<util::JsonValue> details) const {
+    std::optional<support::JsonValue> details) const {
     redact_custom_message_entry_content(content);
     if (details) {
         details = redact_json_value(*details);
@@ -999,7 +999,7 @@ util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
     dto.content = custom_message_content_to_dto(std::move(content));
     dto.display = display;
     if (details) {
-        auto details_json = util::write_json(*details);
+        auto details_json = support::write_json(*details);
         if (!details_json) {
             return std::unexpected(session_error("failed to serialize custom message details"));
         }
@@ -1008,7 +1008,7 @@ util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_label_change(
+support::Expected<std::string> EntrySerializer::serialize_label_change(
     std::optional<std::string> parent_id,
     std::string target_id,
     std::optional<std::string> label) const {
@@ -1021,12 +1021,12 @@ util::Expected<std::string> EntrySerializer::serialize_label_change(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_compaction(
+support::Expected<std::string> EntrySerializer::serialize_compaction(
     std::optional<std::string> parent_id,
     std::string summary,
     std::optional<std::string> first_kept_entry_id,
     std::size_t tokens_before,
-    std::optional<util::JsonValue> details,
+    std::optional<support::JsonValue> details,
     std::optional<bool> from_hook,
     std::vector<ai::MessageVariant> retained_tail,
     std::optional<ai::Usage> usage) const {
@@ -1046,7 +1046,7 @@ util::Expected<std::string> EntrySerializer::serialize_compaction(
         dto.retainedTail = std::move(tail);
     }
     if (details) {
-        auto details_json = util::write_json(*details);
+        auto details_json = support::write_json(*details);
         if (!details_json) {
             return std::unexpected(session_error("failed to serialize compaction details"));
         }
@@ -1059,11 +1059,11 @@ util::Expected<std::string> EntrySerializer::serialize_compaction(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_branch_summary(
+support::Expected<std::string> EntrySerializer::serialize_branch_summary(
     std::optional<std::string> parent_id,
     std::string from_id,
     std::string summary,
-    std::optional<util::JsonValue> details,
+    std::optional<support::JsonValue> details,
     std::optional<bool> from_hook,
     std::optional<ai::Usage> usage) const {
     BranchSummaryDto dto;
@@ -1073,7 +1073,7 @@ util::Expected<std::string> EntrySerializer::serialize_branch_summary(
     dto.fromId = std::move(from_id);
     dto.summary = std::move(summary);
     if (details) {
-        auto details_json = util::write_json(*details);
+        auto details_json = support::write_json(*details);
         if (!details_json) {
             return std::unexpected(session_error("failed to serialize branch summary details"));
         }
@@ -1086,7 +1086,7 @@ util::Expected<std::string> EntrySerializer::serialize_branch_summary(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_session_info(
+support::Expected<std::string> EntrySerializer::serialize_session_info(
     std::optional<std::string> parent_id,
     std::optional<std::string> name) const {
     SessionInfoDto dto;
@@ -1097,7 +1097,7 @@ util::Expected<std::string> EntrySerializer::serialize_session_info(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_leaf(
+support::Expected<std::string> EntrySerializer::serialize_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) const {
     LeafDto dto;
@@ -1108,7 +1108,7 @@ util::Expected<std::string> EntrySerializer::serialize_leaf(
     return serialize_tree_entry(dto);
 }
 
-util::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry& entry) const {
+support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry& entry) const {
     // Round-trip writer: re-emits a parsed entry byte-identically (pi field
     // presence, null-vs-missing, ordering) using the stored id/timestamp so a
     // parsed pi line round-trips exactly. No redaction here — redaction is
@@ -1175,7 +1175,7 @@ util::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry&
         dto.timestamp = std::move(base.timestamp);
         dto.customType = value.custom_type;
         if (value.data) {
-            auto data_json = util::write_json(*value.data);
+            auto data_json = support::write_json(*value.data);
             if (!data_json) {
                 return std::unexpected(session_error("failed to serialize custom entry data"));
             }
@@ -1193,7 +1193,7 @@ util::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry&
         dto.content = custom_message_content_to_dto(value.content);
         dto.display = value.display;
         if (value.details) {
-            auto details_json = util::write_json(*value.details);
+            auto details_json = support::write_json(*value.details);
             if (!details_json) {
                 return std::unexpected(session_error("failed to serialize custom message details"));
             }
@@ -1229,7 +1229,7 @@ util::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry&
             dto.retainedTail = std::move(tail);
         }
         if (value.details) {
-            auto details_json = util::write_json(*value.details);
+            auto details_json = support::write_json(*value.details);
             if (!details_json) {
                 return std::unexpected(session_error("failed to serialize compaction details"));
             }
@@ -1250,7 +1250,7 @@ util::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry&
         dto.fromId = value.from_id;
         dto.summary = value.summary;
         if (value.details) {
-            auto details_json = util::write_json(*value.details);
+            auto details_json = support::write_json(*value.details);
             if (!details_json) {
                 return std::unexpected(session_error("failed to serialize branch summary details"));
             }

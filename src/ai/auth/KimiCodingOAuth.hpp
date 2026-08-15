@@ -44,7 +44,7 @@ public:
     /// `verification_uri_complete`, then polls for the token with the shared
     /// device-poll helper (wait-before-first-poll, interval/expires defaults
     /// 5s/15min, 30s per-request timeout composed with the interaction token).
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> login(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> login(
         ai::AuthInteraction interaction);
 
     /// Keeps pi's signal parameter for parity (`kimiCodingOAuth.refresh`
@@ -52,12 +52,12 @@ public:
     /// `OAuthRefreshHook`) never passes one: the frozen Kimi refresh-signal
     /// defect is reproduced as no-divergence, so request-path refresh is
     /// uncancellable.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> refresh(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> refresh(
         ai::OAuthCredential credential,
         std::stop_token stop_token = {});
 
     /// Derives request authentication as `Authorization: Bearer <access>`.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::ModelAuth>> to_auth(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::ModelAuth>> to_auth(
         const ai::OAuthCredential& credential) const;
 
 private:

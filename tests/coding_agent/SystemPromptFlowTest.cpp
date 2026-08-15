@@ -15,7 +15,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -45,7 +45,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         requests.push_back(context);
         auto terminal = ai::assistant_text_message("done");
         terminal.provider = "sdk-host";
@@ -63,7 +63,7 @@ public:
 /// Session creation against the scripted-client seam (a real ModelRuntime
 /// composed over scripted providers, ADR 0034 "primary seam — Agent +
 /// session-assembly composition").
-[[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult>
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
 create_scripted_session(
     std::shared_ptr<RecordingProvider> client,
     const std::filesystem::path& session_file,

@@ -7,7 +7,7 @@
 #include "ai/auth/Pkce.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PiFixture.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -136,7 +136,7 @@ public:
         std::string body;
     };
 
-    boost::asio::awaitable<util::Expected<ai::auth::OAuthHttpResponse>> post(
+    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> post(
         std::string url,
         std::map<std::string, std::string, std::less<>> headers,
         std::string body,
@@ -149,23 +149,23 @@ public:
         });
         if (failure) {
             if (stop_token.stop_requested()) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Cancelled,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled,
                     "fake client cancelled"));
             }
             co_return std::unexpected(*failure);
         }
         auto& queue = responses[requests.back().url];
         if (queue.empty()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "no scripted response for " + requests.back().url));
         }
         auto scripted = std::move(queue.front());
         queue.pop_front();
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "fake client cancelled"));
         }
         co_return ai::auth::OAuthHttpResponse{
@@ -176,7 +176,7 @@ public:
 
     std::map<std::string, std::deque<ScriptedResponse>, std::less<>> responses;
     std::vector<Request> requests;
-    std::optional<util::Error> failure;
+    std::optional<support::Error> failure;
 };
 
 using UrlSeenChannel = boost::asio::experimental::channel<
@@ -184,15 +184,15 @@ using UrlSeenChannel = boost::asio::experimental::channel<
 using SignalChannel = boost::asio::experimental::channel<
     void(boost::system::error_code)>;
 
-util::Expected<std::string> select_browser_prompt(const ai::AuthPrompt& prompt) {
+support::Expected<std::string> select_browser_prompt(const ai::AuthPrompt& prompt) {
     if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
         return std::string{"browser"};
     }
     if (std::holds_alternative<ai::AuthPromptManualCode>(prompt.kind)) {
         return std::string{"dummy-manual-code"};
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::OAuth,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::OAuth,
         "unexpected prompt"));
 }
 
@@ -213,12 +213,12 @@ struct BrowserLoginHarness {
     std::function<ai::AuthPromptHook(boost::asio::any_io_executor)> make_prompt_hook;
 
     [[nodiscard]] ai::AuthPromptHook sync_prompt_hook(
-        std::function<util::Expected<std::string>(const ai::AuthPrompt&)> sync) {
+        std::function<support::Expected<std::string>(const ai::AuthPrompt&)> sync) {
         return [this, sync = std::move(sync)](ai::AuthPrompt prompt)
         -> cch::support::AsyncResult<std::string> {
         return cch::ai::detail::make_async_result(
             [this, sync = std::move(sync), prompt = std::move(prompt)]() mutable
-                -> boost::asio::awaitable<util::Expected<std::string>> {
+                -> boost::asio::awaitable<support::Expected<std::string>> {
 
                 prompts.push_back(prompt);
                 co_return sync(prompt);
@@ -227,7 +227,7 @@ struct BrowserLoginHarness {
     };
     }
 
-    util::Expected<ai::OAuthCredential> run(
+    support::Expected<ai::OAuthCredential> run(
         std::function<boost::asio::awaitable<void>(const std::string&)> on_auth_url =
             nullptr) {
         boost::asio::io_context io;
@@ -262,7 +262,7 @@ struct BrowserLoginHarness {
 
         auto login_future = boost::asio::co_spawn(
             io,
-            [&]() -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+            [&]() -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                 auto auth = ai::auth::make_openai_codex_oauth_auth(http, options);
                 co_return co_await cch::ai::detail::await_async_result(
                     auth.login(std::move(interaction)));
@@ -410,7 +410,7 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
         -> cch::support::AsyncResult<std::string> {
         return cch::ai::detail::make_async_result(
             [&harness, stop_observed, cancel_seen, prompt = std::move(prompt)]() mutable
-                -> boost::asio::awaitable<util::Expected<std::string>> {
+                -> boost::asio::awaitable<support::Expected<std::string>> {
 
                 harness.prompts.push_back(prompt);
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
@@ -431,8 +431,8 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
                     co_await cancel_seen->async_receive(boost::asio::use_awaitable);
                 } catch (const boost::system::system_error&) {
                 }
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Cancelled,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled,
                     "Login cancelled"));
 
         });
@@ -539,7 +539,7 @@ TEST_CASE("PI_OAUTH_CALLBACK_HOST overrides the callback server bind host", "[ai
         -> cch::support::AsyncResult<std::string> {
         return cch::ai::detail::make_async_result(
             [&harness, stop_observed, cancel_seen, prompt = std::move(prompt)]() mutable
-                -> boost::asio::awaitable<util::Expected<std::string>> {
+                -> boost::asio::awaitable<support::Expected<std::string>> {
 
                 harness.prompts.push_back(prompt);
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
@@ -556,8 +556,8 @@ TEST_CASE("PI_OAUTH_CALLBACK_HOST overrides the callback server bind host", "[ai
                     co_await cancel_seen->async_receive(boost::asio::use_awaitable);
                 } catch (const boost::system::system_error&) {
                 }
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Cancelled,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled,
                     "Login cancelled"));
 
         });
@@ -594,7 +594,7 @@ TEST_CASE("manual code wins the race and closes the callback wait", "[ai][auth][
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [&harness](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [&harness](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"browser"};
                 }
@@ -624,7 +624,7 @@ TEST_CASE("manual code accepts a bare code with no state", "[ai][auth][issue343]
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"browser"};
                 }
@@ -647,7 +647,7 @@ TEST_CASE("manual code with a mismatched state fails with State mismatch", "[ai]
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"browser"};
                 }
@@ -776,7 +776,7 @@ TEST_CASE("listen failure degrades to manual code entry only", "[ai][auth][issue
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"browser"};
                 }
@@ -805,7 +805,7 @@ TEST_CASE("browser login cancellation normalizes to Login cancelled", "[ai][auth
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"browser"};
                 }
@@ -815,7 +815,7 @@ TEST_CASE("browser login cancellation normalizes to Login cancelled", "[ai][auth
 
     auto result = harness.run();
     REQUIRE(!result);
-    CHECK(result.error().code == util::ErrorCode::Cancelled);
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
     CHECK(result.error().message == "Login cancelled");
 }
 
@@ -824,7 +824,7 @@ TEST_CASE("unknown Codex login method fails", "[ai][auth][issue343]") {
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"telepathy"};
                 }
@@ -851,12 +851,12 @@ TEST_CASE("device code login offers frozen content and completes", "[ai][auth][i
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
         return harness.sync_prompt_hook(
-            [](const ai::AuthPrompt& prompt) -> util::Expected<std::string> {
+            [](const ai::AuthPrompt& prompt) -> support::Expected<std::string> {
                 if (std::holds_alternative<ai::AuthPromptSelect>(prompt.kind)) {
                     return std::string{"device_code"};
                 }
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::OAuth,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::OAuth,
                     "unexpected prompt"));
             });
     };
@@ -950,7 +950,7 @@ TEST_CASE("device poll helper honors pending, complete, and cancellation", "[ai]
             ai::auth::DevicePollOptions<int>{
                 .interval_seconds = 1,
                 .expires_in_seconds = 30,
-                .poll = [polled]() -> boost::asio::awaitable<util::Expected<ai::auth::DevicePollResult<int>>> {
+                .poll = [polled]() -> boost::asio::awaitable<support::Expected<ai::auth::DevicePollResult<int>>> {
                     ++*polled;
                     if (*polled == 1) {
                         co_return ai::auth::DevicePollResult<int>{
@@ -975,7 +975,7 @@ TEST_CASE("device poll helper honors pending, complete, and cancellation", "[ai]
             ai::auth::DevicePollOptions<int>{
                 .interval_seconds = 5,
                 .expires_in_seconds = 30,
-                .poll = []() -> boost::asio::awaitable<util::Expected<ai::auth::DevicePollResult<int>>> {
+                .poll = []() -> boost::asio::awaitable<support::Expected<ai::auth::DevicePollResult<int>>> {
                     co_return ai::auth::DevicePollResult<int>{
                         .kind = ai::auth::DevicePollResult<int>::Pending{},
                     };
@@ -983,7 +983,7 @@ TEST_CASE("device poll helper honors pending, complete, and cancellation", "[ai]
                 .stop_token = cancel.get_token(),
             });
         REQUIRE(!result);
-        CHECK(result.error().code == util::ErrorCode::Cancelled);
+        CHECK(result.error().code == support::ErrorCode::Cancelled);
         CHECK(result.error().message == "Login cancelled");
     };
     run_awaitable(cancelled());

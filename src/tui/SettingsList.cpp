@@ -7,7 +7,7 @@
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <exception>
@@ -38,7 +38,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     SettingsSubmenuFactoryHook submenu_factory;
     std::shared_ptr<const KeybindingRegistry> keybindings;
     std::unique_ptr<Component> submenu;
-    std::optional<util::Error> callback_error;
+    std::optional<support::Error> callback_error;
     bool focused{false};
 
     [[nodiscard]] const std::vector<std::size_t>& displayed_indices() const {
@@ -64,8 +64,8 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     }
 
     void report_callback_failure(std::string message) {
-        callback_error = util::make_error(
-            util::ErrorCode::Unknown,
+        callback_error = support::make_error(
+            support::ErrorCode::Unknown,
             std::move(message),
             "the interaction callback threw an exception");
     }
@@ -110,8 +110,8 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
         if (item == nullptr) return;
         if (std::holds_alternative<SettingSubmenu>(item->control)) {
             if (!submenu_factory) {
-                callback_error = util::make_error(
-                    util::ErrorCode::Validation,
+                callback_error = support::make_error(
+                    support::ErrorCode::Validation,
                     "TUI SettingsList submenu item has no submenu factory");
                 return;
             }
@@ -140,8 +140,8 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
             }
             if (*finished) return;
             if (!created) {
-                callback_error = util::make_error(
-                    util::ErrorCode::Validation,
+                callback_error = support::make_error(
+                    support::ErrorCode::Validation,
                     "TUI SettingsList submenu factory returned null");
                 return;
             }
@@ -161,7 +161,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
         emit_change(*item);
     }
 
-    [[nodiscard]] util::Expected<std::string> hint_line(std::string text, std::size_t width) {
+    [[nodiscard]] support::Expected<std::string> hint_line(std::string text, std::size_t width) {
         auto bounded = truncate_text(text, width, "");
         if (!bounded) return std::unexpected(bounded.error());
         return detail::apply_text_style(theme.hint, std::move(*bounded), "SettingsList hint");
@@ -213,11 +213,11 @@ bool SettingsList::submenu_open() const {
     return static_cast<bool>(impl_->submenu);
 }
 
-util::Expected<RenderResult> SettingsList::render(std::size_t width) {
+support::Expected<RenderResult> SettingsList::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI SettingsList requires a positive visible width"));
     }
     if (impl->callback_error) return std::unexpected(*impl->callback_error);

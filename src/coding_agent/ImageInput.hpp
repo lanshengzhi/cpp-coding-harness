@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/Content.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -29,7 +29,7 @@ struct ProcessedImageInput {
     std::span<const std::uint8_t> bytes);
 [[nodiscard]] std::optional<std::string_view> extension_for_image_mime_type(
     std::string_view mime_type);
-[[nodiscard]] util::Expected<ProcessedImageInput> process_image_input(
+[[nodiscard]] support::Expected<ProcessedImageInput> process_image_input(
     std::span<const std::uint8_t> bytes,
     std::string mime_type,
     ImageProcessingLimits limits = {});

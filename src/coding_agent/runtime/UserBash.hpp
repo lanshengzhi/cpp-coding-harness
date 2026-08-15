@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <functional>
 #include <optional>
@@ -27,10 +27,10 @@ struct UserBashProgress {
 
 struct UserBashCompletion {
     ai::BashExecutionMessage message;
-    std::optional<util::Error> diagnostic;
+    std::optional<support::Error> diagnostic;
 };
 
 using UserBashProgressSink =
-    std::move_only_function<util::ExpectedVoid(const UserBashProgress&)>;
+    std::move_only_function<support::ExpectedVoid(const UserBashProgress&)>;
 
 } // namespace cch::coding_agent::runtime

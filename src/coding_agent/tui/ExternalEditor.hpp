@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -23,7 +23,7 @@ namespace cch::coding_agent::tui {
 /// stripped. Cleanup of the temp directory is best effort (pi's `finally`
 /// `rmSync`). Returns the edited content on a clean exit, or `std::nullopt`
 /// when the editor failed or the file could not be read.
-[[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
 edit_in_external_editor(std::string command, std::string content);
 
 } // namespace cch::coding_agent::tui

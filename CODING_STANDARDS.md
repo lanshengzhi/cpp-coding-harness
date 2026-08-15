@@ -110,7 +110,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 7.7. Allocate with `std::make_unique` / `std::make_shared`; no owning raw `new`/`delete`.
 
-7.8. POSIX file descriptors are owned by `UniqueFd` (`src/util/UniqueFd.hpp`) — never `unique_ptr<int>` guards or manual `::close` cleanup paths.
+7.8. POSIX file descriptors are owned by `UniqueFd` (`src/support/UniqueFd.hpp`) — never `unique_ptr<int>` guards or manual `::close` cleanup paths.
 
 ## 8. Owner Interface headers
 
@@ -203,7 +203,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
-- **Include spelling (§2.9):** untouched relative quoted project includes are grandfathered until their owning package contracts into its Owner-local roots; added or modified include lines use the current canonical spelling rule.
+- **Include spelling (§2.9):** every Owner package has contracted into its Owner-local roots (#469), so production sources carry no relative quoted project includes; the remaining relative quoted includes are test files pulling shared helpers from `tests/support/`, grandfathered on untouched lines. Added or modified include lines use the current canonical spelling rule.
 - **Test tag `[coding-agent]`** (35 uses) predates §11.4's `[coding_agent]`; untouched tags are grandfathered, while added or modified tag lists use `[coding_agent]`.
 - **Constant naming (§3.5):** untouched snake_case constexpr locals and `SCREAMING_SNAKE` public constants are grandfathered; added or modified constant declarations use `kCamelCase`.
 - **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.

@@ -16,13 +16,13 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -166,17 +166,17 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 /// this ticket owns (type, thinkingLevel). Generic tree metadata (id,
 /// timestamp, parentId null-vs-omitted) is pinned by the T07 session-wire
 /// contract, not here.
-[[nodiscard]] util::JsonValue entry_shape_to_json(
+[[nodiscard]] support::JsonValue entry_shape_to_json(
     const harness::session::SessionEntry& entry) {
-    util::JsonValue object{util::JsonValue::object_t{}};
+    support::JsonValue object{support::JsonValue::object_t{}};
     auto& o = object.get_object();
-    const auto parsed = util::read_json(entry.raw_line);
+    const auto parsed = support::read_json(entry.raw_line);
     REQUIRE(parsed.has_value());
     const auto& parsed_object = parsed->get_object();
     o.emplace("type", parsed_object.at("type"));
     const auto* thinking = std::get_if<harness::session::ThinkingLevelChangeValue>(&entry.value);
     REQUIRE(thinking != nullptr);
-    o.emplace("thinkingLevel", util::JsonValue(thinking->thinking_level));
+    o.emplace("thinkingLevel", support::JsonValue(thinking->thinking_level));
     return object;
 }
 
@@ -625,7 +625,7 @@ TEST_CASE(
 
     // The global settings file carries the defaultThinkingLevel write.
     const auto settings_text = fixture.read_settings();
-    const auto settings = util::read_json(settings_text);
+    const auto settings = support::read_json(settings_text);
     REQUIRE(settings.has_value());
     const auto& settings_object = settings->get_object();
     const auto found = settings_object.find("defaultThinkingLevel");
@@ -735,7 +735,7 @@ TEST_CASE(
     REQUIRE(loaded.has_value());
     REQUIRE(find_thinking_entry(*loaded) != nullptr);
 
-    const auto settings = util::read_json(fixture.read_settings());
+    const auto settings = support::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
     const auto& settings_object = settings->get_object();
     const auto found = settings_object.find("defaultThinkingLevel");
@@ -761,7 +761,7 @@ TEST_CASE(
     // An invalid level is rejected without state or persistence changes.
     auto invalid = result->session->set_thinking_level("sometimes");
     REQUIRE_FALSE(invalid.has_value());
-    CHECK(invalid.error().code == util::ErrorCode::Validation);
+    CHECK(invalid.error().code == support::ErrorCode::Validation);
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
 
     // A no-op change persists nothing: the initial creation entry plus the
@@ -962,20 +962,20 @@ TEST_CASE(
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);
 
-    const auto settings = util::read_json(fixture.read_settings());
+    const auto settings = support::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
 
-    util::JsonValue golden{util::JsonValue::object_t{}};
+    support::JsonValue golden{support::JsonValue::object_t{}};
     golden.get_object().emplace(
         "thinkingLevelChangeEntry", entry_shape_to_json(*entry));
-    util::JsonValue settings_default{util::JsonValue::object_t{}};
+    support::JsonValue settings_default{support::JsonValue::object_t{}};
     const auto& settings_object = settings->get_object();
     const auto found = settings_object.find("defaultThinkingLevel");
     REQUIRE(found != settings_object.end());
     settings_default.get_object().emplace("defaultThinkingLevel", found->second);
     golden.get_object().emplace("settingsDefaultWrite", std::move(settings_default));
 
-    auto serialized = util::write_json(golden);
+    auto serialized = support::write_json(golden);
     REQUIRE(serialized);
     const std::string path = std::string{CCH_SOURCE_DIR} +
                              "/fixtures/pi-agent-core/thinking-persistence.json";

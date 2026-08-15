@@ -1,7 +1,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "SessionLeaf.hpp"
 
 #include <algorithm>
@@ -115,10 +115,10 @@ const SessionEntry* SessionTree::leaf_entry() const {
     return getEntry(leaf_id_);
 }
 
-util::ExpectedVoid SessionTree::branch(std::string_view entry_id) {
+support::ExpectedVoid SessionTree::branch(std::string_view entry_id) {
     if (!getEntry(entry_id)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Session,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Session,
             std::string("entry not found: ") + std::string{entry_id}));
     }
     leaf_id_ = std::string{entry_id};
@@ -552,14 +552,14 @@ std::optional<std::string> SessionTree::get_session_name() const {
 
 // ── Branch summary hook ──
 
-util::ExpectedVoid SessionTree::branchWithSummary(
+support::ExpectedVoid SessionTree::branchWithSummary(
     std::string_view entry_id,
     BranchSummaryHook& hook,
-    std::move_only_function<util::ExpectedVoid(const SessionEntry&)> append_writer) {
+    std::move_only_function<support::ExpectedVoid(const SessionEntry&)> append_writer) {
 
     if (!getEntry(entry_id)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Session,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Session,
             std::string("target entry not found: ") + std::string{entry_id}));
     }
 

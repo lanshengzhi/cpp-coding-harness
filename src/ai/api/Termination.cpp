@@ -4,7 +4,7 @@
 
 namespace cch::ai::api {
 
-util::Expected<TerminationResult> map_responses_termination(
+support::Expected<TerminationResult> map_responses_termination(
     std::string_view terminal,
     bool has_tool_call) {
     if (terminal == "completed" || terminal == "done") {
@@ -27,12 +27,12 @@ util::Expected<TerminationResult> map_responses_termination(
             .error_message = "Responses stream ended without a terminal event",
         };
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Stream,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Stream,
         "Unhandled Responses terminal status: " + std::string{terminal}));
 }
 
-util::Expected<TerminationResult> map_anthropic_termination(
+support::Expected<TerminationResult> map_anthropic_termination(
     std::string_view stop_reason,
     std::optional<std::string_view> refusal_explanation) {
     if (stop_reason == "end_turn" || stop_reason == "pause_turn" ||
@@ -65,8 +65,8 @@ util::Expected<TerminationResult> map_anthropic_termination(
             .error_message = "Anthropic stream ended without message_stop",
         };
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Stream,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Stream,
         "Unhandled Anthropic stop reason: " + std::string{stop_reason}));
 }
 

@@ -10,9 +10,9 @@
 #include "coding_agent/tui/BashExecutionComponent.hpp"
 #include "coding_agent/tui/ToolExecutionComponent.hpp"
 #include "coding_agent/tui/UserMessageComponent.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <deque>
@@ -33,7 +33,7 @@ namespace {
     return bounded_redacted_presentation(std::move(text));
 }
 
-[[nodiscard]] util::Expected<cch::tui::RenderResult> render_plain(
+[[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(
     const LiveTheme& theme,
     std::string text,
     std::size_t width,
@@ -47,8 +47,8 @@ namespace {
 }
 
 /// Serializes tool-call arguments for presentation (pi JSON.stringify).
-[[nodiscard]] std::string serialized_arguments(const util::JsonValue& arguments) {
-    if (auto serialized = util::write_json(arguments); serialized) {
+[[nodiscard]] std::string serialized_arguments(const support::JsonValue& arguments) {
+    if (auto serialized = support::write_json(arguments); serialized) {
         return safe_text(std::move(*serialized));
     }
     return "{}";
@@ -127,7 +127,7 @@ public:
         expanded_ = expanded;
     }
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         cch::tui::Box box(
             1,
             1,
@@ -623,7 +623,7 @@ struct ChatContainer::Impl {
         }
     }
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render_item(
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render_item(
         const ItemVariant& item,
         std::size_t width,
         std::size_t item_index) {
@@ -853,7 +853,7 @@ bool ChatContainer::tools_expanded() const {
     return impl_->tools_expanded;
 }
 
-util::Expected<cch::tui::RenderResult> ChatContainer::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> ChatContainer::render(std::size_t width) {
     cch::tui::RenderResult result;
     for (std::size_t index = 0; index < impl_->items.size(); ++index) {
         auto rendered = impl_->render_item(impl_->items[index], width, index);

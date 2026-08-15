@@ -4,7 +4,7 @@
 
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <format>
 #include <string>
 #include <string_view>
@@ -29,15 +29,15 @@ std::string_view TruncatedText::text() const {
     return text_;
 }
 
-util::Expected<RenderResult> TruncatedText::render(std::size_t width) {
+support::Expected<RenderResult> TruncatedText::render(std::size_t width) {
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI TruncatedText requires a positive visible width"));
     }
     if (padding_x_ >= width || padding_x_ >= width - padding_x_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI TruncatedText width is too small for padding",
             std::format("width {} padding_x {}", width, padding_x_)));
     }

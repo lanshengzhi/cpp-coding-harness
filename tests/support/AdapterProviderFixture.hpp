@@ -6,7 +6,7 @@
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -53,10 +53,10 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 if (model.api != api_) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Stream,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Stream,
                         "Provider " + provider_id_ +
                             " has no API implementation for \"" + model.api + "\""));
                 }

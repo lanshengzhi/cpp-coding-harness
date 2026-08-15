@@ -2,7 +2,7 @@
 
 #include <cch/ai/ModelStream.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <functional>
@@ -24,7 +24,7 @@ using OAuthProviderPredicate =
 /// OAuth credential missing/expired → "Credentials may have expired … Run
 /// '/login X'". The terminal-error-event contract is preserved: exactly one
 /// `error` terminal event plus an agreeing final `AssistantMessage`, with the
-/// category flowing through the single `util::Expected` channel (#326) — no
+/// category flowing through the single `support::Expected` channel (#326) — no
 /// second exception hierarchy. Only the stream surface is decorated.
 [[nodiscard]] ai::ModelStream apply_auth_guidance(
     ai::ModelStream inner,

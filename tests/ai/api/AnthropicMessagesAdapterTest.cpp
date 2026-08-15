@@ -7,7 +7,7 @@
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -36,7 +36,7 @@ using tests::ScriptedTransport;
 using tests::TransportAttempt;
 
 struct RunResult {
-    util::Expected<ai::AssistantMessage> result;
+    support::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
@@ -127,7 +127,7 @@ struct RunResult {
     tool_assistant.content.push_back(ai::ToolCallContent{
         .id = "bad id!",
         .name = "lookup",
-        .arguments = util::JsonValue::object_t{{"q", "x"}},
+        .arguments = support::JsonValue::object_t{{"q", "x"}},
         .raw_arguments = "{\"q\":\"x\"}",
         .thought_signature = std::nullopt,
         .arguments_valid = true,
@@ -153,11 +153,11 @@ struct RunResult {
     context.tools.push_back(ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     });
@@ -174,11 +174,11 @@ struct RunResult {
     context.tools.push_back(ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     });
@@ -194,7 +194,7 @@ struct RunResult {
     auto stream = models.stream(model, std::move(context), std::move(options));
     auto result = run_async_result(
         std::move(stream).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -381,7 +381,7 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
-    const auto body = util::read_json(request.body);
+    const auto body = support::read_json(request.body);
     REQUIRE(body);
     // Under cacheRetention "none" the string alternative goes out as a raw
     // sanitized JSON string, not a block array (pi `anthropic-messages.ts:1131-1160`).
@@ -426,7 +426,7 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
-    const auto body = util::read_json(request.body);
+    const auto body = support::read_json(request.body);
     REQUIRE(body);
     // A whitespace-only string is trimmed and dropped (pi `anthropic-messages.ts:1131-1160`).
     CHECK(body->at("messages").get_array().empty());
@@ -466,7 +466,7 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
-    const auto body = util::read_json(request.body);
+    const auto body = support::read_json(request.body);
     REQUIRE(body);
     // A trailing string user param is promoted to a one-element cache-marked
     // block array under cache retention (pi `anthropic-messages.ts:1268-1276`;
@@ -890,7 +890,7 @@ TEST_CASE(
     network_transport->attempts = {
         TransportAttempt{
             .chunks = {},
-            .failure = util::make_error(util::ErrorCode::Network, "connection reset"),
+            .failure = support::make_error(support::ErrorCode::Network, "connection reset"),
         },
         TransportAttempt{.chunks = {terminal_sse("end_turn")}},
     };
@@ -932,7 +932,7 @@ TEST_CASE(
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .chunks = {},
-        .failure = util::make_error(util::ErrorCode::Cancelled, "transport cancelled"),
+        .failure = support::make_error(support::ErrorCode::Cancelled, "transport cancelled"),
     });
     const auto model = kimi_model();
     auto models = make_models(transport, model);

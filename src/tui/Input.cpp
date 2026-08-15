@@ -8,7 +8,7 @@
 #include "tui/UnicodeWidth.hpp"
 #include "tui/WordNavigation.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -80,7 +80,7 @@ struct Input::Impl {
     LastAction last_action{LastAction::None};
     bool focused{false};
     std::size_t layout_width{0};
-    std::optional<util::Error> callback_error;
+    std::optional<support::Error> callback_error;
 
     [[nodiscard]] std::string value() const {
         std::string result;
@@ -106,8 +106,8 @@ struct Input::Impl {
     }
 
     void report_callback_failure(std::string message) {
-        callback_error = util::make_error(
-            util::ErrorCode::Unknown,
+        callback_error = support::make_error(
+            support::ErrorCode::Unknown,
             std::move(message),
             "the interaction callback threw an exception");
     }
@@ -340,7 +340,7 @@ struct Input::Impl {
     /// The value window shown at `width` and the visible width of the text
     /// before the cursor within it (pi's render windowing; caller guarantees
     /// `width >= 2` so the prompt's two columns are available).
-    [[nodiscard]] util::Expected<VisibleWindow> visible_window(std::size_t width) const {
+    [[nodiscard]] support::Expected<VisibleWindow> visible_window(std::size_t width) const {
         const auto available = width - 2;
         const auto text = value();
         const auto total = visible_width(text);
@@ -401,11 +401,11 @@ void Input::set_value(std::string value) {
     impl_->cursor = std::min(impl_->cursor, impl_->graphemes.size());
 }
 
-util::Expected<RenderResult> Input::render(std::size_t width) {
+support::Expected<RenderResult> Input::render(std::size_t width) {
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Input requires a positive visible width"));
     }
     impl_->layout_width = width;

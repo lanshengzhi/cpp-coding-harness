@@ -3,7 +3,7 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <format>
@@ -378,7 +378,7 @@ TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][edi
     const auto width_failure = editor.render(8);
 
     REQUIRE_FALSE(width_failure);
-    CHECK(width_failure.error().code == cch::util::ErrorCode::Validation);
+    CHECK(width_failure.error().code == cch::support::ErrorCode::Validation);
     CHECK(width_failure.error().message.find("changed visible width") != std::string::npos);
 
     cch::tui::EditorTheme throwing;

@@ -7,7 +7,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -658,7 +658,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
     if (on_invalidate_) on_invalidate_();
 }
 
-util::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
+support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
     std::size_t width) {
     std::vector<std::string> lines;
     const auto border = [&]() {

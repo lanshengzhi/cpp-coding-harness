@@ -2,7 +2,7 @@
 
 #include <cch/tui/Text.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <format>
@@ -310,7 +310,7 @@ std::string LoadedResources::format_diagnostics(
     return result;
 }
 
-util::Expected<cch::tui::RenderResult> LoadedResources::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> LoadedResources::render(std::size_t width) {
     std::string text;
 
     const auto add_section = [&](const char* name, std::string body) {

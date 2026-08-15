@@ -1,6 +1,6 @@
 #include <cch/coding_agent/Settings.hpp>
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -20,7 +20,7 @@
 namespace cch::coding_agent {
 namespace {
 
-using JsonObject = util::JsonValue::object_t;
+using JsonObject = support::JsonValue::object_t;
 
 constexpr std::string_view kProjectConfigDir = ".pi";
 
@@ -30,30 +30,30 @@ constexpr int kLockMaxAttempts = 10;
 constexpr auto kLockPollInterval = std::chrono::milliseconds{20};
 constexpr auto kLockStaleAfter = std::chrono::seconds{30};
 
-[[nodiscard]] util::Error settings_error(
+[[nodiscard]] support::Error settings_error(
     std::string message,
     std::string detail = {}) {
-    return util::make_error(
-        util::ErrorCode::Workspace,
+    return support::make_error(
+        support::ErrorCode::Workspace,
         std::move(message),
         std::move(detail));
 }
 
-[[nodiscard]] util::Error settings_file_error(
+[[nodiscard]] support::Error settings_file_error(
     std::string message,
     const std::filesystem::path& path,
     std::string detail = {}) {
     if (detail.empty()) {
         detail = message;
     }
-    return util::make_error(
-        util::ErrorCode::JsonParse,
+    return support::make_error(
+        support::ErrorCode::JsonParse,
         std::move(message),
         std::move(detail),
         path.string());
 }
 
-[[nodiscard]] std::string settings_error_text(const util::Error& error) {
+[[nodiscard]] std::string settings_error_text(const support::Error& error) {
     if (error.detail.empty() || error.detail == error.message) {
         return error.message;
     }
@@ -77,7 +77,7 @@ void migrate_settings(JsonObject& settings) {
         const auto websockets = settings.find("websockets");
         if (websockets != settings.end()) {
             if (const auto* enabled = websockets->second.get_if<bool>()) {
-                settings["transport"] = util::JsonValue{
+                settings["transport"] = support::JsonValue{
                     *enabled ? std::string{"websocket"} : std::string{"sse"}};
             }
             settings.erase(websockets);
@@ -85,7 +85,7 @@ void migrate_settings(JsonObject& settings) {
     }
 
     const auto skills = settings.find("skills");
-    if (skills != settings.end() && !skills->second.holds<util::JsonValue::array_t>()) {
+    if (skills != settings.end() && !skills->second.holds<support::JsonValue::array_t>()) {
         if (const auto* skills_object = skills->second.get_if<JsonObject>()) {
             const auto enable_commands = skills_object->find("enableSkillCommands");
             if (enable_commands != skills_object->end() &&
@@ -94,7 +94,7 @@ void migrate_settings(JsonObject& settings) {
             }
             const auto custom = skills_object->find("customDirectories");
             if (custom != skills_object->end() &&
-                custom->second.holds<util::JsonValue::array_t>() &&
+                custom->second.holds<support::JsonValue::array_t>() &&
                 !custom->second.get_array().empty()) {
                 settings["skills"] = custom->second;
             } else {
@@ -108,7 +108,7 @@ void migrate_settings(JsonObject& settings) {
         if (const auto* retry_object = retry->second.get_if<JsonObject>()) {
             auto mutated = *retry_object;
             const auto provider = mutated.find("provider");
-            util::JsonValue::object_t* provider_object = nullptr;
+            support::JsonValue::object_t* provider_object = nullptr;
             JsonObject merged_provider;
             if (provider != mutated.end()) {
                 if (auto* provided = provider->second.get_if<JsonObject>()) {
@@ -120,16 +120,16 @@ void migrate_settings(JsonObject& settings) {
             const bool provider_missing_delay =
                 provider_object == nullptr ||
                 !provider_object->contains("maxRetryDelayMs") ||
-                provider_object->at("maxRetryDelayMs").holds<util::JsonValue::null_t>();
+                provider_object->at("maxRetryDelayMs").holds<support::JsonValue::null_t>();
             if (max_delay != mutated.end() &&
                 max_delay->second.holds<double>() &&
                 provider_missing_delay) {
                 JsonObject configured_provider = std::move(merged_provider);
                 configured_provider["maxRetryDelayMs"] = max_delay->second;
-                mutated["provider"] = util::JsonValue{std::move(configured_provider)};
+                mutated["provider"] = support::JsonValue{std::move(configured_provider)};
             }
             mutated.erase("maxDelayMs");
-            retry->second = util::JsonValue{std::move(mutated)};
+            retry->second = support::JsonValue{std::move(mutated)};
         }
     }
 }
@@ -155,8 +155,8 @@ void migrate_settings(JsonObject& settings) {
 /// keepRecentTokens}`). Each field is optional; unknown or mistyped fields
 /// are ignored (a mistyped field falls back to the pi default at resolution,
 /// mirroring pi's `settings.compaction?.enabled ?? true` reads).
-[[nodiscard]] util::Expected<UserCompactionSettings> parse_compaction_settings(
-    const util::JsonValue& value) {
+[[nodiscard]] support::Expected<UserCompactionSettings> parse_compaction_settings(
+    const support::JsonValue& value) {
     const auto* object = value.get_if<JsonObject>();
     if (object == nullptr) {
         return std::unexpected(settings_file_error(
@@ -196,8 +196,8 @@ void migrate_settings(JsonObject& settings) {
 /// Each field is optional; unknown or mistyped fields are ignored (a mistyped
 /// field falls back to the pi default at resolution, mirroring pi's
 /// `settings.retry?.enabled ?? true` reads).
-[[nodiscard]] util::Expected<UserRetrySettings> parse_retry_settings(
-    const util::JsonValue& value) {
+[[nodiscard]] support::Expected<UserRetrySettings> parse_retry_settings(
+    const support::JsonValue& value) {
     const auto* object = value.get_if<JsonObject>();
     if (object == nullptr) {
         return std::unexpected(settings_file_error(
@@ -237,7 +237,7 @@ void migrate_settings(JsonObject& settings) {
 /// only for the global scope; a project-scope `defaultProjectTrust` is ignored
 /// (global-only). Unknown fields are ignored for forward compatibility and
 /// preserved by the surgical write path.
-[[nodiscard]] util::Expected<UserSettings> parse_settings(
+[[nodiscard]] support::Expected<UserSettings> parse_settings(
     const JsonObject& object,
     bool allow_default_project_trust) {
     UserSettings settings;
@@ -258,7 +258,7 @@ void migrate_settings(JsonObject& settings) {
         settings.default_thinking_level = *value;
     }
     if (const auto found = object.find("enabledModels"); found != object.end()) {
-        if (const auto* array = found->second.get_if<util::JsonValue::array_t>()) {
+        if (const auto* array = found->second.get_if<support::JsonValue::array_t>()) {
             std::vector<std::string> patterns;
             for (const auto& item : *array) {
                 if (const auto* text = item.get_if<std::string>()) {
@@ -333,8 +333,8 @@ void migrate_settings(JsonObject& settings) {
 // Pretty serialization (pi writes settings with `JSON.stringify(_, null, 2)`)
 // ─────────────────────────────────────────────────────────────────────────────
 
-[[nodiscard]] util::ExpectedVoid append_pretty_json(
-    const util::JsonValue& value,
+[[nodiscard]] support::ExpectedVoid append_pretty_json(
+    const support::JsonValue& value,
     std::string& output,
     std::size_t indentation) {
     const auto indent = [&output, indentation](std::size_t extra) {
@@ -347,7 +347,7 @@ void migrate_settings(JsonObject& settings) {
             auto current = object->begin();
             while (current != object->end()) {
                 indent(2);
-                auto key = util::write_json(util::JsonValue{current->first});
+                auto key = support::write_json(support::JsonValue{current->first});
                 if (!key) {
                     return std::unexpected(key.error());
                 }
@@ -367,7 +367,7 @@ void migrate_settings(JsonObject& settings) {
         output.push_back('}');
         return {};
     }
-    if (const auto* array = value.get_if<util::JsonValue::array_t>()) {
+    if (const auto* array = value.get_if<support::JsonValue::array_t>()) {
         output.push_back('[');
         if (!array->empty()) {
             output.push_back('\n');
@@ -386,7 +386,7 @@ void migrate_settings(JsonObject& settings) {
         output.push_back(']');
         return {};
     }
-    auto serialized = util::write_json(value);
+    auto serialized = support::write_json(value);
     if (!serialized) {
         return std::unexpected(serialized.error());
     }
@@ -394,9 +394,9 @@ void migrate_settings(JsonObject& settings) {
     return {};
 }
 
-[[nodiscard]] util::Expected<std::string> serialize_pretty(const JsonObject& object) {
+[[nodiscard]] support::Expected<std::string> serialize_pretty(const JsonObject& object) {
     std::string output;
-    if (auto appended = append_pretty_json(util::JsonValue{object}, output, 0); !appended) {
+    if (auto appended = append_pretty_json(support::JsonValue{object}, output, 0); !appended) {
         return std::unexpected(appended.error());
     }
     output.push_back('\n');
@@ -419,7 +419,7 @@ public:
     explicit FileLock(std::filesystem::path lock_path)
         : lock_path_(std::move(lock_path)) {}
 
-    [[nodiscard]] static util::Expected<std::unique_ptr<FileLock>> acquire(
+    [[nodiscard]] static support::Expected<std::unique_ptr<FileLock>> acquire(
         const std::filesystem::path& target_path) {
         const auto lock_path = std::filesystem::path{target_path.string() + ".lock"};
         for (int attempt = 0; attempt < kLockMaxAttempts; ++attempt) {
@@ -457,7 +457,7 @@ private:
     std::filesystem::path lock_path_;
 };
 
-[[nodiscard]] util::Expected<std::optional<std::string>> read_text_file(
+[[nodiscard]] support::Expected<std::optional<std::string>> read_text_file(
     const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input.is_open()) {
@@ -474,7 +474,7 @@ private:
 }
 
 /// Load one scope: read, parse, and apply pi's read-time migrations.
-[[nodiscard]] util::Expected<UserSettings> load_scope(
+[[nodiscard]] support::Expected<UserSettings> load_scope(
     const std::filesystem::path& path,
     bool allow_default_project_trust) {
     auto content = read_text_file(path);
@@ -484,7 +484,7 @@ private:
     if (!*content || (*content)->empty()) {
         return UserSettings{};
     }
-    auto parsed = util::read_json(**content);
+    auto parsed = support::read_json(**content);
     if (!parsed) {
         return std::unexpected(settings_file_error(
             "failed to parse settings file",
@@ -505,7 +505,7 @@ private:
 
 /// Read the current file content into a JSON object, applying pi's
 /// migrations. Used by the surgical write path.
-[[nodiscard]] util::Expected<JsonObject> read_current_settings(
+[[nodiscard]] support::Expected<JsonObject> read_current_settings(
     const std::filesystem::path& path) {
     JsonObject object;
     auto content = read_text_file(path);
@@ -515,7 +515,7 @@ private:
     if (!*content || (*content)->empty()) {
         return object;
     }
-    auto parsed = util::read_json(**content);
+    auto parsed = support::read_json(**content);
     if (!parsed) {
         return std::unexpected(settings_file_error(
             "could not update settings file",
@@ -534,7 +534,7 @@ private:
     return object;
 }
 
-[[nodiscard]] util::ExpectedVoid write_settings_text(
+[[nodiscard]] support::ExpectedVoid write_settings_text(
     const std::filesystem::path& settings_path,
     std::string serialized) {
     const auto parent = settings_path.parent_path();
@@ -616,10 +616,10 @@ private:
 /// migrate it, and apply only the caller-supplied field, preserving every
 /// unmodified and unknown field. The file is created (with parent directory)
 /// when it does not exist.
-[[nodiscard]] util::ExpectedVoid persist_field(
+[[nodiscard]] support::ExpectedVoid persist_field(
     const std::filesystem::path& path,
     std::string field,
-    util::JsonValue value) {
+    support::JsonValue value) {
     // The proper-lockfile-compatible lock lives at `<path>.lock`, so the
     // parent directory must exist before acquiring it.
     const auto parent = path.parent_path();
@@ -816,9 +816,9 @@ const std::vector<SettingsError>& SettingsManager::errors() const noexcept {
     return impl_->errors;
 }
 
-util::ExpectedVoid SettingsManager::set_project_trusted(bool trusted) {
+support::ExpectedVoid SettingsManager::set_project_trusted(bool trusted) {
     if (impl_->project_trusted == trusted) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     impl_->project_trusted = trusted;
     if (!trusted) {
@@ -833,7 +833,7 @@ util::ExpectedVoid SettingsManager::set_project_trusted(bool trusted) {
                 }),
             impl_->errors.end());
         impl_->recompute_merged();
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     impl_->project_load_failed = false;
     if (!impl_->project_path.empty()) {
@@ -849,10 +849,10 @@ util::ExpectedVoid SettingsManager::set_project_trusted(bool trusted) {
         }
     }
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::reload() {
+support::ExpectedVoid SettingsManager::reload() {
     impl_->errors.clear();
     impl_->global_load_failed = false;
     impl_->project_load_failed = false;
@@ -886,10 +886,10 @@ util::ExpectedVoid SettingsManager::reload() {
     }
 
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::set_theme(
+support::ExpectedVoid SettingsManager::set_theme(
     SettingsScope scope,
     std::string_view value) {
     if (scope == SettingsScope::Project && !impl_->project_trusted) {
@@ -901,34 +901,34 @@ util::ExpectedVoid SettingsManager::set_theme(
         ? impl_->global_load_failed
         : impl_->project_load_failed;
     if (load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     const auto& path = scope == SettingsScope::Global
         ? impl_->global_path
         : impl_->project_path;
     if (path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = scope == SettingsScope::Global
         ? impl_->global_settings
         : impl_->project_settings;
     if (target.theme == value) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
-    auto persisted = persist_field(path, "theme", util::JsonValue{std::string{value}});
+    auto persisted = persist_field(path, "theme", support::JsonValue{std::string{value}});
     if (!persisted) {
         return persisted;
     }
     target.theme = std::string{value};
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::set_default_thinking_level(
+support::ExpectedVoid SettingsManager::set_default_thinking_level(
     SettingsScope scope,
     std::string_view value) {
     if (scope == SettingsScope::Project && !impl_->project_trusted) {
@@ -945,32 +945,32 @@ util::ExpectedVoid SettingsManager::set_default_thinking_level(
         ? impl_->global_load_failed
         : impl_->project_load_failed;
     if (load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     const auto& path = scope == SettingsScope::Global
         ? impl_->global_path
         : impl_->project_path;
     if (path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = scope == SettingsScope::Global
         ? impl_->global_settings
         : impl_->project_settings;
     if (target.default_thinking_level == value) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
     auto persisted = persist_field(
-        path, "defaultThinkingLevel", util::JsonValue{std::string{value}});
+        path, "defaultThinkingLevel", support::JsonValue{std::string{value}});
     if (!persisted) {
         return persisted;
     }
     target.default_thinking_level = std::string{value};
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
 bool SettingsManager::hide_thinking_block() const noexcept {
@@ -984,33 +984,33 @@ std::size_t SettingsManager::output_pad() const noexcept {
     return stored == 0 ? 0 : 1;
 }
 
-util::ExpectedVoid SettingsManager::set_hide_thinking_block(bool hide) {
+support::ExpectedVoid SettingsManager::set_hide_thinking_block(bool hide) {
     // pi `setHideThinkingBlock` always writes the global scope.
     if (impl_->global_load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     if (impl_->global_path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = impl_->global_settings;
     if (target.hide_thinking_block == hide) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
     if (auto persisted = persist_field(
-            impl_->global_path, "hideThinkingBlock", util::JsonValue{hide});
+            impl_->global_path, "hideThinkingBlock", support::JsonValue{hide});
         !persisted) {
         return persisted;
     }
     target.hide_thinking_block = hide;
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
+support::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
     // pi `setOutputPad` always writes the global scope; only 0 and 1 exist.
     if (padding != 0 && padding != 1) {
         return std::unexpected(settings_error(
@@ -1018,27 +1018,27 @@ util::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
             "outputPad must be 0 or 1"));
     }
     if (impl_->global_load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     if (impl_->global_path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = impl_->global_settings;
     if (target.output_pad == padding) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
     if (auto persisted = persist_field(
-            impl_->global_path, "outputPad", util::JsonValue{static_cast<double>(padding)});
+            impl_->global_path, "outputPad", support::JsonValue{static_cast<double>(padding)});
         !persisted) {
         return persisted;
     }
     target.output_pad = padding;
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
 bool SettingsManager::get_enable_skill_commands() const noexcept {
@@ -1046,46 +1046,46 @@ bool SettingsManager::get_enable_skill_commands() const noexcept {
     return impl_->merged_settings.enable_skill_commands.value_or(true);
 }
 
-util::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {
+support::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {
     // pi `setEnableSkillCommands` always writes the global scope.
     if (impl_->global_load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     if (impl_->global_path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = impl_->global_settings;
     if (target.enable_skill_commands == enabled) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
     if (auto persisted = persist_field(
-            impl_->global_path, "enableSkillCommands", util::JsonValue{enabled});
+            impl_->global_path, "enableSkillCommands", support::JsonValue{enabled});
         !persisted) {
         return persisted;
     }
     target.enable_skill_commands = enabled;
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::set_default_project_trust(
+support::ExpectedVoid SettingsManager::set_default_project_trust(
     DefaultProjectTrust trust) {
     // pi `setDefaultProjectTrust` always writes the global scope and is
     // global-only (the project scope never carries a trust default).
     if (impl_->global_load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     if (impl_->global_path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = impl_->global_settings;
     if (target.default_project_trust == trust) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
@@ -1093,62 +1093,62 @@ util::ExpectedVoid SettingsManager::set_default_project_trust(
     if (auto persisted = persist_field(
             impl_->global_path,
             "defaultProjectTrust",
-            util::JsonValue{to_string(trust)});
+            support::JsonValue{to_string(trust)});
         !persisted) {
         return persisted;
     }
     target.default_project_trust = trust;
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::set_default_model_and_provider(
+support::ExpectedVoid SettingsManager::set_default_model_and_provider(
     std::string provider,
     std::string model) {
     // pi `setDefaultModelAndProvider` always writes the global scope.
     if (impl_->global_load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     if (impl_->global_path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = impl_->global_settings;
     if (target.default_provider == provider && target.default_model == model) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
     if (auto persisted = persist_field(
-            impl_->global_path, "defaultProvider", util::JsonValue{provider});
+            impl_->global_path, "defaultProvider", support::JsonValue{provider});
         !persisted) {
         return persisted;
     }
     if (auto persisted = persist_field(
-            impl_->global_path, "defaultModel", util::JsonValue{model});
+            impl_->global_path, "defaultModel", support::JsonValue{model});
         !persisted) {
         return persisted;
     }
     target.default_provider = std::move(provider);
     target.default_model = std::move(model);
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid SettingsManager::set_enabled_models(
+support::ExpectedVoid SettingsManager::set_enabled_models(
     std::optional<std::vector<std::string>> patterns) {
     // pi `setEnabledModels` always writes the global scope.
     if (impl_->global_load_failed) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
     if (impl_->global_path.empty()) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     auto& target = impl_->global_settings;
     if (target.enabled_models == patterns) {
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     }
 
     if (!patterns) {
@@ -1175,19 +1175,19 @@ util::ExpectedVoid SettingsManager::set_enabled_models(
                    impl_->global_path,
                    "enabledModels",
                    [&] {
-                       util::JsonValue::array_t entries;
+                       support::JsonValue::array_t entries;
                        entries.reserve(patterns->size());
                        for (const auto& pattern : *patterns) {
                            entries.emplace_back(pattern);
                        }
-                       return util::JsonValue{std::move(entries)};
+                       return support::JsonValue{std::move(entries)};
                    }());
                !persisted) {
         return persisted;
     }
     target.enabled_models = std::move(patterns);
     impl_->recompute_merged();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
 } // namespace cch::coding_agent

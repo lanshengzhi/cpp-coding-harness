@@ -55,50 +55,33 @@ set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
 include(cmake/ParityArchitecture.cmake)
 cch_parity_set_manifest("${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json")
 
-# Canonical repository-internal include surface: the global include root is
-# published to dependents, the private src root stays private. Applied after
-# each central declaration because the constructor creates the target but does
-# not guess the include surface (Owner-local roots replace this in the
-# contraction tickets).
-function(cch_target_defaults target_name)
+# Owner-local include roots (ADR 0039; #469). Each package publishes only its
+# own interface root (<package>/include, which provides the canonical
+# <cch/...> spelling) to dependents and keeps the repository-private src root
+# private. There is no global public header root: deleting a package's
+# interface root removes its headers from every dependent's include path.
+function(cch_owner_include_roots target_name interface_root)
     target_include_directories(${target_name}
         PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/${interface_root}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 endfunction()
 
-# Pi-neutral C++ Support Package (ADR 0039). Owns passive Error/Expected,
-# JsonValue, and AsyncResult mechanics shared across Owners; header-only, so it
-# has no compiled source of its own. The historical cch_util target below links
-# it and remains the temporary legacy alias until the support contraction
-# ticket #469 deletes it.
+# Pi-neutral C++ Support Package (ADR 0039; #469). Owns passive Error/Expected,
+# JsonValue (including its hand-rolled I/O), AsyncResult, and shared move-only
+# mechanics used across Owners. It carries no product policy, process policy,
+# serialization DTOs, redaction, or output-limiting policy; those remain with
+# their Capability Owners.
 cch_parity_declare_target(
     TARGET cch_support
     ROLE support
     OWNER cch_support
-    KIND interface
-)
-target_include_directories(cch_support INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-cch_parity_declare_target(
-    TARGET cch_util
-    ROLE support
-    OWNER cch_support
     SOURCES
-        src/util/Json.cpp
-        src/util/Process.cpp
-    DEPENDS
-        cch_support
-        Boost::filesystem@boost
-        Threads::Threads@threads
-    INTERFACE_DEPENDS
-        cch_support
-        Boost::filesystem@boost
-        Threads::Threads@threads
+        src/support/Json.cpp
 )
-cch_target_defaults(cch_util)
+cch_owner_include_roots(cch_support src/support/include)
 
 cch_parity_declare_target(
     TARGET cch_tui
@@ -131,13 +114,13 @@ cch_parity_declare_target(
         src/tui/VirtualTerminal.cpp
     DEPENDS
         cch_support
-        cch_util
         md4c::md4c@md4c
         utf8proc::utf8proc@utf8proc
+        Threads::Threads@threads
     INTERFACE_DEPENDS
         cch_support
 )
-cch_target_defaults(cch_tui)
+cch_owner_include_roots(cch_tui src/tui/include)
 
 cch_parity_declare_target(
     TARGET cch_ai
@@ -174,13 +157,15 @@ cch_parity_declare_target(
         src/ai/utils/RetryClassifier.cpp
     DEPENDS
         cch_support
-        cch_util
+        Boost::headers@boost
+        Threads::Threads@threads
+        glaze::glaze@glaze
         OpenSSL::SSL@openssl
         OpenSSL::Crypto@openssl
     INTERFACE_DEPENDS
         cch_support
 )
-cch_target_defaults(cch_ai)
+cch_owner_include_roots(cch_ai src/ai/include)
 
 cch_parity_declare_target(
     TARGET cch_agent_core
@@ -193,6 +178,7 @@ cch_parity_declare_target(
         src/agent/ToolArgumentPreparation.cpp
         src/agent/ToolCallExecutor.cpp
         src/harness/AsyncLocalExecutionEnv.cpp
+        src/harness/Process.cpp
         src/harness/RuntimeRoot.cpp
         src/harness/ShellResolver.cpp
         src/harness/SyncLocalExecutionEnv.cpp
@@ -213,13 +199,15 @@ cch_parity_declare_target(
     DEPENDS
         cch_ai
         cch_support
-        cch_util
+        Boost::headers@boost
+        Threads::Threads@threads
+        glaze::glaze@glaze
         utf8proc::utf8proc@utf8proc
     INTERFACE_DEPENDS
         cch_ai
         cch_support
 )
-cch_target_defaults(cch_agent_core)
+cch_owner_include_roots(cch_agent_core src/agent/include)
 
 # Repository-private coding-agent Owner Package (ADR 0039; #468). One
 # authoritative compiled static library owns every coding-agent composition
@@ -229,8 +217,7 @@ cch_target_defaults(cch_agent_core)
 # legal edges to cch_agent_core, cch_ai, and cch_tui, plus the pi-neutral
 # support package; no other Owner depends on it. The stateful Agent consumes
 # the AI-owned move-only ModelStream (ADR 0040 / #453), so no reverse
-# cch_agent_core -> cch_coding_agent edge exists (#456/#460). cch_util
-# remains the temporary legacy alias until #469 deletes it.
+# cch_agent_core -> cch_coding_agent edge exists (#456/#460).
 cch_parity_declare_target(
     TARGET cch_coding_agent
     ROLE owner
@@ -312,16 +299,17 @@ cch_parity_declare_target(
         cch_ai
         cch_tui
         cch_support
-        cch_util
+        Boost::headers@boost
+        Threads::Threads@threads
+        glaze::glaze@glaze
         WebP::webpdecoder@webp
         CLI11::CLI11@cli11
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai
         cch_support
-        cch_util
 )
-cch_target_defaults(cch_coding_agent)
+cch_owner_include_roots(cch_coding_agent src/coding_agent/include)
 target_include_directories(cch_coding_agent
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
@@ -347,12 +335,20 @@ cch_parity_declare_target(
     DEPENDS
         cch_coding_agent
 )
-target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# main.cpp compiles against the Owner's private runtime headers (the src
+# root); those headers reference the cch_tui interface, which is a legal
+# private cch_coding_agent edge and therefore not interface-published, so the
+# composition target adds the tui interface root privately.
+target_include_directories(cpp_harness PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
+)
 
 # TEMPORARY non-blocking production audit (see #450; mandatory enforcement and
-# deletion land in #470). Reports the current migration violations with stable
-# rule IDs without failing configure, so the per-Owner contraction tickets can
-# resolve them while the build stays green.
+# deletion land in #470). The production graph audits clean after the #469
+# contraction; any new violation is reported with its stable rule ID without
+# failing configure, so the build stays green while enforcement is mandatory
+# only in the fixtures.
 cch_parity_run_gate_report(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -429,52 +425,55 @@ if(CCH_BUILD_TESTS)
     )
     set_tests_properties(cch_parity_gate_fixture PROPERTIES LABELS "architecture;parity-gate;issue448;issue449")
 
+    # Owner Interface standalone compile (ADR 0039; #469): every Owner
+    # Interface header compiles alone with the include path restricted to its
+    # declared package interface dependencies (own root, support, legal direct
+    # Owner dependencies). No third-party or private root is provided, so
+    # third-party leakage, private paths, and undeclared Owner edges fail.
+    add_test(
+        NAME cch_owner_interface_standalone
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/owner_interface_standalone.py
+            --compiler ${CMAKE_CXX_COMPILER}
+            --manifest ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json
+            --project-root ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469")
+
     # Package-aligned test shards (build-performance-plan Stage 4). Each shard
     # is its own executable registered with ctest, so a focused test edit
     # builds and links only its owning package. `cpp_harness_tests` remains as
     # the aggregate target that builds every shard. Grouping follows the
     # package boundaries in CODING_STANDARDS.md section 12 and fixture
     # ownership, not equal file counts; no test object is compiled twice.
+    # Tests include Owner Interface headers through the owner-local interface
+    # roots and private headers through the repository-private src root.
     set(CCH_FORMAL_TEST_INCLUDE_DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ai/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/agent/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/coding_agent/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/support/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
-
-    # util
-    add_executable(cch_tests_util
-        tests/Catch2Main.cpp
-        tests/util/BoundedTextTest.cpp
-        tests/util/ExpectedErrorTest.cpp
-        tests/util/ExpectedMacrosTest.cpp
-        tests/util/JsonValueIoTest.cpp
-        tests/util/OutputLimiterTest.cpp
-        tests/util/ProcessTest.cpp
-        tests/util/RedactorTest.cpp
-        tests/util/TestRunnerIsolationTest.cpp
-)
-    target_include_directories(cch_tests_util PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
-    target_link_libraries(cch_tests_util
-        PRIVATE
-            cch_util
-            Catch2::Catch2
-)
-    target_compile_definitions(cch_tests_util PRIVATE
-        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-)
-    target_compile_options(cch_tests_util PRIVATE ${CCH_WARNING_OPTIONS})
-    catch_discover_tests(cch_tests_util ADD_TAGS_AS_LABELS)
 
     # support
     add_executable(cch_tests_support
         tests/Catch2Main.cpp
         tests/support/AllocationCounter.cpp
         tests/support/AsyncResultTest.cpp
+        tests/support/ExpectedErrorTest.cpp
+        tests/support/ExpectedMacrosTest.cpp
+        tests/support/JsonValueIoTest.cpp
+        tests/support/TestRunnerIsolationTest.cpp
 )
     target_include_directories(cch_tests_support PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_support
         PRIVATE
             cch_support
+            glaze::glaze
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_support PRIVATE
@@ -528,6 +527,7 @@ if(CCH_BUILD_TESTS)
     # AI
     add_executable(cch_tests_ai
         tests/Catch2Main.cpp
+        tests/ai/BoundedTextTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/MessageConversionTest.cpp
@@ -535,6 +535,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/ModelsTest.cpp
         tests/ai/ProviderPolicyTest.cpp
         tests/ai/RetryClassifierTest.cpp
+        tests/ai/RedactorTest.cpp
         tests/ai/SimpleOptionsTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
@@ -554,6 +555,7 @@ if(CCH_BUILD_TESTS)
         PRIVATE
             cch_agent_core
             cch_ai
+            Boost::headers
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_ai PRIVATE
@@ -575,6 +577,7 @@ if(CCH_BUILD_TESTS)
     target_link_libraries(cch_tests_agent
         PRIVATE
             cch_agent_core
+            Boost::headers
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_agent PRIVATE
@@ -587,6 +590,8 @@ if(CCH_BUILD_TESTS)
     add_executable(cch_tests_harness_tools
         tests/Catch2Main.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
+        tests/harness/OutputLimiterTest.cpp
+        tests/harness/ProcessTest.cpp
         tests/harness/RuntimeRootTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/harness/compaction/CompactionTest.cpp
@@ -601,6 +606,7 @@ if(CCH_BUILD_TESTS)
     target_link_libraries(cch_tests_harness_tools
         PRIVATE
             cch_agent_core
+            Boost::headers
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_harness_tools PRIVATE
@@ -664,6 +670,7 @@ if(CCH_BUILD_TESTS)
     target_link_libraries(cch_tests_coding_agent
         PRIVATE
             cch_coding_agent
+            Boost::headers
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_coding_agent PRIVATE
@@ -741,6 +748,7 @@ if(CCH_BUILD_TESTS)
     target_link_libraries(cch_tests_cli_arch
         PRIVATE
             cch_coding_agent
+            Boost::headers
             CLI11::CLI11
             Catch2::Catch2
 )
@@ -756,7 +764,6 @@ if(CCH_BUILD_TESTS)
     # replaces the old single executable's build target).
     add_custom_target(cpp_harness_tests
         DEPENDS
-            cch_tests_util
             cch_tests_support
             cch_tests_tui
             cch_tests_ai

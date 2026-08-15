@@ -5,8 +5,8 @@
 #include "agent/ToolArgumentPreparation.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include "harness/RuntimeRoot.hpp"
-#include "util/Json.hpp"
-#include "util/OutputLimiter.hpp"
+#include "support/Json.hpp"
+#include "harness/OutputLimiter.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -115,10 +115,10 @@ TestRuntime& test_runtime() {
 }
 
 template <typename Start>
-util::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
+support::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
     auto& loop = test_runtime().loop();
     loop.restart();
-    std::optional<util::Expected<agent::AsyncToolExecutionResult>> result;
+    std::optional<support::Expected<agent::AsyncToolExecutionResult>> result;
     boost::asio::co_spawn(
         loop,
         [&]() -> boost::asio::awaitable<void> {
@@ -133,7 +133,7 @@ util::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
 }
 
 agent::ToolInvocation invocation(std::string name, std::string json) {
-    auto args = util::read_json(json);
+    auto args = support::read_json(json);
     REQUIRE(args);
     return agent::ToolInvocation{"call-1", std::move(name), std::move(*args), std::move(json)};
 }
@@ -402,7 +402,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
-    auto structured = util::read_json(R"({"path":"structured.txt"})");
+    auto structured = support::read_json(R"({"path":"structured.txt"})");
     REQUIRE(structured);
     agent::ToolInvocation call{"call-1", "read_file", *structured, R"({"path":"raw.txt"})"};
 
@@ -505,7 +505,7 @@ TEST_CASE(
 TEST_CASE("async bash tool spill file contains complete output beyond the visible limit", "[tools][async][issue73]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<CapturingEnv>(workspace.path());
-    const util::OutputLimit limit;
+    const harness::OutputLimit limit;
     env->streamed_stdout = std::string(limit.max_bytes + 100, 'x') +
         "\napi_key=super-secret\ncomplete-tail\xc3\xa9";
     env->next_shell_result.stdout_output = env->streamed_stdout.substr(0, limit.max_bytes);
@@ -534,7 +534,7 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
 TEST_CASE("async bash tool without streamed output reports capping at the execution layer without a spill file", "[tools][async][issue73]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<CapturingEnv>(workspace.path());
-    const util::OutputLimit limit;
+    const harness::OutputLimit limit;
     // streamed_stdout/streamed_stderr stay empty, so the fake env never fires
     // the streaming callbacks and only the runner-capped result fields exist.
     env->next_shell_result.stdout_output = std::string(limit.max_bytes + 100, 'x') +

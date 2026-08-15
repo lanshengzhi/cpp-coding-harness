@@ -18,7 +18,7 @@
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -26,7 +26,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -108,7 +108,7 @@ constexpr std::string_view kKeylessAlphaKeyedBeta = R"({
 /// request-time guidance through the session's stream seam.
 class AuthTerminalProvider final : public tests::ScriptedProvider {
 public:
-    AuthTerminalProvider(util::ErrorCode code,
+    AuthTerminalProvider(support::ErrorCode code,
                          std::string message,
                          std::string content = {})
         : ScriptedProvider("sdk-host"),
@@ -123,7 +123,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         auto terminal = ai::assistant_text_message(content_);
         terminal.stop_reason = ai::AssistantStopReason::Error;
@@ -137,7 +137,7 @@ public:
             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                 .reason = terminal.stop_reason,
                 .error = terminal,
-                .failure = util::make_error(code_, message_),
+                .failure = support::make_error(code_, message_),
             }));
         }
         co_return terminal;
@@ -148,7 +148,7 @@ public:
     int request_count{0};
 
 private:
-    util::ErrorCode code_;
+    support::ErrorCode code_;
     std::string message_;
     std::string content_;
 };
@@ -156,7 +156,7 @@ private:
 /// Session creation against the scripted-client seam (a real ModelRuntime
 /// composed over scripted providers, ADR 0034 "primary seam — Agent +
 /// session-assembly composition").
-[[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult>
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
 create_scripted_session(
     std::shared_ptr<ai::Provider> client,
     const std::filesystem::path& session_file,
@@ -226,7 +226,7 @@ template <typename T>
 /// the narrow fake factory, wrap it with `apply_auth_guidance`, and consume it
 /// with `ai::consume`, recording every forwarded event.
 struct GuidedRun {
-    util::Expected<ai::AssistantMessage> result;
+    support::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
@@ -253,7 +253,7 @@ struct GuidedRun {
                 [is_using_oauth](std::string_view) { return is_using_oauth; });
             out.result = co_await ai::detail::await_async_result(
                 std::move(decorated).run(
-                    [&out](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                    [&out](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
                         out.events.push_back(event);
                         return {};
                     }));
@@ -292,7 +292,7 @@ TEST_CASE(
     // single Expected channel (no second exception hierarchy).
     auto prompted = result->session->prompt_blocking("hello");
     REQUIRE_FALSE(prompted.has_value());
-    CHECK(prompted.error().code == util::ErrorCode::Auth);
+    CHECK(prompted.error().code == support::ErrorCode::Auth);
     CHECK(prompted.error().message ==
           read_golden_text("re-auth-guidance-preflight-no-key.txt"));
     CHECK(prompted.error().message == default_no_key_guidance("alpha"));
@@ -315,7 +315,7 @@ TEST_CASE(
 
     auto prompted = result->session->prompt_blocking("hello");
     REQUIRE_FALSE(prompted.has_value());
-    CHECK(prompted.error().code == util::ErrorCode::Auth);
+    CHECK(prompted.error().code == support::ErrorCode::Auth);
     CHECK(prompted.error().message ==
           read_golden_text("re-auth-guidance-preflight-oauth.txt"));
     CHECK(prompted.error().message ==
@@ -332,7 +332,7 @@ TEST_CASE(
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
     auto client = std::make_shared<AuthTerminalProvider>(
-        util::ErrorCode::Auth, "Provider is not configured: sdk-host");
+        support::ErrorCode::Auth, "Provider is not configured: sdk-host");
     auto created = create_scripted_session(
         std::move(client),
         workspace.path() / "test-session.jsonl",
@@ -361,7 +361,7 @@ TEST_CASE(
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
     auto client = std::make_shared<AuthTerminalProvider>(
-        util::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
+        support::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
     auto created = create_scripted_session(
         std::move(client),
         workspace.path() / "test-session.jsonl",
@@ -393,7 +393,7 @@ TEST_CASE(
     "request-time decorator maps an auth terminal to the no-key branch through a ModelStream",
     "[coding_agent][re-auth-guidance][issue360]") {
     auto fake = std::make_shared<tests::FakeModelStream>();
-    fake->terminal_failure_code = util::ErrorCode::Auth;
+    fake->terminal_failure_code = support::ErrorCode::Auth;
     fake->responses.push_back(
         terminal_message("Provider is not configured: gpt-test"));
 
@@ -409,7 +409,7 @@ TEST_CASE(
     const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
     REQUIRE(error != nullptr);
     REQUIRE(error->failure.has_value());
-    CHECK(error->failure->code == util::ErrorCode::Auth);
+    CHECK(error->failure->code == support::ErrorCode::Auth);
     REQUIRE(error->error.error_message.has_value());
     CHECK(*error->error.error_message == default_no_key_guidance("fake"));
     CHECK(fake->terminal_events == 1);
@@ -419,7 +419,7 @@ TEST_CASE(
     "request-time decorator maps an auth terminal on an OAuth provider to the re-auth branch",
     "[coding_agent][re-auth-guidance][issue360]") {
     auto fake = std::make_shared<tests::FakeModelStream>();
-    fake->terminal_failure_code = util::ErrorCode::Auth;
+    fake->terminal_failure_code = support::ErrorCode::Auth;
     fake->responses.push_back(
         terminal_message("Provider is not configured: gpt-test"));
 
@@ -432,7 +432,7 @@ TEST_CASE(
     const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
     REQUIRE(error != nullptr);
     REQUIRE(error->failure.has_value());
-    CHECK(error->failure->code == util::ErrorCode::Auth);
+    CHECK(error->failure->code == support::ErrorCode::Auth);
     REQUIRE(error->error.error_message.has_value());
     CHECK(*error->error.error_message == default_oauth_guidance("fake"));
 }
@@ -441,7 +441,7 @@ TEST_CASE(
     "request-time decorator maps an oauth terminal (dead credentials) to the re-auth branch",
     "[coding_agent][re-auth-guidance][issue360]") {
     auto fake = std::make_shared<tests::FakeModelStream>();
-    fake->terminal_failure_code = util::ErrorCode::OAuth;
+    fake->terminal_failure_code = support::ErrorCode::OAuth;
     fake->responses.push_back(
         terminal_message("OAuth refresh failed for gpt-test"));
 
@@ -454,7 +454,7 @@ TEST_CASE(
     const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
     REQUIRE(error != nullptr);
     REQUIRE(error->failure.has_value());
-    CHECK(error->failure->code == util::ErrorCode::OAuth);
+    CHECK(error->failure->code == support::ErrorCode::OAuth);
     REQUIRE(error->error.error_message.has_value());
     CHECK(*error->error.error_message == default_oauth_guidance("fake"));
 }
@@ -464,7 +464,7 @@ TEST_CASE(
     "[coding_agent][re-auth-guidance][issue360]") {
     {
         auto fake = std::make_shared<tests::FakeModelStream>();
-        fake->terminal_failure_code = util::ErrorCode::Stream;
+        fake->terminal_failure_code = support::ErrorCode::Stream;
         fake->responses.push_back(terminal_message("provider request failed"));
         auto run = run_guided(fake, /*is_using_oauth=*/false);
         REQUIRE(run.result.has_value());
@@ -496,7 +496,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     const std::string big(20000, 'x');
     auto client = std::make_shared<AuthTerminalProvider>(
-        util::ErrorCode::Auth,
+        support::ErrorCode::Auth,
         "Provider is not configured: sdk-host",
         "a" + big);
     auto* client_ptr = client.get();

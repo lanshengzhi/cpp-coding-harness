@@ -1,11 +1,11 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -81,7 +81,7 @@ public:
             return cch::support::AsyncResult<std::optional<ai::Credential>>(
                 std::expected<std::optional<ai::Credential>, cch::support::Error>{
                     std::unexpect,
-                    util::make_error(util::ErrorCode::Unknown, "store write failed")});
+                    support::make_error(support::ErrorCode::Unknown, "store write failed")});
         }
         std::optional<ai::Credential> current;
         if (const auto found = records.find(provider_id); found != records.end()) {
@@ -182,12 +182,12 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), options = std::move(options)](
                 ai::AssistantEventSink sink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 seen_models.push_back(model);
                 seen_options.push_back(options);
                 if (options.stop_token.stop_requested()) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Cancelled,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Cancelled,
                         "provider cancelled"));
                 }
                 if (throw_stream) {
@@ -211,7 +211,7 @@ public:
     std::vector<ai::Model> catalog;
     std::vector<ai::Model> seen_models;
     std::vector<ai::ProviderStreamOptions> seen_options;
-    std::optional<util::Error> stream_failure;
+    std::optional<support::Error> stream_failure;
     bool throw_stream{false};
 
 private:
@@ -234,7 +234,7 @@ public:
         ai::ProviderStreamOptions) override {
         return ai::detail::make_model_stream(
             [](ai::AssistantEventSink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 co_return ai::assistant_text_message("unused");
             });
     }
@@ -256,7 +256,7 @@ public:
         ai::ProviderStreamOptions) override {
         return ai::detail::make_model_stream(
             [model = std::move(model)](ai::AssistantEventSink sink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz1234567890";
                 auto message = ai::assistant_text_message("unsafe terminal");
                 message.api = model.api;
@@ -267,12 +267,12 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = ai::AssistantStopReason::Error,
                     .error = message,
-                    .failure = util::make_error(
-                        util::ErrorCode::Stream,
+                    .failure = support::make_error(
+                        support::ErrorCode::Stream,
                         "provider terminal " + secret + std::string(2048, 'x')),
                 }));
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Stream,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Stream,
                     "provider returned an error after its terminal event"));
             });
     }
@@ -294,7 +294,7 @@ public:
         ai::ProviderStreamOptions) override {
         return ai::detail::make_model_stream(
             [model = std::move(model)](ai::AssistantEventSink sink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 auto first = ai::assistant_text_message("first terminal");
                 first.api = model.api;
                 first.provider = model.provider;
@@ -306,15 +306,15 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = ai::AssistantStopReason::Error,
                     .error = first,
-                    .failure = util::make_error(util::ErrorCode::Stream, "first failure"),
+                    .failure = support::make_error(support::ErrorCode::Stream, "first failure"),
                 }));
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = ai::AssistantStopReason::Error,
                     .error = second,
-                    .failure = util::make_error(util::ErrorCode::Stream, "duplicate failure"),
+                    .failure = support::make_error(support::ErrorCode::Stream, "duplicate failure"),
                 }));
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Stream,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Stream,
                     "provider returned an error after its terminal event"));
             });
     }
@@ -324,7 +324,7 @@ private:
 };
 
 struct RunResult {
-    util::Expected<ai::AssistantMessage> result;
+    support::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
@@ -334,16 +334,16 @@ RunResult run_models(
     ai::AiContext context = {},
     ai::SimpleStreamOptions options = {},
     bool fail_sink = false,
-    util::ErrorCode sink_error_code = util::ErrorCode::Unknown) {
+    support::ErrorCode sink_error_code = support::ErrorCode::Unknown) {
     std::vector<ai::AssistantStreamEvent> events;
     auto stream = models->stream(
         std::move(model), std::move(context), std::move(options));
     auto result = run_async_result(
         std::move(stream).run(
-        [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             if (fail_sink) {
-                return std::unexpected(util::make_error(
+                return std::unexpected(support::make_error(
                     sink_error_code,
                     "consumer sink failed"));
             }
@@ -442,7 +442,7 @@ TEST_CASE("Models normalizes provider lookup and model validation failures", "[a
     CHECK(missing.result->stop_reason == ai::AssistantStopReason::Error);
     const auto& missing_terminal = require_terminal_error(missing);
     REQUIRE(missing_terminal.failure);
-    CHECK(missing_terminal.failure->code == util::ErrorCode::Provider);
+    CHECK(missing_terminal.failure->code == support::ErrorCode::Provider);
     CHECK(missing_terminal.error.error_message == missing.result->error_message);
 
     auto provider = std::make_shared<RecordingProvider>("known");
@@ -452,7 +452,7 @@ TEST_CASE("Models normalizes provider lookup and model validation failures", "[a
     REQUIRE(invalid.result);
     const auto& invalid_terminal = require_terminal_error(invalid);
     REQUIRE(invalid_terminal.failure);
-    CHECK(invalid_terminal.failure->code == util::ErrorCode::ModelValidation);
+    CHECK(invalid_terminal.failure->code == support::ErrorCode::ModelValidation);
     CHECK(provider->seen_models.empty());
 }
 
@@ -484,7 +484,7 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
         -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
         return cch::ai::detail::make_async_result(
             [&resolved_keys, &context, credential = std::move(credential)]() mutable
-                -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+                -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
                 std::optional<std::string> key = credential ? credential->key : std::nullopt;
                 std::string source = credential ? "credential" : "ambient";
                 if (!key) {
@@ -516,7 +516,7 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
             explicit_request,
             {},
             ai::SimpleStreamOptions{.api_key = "explicit-key"}).run(
-        [&explicit_events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&explicit_events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             explicit_events.push_back(event);
             return {};
         }));
@@ -561,7 +561,7 @@ TEST_CASE("Models never falls back after a stored credential type mismatch", "[a
     REQUIRE(run.result);
     const auto& terminal = require_terminal_error(run);
     REQUIRE(terminal.failure);
-    CHECK(terminal.failure->code == util::ErrorCode::Auth);
+    CHECK(terminal.failure->code == support::ErrorCode::Auth);
     CHECK(resolve_count == 0);
 }
 
@@ -634,8 +634,8 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
     oauth.refresh = [](ai::OAuthCredential)
         -> cch::support::AsyncResult<ai::OAuthCredential> {
         return cch::support::AsyncResult<ai::OAuthCredential>(
-            std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "refresh rejected")));
     };
     oauth.to_auth = [](const ai::OAuthCredential&)
@@ -653,7 +653,7 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
     REQUIRE(run.result);
     const auto& terminal = require_terminal_error(run);
     REQUIRE(terminal.failure);
-    CHECK(terminal.failure->code == util::ErrorCode::OAuth);
+    CHECK(terminal.failure->code == support::ErrorCode::OAuth);
     CHECK(std::get<ai::OAuthCredential>(credentials->records.at("provider")) == original);
 }
 
@@ -733,7 +733,7 @@ TEST_CASE("Models prepares the complete streamSimple request before Provider dis
     };
     options.env = {{"A", "request"}, {"PI_CACHE_RETENTION", "long"}};
     options.transform_headers = [&transform_count](ai::RequestHeaders headers)
-        -> util::Expected<ai::RequestHeaders> {
+        -> support::Expected<ai::RequestHeaders> {
         ++transform_count;
         CHECK(headers.at("session_id") == "session-1");
         headers.insert_or_assign("X-Transformed", "yes");
@@ -751,7 +751,7 @@ TEST_CASE("Models prepares the complete streamSimple request before Provider dis
             std::move(model),
             std::move(context),
             std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -805,7 +805,7 @@ TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue3
             std::move(model),
             ai::AiContext{},
             std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -852,7 +852,7 @@ TEST_CASE(
             std::move(model),
             ai::AiContext{},
             std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -903,7 +903,7 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     REQUIRE(auth_run.result);
     const auto& auth_terminal = require_terminal_error(auth_run);
     REQUIRE(auth_terminal.failure);
-    CHECK(auth_terminal.failure->code == util::ErrorCode::Auth);
+    CHECK(auth_terminal.failure->code == support::ErrorCode::Auth);
 
     auto provider_models = make_models(credentials, auth_context);
     auto throwing_provider = std::make_shared<RecordingProvider>("provider");
@@ -916,7 +916,7 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     REQUIRE(provider_run.result);
     const auto& provider_terminal = require_terminal_error(provider_run);
     REQUIRE(provider_terminal.failure);
-    CHECK(provider_terminal.failure->code == util::ErrorCode::Stream);
+    CHECK(provider_terminal.failure->code == support::ErrorCode::Stream);
 
     auto sink_models = make_models(credentials, auth_context);
     REQUIRE(sink_models->set_provider(std::make_shared<RecordingProvider>("sink-provider")));
@@ -926,12 +926,12 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
             std::move(sink_request),
             {},
             {}).run(
-        [](const ai::AssistantStreamEvent&) -> util::ExpectedVoid {
+        [](const ai::AssistantStreamEvent&) -> support::ExpectedVoid {
             throw std::runtime_error{"sink callback threw"};
         }));
 
     REQUIRE_FALSE(sink_result);
-    CHECK(sink_result.error().code == util::ErrorCode::Unknown);
+    CHECK(sink_result.error().code == support::ErrorCode::Unknown);
     CHECK(sink_result.error().message == "Assistant event sink failed");
 }
 
@@ -949,7 +949,7 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     REQUIRE(store_run.result);
     const auto& store_terminal = require_terminal_error(store_run);
     REQUIRE(store_terminal.failure);
-    CHECK(store_terminal.failure->code == util::ErrorCode::Auth);
+    CHECK(store_terminal.failure->code == support::ErrorCode::Auth);
 
     auto refresh_credentials = std::make_shared<MemoryCredentialStore>();
     refresh_credentials->records.emplace(
@@ -977,7 +977,7 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     REQUIRE(refresh_run.result);
     const auto& refresh_terminal = require_terminal_error(refresh_run);
     REQUIRE(refresh_terminal.failure);
-    CHECK(refresh_terminal.failure->code == util::ErrorCode::OAuth);
+    CHECK(refresh_terminal.failure->code == support::ErrorCode::OAuth);
 
     auto derivation_credentials = std::make_shared<MemoryCredentialStore>();
     derivation_credentials->records.emplace(
@@ -1001,7 +1001,7 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     REQUIRE(derivation_run.result);
     const auto& derivation_terminal = require_terminal_error(derivation_run);
     REQUIRE(derivation_terminal.failure);
-    CHECK(derivation_terminal.failure->code == util::ErrorCode::OAuth);
+    CHECK(derivation_terminal.failure->code == support::ErrorCode::OAuth);
 }
 
 TEST_CASE("Models normalizes Provider stream failures and propagates sink failures", "[ai][models][issue338]") {
@@ -1009,7 +1009,7 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>("provider");
-    provider->stream_failure = util::make_error(util::ErrorCode::Stream, "serialization failed");
+    provider->stream_failure = support::make_error(support::ErrorCode::Stream, "serialization failed");
     REQUIRE(models->set_provider(provider));
 
     ai::Model request = tests::make_model("model", "provider", "api");
@@ -1017,7 +1017,7 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
     REQUIRE(normalized.result);
     const auto& terminal = require_terminal_error(normalized);
     REQUIRE(terminal.failure);
-    CHECK(terminal.failure->code == util::ErrorCode::Stream);
+    CHECK(terminal.failure->code == support::ErrorCode::Stream);
     CHECK(normalized.result->error_message == terminal.error.error_message);
 
     auto sink_failure = run_models(
@@ -1026,9 +1026,9 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
         {},
         {},
         true,
-        util::ErrorCode::Stream);
+        support::ErrorCode::Stream);
     REQUIRE_FALSE(sink_failure.result);
-    CHECK(sink_failure.result.error().code == util::ErrorCode::Stream);
+    CHECK(sink_failure.result.error().code == support::ErrorCode::Stream);
     CHECK(sink_failure.result.error().message == "consumer sink failed");
     CHECK(sink_failure.events.size() == 1);
 }
@@ -1055,7 +1055,7 @@ TEST_CASE("Models cancellation is one aborted terminal value", "[ai][models][iss
     const auto& terminal = require_terminal_error(run);
     CHECK(terminal.reason == ai::AssistantStopReason::Aborted);
     REQUIRE(terminal.failure);
-    CHECK(terminal.failure->code == util::ErrorCode::Cancelled);
+    CHECK(terminal.failure->code == support::ErrorCode::Cancelled);
     CHECK(provider->seen_models.size() == 1);
 }
 
@@ -1180,8 +1180,8 @@ TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][mo
         oauth_login_auth(
             [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
                 return cch::support::AsyncResult<ai::OAuthCredential>(
-                    std::unexpected(util::make_error(
-                        util::ErrorCode::Network,
+                    std::unexpected(support::make_error(
+                        support::ErrorCode::Network,
                         "provider flow failed",
                         "detail")));
             }));
@@ -1191,7 +1191,7 @@ TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][mo
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == util::ErrorCode::Network);
+    CHECK(result.error().code == support::ErrorCode::Network);
     CHECK(result.error().message == "provider flow failed");
     CHECK(result.error().detail == "detail");
     CHECK(credentials->modify_count == 0);
@@ -1218,7 +1218,7 @@ TEST_CASE("Models login wraps CredentialStore modify failures as the auth catego
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == util::ErrorCode::Auth);
+    CHECK(result.error().code == support::ErrorCode::Auth);
     CHECK(result.error().message == "Credential store modify failed for login-provider");
 }
 
@@ -1231,7 +1231,7 @@ TEST_CASE("Models login rejects unknown providers as a provider error", "[ai][mo
         "missing", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == util::ErrorCode::Provider);
+    CHECK(result.error().code == support::ErrorCode::Provider);
     CHECK(result.error().message == "Unknown provider: missing");
 }
 
@@ -1246,7 +1246,7 @@ TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][m
         "key-only", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == util::ErrorCode::Auth);
+    CHECK(result.error().code == support::ErrorCode::Auth);
     CHECK(result.error().message == "key-only does not support oauth login");
     CHECK(credentials->modify_count == 0);
 }
@@ -1298,6 +1298,6 @@ TEST_CASE("Models login rejects a provider without api-key login support", "[ai]
         "oauth-only", ai::AuthType::ApiKey, empty_interaction()));
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == util::ErrorCode::Auth);
+    CHECK(result.error().code == support::ErrorCode::Auth);
     CHECK(result.error().message == "oauth-only does not support api_key login");
 }

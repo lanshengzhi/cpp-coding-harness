@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/util/Error.hpp"
+#include <cch/support/Error.hpp>
 
 #include <optional>
 #include <string>
@@ -17,12 +17,12 @@ struct SseEvent {
 
 class SseParser {
 public:
-    [[nodiscard]] util::Expected<std::vector<SseEvent>> append(std::string_view bytes);
-    [[nodiscard]] util::Expected<std::optional<SseEvent>> finish();
+    [[nodiscard]] support::Expected<std::vector<SseEvent>> append(std::string_view bytes);
+    [[nodiscard]] support::Expected<std::optional<SseEvent>> finish();
     void reset();
 
 private:
-    [[nodiscard]] util::Expected<std::optional<SseEvent>> consume_line(std::string line);
+    [[nodiscard]] support::Expected<std::optional<SseEvent>> consume_line(std::string line);
     [[nodiscard]] std::optional<SseEvent> dispatch_event();
 
     std::string pending_;

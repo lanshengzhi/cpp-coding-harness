@@ -1,8 +1,8 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 #include "ai/AsyncResultBridge.hpp"
 #include "ai/providers/FakeProvider.hpp"
 #include "support/ModelFixture.hpp"
@@ -36,7 +36,7 @@ struct FakeRequest {
 };
 
 struct RunResult {
-    util::Expected<ai::AssistantMessage> result;
+    support::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
@@ -46,7 +46,7 @@ RunResult run_fake(
     boost::asio::io_context io;
     auto models = ai::providers::make_scripted_fake_models();
     REQUIRE(models != nullptr);
-    std::optional<util::Expected<ai::AssistantMessage>> result;
+    std::optional<support::Expected<ai::AssistantMessage>> result;
     std::vector<ai::AssistantStreamEvent> events;
 
     boost::asio::co_spawn(
@@ -58,11 +58,11 @@ RunResult run_fake(
                 std::move(request.options));
             result = co_await ai::detail::await_async_result(
                 std::move(stream).run(
-                    [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                    [&](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
                         events.push_back(event);
                         if (fail_at_event && events.size() - 1 == *fail_at_event) {
-                            return std::unexpected(util::make_error(
-                                util::ErrorCode::Unknown,
+                            return std::unexpected(support::make_error(
+                                support::ErrorCode::Unknown,
                                 "fake sink rejected event",
                                 std::to_string(*fail_at_event)));
                         }
@@ -225,7 +225,7 @@ void check_tool_lifecycle(
     CHECK(started_call.id == expected_id);
     CHECK(started_call.name == expected_name);
     REQUIRE(started_call.arguments.has_value());
-    REQUIRE(started_call.arguments->holds<util::JsonValue::object_t>());
+    REQUIRE(started_call.arguments->holds<support::JsonValue::object_t>());
     CHECK(started_call.arguments->get_object().empty());
     CHECK(started_call.raw_arguments.empty());
     CHECK_FALSE(started_call.thought_signature.has_value());
@@ -242,7 +242,7 @@ void check_tool_lifecycle(
     CHECK(partial_call.id == expected_id);
     CHECK(partial_call.name == expected_name);
     REQUIRE(partial_call.arguments.has_value());
-    REQUIRE(partial_call.arguments->holds<util::JsonValue::object_t>());
+    REQUIRE(partial_call.arguments->holds<support::JsonValue::object_t>());
     CHECK(partial_call.arguments->get_object().empty());
     CHECK(partial_call.raw_arguments == call_delta.delta);
     CHECK_FALSE(partial_call.thought_signature.has_value());
@@ -365,7 +365,7 @@ TEST_CASE(
     const auto& terminal = require_event<ai::AssistantErrorEvent>(run.events, 0);
     CHECK(terminal.reason == ai::AssistantStopReason::Aborted);
     REQUIRE(terminal.failure);
-    CHECK(terminal.failure->code == util::ErrorCode::Cancelled);
+    CHECK(terminal.failure->code == support::ErrorCode::Cancelled);
 }
 
 TEST_CASE(
@@ -373,15 +373,15 @@ TEST_CASE(
     "[ai][provider][fake][issue338]") {
     struct FailureCase {
         std::string_view name;
-        util::ErrorCode code;
+        support::ErrorCode code;
     };
     constexpr std::array<FailureCase, 6> kFailureCases{{
-        {.name = "model_source", .code = util::ErrorCode::ModelSource},
-        {.name = "model_validation", .code = util::ErrorCode::ModelValidation},
-        {.name = "provider", .code = util::ErrorCode::Provider},
-        {.name = "stream", .code = util::ErrorCode::Stream},
-        {.name = "auth", .code = util::ErrorCode::Auth},
-        {.name = "oauth", .code = util::ErrorCode::OAuth},
+        {.name = "model_source", .code = support::ErrorCode::ModelSource},
+        {.name = "model_validation", .code = support::ErrorCode::ModelValidation},
+        {.name = "provider", .code = support::ErrorCode::Provider},
+        {.name = "stream", .code = support::ErrorCode::Stream},
+        {.name = "auth", .code = support::ErrorCode::Auth},
+        {.name = "oauth", .code = support::ErrorCode::OAuth},
     }};
 
     for (const auto& failure : kFailureCases) {
@@ -394,7 +394,7 @@ TEST_CASE(
         const auto& terminal = require_event<ai::AssistantErrorEvent>(run.events, 0);
         REQUIRE(terminal.failure);
         CHECK(terminal.failure->code == failure.code);
-        CHECK(util::to_string(terminal.failure->code) == failure.name);
+        CHECK(support::to_string(terminal.failure->code) == failure.name);
         CHECK(terminal.error.error_message == run.result->error_message);
     }
 }
@@ -409,7 +409,7 @@ TEST_CASE(
             fail_at);
 
         REQUIRE_FALSE(run.result.has_value());
-        CHECK(run.result.error().code == util::ErrorCode::Unknown);
+        CHECK(run.result.error().code == support::ErrorCode::Unknown);
         CHECK(run.result.error().message == "fake sink rejected event");
         CHECK(run.result.error().detail == std::to_string(fail_at));
         CHECK(run.events.size() == fail_at + 1);

@@ -3,7 +3,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/ai/RequestOptions.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/AsyncResultBridge.hpp"
 #include "ai/ModelStreamBridge.hpp"
 
@@ -37,7 +37,7 @@ struct RecordedStreamSimpleCall {
 /// Scripted, recording narrow fake for the Agent's AI-owned `ModelStream`
 /// seam (ADR 0040 / #453). Records every stream request and returns queued
 /// responses through the move-only `ModelStream` value; a configured
-/// `failure` completes through the single `util::Expected` error alternative
+/// `failure` completes through the single `support::Expected` error alternative
 /// (infrastructure failure, never a domain terminal). Not a
 /// `coding_agent::ModelRuntime` subclass: it produces passive `ModelStream`
 /// values instead of standing in for a virtual Models Runtime surface.
@@ -69,8 +69,8 @@ public:
                                     self->script(std::move(sink), std::move(completion));
                                 });
                         } catch (...) {
-                            completion(std::unexpected(util::make_error(
-                                util::ErrorCode::Stream,
+                            completion(std::unexpected(support::make_error(
+                                support::ErrorCode::Stream,
                                 "scripted stream initiation failed")));
                         }
                     }}};
@@ -106,8 +106,8 @@ public:
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "Request was aborted";
             ++terminal_events;
-            last_terminal_failure = util::make_error(
-                util::ErrorCode::Cancelled, *terminal.error_message);
+            last_terminal_failure = support::make_error(
+                support::ErrorCode::Cancelled, *terminal.error_message);
             if (!emit(ai::AssistantErrorEvent{
                     .reason = terminal.stop_reason,
                     .error = terminal,
@@ -131,13 +131,13 @@ public:
             // (the #326 terminal-error-event contract); no start event is
             // emitted so the loop's synthesize-start path stays exercised.
             ++terminal_events;
-            std::optional<util::Error> terminal_failure = std::nullopt;
+            std::optional<support::Error> terminal_failure = std::nullopt;
             if (response.error_message) {
                 const auto code =
                     response.stop_reason == ai::AssistantStopReason::Aborted
-                        ? util::ErrorCode::Cancelled
-                        : terminal_failure_code.value_or(util::ErrorCode::Stream);
-                terminal_failure = util::make_error(code, *response.error_message);
+                        ? support::ErrorCode::Cancelled
+                        : terminal_failure_code.value_or(support::ErrorCode::Stream);
+                terminal_failure = support::make_error(code, *response.error_message);
             }
             last_terminal_failure = terminal_failure;
             if (!emit(ai::AssistantErrorEvent{
@@ -186,15 +186,15 @@ public:
     /// When set, scripted error-terminal responses carry a failure of this
     /// category instead of the derived Stream code; aborted terminals keep
     /// Cancelled.
-    std::optional<util::ErrorCode> terminal_failure_code{std::nullopt};
+    std::optional<support::ErrorCode> terminal_failure_code{std::nullopt};
     /// The most recent terminal failure emitted on the sink, recorded so tests
     /// can assert the six-category channel flowing through the single
-    /// `util::Expected` error value.
-    std::optional<util::Error> last_terminal_failure{std::nullopt};
+    /// `support::Expected` error value.
+    std::optional<support::Error> last_terminal_failure{std::nullopt};
     /// Scripted assistant responses consumed in FIFO order.
     std::deque<ai::AssistantMessage> responses;
     /// Scripted infrastructure failure returned through the Expected channel.
-    std::optional<util::Error> failure{std::nullopt};
+    std::optional<support::Error> failure{std::nullopt};
 };
 
 /// Adapt a frozen `streamSimple`-shaped coroutine to the Agent's move-only
@@ -204,7 +204,7 @@ public:
 /// `ModelStream` value.
 [[nodiscard]] inline ai::ModelStreamFactory adapt_stream_simple(
     std::move_only_function<
-        boost::asio::awaitable<util::Expected<ai::AssistantMessage>>(
+        boost::asio::awaitable<support::Expected<ai::AssistantMessage>>(
             ai::Model,
             ai::AiContext,
             ai::SimpleStreamOptions,
@@ -213,7 +213,7 @@ public:
     // so it is shared rather than moved out of the factory's coroutine frame.
     auto shared_fn = std::make_shared<
         std::move_only_function<
-            boost::asio::awaitable<util::Expected<ai::AssistantMessage>>(
+            boost::asio::awaitable<support::Expected<ai::AssistantMessage>>(
                 ai::Model,
                 ai::AiContext,
                 ai::SimpleStreamOptions,
@@ -230,7 +230,7 @@ public:
                  context = std::move(context),
                  options = std::move(options)](
                     ai::AssistantEventSink sink) mutable
-                    -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                    -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                     co_return co_await (*shared_fn)(
                         std::move(model),
                         std::move(context),

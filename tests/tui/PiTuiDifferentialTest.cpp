@@ -24,9 +24,9 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/ImageCapabilitiesGuard.hpp"
 #include "tui/InteractionUtils.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -48,21 +48,21 @@ namespace {
     return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-tui" / name;
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> read_fixture(std::string_view name) {
+[[nodiscard]] support::Expected<support::JsonValue> read_fixture(std::string_view name) {
     std::ifstream input{fixture_path(name), std::ios::binary};
     if (!input) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Failed to open pi-tui fixture: " + fixture_path(name).string()));
     }
     const std::string json{
         std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
-    return util::read_json(json);
+    return support::read_json(json);
 }
 
-[[nodiscard]] const util::JsonValue* field(
-    const util::JsonValue::object_t& fields,
+[[nodiscard]] const support::JsonValue* field(
+    const support::JsonValue::object_t& fields,
     std::string_view key) {
     const auto found = fields.find(std::string(key));
     return found == fields.end() ? nullptr : &found->second;
@@ -75,9 +75,9 @@ struct ExpectedKey {
     std::string event_type;
 };
 
-[[nodiscard]] ExpectedKey expected_key(const util::JsonValue& entry) {
-    const auto& expected = entry.get<util::JsonValue::object_t>().at("expected")
-                               .get<util::JsonValue::object_t>();
+[[nodiscard]] ExpectedKey expected_key(const support::JsonValue& entry) {
+    const auto& expected = entry.get<support::JsonValue::object_t>().at("expected")
+                               .get<support::JsonValue::object_t>();
     const auto& id = expected.at("id");
     return {
         .id = id.holds<std::string>() ? id.get_string() : std::string{},
@@ -118,12 +118,12 @@ struct ExpectedKey {
 TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& corpus = root.at("corpus").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& corpus = root.at("corpus").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(corpus.empty());
 
     for (const auto& entry : corpus) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto sequence = object.at("sequence").get_string();
         const auto expected = expected_key(entry);
         const auto context = std::string{"sequence "} + sequence;
@@ -138,16 +138,16 @@ TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][dif
 TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& mode_dependent = root.at("modeDependent").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& mode_dependent = root.at("modeDependent").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(mode_dependent.empty());
 
     for (const auto& entry : mode_dependent) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto sequence = object.at("sequence").get_string();
         const auto context = std::string{"sequence "} + sequence;
         INFO(context);
-        const auto& legacy = object.at("legacy").get<util::JsonValue::object_t>();
+        const auto& legacy = object.at("legacy").get<support::JsonValue::object_t>();
         // The kitty column documents the mode-dependent re-reading; the C++
         // single-table decoder keeps the legacy reading (fixture README).
         REQUIRE(!legacy.at("id").get_string().empty());
@@ -161,14 +161,14 @@ TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui]
 TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& divergences = root.at("divergences").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& divergences = root.at("divergences").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(divergences.empty());
 
     for (const auto& entry : divergences) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto sequence = object.at("sequence").get_string();
-        const auto& pi = object.at("pi").get<util::JsonValue::object_t>();
+        const auto& pi = object.at("pi").get<support::JsonValue::object_t>();
         const auto& pi_id_value = pi.at("id");
         const auto pi_id =
             pi_id_value.holds<std::string>() ? pi_id_value.get_string() : std::string{};
@@ -199,8 +199,8 @@ TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differentia
 TEST_CASE("discarded control sequences produce no key events", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& discarded = root.at("discarded").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& discarded = root.at("discarded").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(discarded.empty());
 
     for (const auto& entry : discarded) {
@@ -214,12 +214,12 @@ TEST_CASE("discarded control sequences produce no key events", "[tui][differenti
 TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& paste = root.at("paste").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& paste = root.at("paste").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(paste.empty());
 
     for (const auto& entry : paste) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto framed = object.at("framed").get_string();
         const auto content = object.at("content").get_string();
         const auto lines = static_cast<std::size_t>(object.at("lines").get_number());
@@ -241,12 +241,12 @@ TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differ
 TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
-    const auto& chunk_splits = root.at("chunkSplits").get<util::JsonValue::array_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
+    const auto& chunk_splits = root.at("chunkSplits").get<support::JsonValue::array_t>();
     REQUIRE_FALSE(chunk_splits.empty());
 
     for (const auto& entry : chunk_splits) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto sequence = object.at("sequence").get_string();
         const auto chunk_size = static_cast<std::size_t>(object.at("chunkSize").get_number());
         const auto expected = expected_key(entry);
@@ -279,13 +279,13 @@ TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][
 TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("keybindings.json");
     REQUIRE(fixture);
-    const auto& entries = fixture->get<util::JsonValue::array_t>();
+    const auto& entries = fixture->get<support::JsonValue::array_t>();
 
     const auto definitions = tui::builtin_tui_keybinding_definitions();
     REQUIRE(definitions.size() == 30);
     std::size_t assembled = 0;
     for (const auto& entry : entries) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto id = object.at("id").get_string();
         INFO(id);
         if (tui::is_known_unassembled_tui_keybinding(id)) continue;
@@ -298,7 +298,7 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
         REQUIRE(definition != definitions.end());
         CHECK(definition->description == object.at("description").get_string());
 
-        const auto& keys = object.at("defaultKeys").get<util::JsonValue::array_t>();
+        const auto& keys = object.at("defaultKeys").get<support::JsonValue::array_t>();
         REQUIRE(definition->default_keys.size() == keys.size());
         for (std::size_t index = 0; index < keys.size(); ++index) {
             INFO(id + " key " + std::to_string(index));
@@ -312,15 +312,15 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
 TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("image-encoder.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
 
-    const auto& kitty = root.at("kitty").get<util::JsonValue::array_t>();
+    const auto& kitty = root.at("kitty").get<support::JsonValue::array_t>();
     REQUIRE(kitty.size() == 2);
     for (const auto& entry : kitty) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto base64 = object.at("base64").get_string();
         const auto output = object.at("output").get_string();
-        const auto& options = object.at("options").get<util::JsonValue::object_t>();
+        const auto& options = object.at("options").get<support::JsonValue::object_t>();
         const auto columns = static_cast<std::size_t>(options.at("columns").get_number());
         const auto rows = static_cast<std::size_t>(options.at("rows").get_number());
         const auto image_id = static_cast<std::uint64_t>(options.at("imageId").get_number());
@@ -339,13 +339,13 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
         CHECK(*encoded == output);
     }
 
-    const auto& iterm2 = root.at("iterm2").get<util::JsonValue::array_t>();
+    const auto& iterm2 = root.at("iterm2").get<support::JsonValue::array_t>();
     REQUIRE(iterm2.size() == 2);
     for (const auto& entry : iterm2) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto base64 = object.at("base64").get_string();
         const auto output = object.at("output").get_string();
-        const auto& options = object.at("options").get<util::JsonValue::object_t>();
+        const auto& options = object.at("options").get<support::JsonValue::object_t>();
         const auto columns = static_cast<std::size_t>(options.at("width").get_number());
         const auto rows = static_cast<std::size_t>(options.at("height").get_number());
         const auto* name = field(options, "name");
@@ -367,9 +367,9 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
         CHECK(*encoded == output);
     }
 
-    const auto& hyperlinks = root.at("hyperlink").get<util::JsonValue::array_t>();
+    const auto& hyperlinks = root.at("hyperlink").get<support::JsonValue::array_t>();
     for (const auto& entry : hyperlinks) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         CHECK(
             tui::hyperlink(object.at("text").get_string(), object.at("url").get_string()) ==
             object.at("output").get_string());
@@ -380,10 +380,10 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
     // isolation points HOME elsewhere).
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set("/home/tester");
-    const auto& fallback = root.at("fallback").get<util::JsonValue::array_t>();
+    const auto& fallback = root.at("fallback").get<support::JsonValue::array_t>();
     REQUIRE(fallback.size() == 4);
     for (const auto& entry : fallback) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto hyperlinks_enabled = object.at("hyperlinks").get_boolean();
         const auto context = std::string{"fallback case "} + object.at("name").get_string();
         INFO(context);
@@ -395,7 +395,7 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
         const auto* dimensions = field(object, "dimensions");
         std::optional<tui::ImagePixelSize> size;
         if (dimensions != nullptr) {
-            const auto& dims = dimensions->get<util::JsonValue::object_t>();
+            const auto& dims = dimensions->get<support::JsonValue::object_t>();
             size = tui::ImagePixelSize{
                 .width = static_cast<std::size_t>(dims.at("widthPx").get_number()),
                 .height = static_cast<std::size_t>(dims.at("heightPx").get_number()),
@@ -414,11 +414,11 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
 TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("utils.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
 
-    const auto& visible = root.at("visibleWidth").get<util::JsonValue::array_t>();
+    const auto& visible = root.at("visibleWidth").get<support::JsonValue::array_t>();
     for (const auto& entry : visible) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"visibleWidth case "} + object.at("name").get_string();
         INFO(context);
         CHECK(
@@ -426,9 +426,9 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
                 static_cast<std::size_t>(object.at("output").get_number()));
     }
 
-    const auto& truncate = root.at("truncate").get<util::JsonValue::array_t>();
+    const auto& truncate = root.at("truncate").get<support::JsonValue::array_t>();
     for (const auto& entry : truncate) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"truncate case "} + object.at("name").get_string();
         INFO(context);
         const auto width = static_cast<std::size_t>(object.at("width").get_number());
@@ -439,25 +439,25 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
         CHECK(*output == object.at("output").get_string());
     }
 
-    const auto& wrap = root.at("wrap").get<util::JsonValue::array_t>();
+    const auto& wrap = root.at("wrap").get<support::JsonValue::array_t>();
     for (const auto& entry : wrap) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"wrap case "} + object.at("name").get_string();
         INFO(context);
         const auto output = tui::wrap_text(
             object.at("input").get_string(),
             static_cast<std::size_t>(object.at("width").get_number()));
         REQUIRE(output.has_value());
-        const auto& expected = object.at("output").get<util::JsonValue::array_t>();
+        const auto& expected = object.at("output").get<support::JsonValue::array_t>();
         REQUIRE(output->size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
             CHECK((*output)[index] == expected[index].get_string());
         }
     }
 
-    const auto& slice = root.at("slice").get<util::JsonValue::array_t>();
+    const auto& slice = root.at("slice").get<support::JsonValue::array_t>();
     for (const auto& entry : slice) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"slice case "} + object.at("name").get_string();
         INFO(context);
         const auto output = tui::slice_by_column(
@@ -469,9 +469,9 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
         CHECK(*output == object.at("output").get_string());
     }
 
-    const auto& strip = root.at("strip").get<util::JsonValue::array_t>();
+    const auto& strip = root.at("strip").get<support::JsonValue::array_t>();
     for (const auto& entry : strip) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"strip case "} + object.at("name").get_string();
         INFO(context);
         CHECK(
@@ -483,34 +483,34 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
 TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("fuzzy.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
 
-    const auto& match = root.at("match").get<util::JsonValue::array_t>();
+    const auto& match = root.at("match").get<support::JsonValue::array_t>();
     for (const auto& entry : match) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"query "} + object.at("query").get_string() +
             " in " + object.at("text").get_string();
         INFO(context);
-        const auto& expected = object.at("output").get<util::JsonValue::object_t>();
+        const auto& expected = object.at("output").get<support::JsonValue::object_t>();
         const auto result =
             tui::fuzzy_match(object.at("query").get_string(), object.at("text").get_string());
         CHECK(result.matches == expected.at("matches").get_boolean());
         CHECK(result.score == expected.at("score").get_number());
     }
 
-    const auto& filter = root.at("filter").get<util::JsonValue::array_t>();
+    const auto& filter = root.at("filter").get<support::JsonValue::array_t>();
     for (const auto& entry : filter) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"fuzzy filter "} + object.at("name").get_string();
         INFO(context);
-        const auto& items = object.at("items").get<util::JsonValue::array_t>();
+        const auto& items = object.at("items").get<support::JsonValue::array_t>();
         std::vector<std::string> items_vector;
         for (const auto& item : items) items_vector.push_back(item.get_string());
         const auto query = object.at("query").get_string();
         const auto ranked = tui::fuzzy_filter(items_vector, query, [](const std::string& item) {
             return item;
         });
-        const auto& expected = object.at("output").get<util::JsonValue::array_t>();
+        const auto& expected = object.at("output").get<support::JsonValue::array_t>();
         REQUIRE(ranked.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
             CHECK(ranked[index] == expected[index].get_string());
@@ -521,14 +521,14 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][dif
 TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][differential][issue386]") {
     const auto fixture = read_fixture("markdown.json");
     REQUIRE(fixture);
-    const auto& root = fixture->get<util::JsonValue::object_t>();
+    const auto& root = fixture->get<support::JsonValue::object_t>();
 
     // Rebuild the recorded deterministic theme as hooks. pi composes
     // `theme.link(theme.underline(...))` for link text; the C++ `link_text`
     // role receives the plain label, so the composition moves into the hook.
-    const auto& styles = root.at("styles").get<util::JsonValue::object_t>();
+    const auto& styles = root.at("styles").get<support::JsonValue::object_t>();
     const auto wrap_style = [&](std::string_view name) {
-        const auto& style = styles.at(std::string(name)).get<util::JsonValue::object_t>();
+        const auto& style = styles.at(std::string(name)).get<support::JsonValue::object_t>();
         const auto prefix = style.at("prefix").get_string();
         const auto suffix = style.at("suffix").get_string();
         return [prefix, suffix](std::string text) { return prefix + text + suffix; };
@@ -568,10 +568,10 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
         .hyperlinks = true,
     });
 
-    const auto& cases = root.at("cases").get<util::JsonValue::array_t>();
+    const auto& cases = root.at("cases").get<support::JsonValue::array_t>();
     tui::Markdown markdown({}, 0, 0, std::move(style));
     for (const auto& entry : cases) {
-        const auto& object = entry.get<util::JsonValue::object_t>();
+        const auto& object = entry.get<support::JsonValue::object_t>();
         const auto width = static_cast<std::size_t>(object.at("width").get_number());
         const auto context = std::string{"markdown case "} + object.at("name").get_string();
         INFO(context);
@@ -579,7 +579,7 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
         markdown.set_text(object.at("markdown").get_string());
         const auto rendered = markdown.render(width);
         REQUIRE(rendered.has_value());
-        const auto& expected = object.at("lines").get<util::JsonValue::array_t>();
+        const auto& expected = object.at("lines").get<support::JsonValue::array_t>();
         REQUIRE(rendered->lines.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
             CHECK(rendered->lines[index] == expected[index].get_string());

@@ -5,7 +5,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <format>
 #include <string>
 #include <utility>
@@ -51,13 +51,13 @@ void Text::set_background_hook(BackgroundHook background_hook) {
     cache_valid_ = false;
 }
 
-util::Expected<RenderResult> Text::render(std::size_t width) {
+support::Expected<RenderResult> Text::render(std::size_t width) {
     if (cache_valid_ && cached_text_ == text_ && cached_width_ == width) {
         return RenderResult{.lines = cached_lines_};
     }
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Text requires a positive visible width"));
     }
     if (text_.empty()) {
@@ -68,8 +68,8 @@ util::Expected<RenderResult> Text::render(std::size_t width) {
         return RenderResult{.lines = cached_lines_};
     }
     if (padding_x_ >= width || padding_x_ >= width - padding_x_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Text width is too small for padding",
             std::format("width {} padding_x {}", width, padding_x_)));
     }
@@ -78,7 +78,7 @@ util::Expected<RenderResult> Text::render(std::size_t width) {
     if (!wrapped) return std::unexpected(wrapped.error());
 
     std::vector<std::string> result;
-    const auto make_line = [&](std::string line) -> util::Expected<std::string> {
+    const auto make_line = [&](std::string line) -> support::Expected<std::string> {
         const auto visible = visible_width(line);
         if (visible < width) line.append(width - visible, ' ');
         return detail::apply_background(background_hook_, std::move(line), width, "Text");

@@ -4,7 +4,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <cstddef>
 #include <format>
 #include <string>
@@ -84,7 +84,7 @@ UserMessageComponent::UserMessageComponent(
 
 UserMessageComponent::~UserMessageComponent() = default;
 
-util::Expected<cch::tui::RenderResult> UserMessageComponent::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> UserMessageComponent::render(std::size_t width) {
     auto rendered = box_.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     if (!rendered->lines.empty()) {

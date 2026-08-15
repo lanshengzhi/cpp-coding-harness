@@ -43,7 +43,7 @@ std::string user_text_at(const std::vector<ai::MessageVariant>& messages, std::s
     return ai::text_from_user_message(*user);
 }
 
-util::Expected<runtime::OpenSession> open_resumed_session(
+support::Expected<runtime::OpenSession> open_resumed_session(
     const std::filesystem::path& path,
     const tests::TempWorkspace& workspace) {
     auto prepared = runtime::prepare_resume_target(path, workspace.path(), true);
@@ -213,7 +213,7 @@ TEST_CASE(
     harness::session::testing::fail_nth_append_for_test(path, 2);
     auto failed = session->prompt_blocking("continue after partial write");
     REQUIRE_FALSE(failed);
-    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(failed.error().code == support::ErrorCode::Session);
     CHECK(failed.error().message == "could not persist session entry");
     CHECK(session->is_open());
     // No rollback theatre: the admitted user and assistant messages stay in
@@ -237,7 +237,7 @@ TEST_CASE(
     // recovering.
     auto recovered = session->prompt_blocking("recover branch");
     REQUIRE_FALSE(recovered);
-    CHECK(recovered.error().code == util::ErrorCode::Session);
+    CHECK(recovered.error().code == support::ErrorCode::Session);
     CHECK(
         recovered.error().message ==
         "session persistence failed; rejecting new prompt");

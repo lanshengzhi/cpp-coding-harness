@@ -6,7 +6,7 @@
 #include "tui/UnicodeWidth.hpp"
 #include "tui/WordNavigation.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -176,7 +176,7 @@ struct Editor::Impl {
     std::size_t scroll_offset{0};
     enum class JumpDirection { Forward, Backward };
     std::optional<JumpDirection> jump_direction;
-    std::optional<util::Error> callback_error;
+    std::optional<support::Error> callback_error;
 
     void clamp_cursor() {
         if (document.empty()) document.emplace_back();
@@ -232,8 +232,8 @@ struct Editor::Impl {
         try {
             on_change(document_text(document));
         } catch (...) {
-            callback_error = util::make_error(
-                util::ErrorCode::Unknown,
+            callback_error = support::make_error(
+                support::ErrorCode::Unknown,
                 "Editor change sink failed",
                 "the change callback threw an exception");
         }
@@ -467,8 +467,8 @@ struct Editor::Impl {
                         explicit_tab);
                 });
         } catch (...) {
-            callback_error = util::make_error(
-                util::ErrorCode::Unknown,
+            callback_error = support::make_error(
+                support::ErrorCode::Unknown,
                 "Editor autocomplete provider failed",
                 "the autocomplete callback threw an exception");
             cancel_autocomplete();
@@ -1110,8 +1110,8 @@ struct Editor::Impl {
         try {
             on_submit(result);
         } catch (...) {
-            callback_error = util::make_error(
-                util::ErrorCode::Unknown,
+            callback_error = support::make_error(
+                support::ErrorCode::Unknown,
                 "Editor submit sink failed",
                 "the submit callback threw an exception");
         }
@@ -1372,20 +1372,20 @@ std::size_t Editor::autocomplete_selected_index() const {
     return impl_->autocomplete_selected;
 }
 
-util::Expected<RenderResult> Editor::render(std::size_t width) {
+support::Expected<RenderResult> Editor::render(std::size_t width) {
     std::lock_guard lock(impl_->impl_mutex);
     impl_->drain_autocomplete_result();
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "Editor requires a positive visible width"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
     }
     impl_->layout_width = width;
     for (const auto& logical_line : impl_->document) {
         for (const auto& segment : logical_line) {
             for (const auto& grapheme : detail::split_graphemes(segment.text)) {
                 if (detail::grapheme_width(grapheme) > width) {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Validation,
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Validation,
                         "Editor grapheme is wider than the available visible width"));
                 }
             }

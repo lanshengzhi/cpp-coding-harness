@@ -27,7 +27,7 @@ namespace runtime = cch::coding_agent::runtime;
 namespace {
 
 struct ShellRun {
-    util::Expected<runtime::UserShellResult> result;
+    support::Expected<runtime::UserShellResult> result;
     std::string updates;
 };
 
@@ -56,10 +56,10 @@ struct ShellRun {
         [&]() -> boost::asio::awaitable<void> {
             run.result = co_await ai::detail::await_async_result(shell.execute(
                 std::move(command),
-                [&](std::string_view update) -> util::ExpectedVoid {
+                [&](std::string_view update) -> support::ExpectedVoid {
                     if (fail_updates) {
-                        return std::unexpected(util::make_error(
-                            util::ErrorCode::Unknown,
+                        return std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown,
                             "update sink rejected output"));
                     }
                     run.updates.append(update);
@@ -201,7 +201,7 @@ TEST_CASE(
         harness::ShellConfig{.shell_path = std::string{"/nonexistent/cch-user-shell"}}};
     const auto failed = run_user_shell(stale_shell, "printf 'never\\n'");
     REQUIRE_FALSE(failed.result);
-    CHECK(failed.result.error().code == util::ErrorCode::Process);
+    CHECK(failed.result.error().code == support::ErrorCode::Process);
     CHECK(failed.updates.empty());
 
     runtime::LocalUserShell sh_shell{

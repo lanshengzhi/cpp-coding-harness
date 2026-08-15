@@ -25,11 +25,11 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include "ai/providers/FakeProvider.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -221,14 +221,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture->session,
             terminal,
             {.agent_config_directory = fixture->config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -264,14 +264,14 @@ TEST_CASE(
     // row would scroll it off.
     tui::VirtualTerminal terminal({.columns = 72, .rows = 25});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture->session,
             terminal,
             {.agent_config_directory = fixture->config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -354,14 +354,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture->session,
             terminal,
             {.agent_config_directory = fixture->config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -409,7 +409,7 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
@@ -419,7 +419,7 @@ TEST_CASE(
              .model_fallback_message =
                  "Could not restore model deepseek/deepseek-v4-flash. "
                  "Using openai-codex/gpt-5.5"}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });

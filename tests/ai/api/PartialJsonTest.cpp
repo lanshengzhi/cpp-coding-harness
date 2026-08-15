@@ -1,5 +1,5 @@
 #include "ai/api/PartialJson.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,7 +18,7 @@ struct StreamingJsonCase {
 
 [[nodiscard]] std::string parse(std::string_view input) {
     const auto value = ai::api::parse_streaming_json(input);
-    const auto serialized = util::write_json(value);
+    const auto serialized = support::write_json(value);
     REQUIRE(serialized);
     return *serialized;
 }
@@ -65,7 +65,7 @@ TEST_CASE(
     // parsed values are asserted directly; glaze re-escapes them on write.
     const auto value = ai::api::parse_streaming_json(
         R"({"path":"A\H","text":"col1	col2"})");
-    REQUIRE(value.holds<util::JsonValue::object_t>());
+    REQUIRE(value.holds<support::JsonValue::object_t>());
     CHECK(value.at("path").get_string() == "A\\H");
     CHECK(value.at("text").get_string() == "col1\tcol2");
 }

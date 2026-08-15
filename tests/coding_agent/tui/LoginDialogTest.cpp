@@ -9,7 +9,7 @@
 
 #include <cch/tui/Keybindings.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -173,11 +173,11 @@ TEST_CASE(
     dialog.show_progress("Contacting provider...");
 
     boost::asio::io_context io;
-    std::optional<util::Expected<std::string>> prompt_result;
+    std::optional<support::Expected<std::string>> prompt_result;
     boost::asio::co_spawn(
         io,
         dialog.show_prompt("Enter API key", "sk-..."),
-        [&](std::exception_ptr exception, util::Expected<std::string> result) {
+        [&](std::exception_ptr exception, support::Expected<std::string> result) {
             CHECK(exception == nullptr);
             prompt_result.emplace(std::move(result));
         });
@@ -214,11 +214,11 @@ TEST_CASE(
     auto dialog = fixture.make("Login to OpenAI Codex");
 
     boost::asio::io_context io;
-    std::optional<util::Expected<std::string>> prompt_result;
+    std::optional<support::Expected<std::string>> prompt_result;
     boost::asio::co_spawn(
         io,
         dialog.show_manual_input("Paste the authorization code"),
-        [&](std::exception_ptr exception, util::Expected<std::string> result) {
+        [&](std::exception_ptr exception, support::Expected<std::string> result) {
             CHECK(exception == nullptr);
             prompt_result.emplace(std::move(result));
         });
@@ -230,7 +230,7 @@ TEST_CASE(
 
     REQUIRE(prompt_result.has_value());
     REQUIRE_FALSE(prompt_result->has_value());
-    CHECK(prompt_result->error().code == util::ErrorCode::Cancelled);
+    CHECK(prompt_result->error().code == support::ErrorCode::Cancelled);
     CHECK(prompt_result->error().message == "Login cancelled");
     CHECK(dialog.stop_token().stop_requested());
     CHECK(fixture.cancellations == 1);
@@ -243,11 +243,11 @@ TEST_CASE(
     auto dialog = fixture.make("Login to OpenAI Codex");
 
     boost::asio::io_context io;
-    std::optional<util::Expected<std::string>> prompt_result;
+    std::optional<support::Expected<std::string>> prompt_result;
     boost::asio::co_spawn(
         io,
         dialog.show_manual_input("Paste the authorization code"),
-        [&](std::exception_ptr exception, util::Expected<std::string> result) {
+        [&](std::exception_ptr exception, support::Expected<std::string> result) {
             CHECK(exception == nullptr);
             prompt_result.emplace(std::move(result));
         });
@@ -260,7 +260,7 @@ TEST_CASE(
 
     REQUIRE(prompt_result.has_value());
     REQUIRE_FALSE(prompt_result->has_value());
-    CHECK(prompt_result->error().code == util::ErrorCode::Cancelled);
+    CHECK(prompt_result->error().code == support::ErrorCode::Cancelled);
     CHECK(prompt_result->error().message == "Login cancelled");
     CHECK_FALSE(dialog.stop_token().stop_requested());
     CHECK(fixture.cancellations == 0);
@@ -273,11 +273,11 @@ TEST_CASE(
     auto dialog = fixture.make("Login to DeepSeek");
     boost::asio::io_context io;
 
-    std::optional<util::Expected<std::string>> first_result;
+    std::optional<support::Expected<std::string>> first_result;
     boost::asio::co_spawn(
         io,
         dialog.show_prompt("Enter API key", std::nullopt),
-        [&](std::exception_ptr exception, util::Expected<std::string> result) {
+        [&](std::exception_ptr exception, support::Expected<std::string> result) {
             CHECK(exception == nullptr);
             first_result.emplace(std::move(result));
         });
@@ -289,11 +289,11 @@ TEST_CASE(
     REQUIRE(first_result->has_value());
     CHECK(**first_result == "first-value");
 
-    std::optional<util::Expected<std::string>> second_result;
+    std::optional<support::Expected<std::string>> second_result;
     boost::asio::co_spawn(
         io,
         dialog.show_prompt("Confirm API key", std::nullopt),
-        [&](std::exception_ptr exception, util::Expected<std::string> result) {
+        [&](std::exception_ptr exception, support::Expected<std::string> result) {
             CHECK(exception == nullptr);
             second_result.emplace(std::move(result));
         });

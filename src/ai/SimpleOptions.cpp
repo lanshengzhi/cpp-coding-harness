@@ -1,7 +1,7 @@
 #include "SimpleOptions.hpp"
 
 #include "ai/ModelThinkingLevel.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <array>
@@ -111,7 +111,7 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
                             } else {
                                 characters += content.name.size();
                                 if (content.arguments) {
-                                    const auto serialized = util::write_json(*content.arguments);
+                                    const auto serialized = support::write_json(*content.arguments);
                                     characters += serialized ? serialized->size() : 16;
                                 } else {
                                     characters += content.raw_arguments.size();
@@ -141,16 +141,16 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
     if (tools.empty()) {
         return 0;
     }
-    util::JsonValue::array_t values;
+    support::JsonValue::array_t values;
     values.reserve(tools.size());
     for (const auto& tool : tools) {
-        values.emplace_back(util::JsonValue::object_t{
+        values.emplace_back(support::JsonValue::object_t{
             {"description", tool.description},
             {"name", tool.name},
             {"parameters", tool.parameters},
         });
     }
-    const auto serialized = util::write_json(util::JsonValue{std::move(values)});
+    const auto serialized = support::write_json(support::JsonValue{std::move(values)});
     return serialized ? estimated_text_tokens(*serialized) : 0;
 }
 

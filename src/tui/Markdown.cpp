@@ -5,7 +5,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <md4c.h>
 
 #include <algorithm>
@@ -330,7 +330,7 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
     }
 }
 
-[[nodiscard]] util::Expected<BlockNode> parse_markdown(std::string_view text) {
+[[nodiscard]] support::Expected<BlockNode> parse_markdown(std::string_view text) {
     ParseState state;
     state.root.kind = BlockKind::Document;
     state.strict_strikethrough = scan_strikethrough_delimiters(text);
@@ -351,8 +351,8 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
         &parser,
         &state);
     if (parse_result == 0 && !state.failed) return std::move(state.root);
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Unknown,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Unknown,
         "TUI Markdown parsing failed",
         state.failed
             ? "a parser callback threw an exception"
@@ -484,7 +484,7 @@ struct RenderContext {
     bool quoted{false};
 };
 
-using RenderedLines = util::Expected<std::vector<std::string>>;
+using RenderedLines = support::Expected<std::vector<std::string>>;
 
 [[nodiscard]] RenderedLines add_prefix(
     const std::vector<std::string>& logical_lines,
@@ -706,8 +706,8 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
 
 [[nodiscard]] RenderedLines render_block(const BlockNode& block, std::size_t width, RenderContext context) {
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Markdown requires a positive content width"));
     }
     switch (block.kind) {
@@ -940,13 +940,13 @@ void Markdown::set_background_hook(BackgroundHook background_hook) {
     invalidate();
 }
 
-util::Expected<RenderResult> Markdown::render(std::size_t width) {
+support::Expected<RenderResult> Markdown::render(std::size_t width) {
     if (impl_->cache_valid && impl_->cached_text == impl_->text && impl_->cached_width == width) {
         return RenderResult{.lines = impl_->cached_lines};
     }
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Markdown requires a positive visible width"));
     }
     if (impl_->text.empty() || impl_->text.find_first_not_of(" \t\r\n") == std::string::npos) {
@@ -957,8 +957,8 @@ util::Expected<RenderResult> Markdown::render(std::size_t width) {
         return RenderResult{.lines = impl_->cached_lines};
     }
     if (impl_->padding_x >= width || impl_->padding_x >= width - impl_->padding_x) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Markdown width is too small for padding",
             std::format("width {} padding_x {}", width, impl_->padding_x)));
     }
@@ -981,13 +981,13 @@ util::Expected<RenderResult> Markdown::render(std::size_t width) {
                     .syntax_highlighter = impl_->syntax_highlighter,
                 });
         } catch (const std::exception&) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "TUI Markdown callback failed",
                 "the styling or syntax-highlighting callback threw an exception"));
         } catch (...) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "TUI Markdown callback failed",
                 "the styling or syntax-highlighting callback threw an unknown exception"));
         }
@@ -1000,7 +1000,7 @@ util::Expected<RenderResult> Markdown::render(std::size_t width) {
     }
 
     std::vector<std::string> result;
-    const auto make_line = [&](std::string line) -> util::Expected<std::string> {
+    const auto make_line = [&](std::string line) -> support::Expected<std::string> {
         line.insert(0, impl_->padding_x, ' ');
         const auto visible = visible_width(line);
         if (visible < width) line.append(width - visible, ' ');

@@ -3,8 +3,8 @@
 #include "ExecutionShared.hpp"
 #include "ToolCallExecutor.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/ai/Usage.hpp>
@@ -34,7 +34,7 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     state.messages = context.messages;
 }
 
-[[nodiscard]] util::ExpectedVoid append_message_with_lifecycle(
+[[nodiscard]] support::ExpectedVoid append_message_with_lifecycle(
     AgentState& state,
     ai::AiContext& context,
     AgentEventSink& sink,
@@ -84,7 +84,7 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     return std::nullopt;
 }
 
-[[nodiscard]] util::ExpectedVoid apply_turn_update(
+[[nodiscard]] support::ExpectedVoid apply_turn_update(
     AsyncAgentOptions& options,
     ai::AiContext& context,
     AgentState& state,
@@ -95,8 +95,8 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
         }
     }
     if (update.thinking_level && !is_valid_thinking_level(*update.thinking_level)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid thinking level",
             *update.thinking_level));
     }
@@ -152,7 +152,7 @@ AsyncAgentLoop::AsyncAgentLoop(
         options_.model, options_.thinking_level);
 }
 
-boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
+boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
     std::string user_prompt,
     AgentEventSink sink,
     std::stop_token stop_token) {
@@ -160,7 +160,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
         {}, std::move(user_prompt), std::move(sink), stop_token);
 }
 
-boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
     std::vector<ai::MessageVariant> history,
     std::string user_prompt,
     AgentEventSink sink,
@@ -173,7 +173,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         {});
 }
 
-boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
     std::vector<ai::MessageVariant> history,
     ai::UserMessage user_message,
     AgentEventSink sink,
@@ -186,18 +186,18 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         {});
 }
 
-boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
     std::vector<ai::MessageVariant> history,
     AgentEventSink sink,
     std::stop_token stop_token) {
     if (history.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Cannot continue: no messages in context"));
     }
     if (std::holds_alternative<ai::AssistantMessage>(history.back())) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Cannot continue from message role: assistant"));
     }
     co_return co_await continue_with(
@@ -208,7 +208,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         {});
 }
 
-boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
     std::vector<ai::MessageVariant> history,
     std::optional<ai::UserMessage> user_message,
     AgentEventSink sink,
@@ -222,7 +222,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     context.system_prompt = options_.system_prompt;
     context.messages = std::move(history);
     std::vector<ai::MessageVariant> new_messages;
-    const auto emit_agent_end = [&]() -> util::ExpectedVoid {
+    const auto emit_agent_end = [&]() -> support::ExpectedVoid {
         return emit_agent_event(sink, AgentEndEvent{new_messages});
     };
 
@@ -324,8 +324,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     co_return std::unexpected(converted.error());
                 }
                 if (converted->empty()) {
-                    auto error = util::make_error(
-                        util::ErrorCode::Validation,
+                    auto error = support::make_error(
+                        support::ErrorCode::Validation,
                         "convertToLlm returned no messages",
                         "LLM request would be empty");
                     CCH_TRY_VOID(emit_agent_end());
@@ -348,7 +348,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             std::move(stream_options));
         auto assistant = co_await ai::detail::await_async_result(
             std::move(stream).run(
-            [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+            [&](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
                 if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
                     if (assistant_start_emitted) {
                         return {};
@@ -448,7 +448,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (!calls.empty() && assistant->stop_reason == ai::AssistantStopReason::Length) {
             tool_results.reserve(calls.size());
             for (const auto& call : calls) {
-                CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
+                CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(support::JsonValue{})}));
 
                 ai::ToolResultMessage result;
                 result.tool_call_id = call.id;
@@ -519,8 +519,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             }
             if (*update) {
                 if ((**update).model && !options_.validate_turn_update) {
-                    auto error = util::make_error(
-                        util::ErrorCode::Validation,
+                    auto error = support::make_error(
+                        support::ErrorCode::Validation,
                         "model update requires validation",
                         (**update).model->id);
                     CCH_TRY_VOID(emit_agent_end());
@@ -583,8 +583,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     // uncapped default never exhausts the loop (ADR 0015). Exhaustion of the
     // host's own configured budget is a validation-classified outcome, never
     // a provider error.
-    auto error = util::make_error(
-        util::ErrorCode::Validation,
+    auto error = support::make_error(
+        support::ErrorCode::Validation,
         "max turns exceeded",
         "agent reached the configured max_turns before a final assistant response");
     CCH_TRY_VOID(emit_agent_end());

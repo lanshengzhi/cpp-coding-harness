@@ -22,7 +22,7 @@ struct ModelRuntimeTransportOptions {
 /// Build a ModelRuntime with explicit transport injection. Production
 /// construction goes through `ModelRuntime::create`, which fills the default
 /// Boost.Beast transports and delegates here.
-[[nodiscard]] util::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
+[[nodiscard]] support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
     ModelRuntimeOptions options,
     ModelRuntimeTransportOptions transports);
 

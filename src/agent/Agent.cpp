@@ -5,7 +5,7 @@
 #include "ai/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
-#include "util/BoundedText.hpp"
+#include "ai/BoundedText.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -86,15 +86,15 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
         message);
 }
 
-[[nodiscard]] util::ExpectedVoid admit_queued_message(
+[[nodiscard]] support::ExpectedVoid admit_queued_message(
     AgentInputQueues& queues,
     AgentInputQueue& queue,
     ai::MessageVariant message,
     std::string_view queue_name) {
     const std::size_t message_bytes = approximate_message_size(message);
     if (queue.messages.size() + 1 > queues.max_messages) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "too many queued messages",
             std::string{queue_name} + " message count exceeds " + std::to_string(queues.max_messages)));
     }
@@ -104,8 +104,8 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
         queued_bytes += approximate_message_size(queued);
     }
     if (queued_bytes > queues.max_bytes) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "queued messages too large",
             std::string{queue_name} + " message byte size exceeds " + std::to_string(queues.max_bytes)));
     }
@@ -153,10 +153,10 @@ struct Agent::Impl {
         state.active_tool_names = tool_names(definitions);
     }
 
-    [[nodiscard]] util::ExpectedVoid process_event(
+    [[nodiscard]] support::ExpectedVoid process_event(
         const AgentLifecycleEvent& event,
         AgentEventCommitter& commitment,
-        std::optional<util::Error>& commitment_failure) {
+        std::optional<support::Error>& commitment_failure) {
         reduce_state(event);
 
         std::optional<AgentLifecycleEvent> invocation_event;
@@ -225,7 +225,7 @@ struct Agent::Impl {
         }
     }
 
-    void record_observer_diagnostic(const util::Error& failure) {
+    void record_observer_diagnostic(const support::Error& failure) {
         constexpr std::size_t kMaxDiagnostics = 16;
         constexpr std::size_t kMaxDetailBytes = 1024;
 
@@ -234,19 +234,19 @@ struct Agent::Impl {
             detail += ": ";
             detail += failure.detail;
         }
-        detail = util::bounded_redacted_text(
+        detail = ai::bounded_redacted_text(
             std::move(detail), kMaxDetailBytes, "...");
 
         if (state.diagnostics.size() == kMaxDiagnostics) {
             state.diagnostics.erase(state.diagnostics.begin());
         }
-        state.diagnostics.push_back(util::make_error(
+        state.diagnostics.push_back(support::make_error(
             failure.code,
             "agent event observer failed",
             std::move(detail)));
     }
 
-    [[nodiscard]] util::ExpectedVoid notify(
+    [[nodiscard]] support::ExpectedVoid notify(
         const AgentLifecycleEvent& event,
         const std::vector<std::shared_ptr<Subscriber>>& delivery_snapshot) {
         for (const auto& subscriber : delivery_snapshot) {
@@ -260,14 +260,14 @@ struct Agent::Impl {
                     subscriber->delivery_enabled = false;
                 }
             } catch (const std::exception& exception) {
-                record_observer_diagnostic(util::make_error(
-                    util::ErrorCode::Unknown,
+                record_observer_diagnostic(support::make_error(
+                    support::ErrorCode::Unknown,
                     exception.what()));
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
             } catch (...) {
-                record_observer_diagnostic(util::make_error(
-                    util::ErrorCode::Unknown,
+                record_observer_diagnostic(support::make_error(
+                    support::ErrorCode::Unknown,
                     "unknown exception"));
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
@@ -328,9 +328,9 @@ struct Agent::Impl {
     /// run-scoped event sink and stop token, and settles run state on every
     /// exit path. `run_loop_call` is built by the caller (a friend context)
     /// because the loop's private input-queue kinds are not reachable here.
-    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> run_loop(
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_loop(
         std::shared_ptr<Impl> impl,
-        std::move_only_function<boost::asio::awaitable<util::Expected<AsyncAgentRunResult>>(
+        std::move_only_function<boost::asio::awaitable<support::Expected<AsyncAgentRunResult>>(
             AgentEventSink sink, std::stop_token token)> run_loop_call,
         AgentEventCommitter commitment,
         std::stop_source stop_source) {
@@ -353,8 +353,8 @@ struct Agent::Impl {
             impl->remove_unregistered_subscribers();
         };
 
-        std::optional<util::Error> commitment_failure;
-        std::optional<util::Expected<AsyncAgentRunResult>> result;
+        std::optional<support::Error> commitment_failure;
+        std::optional<support::Expected<AsyncAgentRunResult>> result;
         try {
             result = co_await run_loop_call(
                 [impl, &commitment, &commitment_failure](
@@ -365,14 +365,14 @@ struct Agent::Impl {
                 impl->active_stop_source->get_token());
         } catch (const std::exception& exception) {
             finish_run();
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "agent run failed",
                 exception.what()));
         } catch (...) {
             finish_run();
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "agent run failed",
                 "unknown exception"));
         }
@@ -391,7 +391,7 @@ struct Agent::Impl {
         if (!*result) {
             co_return std::unexpected(result->error());
         }
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
 
     AsyncAgentLoop loop;
@@ -491,13 +491,13 @@ support::AsyncResult<void> Agent::prompt(
     AgentEventCommitter commitment,
     std::stop_source stop_source) {
     if (!impl_) {
-        return support::AsyncResult<void>{std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return support::AsyncResult<void>{std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"))};
     }
     if (impl_->active_run) {
-        return support::AsyncResult<void>{std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return support::AsyncResult<void>{std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is busy (prompt already in flight)"))};
     }
     return ai::detail::make_async_result(
@@ -507,13 +507,13 @@ support::AsyncResult<void> Agent::prompt(
          stop_source = std::move(stop_source)]() mutable
             -> boost::asio::awaitable<support::ExpectedVoid> {
     if (!impl) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (impl->active_run) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is busy (prompt already in flight)"));
     }
     co_return co_await Impl::run_loop(
@@ -563,13 +563,13 @@ support::AsyncResult<void> Agent::continue_run(
          stop_source = std::move(stop_source)]() mutable
             -> boost::asio::awaitable<support::ExpectedVoid> {
     if (!impl) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (impl->active_run) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is busy (prompt already in flight)"));
     }
     co_return co_await Impl::run_loop(
@@ -616,10 +616,10 @@ void Agent::abort() {
     }
 }
 
-util::ExpectedVoid Agent::steer(ai::MessageVariant message) {
+support::ExpectedVoid Agent::steer(ai::MessageVariant message) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     auto& queues = impl_->state.input_queues;
@@ -627,10 +627,10 @@ util::ExpectedVoid Agent::steer(ai::MessageVariant message) {
         queues, queues.steering, std::move(message), "steering");
 }
 
-util::ExpectedVoid Agent::follow_up(ai::MessageVariant message) {
+support::ExpectedVoid Agent::follow_up(ai::MessageVariant message) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     auto& queues = impl_->state.input_queues;
@@ -638,20 +638,20 @@ util::ExpectedVoid Agent::follow_up(ai::MessageVariant message) {
         queues, queues.follow_up, std::move(message), "follow-up");
 }
 
-util::ExpectedVoid Agent::set_steering_mode(InputQueueMode mode) {
+support::ExpectedVoid Agent::set_steering_mode(InputQueueMode mode) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     impl_->state.input_queues.steering.mode = mode;
     return {};
 }
 
-util::ExpectedVoid Agent::set_follow_up_mode(InputQueueMode mode) {
+support::ExpectedVoid Agent::set_follow_up_mode(InputQueueMode mode) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     impl_->state.input_queues.follow_up.mode = mode;
@@ -668,15 +668,15 @@ namespace {
 
 } // namespace
 
-util::Expected<std::string> Agent::set_thinking_level(std::string_view level) {
+support::Expected<std::string> Agent::set_thinking_level(std::string_view level) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (!is_valid_thinking_level(level)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid thinking level",
             std::string{level}));
     }
@@ -690,10 +690,10 @@ util::Expected<std::string> Agent::set_thinking_level(std::string_view level) {
     return effective;
 }
 
-util::ExpectedVoid Agent::set_model(ai::Model model) {
+support::ExpectedVoid Agent::set_model(ai::Model model) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (auto valid = ai::validate_model(model); !valid) {
@@ -712,27 +712,27 @@ void Agent::set_system_prompt(std::string system_prompt) {
     impl_->state.system_prompt = std::move(system_prompt);
 }
 
-util::ExpectedVoid Agent::clear_steering_queue() {
+support::ExpectedVoid Agent::clear_steering_queue() {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     impl_->state.input_queues.steering.messages.clear();
     return {};
 }
 
-util::ExpectedVoid Agent::clear_follow_up_queue() {
+support::ExpectedVoid Agent::clear_follow_up_queue() {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     impl_->state.input_queues.follow_up.messages.clear();
     return {};
 }
 
-util::ExpectedVoid Agent::clear_input_queues() {
+support::ExpectedVoid Agent::clear_input_queues() {
     if (auto cleared = clear_steering_queue(); !cleared) {
         return cleared;
     }
@@ -743,16 +743,16 @@ AgentState Agent::state() const {
     return impl_ ? impl_->state : AgentState{};
 }
 
-util::Expected<AgentEventSubscription> Agent::subscribe(
+support::Expected<AgentEventSubscription> Agent::subscribe(
     AgentEventSink sink) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (!sink) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent event sink is empty"));
     }
 
@@ -775,34 +775,34 @@ void Agent::clear_subscriptions() {
     }
 }
 
-util::ExpectedVoid detail::AgentMessageAccess::append_bash_execution(
+support::ExpectedVoid detail::AgentMessageAccess::append_bash_execution(
     Agent& agent,
     ai::BashExecutionMessage message) {
     if (!agent.impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is busy (cannot commit passive message)"));
     }
     agent.impl_->state.messages.emplace_back(std::move(message));
     return {};
 }
 
-util::ExpectedVoid detail::AgentMessageAccess::replace_messages(
+support::ExpectedVoid detail::AgentMessageAccess::replace_messages(
     Agent& agent,
     std::vector<ai::MessageVariant> messages) {
     if (!agent.impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is busy (cannot replace session context)"));
     }
     agent.impl_->state.messages = std::move(messages);
@@ -811,16 +811,16 @@ util::ExpectedVoid detail::AgentMessageAccess::replace_messages(
     return {};
 }
 
-util::ExpectedVoid detail::AgentMessageAccess::pop_trailing_assistant(
+support::ExpectedVoid detail::AgentMessageAccess::pop_trailing_assistant(
     Agent& agent) {
     if (!agent.impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is not initialized"));
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "agent is busy (cannot mutate session context)"));
     }
     auto& messages = agent.impl_->state.messages;

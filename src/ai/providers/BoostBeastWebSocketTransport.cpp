@@ -37,7 +37,7 @@ struct ParsedWebSocketUrl {
     bool tls{true};
 };
 
-[[nodiscard]] util::Expected<ParsedWebSocketUrl> parse_websocket_url(
+[[nodiscard]] support::Expected<ParsedWebSocketUrl> parse_websocket_url(
     const std::string& url) {
     std::string_view rest = url;
     bool tls = true;
@@ -47,8 +47,8 @@ struct ParsedWebSocketUrl {
         tls = false;
         rest.remove_prefix(5);
     } else {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "unsupported URL scheme",
             "BoostBeastWebSocketTransport only supports ws and wss URLs"));
     }
@@ -61,8 +61,8 @@ struct ParsedWebSocketUrl {
     parsed.port = tls ? "443" : "80";
     parsed.target = slash == std::string_view::npos ? "/" : std::string{rest.substr(slash)};
     if (authority.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "missing WebSocket host",
             "WebSocket URL is missing host"));
     }
@@ -76,38 +76,38 @@ struct ParsedWebSocketUrl {
     }
 
     if (parsed.host.empty() || parsed.port.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "invalid WebSocket authority",
             "WebSocket URL has invalid host or port"));
     }
     return parsed;
 }
 
-[[nodiscard]] util::Error cancelled_error() {
-    return util::make_error(
-        util::ErrorCode::Cancelled,
+[[nodiscard]] support::Error cancelled_error() {
+    return support::make_error(
+        support::ErrorCode::Cancelled,
         "WebSocket transport cancelled",
         "WebSocket operation was cancelled");
 }
 
-[[nodiscard]] util::Error transport_error(
+[[nodiscard]] support::Error transport_error(
     std::string message,
     boost::system::error_code ec) {
     auto code = ec == boost::asio::error::operation_aborted
-        ? util::ErrorCode::Cancelled
-        : util::ErrorCode::Network;
+        ? support::ErrorCode::Cancelled
+        : support::ErrorCode::Network;
     auto detail = ec ? ec.message() : std::string{};
-    return util::make_error(code, std::move(message), std::move(detail));
+    return support::make_error(code, std::move(message), std::move(detail));
 }
 
-[[nodiscard]] util::Error exception_error(const std::exception& error) {
+[[nodiscard]] support::Error exception_error(const std::exception& error) {
     std::string detail = error.what();
     auto code = detail.find("timeout") != std::string::npos ||
                 detail.find("timed out") != std::string::npos
-        ? util::ErrorCode::Timeout
-        : util::ErrorCode::Network;
-    return util::make_error(code, "WebSocket transport failure", std::move(detail));
+        ? support::ErrorCode::Timeout
+        : support::ErrorCode::Network;
+    return support::make_error(code, "WebSocket transport failure", std::move(detail));
 }
 
 template <typename Socket>
@@ -131,15 +131,15 @@ public:
     BeastWebSocketConnection(const BeastWebSocketConnection&) = delete;
     BeastWebSocketConnection& operator=(const BeastWebSocketConnection&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> async_send(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> async_send(
         std::string_view text) override {
         namespace asio = boost::asio;
         if (stop_token_.stop_requested()) {
             co_return std::unexpected(cancelled_error());
         }
         if (closed_ || closing_) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "WebSocket is closed"));
         }
         auto executor = co_await asio::this_coro::executor;
@@ -158,10 +158,10 @@ public:
         } catch (const std::exception& error) {
             co_return std::unexpected(exception_error(error));
         }
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> async_receive() override {
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>> async_receive() override {
         namespace asio = boost::asio;
         namespace beast = boost::beast;
         if (stop_token_.stop_requested()) {
@@ -208,8 +208,8 @@ public:
             }
             if (idle_timed_out) {
                 closed_ = true;
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Timeout,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Timeout,
                     "WebSocket idle timeout after " +
                         std::to_string(idle_timeout_->count()) + "ms"));
             }
@@ -300,7 +300,7 @@ template <typename Socket>
 
 } // namespace
 
-boost::asio::awaitable<util::Expected<std::shared_ptr<WebSocket>>>
+boost::asio::awaitable<support::Expected<std::shared_ptr<WebSocket>>>
 BoostBeastWebSocketTransport::async_connect(
     const WebSocketConnectRequest& request) {
     namespace asio = boost::asio;
@@ -345,15 +345,15 @@ BoostBeastWebSocketTransport::async_connect(
             boost::system::error_code ec;
             ctx.set_default_verify_paths(ec);
             if (ec) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Network,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Network,
                     "CA loading failure", ec.message()));
             }
             beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
             beast::get_lowest_layer(stream).expires_after(request.connect_timeout);
             if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Network,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Network,
                     "TLS SNI setup failed",
                     "OpenSSL rejected the host name"));
             }
@@ -391,8 +391,8 @@ BoostBeastWebSocketTransport::async_connect(
             std::move(socket), request.stop_token, request.idle_timeout);
     } catch (const boost::system::system_error& error) {
         if (connect_timed_out) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Timeout,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Timeout,
                 "WebSocket connect timeout after " +
                     std::to_string(request.connect_timeout.count()) + "ms"));
         }
@@ -400,14 +400,14 @@ BoostBeastWebSocketTransport::async_connect(
             error.code() == asio::error::operation_aborted) {
             co_return std::unexpected(cancelled_error());
         }
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Network,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Network,
             "WebSocket connect failure",
             error.code().message()));
     } catch (const std::exception& error) {
         if (connect_timed_out) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Timeout,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Timeout,
                 "WebSocket connect timeout after " +
                     std::to_string(request.connect_timeout.count()) + "ms"));
         }

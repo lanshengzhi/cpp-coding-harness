@@ -3,7 +3,7 @@
 #include <cch/tui/TerminalImage.hpp>
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <exception>
 #include <format>
@@ -190,10 +190,10 @@ void clear_grapheme(std::vector<VirtualTerminalCell>& row, std::size_t column) {
 }
 
 template <typename T>
-util::ExpectedVoid require_started(const T& impl) {
+support::ExpectedVoid require_started(const T& impl) {
     if (impl.modes.started) return {};
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "Virtual Terminal must be started before terminal operations"));
 }
 
@@ -209,15 +209,15 @@ VirtualTerminal::VirtualTerminal(VirtualTerminal&&) noexcept = default;
 VirtualTerminal& VirtualTerminal::operator=(VirtualTerminal&&) noexcept = default;
 VirtualTerminal::~VirtualTerminal() = default;
 
-util::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) {
+support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) {
     if (impl_->modes.started) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Virtual Terminal is already started"));
     }
     if (impl_->dimensions.columns == 0 || impl_->dimensions.rows == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Virtual Terminal requires positive dimensions"));
     }
     impl_->input_sink = std::move(input_sink);
@@ -236,7 +236,7 @@ util::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Terminal
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::stop() {
+support::ExpectedVoid VirtualTerminal::stop() {
     if (impl_->progress_active) {
         impl_->output.push_back(std::string(kProgressClearSequence));
         impl_->progress_active = false;
@@ -263,7 +263,7 @@ TerminalModeState VirtualTerminal::modes() const {
     return impl_->modes;
 }
 
-util::ExpectedVoid VirtualTerminal::clear_screen() {
+support::ExpectedVoid VirtualTerminal::clear_screen() {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->clear_screen_called = true;
     // pi's resize full-redraw emits \x1b[2J\x1b[H\x1b[3J: clear screen, home,
@@ -282,7 +282,7 @@ util::ExpectedVoid VirtualTerminal::clear_screen() {
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
+support::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     if (impl_->sync_depth == 0) {
         impl_->output.push_back(std::string(kBeginSync));
@@ -291,11 +291,11 @@ util::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::end_synchronized_update() {
+support::ExpectedVoid VirtualTerminal::end_synchronized_update() {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     if (impl_->sync_depth == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Virtual Terminal synchronized update is not active"));
     }
     --impl_->sync_depth;
@@ -305,20 +305,20 @@ util::ExpectedVoid VirtualTerminal::end_synchronized_update() {
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::set_title(std::string_view title) {
+support::ExpectedVoid VirtualTerminal::set_title(std::string_view title) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->output.push_back(std::format("\x1b]0;{}\x07", title));
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::set_progress(bool active) {
+support::ExpectedVoid VirtualTerminal::set_progress(bool active) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->output.push_back(std::string(active ? kProgressActiveSequence : kProgressClearSequence));
     impl_->progress_active = active;
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::drain_input(
+support::ExpectedVoid VirtualTerminal::drain_input(
     std::chrono::milliseconds,
     std::chrono::milliseconds) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
@@ -328,7 +328,7 @@ util::ExpectedVoid VirtualTerminal::drain_input(
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
+support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     auto tokens = detail::tokenize_terminal_output(output);
     if (!tokens) return std::unexpected(tokens.error());
@@ -336,16 +336,16 @@ util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     std::size_t output_width = 0;
     for (const auto& token : *tokens) {
         if (token.kind == detail::TerminalTokenKind::Newline) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "Virtual Terminal write must contain exactly one physical line"));
         }
         output_width += token.width;
     }
     const auto remaining = impl_->dimensions.columns - impl_->cursor.column;
     if (output_width > remaining) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI component rendered a line wider than its width bound",
             std::format(
                 "line width {} exceeds visible width {}",
@@ -409,11 +409,11 @@ util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
+support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     if (position.column > impl_->dimensions.columns) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Virtual Terminal cursor position is outside its dimensions"));
     }
     // `row` is a buffer row under the main-screen scrollback flow: rows at or
@@ -433,31 +433,31 @@ util::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
+support::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->modes.cursor_visible = visible;
     return {};
 }
 
-util::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalImage& image) {
+support::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalImage& image) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     if (impl_->capabilities.inline_images == InlineImageProtocol::None) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Virtual Terminal does not support inline images"));
     }
     if (!detail::protocol_supports_mime(
             impl_->capabilities.inline_images,
             image.mime_type)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image format is unsupported by the Virtual Terminal protocol"));
     }
     if (image.region.columns == 0 || image.region.rows == 0 ||
         image.region.column >= impl_->dimensions.columns ||
         image.region.columns > impl_->dimensions.columns - image.region.column) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image region is outside Virtual Terminal dimensions"));
     }
     for (const auto& visible : impl_->images) {
@@ -468,8 +468,8 @@ util::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalI
             if (image.preferred_handle && visible.handle == *image.preferred_handle) {
                 continue;
             }
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "Inline image regions cannot overlap"));
         }
     }
@@ -495,7 +495,7 @@ util::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalI
     return handle;
 }
 
-util::ExpectedVoid VirtualTerminal::remove_image(
+support::ExpectedVoid VirtualTerminal::remove_image(
     TerminalImageHandle handle,
     const CellRegion& region) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
@@ -504,8 +504,8 @@ util::ExpectedVoid VirtualTerminal::remove_image(
     });
     if (found == impl_->images.end()) return {};
     if (found->region != region) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image removal region does not match its owned region"));
     }
     const auto owned_region = found->region;
@@ -532,7 +532,7 @@ util::ExpectedVoid VirtualTerminal::remove_image(
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
+support::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
     if (!impl_->modes.started || !impl_->input_sink) return {};
     auto consumed = detail::consume_cell_size_input(
         std::move(impl_->cell_size_pending),
@@ -549,13 +549,13 @@ util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
                 try {
                     impl_->resize_sink(impl_->dimensions);
                 } catch (const std::exception&) {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Unknown,
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Unknown,
                         "Virtual Terminal resize sink failed",
                         "the resize callback threw an exception"));
                 } catch (...) {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Unknown,
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Unknown,
                         "Virtual Terminal resize sink failed",
                         "the resize callback threw an unknown exception"));
                 }
@@ -566,13 +566,13 @@ util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
         try {
             impl_->input_sink(std::move(consumed.forwarded_input));
         } catch (const std::exception&) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "Virtual Terminal input sink failed",
                 "the input callback threw an exception"));
         } catch (...) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "Virtual Terminal input sink failed",
                 "the input callback threw an unknown exception"));
         }
@@ -580,23 +580,23 @@ util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
     return {};
 }
 
-util::ExpectedVoid VirtualTerminal::flush_input() {
+support::ExpectedVoid VirtualTerminal::flush_input() {
     return inject_input({});
 }
 
-util::ExpectedVoid VirtualTerminal::inject_resize(TerminalDimensions dimensions) {
+support::ExpectedVoid VirtualTerminal::inject_resize(TerminalDimensions dimensions) {
     resize_cells(*impl_, dimensions);
     if (!impl_->modes.started || !impl_->resize_sink) return {};
     try {
         impl_->resize_sink(dimensions);
     } catch (const std::exception&) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Virtual Terminal resize sink failed",
             "the resize callback threw an exception"));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Virtual Terminal resize sink failed",
             "the resize callback threw an unknown exception"));
     }

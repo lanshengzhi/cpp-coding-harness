@@ -26,8 +26,8 @@
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -66,9 +66,9 @@ namespace {
 }
 
 void expect_json_equal(
-    const util::JsonValue& actual,
+    const support::JsonValue& actual,
     std::string_view fixture_name) {
-    auto serialized = util::write_json(actual);
+    auto serialized = support::write_json(actual);
     REQUIRE(serialized);
     const auto expected = read_fixture_text(fixture_name);
     if (*serialized != expected) {
@@ -114,63 +114,63 @@ void expect_json_equal(
 /// harness-consumer option set (agent-harness.ts createStreamFn): reasoning,
 /// sessionId, cacheRetention (resolved, matching what the provider dispatch
 /// receives), timeoutMs, maxRetries, maxRetryDelayMs, headers, signal.
-[[nodiscard]] util::JsonValue options_to_json(
+[[nodiscard]] support::JsonValue options_to_json(
     const ai::SimpleStreamOptions& options,
     const ai::Model& model) {
-    util::JsonValue object{util::JsonValue::object_t{}};
+    support::JsonValue object{support::JsonValue::object_t{}};
     auto& o = object.get_object();
 
-    util::JsonValue model_object{util::JsonValue::object_t{}};
-    model_object.get_object().emplace("id", util::JsonValue(model.id));
+    support::JsonValue model_object{support::JsonValue::object_t{}};
+    model_object.get_object().emplace("id", support::JsonValue(model.id));
     model_object.get_object().emplace(
-        "provider", util::JsonValue(model.provider));
-    model_object.get_object().emplace("api", util::JsonValue(model.api));
+        "provider", support::JsonValue(model.provider));
+    model_object.get_object().emplace("api", support::JsonValue(model.api));
     o.emplace("model", std::move(model_object));
 
     if (options.reasoning) {
         o.emplace(
             "reasoning",
-            util::JsonValue(thinking_level_name(*options.reasoning)));
+            support::JsonValue(thinking_level_name(*options.reasoning)));
     } else {
-        o.emplace("reasoning", util::JsonValue(nullptr));
+        o.emplace("reasoning", support::JsonValue(nullptr));
     }
     if (options.session_id) {
-        o.emplace("sessionId", util::JsonValue(*options.session_id));
+        o.emplace("sessionId", support::JsonValue(*options.session_id));
     } else {
-        o.emplace("sessionId", util::JsonValue(nullptr));
+        o.emplace("sessionId", support::JsonValue(nullptr));
     }
     o.emplace(
         "cacheRetention",
-        util::JsonValue(cache_retention_name(
+        support::JsonValue(cache_retention_name(
             ai::detail::resolve_cache_retention(
                 options.cache_retention, options.env))));
     if (options.timeout_ms) {
         o.emplace(
             "timeoutMs",
-            util::JsonValue(static_cast<int>(*options.timeout_ms)));
+            support::JsonValue(static_cast<int>(*options.timeout_ms)));
     } else {
-        o.emplace("timeoutMs", util::JsonValue(nullptr));
+        o.emplace("timeoutMs", support::JsonValue(nullptr));
     }
-    o.emplace("maxRetries", util::JsonValue(static_cast<int>(options.max_retries)));
+    o.emplace("maxRetries", support::JsonValue(static_cast<int>(options.max_retries)));
     if (options.max_retry_delay_ms) {
         o.emplace(
             "maxRetryDelayMs",
-            util::JsonValue(static_cast<int>(*options.max_retry_delay_ms)));
+            support::JsonValue(static_cast<int>(*options.max_retry_delay_ms)));
     } else {
-        o.emplace("maxRetryDelayMs", util::JsonValue(nullptr));
+        o.emplace("maxRetryDelayMs", support::JsonValue(nullptr));
     }
-    util::JsonValue headers{util::JsonValue::object_t{}};
+    support::JsonValue headers{support::JsonValue::object_t{}};
     for (const auto& [name, value] : options.headers) {
         if (value) {
-            headers.get_object().emplace(name, util::JsonValue(*value));
+            headers.get_object().emplace(name, support::JsonValue(*value));
         } else {
-            headers.get_object().emplace(name, util::JsonValue(nullptr));
+            headers.get_object().emplace(name, support::JsonValue(nullptr));
         }
     }
     o.emplace("headers", std::move(headers));
     o.emplace(
         "signal",
-        util::JsonValue(options.stop_token != std::stop_token{}));
+        support::JsonValue(options.stop_token != std::stop_token{}));
     return object;
 }
 
@@ -233,75 +233,75 @@ void expect_json_equal(
 struct LifecycleSerializer {
     int turn{0};
 
-    [[nodiscard]] util::JsonValue event_to_json(
+    [[nodiscard]] support::JsonValue event_to_json(
         const agent::AgentLifecycleEvent& event) {
-        util::JsonValue object{util::JsonValue::object_t{}};
+        support::JsonValue object{support::JsonValue::object_t{}};
         auto& o = object.get_object();
         if (std::holds_alternative<agent::AgentStartEvent>(event)) {
-            o.emplace("type", util::JsonValue("agent_start"));
+            o.emplace("type", support::JsonValue("agent_start"));
         } else if (const auto* end =
                        std::get_if<agent::AgentEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("agent_end"));
+            o.emplace("type", support::JsonValue("agent_end"));
             o.emplace(
                 "messageCount",
-                util::JsonValue(static_cast<int>(end->messages.size())));
+                support::JsonValue(static_cast<int>(end->messages.size())));
         } else if (std::holds_alternative<agent::TurnStartEvent>(event)) {
             ++turn;
-            o.emplace("type", util::JsonValue("turn_start"));
-            o.emplace("turn", util::JsonValue(turn));
+            o.emplace("type", support::JsonValue("turn_start"));
+            o.emplace("turn", support::JsonValue(turn));
         } else if (const auto* end =
                        std::get_if<agent::TurnEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("turn_end"));
+            o.emplace("type", support::JsonValue("turn_end"));
             const auto* assistant =
                 std::get_if<ai::AssistantMessage>(&end->message);
             REQUIRE(assistant != nullptr);
             o.emplace(
                 "stopReason",
-                util::JsonValue(ai::stop_reason_to_string(
+                support::JsonValue(ai::stop_reason_to_string(
                     assistant->stop_reason)));
             o.emplace(
                 "toolResults",
-                util::JsonValue(static_cast<int>(end->tool_results.size())));
+                support::JsonValue(static_cast<int>(end->tool_results.size())));
         } else if (const auto* start =
                        std::get_if<agent::MessageStartEvent>(&event)) {
-            o.emplace("type", util::JsonValue("message_start"));
-            o.emplace("role", util::JsonValue(message_role(start->message)));
+            o.emplace("type", support::JsonValue("message_start"));
+            o.emplace("role", support::JsonValue(message_role(start->message)));
         } else if (const auto* update =
                        std::get_if<agent::MessageUpdateEvent>(&event)) {
-            o.emplace("type", util::JsonValue("message_update"));
+            o.emplace("type", support::JsonValue("message_update"));
             o.emplace(
                 "event",
-                util::JsonValue(stream_event_name(update->assistant_event)));
+                support::JsonValue(stream_event_name(update->assistant_event)));
         } else if (const auto* end =
                        std::get_if<agent::MessageEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("message_end"));
-            o.emplace("role", util::JsonValue(message_role(end->message)));
+            o.emplace("type", support::JsonValue("message_end"));
+            o.emplace("role", support::JsonValue(message_role(end->message)));
         } else if (const auto* start =
                        std::get_if<agent::ToolExecutionStartEvent>(&event)) {
-            o.emplace("type", util::JsonValue("tool_execution_start"));
-            o.emplace("toolCallId", util::JsonValue(start->tool_call_id));
-            o.emplace("toolName", util::JsonValue(start->tool_name));
+            o.emplace("type", support::JsonValue("tool_execution_start"));
+            o.emplace("toolCallId", support::JsonValue(start->tool_call_id));
+            o.emplace("toolName", support::JsonValue(start->tool_name));
         } else if (const auto* update =
                        std::get_if<agent::ToolExecutionUpdateEvent>(&event)) {
-            o.emplace("type", util::JsonValue("tool_execution_update"));
-            o.emplace("toolCallId", util::JsonValue(update->tool_call_id));
-            o.emplace("toolName", util::JsonValue(update->tool_name));
+            o.emplace("type", support::JsonValue("tool_execution_update"));
+            o.emplace("toolCallId", support::JsonValue(update->tool_call_id));
+            o.emplace("toolName", support::JsonValue(update->tool_name));
         } else if (const auto* end =
                        std::get_if<agent::ToolExecutionEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("tool_execution_end"));
-            o.emplace("toolCallId", util::JsonValue(end->tool_call_id));
-            o.emplace("toolName", util::JsonValue(end->tool_name));
-            o.emplace("isError", util::JsonValue(end->is_error));
+            o.emplace("type", support::JsonValue("tool_execution_end"));
+            o.emplace("toolCallId", support::JsonValue(end->tool_call_id));
+            o.emplace("toolName", support::JsonValue(end->tool_name));
+            o.emplace("isError", support::JsonValue(end->is_error));
         }
         return object;
     }
 };
 
-util::ExpectedVoid run_prompt(
+support::ExpectedVoid run_prompt(
     agent::Agent& subject,
     std::string prompt) {
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -311,15 +311,15 @@ util::ExpectedVoid run_prompt(
         boost::asio::detached);
     io.run();
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
 }
 
 struct LoopRun {
-    util::Expected<agent::AsyncAgentRunResult> result;
+    support::Expected<agent::AsyncAgentRunResult> result;
     std::vector<agent::AgentLifecycleEvent> events;
 };
 
@@ -328,7 +328,7 @@ LoopRun run_loop(
     std::string prompt,
     std::stop_token stop_token = {}) {
     boost::asio::io_context io;
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
     boost::asio::co_spawn(
         io,
@@ -338,7 +338,7 @@ LoopRun run_loop(
                 std::move(prompt),
                 [&](const agent::AgentLifecycleEvent& event) {
                     events.push_back(event);
-                    return util::ExpectedVoid{};
+                    return support::ExpectedVoid{};
                 },
                 stop_token);
             co_return;
@@ -349,24 +349,24 @@ LoopRun run_loop(
     return LoopRun{std::move(*result), std::move(events)};
 }
 
-[[nodiscard]] util::JsonValue lifecycle_events_to_json(
+[[nodiscard]] support::JsonValue lifecycle_events_to_json(
     const std::vector<agent::AgentLifecycleEvent>& events) {
     LifecycleSerializer serializer;
-    util::JsonValue array{util::JsonValue::array_t{}};
+    support::JsonValue array{support::JsonValue::array_t{}};
     for (const auto& event : events) {
         array.get_array().push_back(serializer.event_to_json(event));
     }
     return array;
 }
 
-[[nodiscard]] util::JsonValue stream_calls_to_json(
+[[nodiscard]] support::JsonValue stream_calls_to_json(
     const std::vector<tests::RecordedStreamSimpleCall>& calls) {
-    util::JsonValue array{util::JsonValue::array_t{}};
+    support::JsonValue array{support::JsonValue::array_t{}};
     for (std::size_t index = 0; index < calls.size(); ++index) {
         const auto& call = calls[index];
         auto object = options_to_json(call.options, call.model);
         object.get_object().emplace(
-            "turn", util::JsonValue(static_cast<int>(index + 1)));
+            "turn", support::JsonValue(static_cast<int>(index + 1)));
         array.get_array().push_back(std::move(object));
     }
     return array;
@@ -377,7 +377,7 @@ LoopRun run_loop(
         ai::Tool{"read", "Read a file", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
         [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             agent::AsyncToolExecutionResult result;
             result.content.push_back(ai::text_content("tool says ok"));
             co_return result;
@@ -385,7 +385,7 @@ LoopRun run_loop(
 }
 
 [[nodiscard]] ai::AssistantMessage read_tool_call_message() {
-    auto args = util::read_json(R"({"path":"README.md"})");
+    auto args = support::read_json(R"({"path":"README.md"})");
     REQUIRE(args.has_value());
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::ToolUse;
@@ -480,7 +480,7 @@ TEST_CASE(
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [&prepare_calls](const agent::PrepareNextTurnContext&)
-                -> util::Expected<
+                -> support::Expected<
                     std::optional<agent::AgentLoopTurnUpdate>> {
                 ++prepare_calls;
                 if (prepare_calls == 1) {
@@ -507,14 +507,14 @@ TEST_CASE(
     auto subscription =
         subject.subscribe(
             [&](const agent::AgentLifecycleEvent& event)
-                -> util::ExpectedVoid {
+                -> support::ExpectedVoid {
                 events.push_back(event);
                 if (!steered &&
                     std::holds_alternative<agent::TurnEndEvent>(event)) {
                     steered = true;
                     return subject.steer(ai::user_text_message("steer me"));
                 }
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             });
     REQUIRE(subscription);
     REQUIRE(run_prompt(subject, "read the file"));
@@ -522,7 +522,7 @@ TEST_CASE(
     REQUIRE(steered);
     REQUIRE(runtime->calls.size() == 3);
 
-    util::JsonValue golden{util::JsonValue::object_t{}};
+    support::JsonValue golden{support::JsonValue::object_t{}};
     golden.get_object().emplace("events", lifecycle_events_to_json(events));
     golden.get_object().emplace(
         "streamCalls", stream_calls_to_json(runtime->calls));
@@ -598,7 +598,7 @@ TEST_CASE(
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-                -> util::Expected<
+                -> support::Expected<
                     std::optional<agent::AgentLoopTurnUpdate>> {
                 return agent::AgentLoopTurnUpdate{
                     .model = tests::make_model("gpt-basic"),
@@ -607,7 +607,7 @@ TEST_CASE(
     options.validate_turn_update =
         agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate&)
-                -> util::ExpectedVoid { return {}; });
+                -> support::ExpectedVoid { return {}; });
 
     agent::Agent subject(
         runtime->factory(),
@@ -635,16 +635,16 @@ namespace {
 [[nodiscard]] agent::Tool make_details_tool(
     std::string name,
     std::string result_text,
-    util::JsonValue contract) {
+    support::JsonValue contract) {
     return tests::make_fake_tool(
         ai::Tool{std::move(name), "Fake tool", std::move(contract)},
         agent::ToolConcurrency::Exclusive,
         [result_text = std::move(result_text)](
             agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             agent::AsyncToolExecutionResult result;
             result.content.push_back(ai::text_content(result_text));
-            result.details = util::JsonValue::object_t{
+            result.details = support::JsonValue::object_t{
                 {"note", "golden-details"},
             };
             co_return result;
@@ -654,19 +654,19 @@ namespace {
 /// Serialize one tool result into pi's `ToolResultMessage` wire shape:
 /// role, toolCallId, toolName, content, details (omitted when absent),
 /// isError, timestamp.
-[[nodiscard]] util::JsonValue tool_result_to_json(
+[[nodiscard]] support::JsonValue tool_result_to_json(
     const ai::ToolResultMessage& result) {
-    util::JsonValue object{util::JsonValue::object_t{}};
+    support::JsonValue object{support::JsonValue::object_t{}};
     auto& o = object.get_object();
-    o.emplace("role", util::JsonValue("toolResult"));
-    o.emplace("toolCallId", util::JsonValue(result.tool_call_id));
-    o.emplace("toolName", util::JsonValue(result.tool_name));
-    util::JsonValue content{util::JsonValue::array_t{}};
+    o.emplace("role", support::JsonValue("toolResult"));
+    o.emplace("toolCallId", support::JsonValue(result.tool_call_id));
+    o.emplace("toolName", support::JsonValue(result.tool_name));
+    support::JsonValue content{support::JsonValue::array_t{}};
     for (const auto& block : result.content) {
         if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-            util::JsonValue text_block{util::JsonValue::object_t{}};
-            text_block.get_object().emplace("type", util::JsonValue("text"));
-            text_block.get_object().emplace("text", util::JsonValue(text->text));
+            support::JsonValue text_block{support::JsonValue::object_t{}};
+            text_block.get_object().emplace("type", support::JsonValue("text"));
+            text_block.get_object().emplace("text", support::JsonValue(text->text));
             content.get_array().push_back(std::move(text_block));
         }
     }
@@ -674,8 +674,8 @@ namespace {
     if (result.details) {
         o.emplace("details", *result.details);
     }
-    o.emplace("isError", util::JsonValue(result.is_error));
-    o.emplace("timestamp", util::JsonValue(static_cast<int>(result.timestamp)));
+    o.emplace("isError", support::JsonValue(result.is_error));
+    o.emplace("timestamp", support::JsonValue(static_cast<int>(result.timestamp)));
     return object;
 }
 
@@ -688,12 +688,12 @@ TEST_CASE(
     // arguments fail JSON Schema validation, and a sibling success. The batch
     // result groups each call's ToolResultMessage with is_error, and the
     // failing call never takes down its siblings (ADR 0008).
-    const auto contract = util::JsonValue::object_t{
+    const auto contract = support::JsonValue::object_t{
         {"type", "object"},
-        {"properties", util::JsonValue::object_t{
-            {"path", util::JsonValue::object_t{{"type", "string"}}},
+        {"properties", support::JsonValue::object_t{
+            {"path", support::JsonValue::object_t{{"type", "string"}}},
         }},
-        {"required", util::JsonValue::array_t{"path"}},
+        {"required", support::JsonValue::array_t{"path"}},
         {"additionalProperties", false},
     };
 
@@ -706,11 +706,11 @@ TEST_CASE(
     agent::ToolCallExecutor executor{tools, agent::ToolCallExecutorOptions{}};
     auto calls = {
         ai::tool_call_content("call-ok", "read", R"({"path":"a.txt"})",
-            *util::read_json(R"({"path":"a.txt"})")),
+            *support::read_json(R"({"path":"a.txt"})")),
         ai::tool_call_content("call-bad", "read", R"({"path":{}})",
-            *util::read_json(R"({"path":{}})")),
+            *support::read_json(R"({"path":{}})")),
         ai::tool_call_content("call-sibling", "write", R"({"path":"b.txt"})",
-            *util::read_json(R"({"path":"b.txt"})")),
+            *support::read_json(R"({"path":"b.txt"})")),
     };
     ai::AssistantMessage assistant;
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
@@ -719,12 +719,12 @@ TEST_CASE(
     }
 
     boost::asio::io_context io;
-    std::optional<util::Expected<agent::ToolCallBatchResult>> result;
+    std::optional<support::Expected<agent::ToolCallBatchResult>> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
             agent::AgentEventSink sink{
-                [](const agent::AgentLifecycleEvent&) { return util::ExpectedVoid{}; }};
+                [](const agent::AgentLifecycleEvent&) { return support::ExpectedVoid{}; }};
             result = co_await executor.execute(
                 agent::ToolCallBatchRequest{assistant, {}},
                 sink);
@@ -737,8 +737,8 @@ TEST_CASE(
     const auto& batch = **result;
     REQUIRE(batch.results.size() == 3);
 
-    util::JsonValue golden{util::JsonValue::object_t{}};
-    util::JsonValue results{util::JsonValue::array_t{}};
+    support::JsonValue golden{support::JsonValue::object_t{}};
+    support::JsonValue results{support::JsonValue::array_t{}};
     for (const auto& tool_result : batch.results) {
         results.get_array().push_back(tool_result_to_json(tool_result));
     }
@@ -769,7 +769,7 @@ namespace {
         concurrency,
         [delay, result_text = std::move(result_text)](
             agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             if (delay.count() > 0) {
                 auto timer = boost::asio::steady_timer(
                     co_await boost::asio::this_coro::executor,
@@ -789,78 +789,78 @@ namespace {
 struct SchedulingSerializer {
     int turn{0};
 
-    [[nodiscard]] util::JsonValue event_to_json(
+    [[nodiscard]] support::JsonValue event_to_json(
         const agent::AgentLifecycleEvent& event) {
-        util::JsonValue object{util::JsonValue::object_t{}};
+        support::JsonValue object{support::JsonValue::object_t{}};
         auto& o = object.get_object();
         if (std::holds_alternative<agent::AgentStartEvent>(event)) {
-            o.emplace("type", util::JsonValue("agent_start"));
+            o.emplace("type", support::JsonValue("agent_start"));
         } else if (const auto* end =
                        std::get_if<agent::AgentEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("agent_end"));
+            o.emplace("type", support::JsonValue("agent_end"));
             o.emplace(
                 "messageCount",
-                util::JsonValue(static_cast<int>(end->messages.size())));
+                support::JsonValue(static_cast<int>(end->messages.size())));
         } else if (std::holds_alternative<agent::TurnStartEvent>(event)) {
             ++turn;
-            o.emplace("type", util::JsonValue("turn_start"));
-            o.emplace("turn", util::JsonValue(turn));
+            o.emplace("type", support::JsonValue("turn_start"));
+            o.emplace("turn", support::JsonValue(turn));
         } else if (const auto* end =
                        std::get_if<agent::TurnEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("turn_end"));
+            o.emplace("type", support::JsonValue("turn_end"));
             const auto* assistant =
                 std::get_if<ai::AssistantMessage>(&end->message);
             REQUIRE(assistant != nullptr);
             o.emplace(
                 "stopReason",
-                util::JsonValue(ai::stop_reason_to_string(
+                support::JsonValue(ai::stop_reason_to_string(
                     assistant->stop_reason)));
             o.emplace(
                 "toolResults",
-                util::JsonValue(static_cast<int>(end->tool_results.size())));
+                support::JsonValue(static_cast<int>(end->tool_results.size())));
         } else if (const auto* start =
                        std::get_if<agent::MessageStartEvent>(&event)) {
-            o.emplace("type", util::JsonValue("message_start"));
-            o.emplace("role", util::JsonValue(message_role(start->message)));
+            o.emplace("type", support::JsonValue("message_start"));
+            o.emplace("role", support::JsonValue(message_role(start->message)));
             if (const auto* result =
                     std::get_if<ai::ToolResultMessage>(&start->message)) {
-                o.emplace("toolCallId", util::JsonValue(result->tool_call_id));
+                o.emplace("toolCallId", support::JsonValue(result->tool_call_id));
             }
         } else if (const auto* update =
                        std::get_if<agent::MessageUpdateEvent>(&event)) {
-            o.emplace("type", util::JsonValue("message_update"));
+            o.emplace("type", support::JsonValue("message_update"));
             o.emplace(
                 "event",
-                util::JsonValue(stream_event_name(update->assistant_event)));
+                support::JsonValue(stream_event_name(update->assistant_event)));
         } else if (const auto* end =
                        std::get_if<agent::MessageEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("message_end"));
-            o.emplace("role", util::JsonValue(message_role(end->message)));
+            o.emplace("type", support::JsonValue("message_end"));
+            o.emplace("role", support::JsonValue(message_role(end->message)));
             if (const auto* result =
                     std::get_if<ai::ToolResultMessage>(&end->message)) {
-                o.emplace("toolCallId", util::JsonValue(result->tool_call_id));
+                o.emplace("toolCallId", support::JsonValue(result->tool_call_id));
             }
         } else if (const auto* start =
                        std::get_if<agent::ToolExecutionStartEvent>(&event)) {
-            o.emplace("type", util::JsonValue("tool_execution_start"));
-            o.emplace("toolCallId", util::JsonValue(start->tool_call_id));
-            o.emplace("toolName", util::JsonValue(start->tool_name));
+            o.emplace("type", support::JsonValue("tool_execution_start"));
+            o.emplace("toolCallId", support::JsonValue(start->tool_call_id));
+            o.emplace("toolName", support::JsonValue(start->tool_name));
             o.emplace("args", start->args);
         } else if (const auto* end =
                        std::get_if<agent::ToolExecutionEndEvent>(&event)) {
-            o.emplace("type", util::JsonValue("tool_execution_end"));
-            o.emplace("toolCallId", util::JsonValue(end->tool_call_id));
-            o.emplace("toolName", util::JsonValue(end->tool_name));
-            o.emplace("isError", util::JsonValue(end->is_error));
+            o.emplace("type", support::JsonValue("tool_execution_end"));
+            o.emplace("toolCallId", support::JsonValue(end->tool_call_id));
+            o.emplace("toolName", support::JsonValue(end->tool_name));
+            o.emplace("isError", support::JsonValue(end->is_error));
         }
         return object;
     }
 };
 
-[[nodiscard]] util::JsonValue scheduling_events_to_json(
+[[nodiscard]] support::JsonValue scheduling_events_to_json(
     const std::vector<agent::AgentLifecycleEvent>& events) {
     SchedulingSerializer serializer;
-    util::JsonValue array{util::JsonValue::array_t{}};
+    support::JsonValue array{support::JsonValue::array_t{}};
     for (const auto& event : events) {
         array.get_array().push_back(serializer.event_to_json(event));
     }
@@ -875,7 +875,7 @@ struct SchedulingSerializer {
     for (const auto& [id, name] : calls) {
         (void)name;
         message.content.push_back(ai::tool_call_content(
-            id, name, R"({"x":1})", util::JsonValue::object_t{{{"x", 1}}}));
+            id, name, R"({"x":1})", support::JsonValue::object_t{{{"x", 1}}}));
     }
     return message;
 }
@@ -920,7 +920,7 @@ TEST_CASE(
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext& context)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         const bool terminate =
             context.tool_call.name == "gamma" ||
             context.tool_call.name == "delta";

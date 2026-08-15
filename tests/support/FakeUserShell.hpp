@@ -24,7 +24,7 @@ public:
     struct Execution {
         std::vector<std::string> updates;
         coding_agent::runtime::UserShellResult result;
-        std::optional<util::Error> infrastructure_failure;
+        std::optional<support::Error> infrastructure_failure;
         bool gated{false};
     };
 
@@ -47,12 +47,12 @@ public:
              command = std::move(command),
              update_sink = std::move(update_sink),
              stop_token]() mutable
-            -> boost::asio::awaitable<util::Expected<coding_agent::runtime::UserShellResult>> {
+            -> boost::asio::awaitable<support::Expected<coding_agent::runtime::UserShellResult>> {
                 commands.push_back(std::move(command));
                 const auto index = next_execution_++;
                 if (index >= executions_.size()) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Process,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Process,
                         "fake User Shell has no queued execution"));
                 }
 

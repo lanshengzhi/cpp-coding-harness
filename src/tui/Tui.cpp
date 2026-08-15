@@ -7,7 +7,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -35,15 +35,15 @@ namespace {
 
 constexpr std::size_t kInputDecodeChunkBytes = 4096;
 
-[[nodiscard]] std::string describe_error(const util::Error& error) {
+[[nodiscard]] std::string describe_error(const support::Error& error) {
     if (error.detail.empty()) return error.message;
     return std::format("{} [{}]", error.message, error.detail);
 }
 
-[[nodiscard]] util::Error startup_rollback_error(
-    const util::Error& startup,
-    const util::Error& rollback) {
-    return util::make_error(
+[[nodiscard]] support::Error startup_rollback_error(
+    const support::Error& startup,
+    const support::Error& rollback) {
+    return support::make_error(
         startup.code,
         "TUI startup failed and terminal restoration was incomplete",
         std::format(
@@ -53,7 +53,7 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
 }
 
 /// Write a single full-width line to the terminal at the given row.
-[[nodiscard]] util::ExpectedVoid write_line(
+[[nodiscard]] support::ExpectedVoid write_line(
     Terminal& terminal,
     std::size_t row,
     std::string_view line) {
@@ -64,7 +64,7 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
 }
 
 /// Clear a row of the terminal by writing spaces at the full terminal width.
-[[nodiscard]] util::ExpectedVoid clear_row(Terminal& terminal, std::size_t row, std::size_t columns) {
+[[nodiscard]] support::ExpectedVoid clear_row(Terminal& terminal, std::size_t row, std::size_t columns) {
     if (auto result = terminal.set_cursor(CursorPosition{.column = 0, .row = row}); !result) {
         return std::unexpected(result.error());
     }
@@ -72,7 +72,7 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
     return terminal.write(std::string(columns, ' '));
 }
 
-[[nodiscard]] util::Expected<std::string> line_suffix_from_column(
+[[nodiscard]] support::Expected<std::string> line_suffix_from_column(
     std::string_view line,
     std::size_t column) {
     auto tokens = detail::tokenize_terminal_output(line);
@@ -106,7 +106,7 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
     return suffix;
 }
 
-[[nodiscard]] util::Expected<std::string> replace_line_region(
+[[nodiscard]] support::Expected<std::string> replace_line_region(
     std::string_view line,
     std::string_view replacement,
     std::size_t column,
@@ -149,16 +149,16 @@ Tui::~Tui() {
     (void)stop();
 }
 
-util::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
+support::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
     std::lock_guard lock(mutex_);
     return detail::attach_child(children_, std::move(component), "");
 }
 
-util::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
+support::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
     std::lock_guard lock(mutex_);
     if (!overlay) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI cannot attach a null Overlay"));
     }
     auto& ref = *overlay;
@@ -166,12 +166,12 @@ util::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr
     return ref;
 }
 
-util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
+support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
     std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!owns_overlay(overlay)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Overlay is not attached to this TUI"));
     }
 
@@ -183,8 +183,8 @@ util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
     const auto before = overlays_.size();
     std::erase_if(overlays_, [overlay](const auto& ptr) { return ptr.get() == overlay; });
     if (overlays_.size() == before) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Overlay not found in TUI"));
     }
 
@@ -195,12 +195,12 @@ util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
     return {};
 }
 
-util::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
+support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
     std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!owns_overlay(overlay)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Overlay is not attached to this TUI"));
     }
 
@@ -218,12 +218,12 @@ util::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
     return {};
 }
 
-util::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
+support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
     std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!owns_overlay(overlay)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Overlay is not attached to this TUI"));
     }
 
@@ -232,7 +232,7 @@ util::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
     return {};
 }
 
-util::ExpectedVoid Tui::start() {
+support::ExpectedVoid Tui::start() {
     std::unique_lock lock(mutex_);
     if (started_) {
         return {};
@@ -263,7 +263,7 @@ util::ExpectedVoid Tui::start() {
     return {};
 }
 
-util::ExpectedVoid Tui::stop() {
+support::ExpectedVoid Tui::stop() {
     std::unique_lock lock(mutex_);
     if (!started_) return {};
 
@@ -292,11 +292,11 @@ util::ExpectedVoid Tui::stop() {
     return {};
 }
 
-util::ExpectedVoid Tui::clear_screen() {
+support::ExpectedVoid Tui::clear_screen() {
     std::lock_guard lock(mutex_);
     if (!started_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI must be started before clearing the screen"));
     }
     if (auto removed = remove_active_images(); !removed) {
@@ -312,18 +312,18 @@ util::ExpectedVoid Tui::clear_screen() {
     return {};
 }
 
-util::ExpectedVoid Tui::render() {
+support::ExpectedVoid Tui::render() {
     std::lock_guard lock(mutex_);
     if (!started_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI must be started before rendering"));
     }
 
     const auto dimensions = terminal_.dimensions();
     if (dimensions.columns == 0 || dimensions.rows == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI requires positive terminal dimensions"));
     }
 
@@ -371,7 +371,7 @@ util::ExpectedVoid Tui::render() {
     // Write the full composed buffer with pi's line-flow ordering (rows at or
     // past the visible bottom advance the terminal's scrollback through the
     // absolute-cursor seam).
-    auto write_full_buffer = [&]() -> util::ExpectedVoid {
+    auto write_full_buffer = [&]() -> support::ExpectedVoid {
         for (std::size_t row = 0; row < new_lines.size(); ++row) {
             if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
                 return std::unexpected(result.error());
@@ -383,7 +383,7 @@ util::ExpectedVoid Tui::render() {
     // pi fullRender(true): drop all image placements, clear screen, home, and
     // clear scrollback (`\x1b[2J\x1b[H\x1b[3J`), then reflow the full buffer so
     // the terminal's scroll history starts clean.
-    auto clear_and_rewrite = [&]() -> util::ExpectedVoid {
+    auto clear_and_rewrite = [&]() -> support::ExpectedVoid {
         if (auto result = remove_active_images(); !result) {
             return std::unexpected(result.error());
         }
@@ -394,7 +394,7 @@ util::ExpectedVoid Tui::render() {
         return write_full_buffer();
     };
 
-    auto render_result = [&]() -> util::ExpectedVoid {
+    auto render_result = [&]() -> support::ExpectedVoid {
         if (first_render) {
             // pi fullRender(false): write the full buffer without clearing
             // ("assumes clean screen"), so startup content stays visible until
@@ -542,7 +542,7 @@ util::ExpectedVoid Tui::render() {
     return {};
 }
 
-util::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions) {
+support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions) {
     RenderResult output;
     for (const auto& child : children_) {
         if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child.get())) {
@@ -631,7 +631,7 @@ RenderResult Tui::materialize_images(
     return output;
 }
 
-util::ExpectedVoid Tui::composite_overlays(
+support::ExpectedVoid Tui::composite_overlays(
     TerminalDimensions dimensions,
     const TerminalCapabilities& capabilities,
     RenderResult& output) {
@@ -730,7 +730,7 @@ util::ExpectedVoid Tui::composite_overlays(
     return {};
 }
 
-util::ExpectedVoid Tui::remove_active_images() {
+support::ExpectedVoid Tui::remove_active_images() {
     while (!active_images_.empty()) {
         const auto image = active_images_.back();
         if (auto removed = terminal_.remove_image(image.handle, image.region); !removed) {
@@ -741,7 +741,7 @@ util::ExpectedVoid Tui::remove_active_images() {
     return {};
 }
 
-util::ExpectedVoid Tui::remove_images_intersecting(const CellRegion& region) {
+support::ExpectedVoid Tui::remove_images_intersecting(const CellRegion& region) {
     std::size_t index = 0;
     while (index < active_images_.size()) {
         const auto& image = active_images_[index];
@@ -757,7 +757,7 @@ util::ExpectedVoid Tui::remove_images_intersecting(const CellRegion& region) {
     return {};
 }
 
-util::ExpectedVoid Tui::remove_stale_images(
+support::ExpectedVoid Tui::remove_stale_images(
     const std::vector<InlineImageRenderRegion>& desired_images) {
     std::size_t index = 0;
     while (index < active_images_.size()) {
@@ -784,7 +784,7 @@ util::ExpectedVoid Tui::remove_stale_images(
     return {};
 }
 
-util::ExpectedVoid Tui::place_images(
+support::ExpectedVoid Tui::place_images(
     const std::vector<InlineImageRenderRegion>& desired_images) {
     for (const auto& image : desired_images) {
         const auto active = std::find_if(
@@ -832,7 +832,7 @@ util::ExpectedVoid Tui::place_images(
     return {};
 }
 
-util::ExpectedVoid Tui::set_focus(Component* component) {
+support::ExpectedVoid Tui::set_focus(Component* component) {
     std::lock_guard lock(mutex_);
     if (component != nullptr && !owns(component)) {
         // Check if component is inside an overlay
@@ -844,14 +844,14 @@ util::ExpectedVoid Tui::set_focus(Component* component) {
             }
         }
         if (!found_in_overlay) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "TUI focus target is not attached to this root"));
         }
     }
     if (component != nullptr && dynamic_cast<Focusable*>(component) == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI focus target does not participate in focus"));
     }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ai/providers/WebSocketTransport.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -28,7 +28,7 @@ public:
     struct Session {
         std::vector<std::string> sent_frames;
         std::vector<std::string> frames;
-        std::vector<util::Error> receive_failures;
+        std::vector<support::Error> receive_failures;
         bool closed{false};
         std::size_t close_count{0};
         /// Invoked synchronously on every send; enqueues frames into `frames`.
@@ -40,16 +40,16 @@ public:
         std::shared_ptr<Session> session)
         : request_(std::move(request)), session_(std::move(session)) {}
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> async_send(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> async_send(
         std::string_view text) override {
         session_->sent_frames.push_back(std::string{text});
         if (session_->on_send) {
             session_->on_send(*this, text);
         }
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> async_receive() override {
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>> async_receive() override {
         if (!session_->frames.empty()) {
             auto frame = std::move(session_->frames.front());
             session_->frames.erase(session_->frames.begin());
@@ -73,8 +73,8 @@ public:
             if (session_->closed) {
                 co_return std::optional<std::string>{};
             }
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Timeout,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Timeout,
                 "WebSocket idle timeout after " +
                     std::to_string(request_.idle_timeout->count()) + "ms"));
         }
@@ -106,17 +106,17 @@ private:
 class ScriptedWebSocketTransport final : public ai::providers::WebSocketTransport {
 public:
     struct ConnectScript {
-        std::optional<util::Error> failure{std::nullopt};
+        std::optional<support::Error> failure{std::nullopt};
         std::shared_ptr<ScriptedWebSocket::Session> session{nullptr};
     };
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::shared_ptr<ai::providers::WebSocket>>> async_connect(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::shared_ptr<ai::providers::WebSocket>>> async_connect(
         const ai::providers::WebSocketConnectRequest& request) override {
         requests.push_back(request);
         if (on_connect) {
             on_connect(request);
         }
-        std::optional<util::Error> failure;
+        std::optional<support::Error> failure;
         std::shared_ptr<ScriptedWebSocket::Session> session;
         if (connect_index < connect_scripts.size()) {
             const auto script = connect_scripts[connect_index++];

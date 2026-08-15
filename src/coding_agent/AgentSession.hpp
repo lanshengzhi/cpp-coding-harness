@@ -15,8 +15,8 @@
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFork.hpp"
 #include "coding_agent/runtime/SessionStats.hpp"
@@ -131,7 +131,7 @@ struct CompactionResult {
     /// Usage from the summarization call(s), when reported.
     std::optional<ai::Usage> usage{std::nullopt};
     /// pi `CompactionDetails`: `{readFiles, modifiedFiles}`.
-    std::optional<util::JsonValue> details{std::nullopt};
+    std::optional<support::JsonValue> details{std::nullopt};
 };
 
 // ── EventSubscription ────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ public:
     /// completes normally; its final Assistant Message is delivered through the
     /// ordinary lifecycle and retained in state. Closed, busy, or other
     /// agent-execution failures also return errors.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> prompt(
         std::string text,
         PromptOptions options = {});
 
@@ -252,7 +252,7 @@ public:
     /// internally synchronized: do not call prompt_blocking on one thread while
     /// another thread drives the same session or any session sharing the same
     /// runtime.
-    [[nodiscard]] util::ExpectedVoid prompt_blocking(
+    [[nodiscard]] support::ExpectedVoid prompt_blocking(
         std::string text,
         PromptOptions options = {});
 
@@ -260,30 +260,30 @@ public:
 
     /// Queue input after the current assistant turn. Admission is synchronous
     /// and rejects before mutation when the Agent-owned queue is full.
-    [[nodiscard]] util::ExpectedVoid steer(
+    [[nodiscard]] support::ExpectedVoid steer(
         std::string text,
         PromptOptions options = {});
 
     /// Queue input only when the Agent would otherwise stop. Admission is
     /// synchronous and rejects before mutation when the Agent-owned queue is full.
-    [[nodiscard]] util::ExpectedVoid follow_up(
+    [[nodiscard]] support::ExpectedVoid follow_up(
         std::string text,
         PromptOptions options = {});
 
     /// Change the pi-compatible drain policy for steering input.
-    [[nodiscard]] util::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
+    [[nodiscard]] support::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
 
     /// Change the pi-compatible drain policy for follow-up input.
-    [[nodiscard]] util::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
+    [[nodiscard]] support::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
 
     /// Remove all pending steering input.
-    [[nodiscard]] util::ExpectedVoid clear_steering_queue();
+    [[nodiscard]] support::ExpectedVoid clear_steering_queue();
 
     /// Remove all pending follow-up input.
-    [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
+    [[nodiscard]] support::ExpectedVoid clear_follow_up_queue();
 
     /// Remove all pending steering and follow-up input.
-    [[nodiscard]] util::ExpectedVoid clear_input_queues();
+    [[nodiscard]] support::ExpectedVoid clear_input_queues();
 
     // ── Model / thinking state ────────────────────────────────────────────
 
@@ -294,7 +294,7 @@ public:
     /// resume restores the level exactly like pi (T04). Returns the effective
     /// (clamped) level, or an error for an invalid request or a persistence
     /// failure.
-    [[nodiscard]] util::Expected<std::string> set_thinking_level(
+    [[nodiscard]] support::Expected<std::string> set_thinking_level(
         std::string_view level);
 
     /// Runtime model switch (pi `AgentSession.setModel`): validates that the
@@ -304,11 +304,11 @@ public:
     /// re-clamps the thinking level against the new model. Same impl_ copying
     /// contract as prompt(): the returned lazy awaitable survives moving or
     /// destroying the public handle before its first co_await.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> set_model(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(
         ai::Model model);
     /// Blocking facade for tests and one-shot hosts; drives the async path on
     /// a temporary executor (same contract as prompt_blocking).
-    [[nodiscard]] util::ExpectedVoid set_model_blocking(ai::Model model);
+    [[nodiscard]] support::ExpectedVoid set_model_blocking(ai::Model model);
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`): when the session
     /// carries scoped models, cycle within the auth-filtered scoped set
@@ -316,11 +316,11 @@ public:
     /// explicit thinking level overrides the current preference); otherwise
     /// cycle within the available models. A set with zero or one eligible
     /// model yields `std::nullopt`. Same impl_ copying contract as prompt().
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
     cycle_model(std::string direction);
     /// Blocking facade for tests and one-shot hosts; drives the async path on
     /// a temporary executor (same contract as prompt_blocking).
-    [[nodiscard]] util::Expected<std::optional<ModelCycleResult>> cycle_model_blocking(
+    [[nodiscard]] support::Expected<std::optional<ModelCycleResult>> cycle_model_blocking(
         std::string direction);
 
     /// Cycle the thinking level through the active model's supported set (pi
@@ -328,7 +328,7 @@ public:
     /// one, wrapping. `std::nullopt` when the active model supports no
     /// thinking. Applies `set_thinking_level` (entry + settings default on a
     /// real change).
-    [[nodiscard]] util::Expected<std::optional<std::string>> cycle_thinking_level();
+    [[nodiscard]] support::Expected<std::optional<std::string>> cycle_thinking_level();
 
     /// Replace the session's scoped-model set (pi `AgentSession.setScopedModels`;
     /// session-only, never persisted). An empty set restores un-scoped cycling
@@ -357,7 +357,7 @@ public:
     /// saved yet. Wait for the first assistant response before cloning or
     /// forking it.", "Failed to create forked session", and the G3 "Cannot
     /// fork: ..." source-file strings.
-    [[nodiscard]] util::Expected<runtime::ForkPreparation> prepare_fork(
+    [[nodiscard]] support::Expected<runtime::ForkPreparation> prepare_fork(
         std::string_view entry_id,
         runtime::ForkPosition position) const;
 
@@ -368,7 +368,7 @@ public:
     /// Returns immediately when no run is active; User Bash and manual
     /// compaction are outside the Agent run and never awaited. The settle
     /// wait itself cannot fail, so the expected alternative stays empty.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> wait_for_idle();
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> wait_for_idle();
 
     /// The session tree topology for the tree selector (pi
     /// `sessionManager.getTree()` + `getLeafId()`): root nodes with resolved
@@ -376,7 +376,7 @@ public:
     /// file's entries; in-memory sessions derive a linear tree from the live
     /// context with synthetic ids that only the tree surface understands
     /// (the C++ in-memory store keeps no entries, #409).
-    [[nodiscard]] util::Expected<SessionTreeTopology> session_tree() const;
+    [[nodiscard]] support::Expected<SessionTreeTopology> session_tree() const;
 
     /// pi `AgentSession.navigateTree` subset: switch the active path to
     /// `target_id` with the leaf/active-path semantics of the pi v3 Session
@@ -390,14 +390,14 @@ public:
     /// render unchanged. Rejects an active Agent run with pi's verbatim
     /// error; label attachment is the separate `set_entry_label` surface
     /// (editLabel).
-    [[nodiscard]] util::Expected<TreeNavigationResult> navigate_tree(
+    [[nodiscard]] support::Expected<TreeNavigationResult> navigate_tree(
         std::string_view target_id);
 
     /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
     /// append a `label` entry targeting `entry_id` under the current leaf.
     /// Persisted sessions write the entry; in-memory sessions keep no entry
     /// surface and the change is dropped like every in-memory store write.
-    [[nodiscard]] util::ExpectedVoid set_entry_label(
+    [[nodiscard]] support::ExpectedVoid set_entry_label(
         std::string_view entry_id,
         std::optional<std::string> label);
 
@@ -412,7 +412,7 @@ public:
     /// compaction is already in flight, no model is selected, the session has
     /// nothing to compact (or was already compacted), or summarization fails
     /// or is aborted.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<CompactionResult>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>>
     compact(std::string custom_instructions = {});
 
     // ── Event subscriptions ──────────────────────────────────────────────
@@ -421,7 +421,7 @@ public:
     /// event emitted during subsequent prompts. Returns a handle; events
     /// stop when the handle is destroyed or unsubscribed.
     /// Returns an error if the session is closed.
-    [[nodiscard]] util::Expected<EventSubscription> subscribe(
+    [[nodiscard]] support::Expected<EventSubscription> subscribe(
         agent::AgentEventSink sink);
 
     /// Subscribe to session-assembly events (pi `AgentSessionEvent`): the
@@ -429,7 +429,7 @@ public:
     /// is called for every session event during subsequent prompts. Returns a
     /// handle; events stop when the handle is destroyed or unsubscribed.
     /// Returns an error if the session is closed.
-    [[nodiscard]] util::Expected<SessionEventSubscription> subscribe_session(
+    [[nodiscard]] support::Expected<SessionEventSubscription> subscribe_session(
         AgentSessionEventSink sink);
 
     // ── State accessors ──────────────────────────────────────────────────
@@ -459,7 +459,7 @@ public:
     /// current leaf. In-memory sessions keep no entry surface and the change
     /// is dropped like every in-memory store write. Returns the stored
     /// (sanitized) name.
-    [[nodiscard]] util::Expected<std::optional<std::string>> set_session_name(
+    [[nodiscard]] support::Expected<std::optional<std::string>> set_session_name(
         std::string name);
 
     /// pi `getSessionStats` subset: per-role message counts and usage/token
@@ -524,7 +524,7 @@ public:
     /// `is_streaming()`/`is_compacting()`; User Bash does not block reload.
     /// Same `impl_` copying contract as `prompt()`.
     [[nodiscard]] boost::asio::awaitable<
-        util::Expected<runtime::AgentSessionReloadResult>>
+        support::Expected<runtime::AgentSessionReloadResult>>
     reload();
 
     /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
@@ -557,12 +557,12 @@ public:
     [[nodiscard]] const std::vector<ResourceDiagnostic>& theme_diagnostics() const;
 
 private:
-    friend util::Expected<CreateAgentSessionResult> create_agent_session(
+    friend support::Expected<CreateAgentSessionResult> create_agent_session(
         runtime::AgentSessionCreationRequest request);
-    friend util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    friend support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
         runtime::AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models);
-    friend util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    friend support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
         runtime::AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models,
         std::unique_ptr<runtime::AsyncUserShell> user_shell);
@@ -585,19 +585,19 @@ private:
 /// diagnostics.
 ///
 /// Does not write to stdout/stderr or read RPC stdin.
-[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session(
+[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request);
 
 /// Private test-support wrapper around SessionFactory's Models assembly seam
 /// (the deterministic provider surface the deleted fake-provider CLI flag
 /// used to drive).
-[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models);
 
 /// Private test-support wrapper around SessionFactory's Models assembly seam
 /// with an injected Session-owned User Shell.
-[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models,
     std::unique_ptr<runtime::AsyncUserShell> user_shell);

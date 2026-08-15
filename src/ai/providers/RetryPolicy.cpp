@@ -91,7 +91,7 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
     return static_cast<std::int64_t>(seconds) * 1000;
 }
 
-[[nodiscard]] util::Expected<std::uint64_t> validate_delay(
+[[nodiscard]] support::Expected<std::uint64_t> validate_delay(
     double delay_ms,
     std::optional<std::uint64_t> requested_max,
     std::string_view message) {
@@ -101,8 +101,8 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
         : static_cast<std::uint64_t>(non_negative);
     const auto maximum = requested_max.value_or(kDefaultMaxRetryDelayMs);
     if (maximum > 0 && delay > maximum) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Stream,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Stream,
             "Server requested retry delay above configured maximum",
             std::string{message}));
     }
@@ -130,7 +130,7 @@ bool is_retryable_provider_failure(const ProviderFailure& failure) {
            *failure.status == 429 || *failure.status >= 500;
 }
 
-util::Expected<std::uint64_t> provider_retry_delay_ms(
+support::Expected<std::uint64_t> provider_retry_delay_ms(
     const ProviderFailure& failure,
     std::uint32_t retry_index,
     std::optional<std::uint64_t> max_retry_delay_ms,

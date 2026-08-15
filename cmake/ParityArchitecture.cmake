@@ -415,12 +415,11 @@ endfunction()
 # fixtures (emit the ownership index, scan direct includes, validate against
 # the strict manifest) but reports policy violations instead of failing
 # configuration. The per-Owner contraction tickets (#456, #460, #463, #468)
-# resolved the split-target and reverse-edge violations; the only known
-# migration violation class left in the production graph is:
+# resolved the split-target and reverse-edge violations, and #469 removed the
+# legacy `cch_util` target, the `cch/util` forwarding root, and the global
+# public header root, so the production graph is expected to audit clean.
 #
-#   * the legacy `cch_util` target and `cch/util` header root (#469).
-#
-# Reporting keeps those violations visible under their stable rule IDs without
+# Reporting keeps any regression visible under its stable rule ID without
 # blocking the build, while incomplete or missing evidence still fails loudly
 # so no violation can disappear through a skipped declaration. Do not extend
 # this function or depend on its non-blocking behavior: #470 replaces it with

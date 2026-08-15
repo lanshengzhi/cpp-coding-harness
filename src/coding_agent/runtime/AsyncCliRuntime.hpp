@@ -5,7 +5,7 @@
 #include "cli/SessionFamily.hpp"
 
 #include <cch/ai/Models.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <functional>
 #include <iosfwd>

@@ -4,7 +4,7 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -21,7 +21,7 @@ public:
     explicit FocusableInputComponent(std::string label = "x")
         : label_(std::move(label)) {}
 
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         auto line = label_;
         if (line.size() < width) line.append(width - line.size(), ' ');
         return cch::tui::RenderResult{.lines = {std::move(line)}};

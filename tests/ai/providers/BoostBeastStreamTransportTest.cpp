@@ -13,15 +13,15 @@ using namespace cch;
 
 namespace {
 
-util::Expected<ai::providers::StreamResponse> run_stream(ai::providers::StreamRequest request) {
+support::Expected<ai::providers::StreamResponse> run_stream(ai::providers::StreamRequest request) {
     boost::asio::io_context io;
-    std::optional<util::Expected<ai::providers::StreamResponse>> result;
+    std::optional<support::Expected<ai::providers::StreamResponse>> result;
 
     ai::providers::BoostBeastStreamTransport transport;
     boost::asio::co_spawn(
         io,
         [&transport, request = std::move(request), &result]() mutable -> boost::asio::awaitable<void> {
-            result = co_await transport.async_stream(request, [](std::string_view) { return util::ExpectedVoid{}; });
+            result = co_await transport.async_stream(request, [](std::string_view) { return support::ExpectedVoid{}; });
             co_return;
         },
         boost::asio::detached);
@@ -40,7 +40,7 @@ TEST_CASE("stream transport rejects unsupported URLs before network", "[ai][prov
     auto response = run_stream(std::move(request));
 
     REQUIRE_FALSE(response);
-    CHECK(response.error().code == util::ErrorCode::Validation);
+    CHECK(response.error().code == support::ErrorCode::Validation);
     CHECK(response.error().detail.find("https") != std::string::npos);
 }
 
@@ -51,7 +51,7 @@ TEST_CASE("stream transport rejects missing host before network", "[ai][provider
     auto response = run_stream(std::move(request));
 
     REQUIRE_FALSE(response);
-    CHECK(response.error().code == util::ErrorCode::Validation);
+    CHECK(response.error().code == support::ErrorCode::Validation);
     CHECK(response.error().detail.find("host") != std::string::npos);
 }
 
@@ -68,7 +68,7 @@ TEST_CASE(
     auto response = run_stream(std::move(request));
 
     REQUIRE_FALSE(response);
-    CHECK(response.error().code == util::ErrorCode::Cancelled);
+    CHECK(response.error().code == support::ErrorCode::Cancelled);
     CHECK(response.error().message == "stream transport cancelled");
 }
 
@@ -80,6 +80,6 @@ TEST_CASE("stream transport rejects unsupported HTTP methods before network", "[
     auto response = run_stream(std::move(request));
 
     REQUIRE_FALSE(response);
-    CHECK(response.error().code == util::ErrorCode::Validation);
+    CHECK(response.error().code == support::ErrorCode::Validation);
     CHECK(response.error().message == "unsupported HTTP method");
 }

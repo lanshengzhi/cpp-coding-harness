@@ -6,7 +6,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/tui/Component.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -71,7 +71,7 @@ public:
     /// `setOutputPad` + `rebuildChatFromMessages`).
     void set_output_pad(std::size_t output_pad);
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

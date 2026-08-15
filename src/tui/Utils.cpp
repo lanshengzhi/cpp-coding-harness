@@ -2,7 +2,7 @@
 
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <utf8proc.h>
 
 #include <algorithm>
@@ -37,7 +37,7 @@ std::size_t visible_width(std::string_view text) {
     return std::max(maximum, current);
 }
 
-util::Expected<std::vector<std::string>> wrap_text(std::string_view text, std::size_t width) {
+support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std::size_t width) {
     if (width == 0) {
         return std::unexpected(detail::invalid_terminal_text("Wrap width must be positive"));
     }
@@ -172,7 +172,7 @@ util::Expected<std::vector<std::string>> wrap_text(std::string_view text, std::s
     return lines;
 }
 
-util::Expected<std::string> truncate_text(
+support::Expected<std::string> truncate_text(
     std::string_view text,
     std::size_t max_width,
     std::string_view ellipsis,
@@ -231,7 +231,7 @@ util::Expected<std::string> truncate_text(
     return result;
 }
 
-util::Expected<std::string> slice_by_column(
+support::Expected<std::string> slice_by_column(
     std::string_view line,
     std::size_t start_col,
     std::size_t length,

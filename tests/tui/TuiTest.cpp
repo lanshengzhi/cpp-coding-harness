@@ -4,7 +4,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -21,7 +21,7 @@ namespace {
 
 class OverwideComponent final : public cch::tui::Component {
 public:
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {"too wide"}};
     }
 
@@ -30,16 +30,16 @@ public:
 
 class PartialStartupFailureTerminal final : public cch::tui::Terminal {
 public:
-    [[nodiscard]] cch::util::ExpectedVoid start(
+    [[nodiscard]] cch::support::ExpectedVoid start(
         cch::tui::TerminalInputSink,
         cch::tui::TerminalResizeSink) override {
         modes_.started = true;
         return {};
     }
 
-    [[nodiscard]] cch::util::ExpectedVoid stop() override {
-        return std::unexpected(cch::util::make_error(
-            cch::util::ErrorCode::Process,
+    [[nodiscard]] cch::support::ExpectedVoid stop() override {
+        return std::unexpected(cch::support::make_error(
+            cch::support::ErrorCode::Process,
             "terminal restoration failed",
             "stop detail"));
     }
@@ -47,32 +47,32 @@ public:
     [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return {}; }
     [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override { return {}; }
     [[nodiscard]] cch::tui::TerminalModeState modes() const override { return modes_; }
-    [[nodiscard]] cch::util::ExpectedVoid clear_screen() override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid write(std::string_view) override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid set_cursor_visible(bool visible) override {
+    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid write(std::string_view) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool visible) override {
         if (!visible) {
-            return std::unexpected(cch::util::make_error(
-                cch::util::ErrorCode::Process,
+            return std::unexpected(cch::support::make_error(
+                cch::support::ErrorCode::Process,
                 "cursor hiding failed",
                 "cursor detail"));
         }
         return {};
     }
-    [[nodiscard]] cch::util::Expected<cch::tui::TerminalImageHandle> place_image(
+    [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
         const cch::tui::TerminalImage&) override {
         return cch::tui::TerminalImageHandle{};
     }
-    [[nodiscard]] cch::util::ExpectedVoid remove_image(
+    [[nodiscard]] cch::support::ExpectedVoid remove_image(
         cch::tui::TerminalImageHandle,
         const cch::tui::CellRegion&) override {
         return {};
     }
-    [[nodiscard]] cch::util::ExpectedVoid begin_synchronized_update() override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid end_synchronized_update() override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid set_title(std::string_view) override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] cch::util::ExpectedVoid drain_input(
+    [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid drain_input(
         std::chrono::milliseconds,
         std::chrono::milliseconds) override {
         return {};
@@ -87,7 +87,7 @@ class FocusableInputComponent final
       public cch::tui::InputHandler,
       public cch::tui::Focusable {
 public:
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {"x"}};
     }
 
@@ -202,7 +202,7 @@ TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45]") {
     const auto result = tui.add_child(nullptr);
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
     CHECK(result.error().message == "TUI cannot attach a null Component");
 }
 
@@ -224,7 +224,7 @@ TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][is
     const auto result = tui.render();
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
     CHECK(result.error().message == "TUI component rendered a line wider than its width bound");
     CHECK(result.error().detail == "line width 8 exceeds visible width 3");
     CHECK(result.error().detail.size() < 128);
@@ -553,7 +553,7 @@ TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overfl
 
     const auto result = terminal.write("yz");
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
     CHECK(terminal.screen() == expected_screen);
     const std::vector<std::string> expected_output{"x"};
     CHECK(terminal.output() == expected_output);

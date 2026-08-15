@@ -455,19 +455,19 @@ std::optional<std::string_view> extension_for_image_mime_type(
     return std::nullopt;
 }
 
-util::Expected<ProcessedImageInput> process_image_input(
+support::Expected<ProcessedImageInput> process_image_input(
     std::span<const std::uint8_t> bytes,
     std::string mime_type,
     ImageProcessingLimits limits) {
     if (limits.max_width == 0 || limits.max_height == 0 || limits.max_base64_bytes == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "image processing limits must be positive"));
     }
     if (mime_type == "image/jpg") mime_type = "image/jpeg";
     if (!extension_for_image_mime_type(mime_type)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "unsupported image MIME type: " + mime_type));
     }
 

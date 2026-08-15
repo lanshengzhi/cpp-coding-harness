@@ -31,19 +31,19 @@ public:
     OpenAICodexOAuth(const OpenAICodexOAuth&) = delete;
     OpenAICodexOAuth& operator=(const OpenAICodexOAuth&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> login(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> login(
         ai::AuthInteraction interaction);
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> refresh(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> refresh(
         ai::OAuthCredential credential);
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::ModelAuth>> to_auth(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::ModelAuth>> to_auth(
         const ai::OAuthCredential& credential) const;
 
 private:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> login_browser(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> login_browser(
         ai::AuthInteraction interaction);
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> login_device_code(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> login_device_code(
         ai::AuthInteraction interaction);
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::OAuthCredential>> exchange_code(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::OAuthCredential>> exchange_code(
         std::string code,
         std::string verifier,
         std::string redirect_uri,

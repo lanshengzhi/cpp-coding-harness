@@ -22,7 +22,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -78,9 +78,9 @@ void drain_ready(boost::asio::io_context& io) {
 class ScriptedOAuthProvider final : public ai::Provider {
 public:
     using LoginScript = std::move_only_function<
-        boost::asio::awaitable<util::Expected<ai::OAuthCredential>>(ai::AuthInteraction)>;
+        boost::asio::awaitable<support::Expected<ai::OAuthCredential>>(ai::AuthInteraction)>;
     using RefreshScript = std::move_only_function<
-        boost::asio::awaitable<util::Expected<ai::OAuthCredential>>(ai::OAuthCredential)>;
+        boost::asio::awaitable<support::Expected<ai::OAuthCredential>>(ai::OAuthCredential)>;
 
     ScriptedOAuthProvider(
         std::string provider_id,
@@ -98,7 +98,7 @@ public:
             -> cch::support::AsyncResult<ai::OAuthCredential> {
             return cch::ai::detail::make_async_result(
                 [script, interaction = std::move(interaction)]() mutable
-                    -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                    -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                     co_return co_await (*script)(std::move(interaction));
                 });
         };
@@ -108,7 +108,7 @@ public:
                 -> cch::support::AsyncResult<ai::OAuthCredential> {
                 return cch::ai::detail::make_async_result(
                     [script, credential = std::move(credential)]() mutable
-                        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                         co_return co_await (*script)(std::move(credential));
                     });
             };
@@ -160,9 +160,9 @@ public:
         return ai::detail::make_model_stream(
             [this](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Provider, "scripted provider does not stream"));
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Provider, "scripted provider does not stream"));
                 });
     }
 
@@ -225,7 +225,7 @@ struct LoginFixture {
     /// Create a session on the injected runtime (the private E2E seam), so
     /// the real resolution chain lands on the unknown placeholder while no
     /// provider has configured auth — pi's `isUnknownModel` boot state.
-    [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> create_session(
+    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_session(
         std::shared_ptr<coding_agent::ModelRuntime> runtime) {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.no_skills = true;
@@ -241,7 +241,7 @@ struct InteractiveRun {
     // Wide enough that status lines never wrap mid-assertion.
     tui::VirtualTerminal terminal{{.columns = 220, .rows = 40}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     std::vector<std::string> opened_urls;
 
     void start(
@@ -261,7 +261,7 @@ struct InteractiveRun {
                     config.action_sink =
                         [this](std::size_t /* action_generation */,
                                coding_agent::tui::TuiActionVariant action)
-                        -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
+                        -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
                             if (const auto* open =
                                     std::get_if<coding_agent::tui::OpenBrowserAction>(
                                         &action)) {
@@ -272,7 +272,7 @@ struct InteractiveRun {
                         };
                     return config;
                 }()),
-            [this](std::exception_ptr exception, util::ExpectedVoid result) {
+            [this](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
             });
@@ -304,7 +304,7 @@ struct InteractiveRun {
 [[nodiscard]] ScriptedOAuthProvider::LoginScript codex_url_then_manual_code(
     std::shared_ptr<std::optional<std::string>> submitted_code) {
     return [submitted_code](ai::AuthInteraction interaction)
-        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
         interaction.notify(ai::AuthEvent{ai::AuthUrl{
             .url = "https://auth.openai.example/authorize?client=abc",
             .instructions = "Complete sign-in in your browser.",
@@ -335,7 +335,7 @@ TEST_CASE(
         "kimi-coding",
         "Kimi For Coding",
         std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
             co_return dummy_oauth_credential();
         });
     kimi->install_ambient_api_key("Kimi API key");
@@ -412,7 +412,7 @@ TEST_CASE(
         "Kimi For Coding",
         std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
         [](ai::AuthInteraction interaction)
-            -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+            -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
             interaction.notify(ai::AuthEvent{ai::AuthDeviceCode{
                 .user_code = "ABCD-EFGH",
                 .verification_uri = "https://kimi.example/device",
@@ -549,9 +549,9 @@ TEST_CASE(
         "openai-codex",
         "OpenAI Codex",
         std::vector<ai::Model>{tests::scripted_request_model("openai-codex", "gpt-5.5")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::OAuth,
+        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::OAuth,
                 "OpenAI Codex token exchange failed (400): invalid grant"));
         });
     auto runtime = fixture.create_runtime({codex});
@@ -619,7 +619,7 @@ TEST_CASE(
         "OpenAI Codex",
         std::vector<ai::Model>{tests::scripted_request_model("openai-codex", "gpt-5.5")},
         [selected_id](ai::AuthInteraction interaction)
-            -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+            -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
             ai::AuthPromptSelect select;
             select.message = "Choose sign-in method";
             select.options = {
@@ -664,7 +664,7 @@ TEST_CASE(
         "kimi-coding",
         "Kimi For Coding",
         std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
             co_return dummy_oauth_credential();
         });
     kimi->install_ambient_api_key("Kimi API key");
@@ -718,7 +718,7 @@ TEST_CASE(
         "openai-codex",
         "OpenAI Codex",
         std::vector<ai::Model>{tests::scripted_request_model("openai-codex", "gpt-5.5")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
             co_return dummy_oauth_credential();
         });
     auto runtime = fixture.create_runtime({codex});
@@ -774,12 +774,12 @@ TEST_CASE(
         "openai-codex",
         "OpenAI Codex",
         std::vector<ai::Model>{tests::scripted_request_model("openai-codex", "gpt-5.5")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
             co_return dummy_oauth_credential();
         },
-        [](ai::OAuthCredential) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::OAuth,
+        [](ai::OAuthCredential) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::OAuth,
                 "OpenAI Codex token refresh failed (401): token expired"));
         });
     auto runtime = fixture.create_runtime({codex});

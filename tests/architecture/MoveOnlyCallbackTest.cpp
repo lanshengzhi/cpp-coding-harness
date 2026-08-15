@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "../../include/cch/agent/Agent.hpp"
-#include "../../include/cch/agent/AgentContext.hpp"
-#include "../../include/cch/agent/AgentEvent.hpp"
+#include <cch/agent/Agent.hpp>
+#include <cch/agent/AgentContext.hpp>
+#include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include "ai/providers/StreamTransport.hpp"
@@ -61,7 +61,7 @@ TEST_CASE("move-only event sinks can own unique state", "[architecture][u5]") {
     int observed = 0;
     agent::AgentEventSink sink = [state = std::make_unique<int>(41), &observed](const agent::AgentLifecycleEvent&) mutable {
         observed = *state + 1;
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     };
 
     REQUIRE(sink);
@@ -76,7 +76,7 @@ TEST_CASE("move-only body handlers can own unique buffers", "[architecture][u5]"
     ai::providers::BodyChunkHandler handler = [buffer = std::make_unique<std::string>(), &observed](std::string_view chunk) mutable {
         *buffer += chunk;
         observed = static_cast<int>(buffer->size());
-        return util::ExpectedVoid{};
+        return support::ExpectedVoid{};
     };
 
     REQUIRE(handler);

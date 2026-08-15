@@ -49,7 +49,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         requests.push_back(context);
         auto terminal = ai::assistant_text_message("done");
         terminal.provider = "sdk-host";
@@ -66,10 +66,10 @@ public:
 
 /// Drives one `AgentSession::reload()` on a temporary executor and returns
 /// the outcome.
-[[nodiscard]] util::Expected<coding_agent::runtime::AgentSessionReloadResult> run_reload(
+[[nodiscard]] support::Expected<coding_agent::runtime::AgentSessionReloadResult> run_reload(
     coding_agent::AgentSession& session) {
     boost::asio::io_context io;
-    std::optional<util::Expected<coding_agent::runtime::AgentSessionReloadResult>> result;
+    std::optional<support::Expected<coding_agent::runtime::AgentSessionReloadResult>> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -352,7 +352,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         requests.push_back(context);
         if (gate_request_number && request_count == *gate_request_number) {
@@ -443,7 +443,7 @@ TEST_CASE(
     // false (pi `isCompacting` ≠ `isStreaming`), so the TUI's `/reload`
     // refusal shows the compaction warning.
     boost::asio::io_context io;
-    std::optional<util::Expected<coding_agent::CompactionResult>> compact_result;
+    std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {

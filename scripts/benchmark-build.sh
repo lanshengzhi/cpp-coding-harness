@@ -75,7 +75,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 test_shard_for() {
 	local file=$1
 	case "$file" in
-		tests/util/*) echo cch_tests_util ;;
+		tests/support/*) echo cch_tests_support ;;
 		tests/tui/*) echo cch_tests_tui ;;
 		tests/ai/*) echo cch_tests_ai ;;
 		tests/agent/*) echo cch_tests_agent ;;

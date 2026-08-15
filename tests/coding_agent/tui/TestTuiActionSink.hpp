@@ -14,7 +14,7 @@
 
 #include "coding_agent/tui/InteractiveMode.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -29,7 +29,7 @@ namespace cch::coding_agent::tui::testing {
 /// the replacement/boot session from the request. Absent in a recorder, the
 /// action resolves with the unavailable-host error.
 using TestSessionFactorySink = std::move_only_function<
-    util::Expected<CreateAgentSessionResult>(runtime::AgentSessionCreationRequest)>;
+    support::Expected<CreateAgentSessionResult>(runtime::AgentSessionCreationRequest)>;
 
 /// A lightweight summary of a `ReplaceSessionAction` payload (the request
 /// itself is move-only, so tests assert the owned facts it carried).
@@ -74,10 +74,10 @@ struct ActionSinkRecorder {
     [[nodiscard]] TuiActionSink make_sink() {
         const auto shared = state;
         return [shared](std::size_t action_generation, TuiActionVariant action)
-            -> util::Expected<TuiActionResultVariant> {
+            -> support::Expected<TuiActionResultVariant> {
             shared->generations.push_back(action_generation);
             return std::visit(
-                [shared](auto&& payload) -> util::Expected<TuiActionResultVariant> {
+                [shared](auto&& payload) -> support::Expected<TuiActionResultVariant> {
                     using T = std::decay_t<decltype(payload)>;
                     if constexpr (std::is_same_v<T, OpenBrowserAction>) {
                         shared->open_browser.push_back(std::move(payload));
@@ -114,9 +114,9 @@ struct ActionSinkRecorder {
                         });
                         if (!shared->replace_session) {
                             return TuiActionResultVariant{
-                                util::Expected<CreateAgentSessionResult>{std::unexpected(
-                                    util::make_error(
-                                        util::ErrorCode::Unknown,
+                                support::Expected<CreateAgentSessionResult>{std::unexpected(
+                                    support::make_error(
+                                        support::ErrorCode::Unknown,
                                         "no session creator installed"))}};
                         }
                         return TuiActionResultVariant{

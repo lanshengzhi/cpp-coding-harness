@@ -3,7 +3,7 @@
 #include "coding_agent/tui/Theme.hpp"
 
 #include <cch/tui/Component.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -77,7 +77,7 @@ public:
     void set_data(FooterData data) { data_ = std::move(data); }
     [[nodiscard]] const FooterData& data() const { return data_; }
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
 
 private:

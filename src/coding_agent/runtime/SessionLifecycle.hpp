@@ -3,7 +3,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionResume.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -79,7 +79,7 @@ using NewSessionPublication = std::variant<
 /// `SessionManager.open(path, dir, cwdOverride)`) binds the runtime to the
 /// override even when the header stores a different (missing) cwd; the
 /// header keeps its stored value.
-[[nodiscard]] util::Expected<PreparedResumeTarget> prepare_resume_target(
+[[nodiscard]] support::Expected<PreparedResumeTarget> prepare_resume_target(
     std::filesystem::path resume_path,
     std::filesystem::path explicit_workspace,
     bool workspace_explicit,
@@ -89,14 +89,14 @@ using NewSessionPublication = std::variant<
 /// succeeded. Session Publication is the single mutation point: it derives
 /// automatic targets, applies the directory privacy policy, generates the
 /// session identity, and translates store failures into session errors.
-[[nodiscard]] util::Expected<OpenSession> publish_session(
+[[nodiscard]] support::Expected<OpenSession> publish_session(
     NewSessionPublication target,
     std::string provider,
     std::string model);
 
 /// Open an existing session file for resumption after all fallible
 /// prerequisites have succeeded.
-[[nodiscard]] util::Expected<OpenSession> publish_resume_session(
+[[nodiscard]] support::Expected<OpenSession> publish_resume_session(
     const PreparedResumeTarget& target);
 
 /// pi `SessionManager.forkFrom`: create a new persisted session in the target
@@ -106,7 +106,7 @@ using NewSessionPublication = std::variant<
 /// path); the returned prepared target re-resolves the copied history exactly
 /// like a resume. Fails with pi's fork wording when the source is empty or
 /// invalid or carries no header.
-[[nodiscard]] util::Expected<PreparedResumeTarget> prepare_fork_target(
+[[nodiscard]] support::Expected<PreparedResumeTarget> prepare_fork_target(
     std::filesystem::path source_path,
     std::filesystem::path target_workspace,
     std::optional<std::filesystem::path> directory_override,

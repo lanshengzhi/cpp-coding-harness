@@ -2,7 +2,7 @@
 
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Tool.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include "ai/AsyncResultBridge.hpp"
 
@@ -52,12 +52,12 @@ template <typename Body>
                 agent::ToolExecuteResult::completion_type completion) mutable noexcept {
                 auto executor = cch::ai::detail::t_initiating_executor;
                 if (!executor) {
-                    completion(std::unexpected(util::make_error(
-                        util::ErrorCode::Tool, "tool execution has no initiating executor")));
+                    completion(std::unexpected(support::make_error(
+                        support::ErrorCode::Tool, "tool execution has no initiating executor")));
                     return;
                 }
                 try {
-                    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> coro;
+                    boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> coro;
                     {
                         std::lock_guard lock(*body_mutex);
                         coro = (*shared_body)(
@@ -70,17 +70,17 @@ template <typename Body>
                         std::move(coro),
                         [completion = std::move(completion)](
                             std::exception_ptr eptr,
-                            util::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
+                            support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
                             if (eptr) {
-                                completion(std::unexpected(util::make_error(
-                                    util::ErrorCode::Tool, "tool execution failed")));
+                                completion(std::unexpected(support::make_error(
+                                    support::ErrorCode::Tool, "tool execution failed")));
                             } else {
                                 completion(std::move(result));
                             }
                         });
                 } catch (...) {
-                    completion(std::unexpected(util::make_error(
-                        util::ErrorCode::Tool, "tool execution failed")));
+                    completion(std::unexpected(support::make_error(
+                        support::ErrorCode::Tool, "tool execution failed")));
                 }
             }};
     };

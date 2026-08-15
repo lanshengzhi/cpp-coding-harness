@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -20,9 +20,9 @@ class AsyncClipboardReader {
 public:
     virtual ~AsyncClipboardReader() = default;
 
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<ClipboardImage>>>
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<std::optional<ClipboardImage>>>
     read_image() = 0;
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<std::string>>>
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<std::optional<std::string>>>
     read_text() = 0;
 };
 

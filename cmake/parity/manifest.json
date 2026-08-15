@@ -5,31 +5,31 @@
     "cch_ai": {
       "role": "owner",
       "root": "src/ai",
-      "interface_root": "include/cch/ai",
+      "interface_root": "src/ai/include/cch/ai",
       "legal_owner_dependencies": []
     },
     "cch_agent_core": {
       "role": "owner",
       "root": "src/agent",
-      "interface_root": "include/cch/agent",
+      "interface_root": "src/agent/include/cch/agent",
       "legal_owner_dependencies": ["cch_ai"]
     },
     "cch_tui": {
       "role": "owner",
       "root": "src/tui",
-      "interface_root": "include/cch/tui",
+      "interface_root": "src/tui/include/cch/tui",
       "legal_owner_dependencies": []
     },
     "cch_coding_agent": {
       "role": "owner",
       "root": "src/coding_agent",
-      "interface_root": "include/cch/coding_agent",
+      "interface_root": "src/coding_agent/include/cch/coding_agent",
       "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_tui"]
     },
     "cch_support": {
       "role": "support",
       "root": "src/support",
-      "interface_root": "include/cch/support",
+      "interface_root": "src/support/include/cch/support",
       "legal_owner_dependencies": []
     }
   },

@@ -6,7 +6,7 @@
 
 #include <cch/tui/Text.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -19,8 +19,8 @@ namespace {
 
 /// pi's stable login-cancellation error (the recorded C++ enrichment: the
 /// kind travels on the error so the frontend suppresses on kind, not string).
-[[nodiscard]] util::Error login_cancelled_error() {
-    return util::make_error(util::ErrorCode::Cancelled, "Login cancelled");
+[[nodiscard]] support::Error login_cancelled_error() {
+    return support::make_error(support::ErrorCode::Cancelled, "Login cancelled");
 }
 
 /// pi's OSC 8 hyperlink wrapper.
@@ -139,7 +139,7 @@ void LoginDialogComponent::show_progress(std::string message) {
     if (on_invalidate_) on_invalidate_();
 }
 
-boost::asio::awaitable<util::Expected<std::string>> LoginDialogComponent::show_prompt(
+boost::asio::awaitable<support::Expected<std::string>> LoginDialogComponent::show_prompt(
     std::string message,
     std::optional<std::string> placeholder) {
     // pi `showPrompt`: appends (preserving a previously shown URL), then
@@ -158,7 +158,7 @@ boost::asio::awaitable<util::Expected<std::string>> LoginDialogComponent::show_p
     co_return co_await run_prompt(std::move(items));
 }
 
-boost::asio::awaitable<util::Expected<std::string>> LoginDialogComponent::show_manual_input(
+boost::asio::awaitable<support::Expected<std::string>> LoginDialogComponent::show_manual_input(
     std::string prompt) {
     // pi `showManualInput`: clear the input, append the dim prompt, input,
     // and the cancel hint.
@@ -171,7 +171,7 @@ boost::asio::awaitable<util::Expected<std::string>> LoginDialogComponent::show_m
     co_return co_await run_prompt(std::move(items));
 }
 
-boost::asio::awaitable<util::Expected<std::string>> LoginDialogComponent::run_prompt(
+boost::asio::awaitable<support::Expected<std::string>> LoginDialogComponent::run_prompt(
     std::vector<ContentItem> items) {
     const auto executor = co_await boost::asio::this_coro::executor;
     auto slot = std::make_shared<PromptSlot>(executor);
@@ -188,8 +188,8 @@ boost::asio::awaitable<util::Expected<std::string>> LoginDialogComponent::run_pr
     auto result = co_await slot->channel.async_receive(
         boost::asio::redirect_error(boost::asio::use_awaitable, error));
     if (error) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "login prompt channel failed",
             error.message()));
     }
@@ -221,16 +221,16 @@ void LoginDialogComponent::cancel() {
     if (on_invalidate_) on_invalidate_();
 }
 
-util::Expected<cch::tui::RenderResult> LoginDialogComponent::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> LoginDialogComponent::render(std::size_t width) {
     std::lock_guard lock(mutex_);
     cch::tui::RenderResult result;
-    const auto append = [&result, width](cch::tui::Component& component) -> util::ExpectedVoid {
+    const auto append = [&result, width](cch::tui::Component& component) -> support::ExpectedVoid {
         auto rendered = component.render(width);
         if (!rendered) return std::unexpected(rendered.error());
         for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
         return {};
     };
-    const auto append_text = [&append](const std::string& content) -> util::ExpectedVoid {
+    const auto append_text = [&append](const std::string& content) -> support::ExpectedVoid {
         cch::tui::Text line(content, 1, 0);
         return append(line);
     };

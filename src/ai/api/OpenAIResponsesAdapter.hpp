@@ -24,7 +24,7 @@ public:
     OpenAIResponsesAdapter& operator=(const OpenAIResponsesAdapter&) = delete;
 
     /// Borrowed model and context must outlive the returned awaitable.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> stream(
         const Model& model,
         const AiContext& context,
         ProviderStreamOptions options,

@@ -5,7 +5,7 @@
 #include <cch/tui/Utils.hpp>
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -93,7 +93,7 @@ bool KeybindingHints::expanded() const {
     return expanded_;
 }
 
-util::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t width) {
     const auto& keybindings = keybindings_->registry();
     std::string text;
     if (!expanded_) {

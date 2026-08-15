@@ -342,7 +342,7 @@ TEST_CASE("AsyncResult is move-only and names the shared error default", "[suppo
 
 TEST_CASE("AsyncResult exposes no executor, event bus, polymorphic box, or Boost.Asio", "[support][issue451]") {
     const auto path = std::filesystem::path(CCH_SOURCE_DIR) /
-        "include" / "cch" / "support" / "AsyncResult.hpp";
+        "src" / "support" / "include" / "cch" / "support" / "AsyncResult.hpp";
     REQUIRE(std::filesystem::exists(path));
 
     std::ifstream input(path);

@@ -117,8 +117,8 @@ void drain_ready(boost::asio::io_context& io) {
 struct Running {
     tui::VirtualTerminal terminal{true_color_options()};
     boost::asio::io_context io;
-    std::optional<util::Expected<cli::StartupPickerResult>> picker_result;
-    std::optional<util::Expected<bool>> prompt_result;
+    std::optional<support::Expected<cli::StartupPickerResult>> picker_result;
+    std::optional<support::Expected<bool>> prompt_result;
 };
 
 } // namespace
@@ -157,7 +157,7 @@ TEST_CASE(
                     list_all_sessions_info(sessions_root, std::nullopt);
             }),
         [&](std::exception_ptr exception,
-            util::Expected<cli::StartupPickerResult> result) {
+            support::Expected<cli::StartupPickerResult> result) {
             CHECK(exception == nullptr);
             running.picker_result.emplace(std::move(result));
         });
@@ -215,7 +215,7 @@ TEST_CASE(
                     list_all_sessions_info(sessions_root, std::nullopt);
             }),
         [&](std::exception_ptr exception,
-            util::Expected<cli::StartupPickerResult> result) {
+            support::Expected<cli::StartupPickerResult> result) {
             CHECK(exception == nullptr);
             running.picker_result.emplace(std::move(result));
         });
@@ -263,7 +263,7 @@ TEST_CASE(
                 .theme_setting = std::nullopt,
             },
             title),
-        [&](std::exception_ptr exception, util::Expected<bool> result) {
+        [&](std::exception_ptr exception, support::Expected<bool> result) {
             CHECK(exception == nullptr);
             running.prompt_result.emplace(std::move(result));
         });
@@ -307,7 +307,7 @@ TEST_CASE(
                 .theme_setting = std::nullopt,
             },
             title),
-        [&](std::exception_ptr exception, util::Expected<bool> result) {
+        [&](std::exception_ptr exception, support::Expected<bool> result) {
             CHECK(exception == nullptr);
             running.prompt_result.emplace(std::move(result));
         });
@@ -344,7 +344,7 @@ TEST_CASE(
                 .theme_setting = "light",
             },
             title),
-        [&](std::exception_ptr exception, util::Expected<bool> result) {
+        [&](std::exception_ptr exception, support::Expected<bool> result) {
             CHECK(exception == nullptr);
             running.prompt_result.emplace(std::move(result));
         });
@@ -382,7 +382,7 @@ TEST_CASE(
                 .theme_setting = std::nullopt,
             },
             title),
-        [&](std::exception_ptr exception, util::Expected<bool> result) {
+        [&](std::exception_ptr exception, support::Expected<bool> result) {
             CHECK(exception == nullptr);
             running.prompt_result.emplace(std::move(result));
         });
@@ -426,7 +426,7 @@ TEST_CASE(
                 .theme_setting = "custom",
             },
             title),
-        [&](std::exception_ptr exception, util::Expected<bool> result) {
+        [&](std::exception_ptr exception, support::Expected<bool> result) {
             CHECK(exception == nullptr);
             running.prompt_result.emplace(std::move(result));
         });

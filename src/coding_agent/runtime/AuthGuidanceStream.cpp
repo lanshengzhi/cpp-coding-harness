@@ -17,7 +17,7 @@ namespace {
 /// message; every other `auth`-category failure produces the no-key message.
 /// Non-auth failures pass through unmapped (pi rethrows non-no-key `getAuth`
 /// errors rather than rewriting them).
-[[nodiscard]] std::optional<util::Error> guidance_terminal(
+[[nodiscard]] std::optional<support::Error> guidance_terminal(
     std::string_view provider,
     const ai::AssistantErrorEvent& error,
     OAuthProviderPredicate& is_using_oauth,
@@ -25,19 +25,19 @@ namespace {
     if (!error.failure) {
         return std::nullopt;
     }
-    if (error.failure->code == util::ErrorCode::OAuth) {
-        return util::make_error(
-            util::ErrorCode::OAuth,
+    if (error.failure->code == support::ErrorCode::OAuth) {
+        return support::make_error(
+            support::ErrorCode::OAuth,
             format_oauth_reauthenticate_message(provider));
     }
-    if (error.failure->code == util::ErrorCode::Auth) {
+    if (error.failure->code == support::ErrorCode::Auth) {
         if (is_using_oauth(provider)) {
-            return util::make_error(
-                util::ErrorCode::Auth,
+            return support::make_error(
+                support::ErrorCode::Auth,
                 format_oauth_reauthenticate_message(provider));
         }
-        return util::make_error(
-            util::ErrorCode::Auth,
+        return support::make_error(
+            support::ErrorCode::Auth,
             format_no_api_key_found_message(provider, docs_path));
     }
     return std::nullopt;
@@ -45,7 +45,7 @@ namespace {
 
 [[nodiscard]] ai::AssistantMessage rewrite_message(
     ai::AssistantMessage message,
-    const util::Error& guidance) {
+    const support::Error& guidance) {
     message.error_message = guidance.message;
     return message;
 }
@@ -63,13 +63,13 @@ ai::ModelStream apply_auth_guidance(
          docs_path = std::move(docs_path)](
             ai::AssistantEventSink sink,
             ai::ModelStreamCompletion completion) mutable noexcept {
-            auto rewrote = std::make_shared<std::optional<util::Error>>();
+            auto rewrote = std::make_shared<std::optional<support::Error>>();
             auto predicate = std::make_shared<OAuthProviderPredicate>(
                 std::move(is_using_oauth));
 
             ai::AssistantEventSink wrapped_sink =
                 [sink = std::move(sink), rewrote, provider, predicate, docs_path](
-                    const ai::AssistantStreamEvent& event) mutable -> util::ExpectedVoid {
+                    const ai::AssistantStreamEvent& event) mutable -> support::ExpectedVoid {
                     if (const auto* error =
                             std::get_if<ai::AssistantErrorEvent>(&event)) {
                         if (auto guidance = guidance_terminal(
@@ -94,7 +94,7 @@ ai::ModelStream apply_auth_guidance(
 
             ai::ModelStreamCompletion wrapped_completion =
                 [completion = std::move(completion), rewrote](
-                    std::expected<ai::AssistantMessage, util::Error> result) mutable noexcept {
+                    std::expected<ai::AssistantMessage, support::Error> result) mutable noexcept {
                     if (rewrote->has_value() && result.has_value()) {
                         // The returned terminal message must agree with the
                         // forwarded terminal event (the #326 contract).

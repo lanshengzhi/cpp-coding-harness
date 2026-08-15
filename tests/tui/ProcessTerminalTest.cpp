@@ -2,10 +2,10 @@
 #include <cch/tui/Tui.hpp>
 
 #include "support/ImageEnvironmentGuard.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -69,7 +69,7 @@ class MinimalShell final
       public cch::tui::InputHandler,
       public cch::tui::Focusable {
 public:
-    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {"shell"}};
     }
 
@@ -136,8 +136,8 @@ private:
 TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", "[tui][terminal][issue54]") {
     std::array<int, 2> raw_descriptors{};
     REQUIRE(::pipe(raw_descriptors.data()) == 0);
-    cch::util::UniqueFd input(raw_descriptors[0]);
-    cch::util::UniqueFd output(raw_descriptors[1]);
+    cch::support::UniqueFd input(raw_descriptors[0]);
+    cch::support::UniqueFd output(raw_descriptors[1]);
 
     cch::tui::ProcessTerminal terminal({
         .input_fd = input.get(),
@@ -146,7 +146,7 @@ TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", 
     const auto result = terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {});
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
     CHECK(result.error().message == "Process Terminal requires TTY input and output descriptors");
     CHECK(result.error().detail.size() < 256);
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
@@ -329,7 +329,7 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
     std::atomic<bool> callback_started{false};
     std::atomic<bool> external_stop_started{false};
     std::atomic<bool> callback_stop_succeeded{false};
-    cch::util::ExpectedVoid external_result;
+    cch::support::ExpectedVoid external_result;
 
     cch::tui::ProcessTerminal terminal({
         .input_fd = pty->slave.get(),
@@ -364,7 +364,7 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
 TEST_CASE("Process Terminal reports callback and restoration failures together", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
-    cch::util::UniqueFd output(::dup(pty->slave.get()));
+    cch::support::UniqueFd output(::dup(pty->slave.get()));
     REQUIRE(output);
     const auto output_descriptor = output.get();
     std::atomic<bool> callback_failed{false};
@@ -390,7 +390,7 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
     CHECK(failed_stop.error().detail.find("Process Terminal input sink failed") != std::string::npos);
     CHECK(failed_stop.error().detail.find("could not write terminal output") != std::string::npos);
 
-    cch::util::UniqueFd replacement(::open(pty->slave_name.c_str(), O_RDWR | O_NOCTTY));
+    cch::support::UniqueFd replacement(::open(pty->slave_name.c_str(), O_RDWR | O_NOCTTY));
     REQUIRE(replacement);
     REQUIRE(replacement.get() == output_descriptor);
     REQUIRE(terminal.stop());
@@ -477,7 +477,7 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
 TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
-    cch::util::UniqueFd read_only_output(::open(pty->slave_name.c_str(), O_RDONLY | O_NOCTTY));
+    cch::support::UniqueFd read_only_output(::open(pty->slave_name.c_str(), O_RDONLY | O_NOCTTY));
     REQUIRE(read_only_output);
     termios original{};
     REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
@@ -489,7 +489,7 @@ TEST_CASE("Process Terminal rolls back raw input after partial startup failure",
     const auto result = terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {});
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Process);
+    CHECK(result.error().code == cch::support::ErrorCode::Process);
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
     CHECK(cch::tests::same_terminal_state(restored, original));
@@ -1299,7 +1299,7 @@ TEST_CASE(
             "chunk-{:06d}-{};", i, std::string(4000, 'x'));
         auto result = terminal.write(chunk);
         if (!result) {
-            CHECK(result.error().code == cch::util::ErrorCode::Busy);
+            CHECK(result.error().code == cch::support::ErrorCode::Busy);
             saw_busy = true;
             break;
         }
@@ -1398,7 +1398,7 @@ TEST_CASE(
     const auto elapsed = std::chrono::steady_clock::now() - started;
     CHECK(elapsed < std::chrono::milliseconds(400));
     if (!stopped) {
-        CHECK(stopped.error().code == cch::util::ErrorCode::Process);
+        CHECK(stopped.error().code == cch::support::ErrorCode::Process);
     }
 
     // Idempotent and equally prompt.

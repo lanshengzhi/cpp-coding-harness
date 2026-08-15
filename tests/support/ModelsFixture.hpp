@@ -5,7 +5,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "harness/RuntimeRoot.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/executor_work_guard.hpp>
@@ -236,7 +236,7 @@ inline ai::Model scripted_request_model(
     return model;
 }
 
-inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
+inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options) {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
@@ -250,7 +250,7 @@ inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_sessi
     return coding_agent::create_agent_session(std::move(request));
 }
 
-inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
+inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options,
     std::unique_ptr<coding_agent::runtime::AsyncUserShell> user_shell) {
     auto models = std::move(options.models);
@@ -266,12 +266,12 @@ inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_sessi
 
 namespace cch::coding_agent {
 
-inline util::Expected<CreateAgentSessionResult> create_agent_session(
+inline support::Expected<CreateAgentSessionResult> create_agent_session(
     tests::ModelsSessionOptions options) {
     return tests::create_agent_session(std::move(options));
 }
 
-inline util::Expected<CreateAgentSessionResult> create_agent_session(
+inline support::Expected<CreateAgentSessionResult> create_agent_session(
     tests::ModelsSessionOptions options,
     std::unique_ptr<runtime::AsyncUserShell> user_shell) {
     return tests::create_agent_session(

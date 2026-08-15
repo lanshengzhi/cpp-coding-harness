@@ -36,9 +36,9 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -263,7 +263,7 @@ struct Running {
 
     tui::VirtualTerminal terminal;
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
 };
 
 // ── interrupt: a gated recording runtime for the app.interrupt leg ─────────
@@ -338,14 +338,14 @@ TEST_CASE(
     // summary) in the chat viewport above the status/editor/footer rows.
     tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture->session,
             terminal,
             {.agent_config_directory = fixture->config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -406,7 +406,7 @@ TEST_CASE(
             *created->session,
             running.terminal,
             {.agent_config_directory = fixture.agent_dir.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
@@ -511,7 +511,7 @@ TEST_CASE(
     coding_agent::tui::testing::ActionSinkRecorder recorder;
     recorder.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
             request.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
@@ -526,7 +526,7 @@ TEST_CASE(
                 .agent_config_directory = agent_dir.path(),
                 .action_sink = recorder.make_sink(),
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
@@ -567,14 +567,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture->session,
             terminal,
             {.agent_config_directory = fixture->config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });

@@ -2,7 +2,7 @@
 
 #include "OauthPage.hpp"
 #include "Pkce.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/connect.hpp>
@@ -110,7 +110,7 @@ std::uint16_t OAuthCallbackServer::bound_port() const {
     return endpoint.port();
 }
 
-boost::asio::awaitable<util::Expected<std::optional<std::string>>>
+boost::asio::awaitable<support::Expected<std::optional<std::string>>>
 OAuthCallbackServer::wait_for_code() {
     std::optional<std::string> code;
     try {
@@ -135,7 +135,7 @@ void OAuthCallbackServer::close() {
     impl_->acceptor.close(error);
 }
 
-boost::asio::awaitable<util::Expected<std::shared_ptr<OAuthCallbackServer>>>
+boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>>
 OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
     namespace asio = boost::asio;
     namespace beast = boost::beast;

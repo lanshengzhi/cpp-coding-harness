@@ -1,9 +1,9 @@
 #include "EnvApiKeyAuth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -14,7 +14,7 @@ namespace cch::ai::providers {
 namespace {
 
 /// Borrowed context and environment_names must outlive the returned awaitable.
-[[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> resolve_api_key(
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> resolve_api_key(
     const AuthContext& context,
     std::optional<ApiKeyCredential> credential,
     const std::vector<std::string>& environment_names) {
@@ -53,7 +53,7 @@ namespace {
         -> cch::support::AsyncResult<std::optional<AuthCheck>> {
         return detail::make_async_result(
             [&context, credential = std::move(credential), environment_names]()
-                -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
+                -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
                 CCH_TRY(resolved, co_await resolve_api_key(
                     context, std::move(credential), environment_names));
                 if (!resolved) {
@@ -71,7 +71,7 @@ namespace {
         -> cch::support::AsyncResult<std::optional<AuthResult>> {
         return detail::make_async_result(
             [&context, credential = std::move(credential), environment_names]()
-                -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+                -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
                 CCH_TRY(resolved, co_await resolve_api_key(
                     context, std::move(credential), environment_names));
                 co_return resolved;

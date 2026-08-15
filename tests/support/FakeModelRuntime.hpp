@@ -3,10 +3,10 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
 #include "support/ModelsFixture.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -83,10 +83,10 @@ public:
         std::string_view provider_id,
         std::string_view model_id) const override;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<ai::Model>>> get_available(
         std::optional<std::string_view> provider_id = std::nullopt) override;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> check_auth(
         std::string provider_id) override;
 
     [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const override;
@@ -158,7 +158,7 @@ ScriptedRuntimeProvider::stream(
          context = std::move(context),
          options = std::move(options)](
             ai::AssistantEventSink sink)
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
     const std::size_t call_index = owner_->calls.size();
     owner_->calls.push_back(RecordedRuntimeCall{model, context, options});
     const auto& stop_token = owner_->calls.back().options.stop_token;
@@ -171,8 +171,8 @@ ScriptedRuntimeProvider::stream(
             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                 .reason = terminal.stop_reason,
                 .error = terminal,
-                .failure = util::make_error(
-                    util::ErrorCode::Cancelled, "Request was aborted"),
+                .failure = support::make_error(
+                    support::ErrorCode::Cancelled, "Request was aborted"),
             }));
         }
         co_return terminal;
@@ -205,8 +205,8 @@ ScriptedRuntimeProvider::stream(
             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                 .reason = terminal.stop_reason,
                 .error = terminal,
-                .failure = util::make_error(
-                    util::ErrorCode::Cancelled, "Request was aborted"),
+                .failure = support::make_error(
+                    support::ErrorCode::Cancelled, "Request was aborted"),
             }));
         }
         co_return terminal;
@@ -220,10 +220,10 @@ ScriptedRuntimeProvider::stream(
     if (sink) {
         if (response.stop_reason == ai::AssistantStopReason::Error ||
             response.stop_reason == ai::AssistantStopReason::Aborted) {
-            std::optional<util::Error> terminal_failure = std::nullopt;
+            std::optional<support::Error> terminal_failure = std::nullopt;
             if (response.error_message) {
-                terminal_failure = util::make_error(
-                    util::ErrorCode::Stream, *response.error_message);
+                terminal_failure = support::make_error(
+                    support::ErrorCode::Stream, *response.error_message);
             }
             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                 .reason = response.stop_reason,
@@ -269,7 +269,7 @@ inline std::optional<ai::Model> FakeModelRuntime::model(
     return model;
 }
 
-inline boost::asio::awaitable<util::Expected<std::vector<ai::Model>>>
+inline boost::asio::awaitable<support::Expected<std::vector<ai::Model>>>
 FakeModelRuntime::get_available(std::optional<std::string_view> provider_id) {
     std::vector<ai::Model> models;
     if (auto resolved = model(provider_id.value_or("fake"), "fake-model")) {
@@ -278,7 +278,7 @@ FakeModelRuntime::get_available(std::optional<std::string_view> provider_id) {
     co_return models;
 }
 
-inline boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>>
+inline boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>>
 FakeModelRuntime::check_auth(std::string provider_id) {
     (void)provider_id;
     co_return ai::AuthCheck{.source = "fake", .type = ai::AuthType::ApiKey};

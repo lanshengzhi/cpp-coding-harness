@@ -2,7 +2,7 @@
 
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/BoundedText.hpp"
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <algorithm>
 #include <array>
@@ -23,7 +23,7 @@
 namespace cch::coding_agent::tui {
 namespace {
 
-[[nodiscard]] std::string combined_theme_error(const util::Error& error) {
+[[nodiscard]] std::string combined_theme_error(const support::Error& error) {
     if (error.detail.empty() || error.detail == error.message) return error.message;
     return error.message + ": " + error.detail;
 }
@@ -101,7 +101,7 @@ namespace {
 /// instances, never re-read), then builtins, then
 /// `<custom_themes_dir>/<name>.json`, with pi's `Theme not found: <name>`
 /// error.
-[[nodiscard]] util::Expected<ResolvedTheme> load_theme_by_name(
+[[nodiscard]] support::Expected<ResolvedTheme> load_theme_by_name(
     std::string_view name,
     const std::filesystem::path& custom_themes_dir,
     const std::vector<RegisteredTheme>& registered) {
@@ -117,8 +117,8 @@ namespace {
             return load_theme_file(path);
         }
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         std::format("Theme not found: {}", name)));
 }
 
@@ -202,18 +202,18 @@ template <typename Provider>
 /// Fallible §5.4 callback boundary for the settings committer: failures
 /// (including a throwing sink) return the converted error.
 template <typename Sink, typename... Args>
-[[nodiscard]] util::ExpectedVoid invoke_fallible_sink(Sink&& sink, Args&&... args) {
+[[nodiscard]] support::ExpectedVoid invoke_fallible_sink(Sink&& sink, Args&&... args) {
     if (!sink) return {};
     try {
         return std::forward<Sink>(sink)(std::forward<Args>(args)...);
     } catch (const std::exception& error) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "theme controller sink failed",
             bounded_redacted_presentation(error.what())));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "theme controller sink failed"));
     }
 }

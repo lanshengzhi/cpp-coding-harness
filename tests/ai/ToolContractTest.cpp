@@ -1,8 +1,8 @@
 #include "ai/glaze/ToolDtos.hpp"
 #include "support/ComplexToolSchemaFixture.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 #include <cch/ai/Tool.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,14 +13,14 @@ using namespace cch;
 
 namespace {
 
-util::JsonValue complex_contract() {
-    auto parsed = util::read_json(tests::kComplexToolArgumentContract);
+support::JsonValue complex_contract() {
+    auto parsed = support::read_json(tests::kComplexToolArgumentContract);
     REQUIRE(parsed);
     return std::move(*parsed);
 }
 
-std::string canonical_json(const util::JsonValue& value) {
-    auto serialized = util::write_json(value);
+std::string canonical_json(const support::JsonValue& value) {
+    auto serialized = support::write_json(value);
     REQUIRE(serialized);
     return std::move(*serialized);
 }
@@ -28,12 +28,12 @@ std::string canonical_json(const util::JsonValue& value) {
 } // namespace
 
 TEST_CASE("tool parameters are the passive project JSON value", "[ai][u2][tool][issue24]") {
-    static_assert(std::is_same_v<decltype(ai::Tool::parameters), util::JsonValue>);
+    static_assert(std::is_same_v<decltype(ai::Tool::parameters), support::JsonValue>);
 
     ai::Tool object_tool{"object_contract", "Object contract", complex_contract()};
-    ai::Tool boolean_tool{"boolean_contract", "Boolean contract", util::JsonValue{false}};
+    ai::Tool boolean_tool{"boolean_contract", "Boolean contract", support::JsonValue{false}};
 
-    CHECK(object_tool.parameters.holds<util::JsonValue::object_t>());
+    CHECK(object_tool.parameters.holds<support::JsonValue::object_t>());
     CHECK(boolean_tool.parameters.holds<bool>());
     CHECK_FALSE(boolean_tool.parameters.get_boolean());
 }
@@ -44,7 +44,7 @@ TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", 
 
     auto json = ai::glaze::write_function_tool_json(tool);
     REQUIRE(json);
-    auto parsed = util::read_json(*json);
+    auto parsed = support::read_json(*json);
     REQUIRE(parsed);
 
     CHECK(parsed->at("name").get_string() == "complete_contract");
@@ -53,11 +53,11 @@ TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", 
 }
 
 TEST_CASE("function tool serialization preserves boolean JSON Schemas", "[ai][u2][tool][issue24]") {
-    const ai::Tool tool{"disabled_contract", "Reject every argument", util::JsonValue{false}};
+    const ai::Tool tool{"disabled_contract", "Reject every argument", support::JsonValue{false}};
 
     auto json = ai::glaze::write_function_tool_json(tool);
     REQUIRE(json);
-    auto parsed = util::read_json(*json);
+    auto parsed = support::read_json(*json);
     REQUIRE(parsed);
 
     REQUIRE(parsed->at("parameters").holds<bool>());

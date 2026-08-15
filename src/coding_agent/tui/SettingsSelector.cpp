@@ -7,7 +7,7 @@
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Text.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -210,7 +210,7 @@ public:
         content_ = std::move(content);
     }
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         return content_->render(width);
     }
 
@@ -407,7 +407,7 @@ SettingsSelectorComponent::SettingsSelectorComponent(
 
 SettingsSelectorComponent::~SettingsSelectorComponent() = default;
 
-util::Expected<cch::tui::RenderResult> SettingsSelectorComponent::render(
+support::Expected<cch::tui::RenderResult> SettingsSelectorComponent::render(
     std::size_t width) {
     return impl_->list_.render(width);
 }

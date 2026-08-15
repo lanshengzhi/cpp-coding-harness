@@ -8,8 +8,8 @@
 #include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "PartialJson.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -33,7 +33,7 @@
 namespace cch::ai::api {
 namespace {
 
-using JsonObject = util::JsonValue::object_t;
+using JsonObject = support::JsonValue::object_t;
 
 struct BlockSlot {
     enum class Kind { Thinking, Text, ToolCall };
@@ -48,11 +48,11 @@ struct BlockSlot {
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-[[nodiscard]] const JsonObject* object(const util::JsonValue& value) {
+[[nodiscard]] const JsonObject* object(const support::JsonValue& value) {
     return value.get_if<JsonObject>();
 }
 
-[[nodiscard]] const util::JsonValue* member(
+[[nodiscard]] const support::JsonValue* member(
     const JsonObject& value,
     std::string_view name) {
     const auto found = value.find(std::string{name});
@@ -134,7 +134,7 @@ template <typename Headers>
     return result + "/v1/messages";
 }
 
-[[nodiscard]] util::Expected<providers::StreamRequest> build_stream_request(
+[[nodiscard]] support::Expected<providers::StreamRequest> build_stream_request(
     const Model& model,
     const AiContext& context,
     const ProviderStreamOptions& options) {
@@ -143,7 +143,7 @@ template <typename Headers>
     if (!payload) {
         return std::unexpected(payload.error());
     }
-    auto body = util::write_json(*payload);
+    auto body = support::write_json(*payload);
     if (!body) {
         return std::unexpected(body.error());
     }
@@ -191,18 +191,18 @@ template <typename Headers>
     return request;
 }
 
-[[nodiscard]] util::Error stream_error(std::string message, std::string detail = {}) {
-    return util::make_error(
-        util::ErrorCode::Stream,
+[[nodiscard]] support::Error stream_error(std::string message, std::string detail = {}) {
+    return support::make_error(
+        support::ErrorCode::Stream,
         providers::bounded_provider_error_detail(std::move(message)),
         providers::bounded_provider_error_detail(std::move(detail)));
 }
 
-[[nodiscard]] util::Error normalize_transport_error(const util::Error& error) {
-    if (error.code == util::ErrorCode::Cancelled) {
-        return util::make_error(util::ErrorCode::Cancelled, "Request was aborted");
+[[nodiscard]] support::Error normalize_transport_error(const support::Error& error) {
+    if (error.code == support::ErrorCode::Cancelled) {
+        return support::make_error(support::ErrorCode::Cancelled, "Request was aborted");
     }
-    if (error.code == util::ErrorCode::Unknown) {
+    if (error.code == support::ErrorCode::Unknown) {
         return error;
     }
     return stream_error(
@@ -210,13 +210,13 @@ template <typename Headers>
         error.detail);
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> parse_event_json(
+[[nodiscard]] support::Expected<support::JsonValue> parse_event_json(
     const providers::SseEvent& event) {
-    if (auto parsed = util::read_json(event.data)) {
+    if (auto parsed = support::read_json(event.data)) {
         return std::move(*parsed);
     }
     const auto repaired = repair_json_strings(event.data);
-    if (auto parsed = util::read_json(repaired)) {
+    if (auto parsed = support::read_json(repaired)) {
         return std::move(*parsed);
     }
     return std::unexpected(stream_error(
@@ -250,7 +250,7 @@ template <typename Headers>
     return update;
 }
 
-[[nodiscard]] util::ExpectedVoid emit_start(
+[[nodiscard]] support::ExpectedVoid emit_start(
     AssistantEventSink& sink,
     AssistantMessage& assistant,
     bool& started) {
@@ -261,7 +261,7 @@ template <typename Headers>
     return providers::emit(sink, AssistantStartEvent{.partial = assistant});
 }
 
-[[nodiscard]] util::ExpectedVoid start_content_block(
+[[nodiscard]] support::ExpectedVoid start_content_block(
     const JsonObject& event,
     std::map<std::size_t, BlockSlot>& slots,
     AssistantMessage& assistant,
@@ -330,8 +330,8 @@ template <typename Headers>
         assistant.content.emplace_back(ToolCallContent{
             .id = std::string{string_member(*content, "id").value_or("")},
             .name = std::string{string_member(*content, "name").value_or("")},
-            .arguments = input ? std::optional<util::JsonValue>{*input}
-                               : std::optional<util::JsonValue>{util::JsonValue::object_t{}},
+            .arguments = input ? std::optional<support::JsonValue>{*input}
+                               : std::optional<support::JsonValue>{support::JsonValue::object_t{}},
             .raw_arguments = {},
             .thought_signature = std::nullopt,
             .arguments_valid = true,
@@ -350,7 +350,7 @@ template <typename Headers>
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid append_content_delta(
+[[nodiscard]] support::ExpectedVoid append_content_delta(
     const JsonObject& event,
     std::map<std::size_t, BlockSlot>& slots,
     AssistantMessage& assistant,
@@ -410,7 +410,7 @@ template <typename Headers>
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid stop_content_block(
+[[nodiscard]] support::ExpectedVoid stop_content_block(
     const JsonObject& event,
     std::map<std::size_t, BlockSlot>& slots,
     AssistantMessage& assistant,
@@ -453,7 +453,7 @@ template <typename Headers>
     });
 }
 
-[[nodiscard]] util::ExpectedVoid process_json_event(
+[[nodiscard]] support::ExpectedVoid process_json_event(
     const Model& model,
     const JsonObject& event,
     AssistantMessage& assistant,
@@ -524,7 +524,7 @@ template <typename Headers>
            event == "content_block_delta" || event == "content_block_stop";
 }
 
-[[nodiscard]] util::ExpectedVoid process_sse_event(
+[[nodiscard]] support::ExpectedVoid process_sse_event(
     const providers::SseEvent& event,
     const Model& model,
     AssistantMessage& assistant,
@@ -571,10 +571,10 @@ struct AnthropicAttemptState {
     bool saw_message_start{false};
     bool saw_message_stop{false};
     std::optional<TerminationResult> termination{std::nullopt};
-    std::optional<util::Error> handler_failure{std::nullopt};
+    std::optional<support::Error> handler_failure{std::nullopt};
 };
 
-[[nodiscard]] util::ExpectedVoid handle_body_chunk(
+[[nodiscard]] support::ExpectedVoid handle_body_chunk(
     std::string_view bytes,
     const Model& model,
     AssistantMessage& assistant,
@@ -608,7 +608,7 @@ struct AnthropicAttemptState {
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid finish_event_parser(
+[[nodiscard]] support::ExpectedVoid finish_event_parser(
     const Model& model,
     AssistantMessage& assistant,
     AssistantEventSink& sink,
@@ -643,18 +643,18 @@ void finalize_partial_tools(AssistantMessage& assistant) {
     }
 }
 
-[[nodiscard]] util::Expected<AssistantMessage> complete_failure(
+[[nodiscard]] support::Expected<AssistantMessage> complete_failure(
     AssistantMessage assistant,
-    util::Error failure,
+    support::Error failure,
     AssistantEventSink& sink) {
     finalize_partial_tools(assistant);
-    const auto aborted = failure.code == util::ErrorCode::Cancelled;
+    const auto aborted = failure.code == support::ErrorCode::Cancelled;
     assistant.stop_reason = aborted
         ? AssistantStopReason::Aborted
         : AssistantStopReason::Error;
     if (aborted) {
         assistant.error_message = "Request was aborted";
-        failure = util::make_error(util::ErrorCode::Cancelled, *assistant.error_message);
+        failure = support::make_error(support::ErrorCode::Cancelled, *assistant.error_message);
     } else {
         std::string diagnostic = failure.message;
         if (!failure.detail.empty() && diagnostic.find(failure.detail) == std::string::npos) {
@@ -665,7 +665,7 @@ void finalize_partial_tools(AssistantMessage& assistant) {
         }
         assistant.error_message = providers::bounded_provider_error_detail(
             std::move(diagnostic));
-        failure = util::make_error(util::ErrorCode::Stream, *assistant.error_message);
+        failure = support::make_error(support::ErrorCode::Stream, *assistant.error_message);
     }
     auto emitted = providers::emit(sink, AssistantErrorEvent{
         .reason = assistant.stop_reason,
@@ -690,26 +690,26 @@ void finalize_partial_tools(AssistantMessage& assistant) {
     };
 }
 
-[[nodiscard]] providers::ProviderFailure transport_failure(const util::Error& error) {
+[[nodiscard]] providers::ProviderFailure transport_failure(const support::Error& error) {
     return providers::ProviderFailure{
-        .network_error = error.code == util::ErrorCode::Network ||
-                         error.code == util::ErrorCode::Timeout,
+        .network_error = error.code == support::ErrorCode::Network ||
+                         error.code == support::ErrorCode::Timeout,
         .status = std::nullopt,
         .headers = {},
         .message = error.detail.empty() ? error.message : error.detail,
     };
 }
 
-[[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> wait_before_retry(
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> wait_before_retry(
     std::uint64_t delay_ms,
     std::stop_token stop_token) {
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if (delay_ms == 0) {
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
     auto executor = co_await boost::asio::this_coro::executor;
     boost::asio::steady_timer timer(executor, std::chrono::milliseconds{delay_ms});
@@ -718,8 +718,8 @@ void finalize_partial_tools(AssistantMessage& assistant) {
     co_await timer.async_wait(boost::asio::redirect_error(
         boost::asio::use_awaitable, error));
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if (error) {
@@ -727,10 +727,10 @@ void finalize_partial_tools(AssistantMessage& assistant) {
             "Anthropic Messages retry wait failed",
             error.message()));
     }
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<bool>> retry_provider_failure(
+[[nodiscard]] boost::asio::awaitable<support::Expected<bool>> retry_provider_failure(
     providers::ProviderFailure failure,
     std::uint32_t attempt,
     std::uint32_t max_retries,
@@ -759,7 +759,7 @@ AnthropicMessagesAdapter::AnthropicMessagesAdapter(AnthropicMessagesAdapter&&) n
 AnthropicMessagesAdapter& AnthropicMessagesAdapter::operator=(AnthropicMessagesAdapter&&) noexcept = default;
 AnthropicMessagesAdapter::~AnthropicMessagesAdapter() = default;
 
-boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapter::stream(
+boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAdapter::stream(
     const Model& model,
     const AiContext& context,
     ProviderStreamOptions options,
@@ -777,8 +777,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
             "Anthropic Messages Model base URL is required"));
     }
     if (options.stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
     if ((!options.auth.api_key || options.auth.api_key->empty()) &&
@@ -798,9 +798,9 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
     assistant.stop_reason = AssistantStopReason::Pending;
     assistant.timestamp = current_timestamp_ms();
 
-    std::optional<util::Error> sink_failure;
+    std::optional<support::Error> sink_failure;
     AssistantEventSink guarded_sink =
-        [&sink, &sink_failure](const AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&sink, &sink_failure](const AssistantStreamEvent& event) -> support::ExpectedVoid {
             auto emitted = providers::emit(sink, event);
             if (!emitted) {
                 sink_failure = emitted.error();
@@ -812,7 +812,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
         AnthropicAttemptState attempt_state;
         auto response = co_await transport_->async_stream(
             request,
-            [&](std::string_view bytes) -> util::ExpectedVoid {
+            [&](std::string_view bytes) -> support::ExpectedVoid {
                 return handle_body_chunk(
                     bytes,
                     model,
@@ -828,11 +828,11 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
                 co_return complete_failure(
                     assistant, *attempt_state.handler_failure, guarded_sink);
             }
-            if (response.error().code == util::ErrorCode::Cancelled ||
+            if (response.error().code == support::ErrorCode::Cancelled ||
                 options.stop_token.stop_requested()) {
                 co_return complete_failure(
                     assistant,
-                    util::make_error(util::ErrorCode::Cancelled, "Request was aborted"),
+                    support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
                     guarded_sink);
             }
             const auto failure = transport_failure(response.error());
@@ -891,7 +891,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
         if (options.stop_token.stop_requested()) {
             co_return complete_failure(
                 assistant,
-                util::make_error(util::ErrorCode::Cancelled, "Request was aborted"),
+                support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
                 guarded_sink);
         }
         if (!attempt_state.saw_message_stop) {

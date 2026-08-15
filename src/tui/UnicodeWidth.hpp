@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <optional>
@@ -57,12 +57,12 @@ struct TerminalToken {
     std::size_t width{0};
 };
 
-[[nodiscard]] util::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text);
+[[nodiscard]] support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text);
 
 /// Shared width-module helpers (used by the public utility surface and by
 /// `prepare_rendered_line`).
-[[nodiscard]] inline util::Error invalid_terminal_text(std::string message, std::string detail = {}) {
-    return util::make_error(util::ErrorCode::Validation, std::move(message), std::move(detail));
+[[nodiscard]] inline support::Error invalid_terminal_text(std::string message, std::string detail = {}) {
+    return support::make_error(support::ErrorCode::Validation, std::move(message), std::move(detail));
 }
 
 [[nodiscard]] inline std::string normalized_text(const std::vector<TerminalToken>& tokens) {
@@ -71,7 +71,7 @@ struct TerminalToken {
     return result;
 }
 
-[[nodiscard]] inline util::Expected<std::size_t> token_width(const std::vector<TerminalToken>& tokens) {
+[[nodiscard]] inline support::Expected<std::size_t> token_width(const std::vector<TerminalToken>& tokens) {
     std::size_t width = 0;
     for (const auto& token : tokens) {
         if (token.kind == TerminalTokenKind::Newline) {
@@ -86,9 +86,9 @@ struct TerminalToken {
     std::string_view text,
     std::size_t position);
 
-[[nodiscard]] util::Expected<std::string> normalize_terminal_output(std::string_view text);
+[[nodiscard]] support::Expected<std::string> normalize_terminal_output(std::string_view text);
 
-[[nodiscard]] util::Expected<std::string> prepare_rendered_line(
+[[nodiscard]] support::Expected<std::string> prepare_rendered_line(
     std::string_view line,
     std::size_t width);
 

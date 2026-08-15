@@ -1,7 +1,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 #include "../../support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -201,7 +201,7 @@ TEST_CASE("SessionTree branch rejects unknown entry ID", "[harness][session][tre
     std::string original_leaf = tree.leaf_id();
     auto result = tree.branch("deadbeef");
     REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Session);
+    CHECK(result.error().code == support::ErrorCode::Session);
     // Leaf should not have changed
     CHECK(tree.leaf_id() == original_leaf);
 }
@@ -299,9 +299,9 @@ std::string first_user_text(const std::vector<ai::MessageVariant>& msgs) {
     return {};
 }
 
-util::JsonValue ignored_payload_marker(std::string marker) {
-    return util::JsonValue{util::JsonValue::object_t{
-        {"ignoredPayloadMarker", util::JsonValue{std::move(marker)}},
+support::JsonValue ignored_payload_marker(std::string marker) {
+    return support::JsonValue{support::JsonValue::object_t{
+        {"ignoredPayloadMarker", support::JsonValue{std::move(marker)}},
     }};
 }
 } // namespace
@@ -366,7 +366,7 @@ TEST_CASE(
     REQUIRE(store->append(user_msg("root")));
     REQUIRE(store->append_compaction(std::nullopt, "minimal summary", "", 1234, std::nullopt, std::nullopt));
     REQUIRE(store->append_label_change(std::nullopt, "", "checkpoint"));
-    REQUIRE(store->append_custom_entry(std::nullopt, "extension.meta", util::JsonValue{42}));
+    REQUIRE(store->append_custom_entry(std::nullopt, "extension.meta", support::JsonValue{42}));
     REQUIRE(store->append_custom_message_entry(
         std::nullopt, "extension.msg", "injected", true, std::nullopt));
     REQUIRE(store->append_branch_summary(std::nullopt, "from-leaf", "explored", std::nullopt, std::nullopt));
@@ -846,13 +846,13 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     std::vector<harness::session::SessionEntry> appended_entries;
     harness::session::SessionTree::BranchSummaryHook hook =
         [](const harness::session::SessionTree::BranchSummaryContext& ctx)
-        -> util::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
+        -> support::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
         harness::session::SessionTree::BranchSummaryData data;
         data.summary = "summarized " + std::to_string(ctx.branch_entries.size()) + " entries";
         return data;
     };
 
-    auto append_writer = [&](const harness::session::SessionEntry& entry) -> util::ExpectedVoid {
+    auto append_writer = [&](const harness::session::SessionEntry& entry) -> support::ExpectedVoid {
         appended_entries.push_back(entry);
         return {};
     };
@@ -889,12 +889,12 @@ TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree]")
     // Hook that returns nullopt (skip summary).
     harness::session::SessionTree::BranchSummaryHook hook =
         [](const harness::session::SessionTree::BranchSummaryContext&)
-        -> util::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
+        -> support::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
         return std::nullopt;
     };
 
     bool writer_called = false;
-    auto append_writer = [&](const harness::session::SessionEntry&) -> util::ExpectedVoid {
+    auto append_writer = [&](const harness::session::SessionEntry&) -> support::ExpectedVoid {
         writer_called = true;
         return {};
     };
@@ -917,10 +917,10 @@ TEST_CASE("branchWithSummary rejects unknown target", "[harness][session][tree]"
 
     harness::session::SessionTree::BranchSummaryHook hook =
         [](const harness::session::SessionTree::BranchSummaryContext&)
-        -> util::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
+        -> support::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
         return std::nullopt;
     };
-    auto append_writer = [](const harness::session::SessionEntry&) -> util::ExpectedVoid { return {}; };
+    auto append_writer = [](const harness::session::SessionEntry&) -> support::ExpectedVoid { return {}; };
 
     auto result = tree->branchWithSummary("deadbeef", hook, std::move(append_writer));
     REQUIRE_FALSE(result.has_value());

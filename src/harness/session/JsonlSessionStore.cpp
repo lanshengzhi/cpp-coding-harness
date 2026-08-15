@@ -11,8 +11,8 @@
 namespace cch::harness::session {
 
 struct JsonlSessionStore::Impl {
-    [[nodiscard]] util::ExpectedVoid append_serialized(
-        util::Expected<std::string> serialized) {
+    [[nodiscard]] support::ExpectedVoid append_serialized(
+        support::Expected<std::string> serialized) {
         if (!serialized) {
             return std::unexpected(serialized.error());
         }
@@ -33,7 +33,7 @@ JsonlSessionStore& JsonlSessionStore::operator=(JsonlSessionStore&&) = default;
 std::optional<std::filesystem::path> JsonlSessionStore::path() const { return impl_->path; }
 const SessionMetadata& JsonlSessionStore::metadata() const { return impl_->metadata; }
 
-util::Expected<JsonlSessionStore> JsonlSessionStore::create_new(
+support::Expected<JsonlSessionStore> JsonlSessionStore::create_new(
     const std::filesystem::path& path, SessionMetadata metadata) {
     EntrySerializer serializer;
     auto header_json = serializer.serialize_header(metadata);
@@ -54,7 +54,7 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::create_new(
     return store;
 }
 
-util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::filesystem::path& path) {
+support::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::filesystem::path& path) {
     auto loaded = load(path);
     if (!loaded) {
         return std::unexpected(loaded.error());
@@ -78,7 +78,7 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::fi
     return store;
 }
 
-util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::path& path) {
+support::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::path& path) {
     auto journal = SessionJournal::open_existing(path);
     if (!journal) {
         return std::unexpected(journal.error());
@@ -93,7 +93,7 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
     return serializer.parse_lines(*lines);
 }
 
-util::Expected<SessionTree> JsonlSessionStore::open_as_tree(const std::filesystem::path& path) {
+support::Expected<SessionTree> JsonlSessionStore::open_as_tree(const std::filesystem::path& path) {
     auto loaded = load(path);
     if (!loaded.has_value()) {
         return std::unexpected(loaded.error());
@@ -101,7 +101,7 @@ util::Expected<SessionTree> JsonlSessionStore::open_as_tree(const std::filesyste
     return SessionTree(std::move(*loaded));
 }
 
-util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) {
+support::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) {
     EntrySerializer serializer;
     auto parent_id = impl_->persist_leaf_after_message_append
         ? impl_->active_append_parent_id
@@ -131,7 +131,7 @@ util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) 
     return {};
 }
 
-util::ExpectedVoid JsonlSessionStore::append_model_change(
+support::ExpectedVoid JsonlSessionStore::append_model_change(
     std::optional<std::string> parent_id,
     std::string provider,
     std::string model_id) {
@@ -140,7 +140,7 @@ util::ExpectedVoid JsonlSessionStore::append_model_change(
         std::move(parent_id), std::move(provider), std::move(model_id)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_thinking_level_change(
+support::ExpectedVoid JsonlSessionStore::append_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) {
     EntrySerializer serializer;
@@ -148,7 +148,7 @@ util::ExpectedVoid JsonlSessionStore::append_thinking_level_change(
         std::move(parent_id), std::move(thinking_level)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_active_tools_change(
+support::ExpectedVoid JsonlSessionStore::append_active_tools_change(
     std::optional<std::string> parent_id,
     std::vector<std::string> tools) {
     EntrySerializer serializer;
@@ -156,21 +156,21 @@ util::ExpectedVoid JsonlSessionStore::append_active_tools_change(
         std::move(parent_id), std::move(tools)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_custom_entry(
+support::ExpectedVoid JsonlSessionStore::append_custom_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
-    util::JsonValue data) {
+    support::JsonValue data) {
     EntrySerializer serializer;
     return impl_->append_serialized(serializer.serialize_custom_entry(
         std::move(parent_id), std::move(custom_type), std::move(data)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
+support::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
     CustomMessageEntryContent content,
     bool display,
-    std::optional<util::JsonValue> details) {
+    std::optional<support::JsonValue> details) {
     EntrySerializer serializer;
     return impl_->append_serialized(serializer.serialize_custom_message_entry(
         std::move(parent_id),
@@ -180,7 +180,7 @@ util::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
         std::move(details)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_label_change(
+support::ExpectedVoid JsonlSessionStore::append_label_change(
     std::optional<std::string> parent_id,
     std::string target_id,
     std::optional<std::string> label) {
@@ -189,12 +189,12 @@ util::ExpectedVoid JsonlSessionStore::append_label_change(
         std::move(parent_id), std::move(target_id), std::move(label)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_compaction(
+support::ExpectedVoid JsonlSessionStore::append_compaction(
     std::optional<std::string> parent_id,
     std::string summary,
     std::string first_kept_entry_id,
     std::size_t tokens_before,
-    std::optional<util::JsonValue> details,
+    std::optional<support::JsonValue> details,
     std::optional<bool> from_hook,
     std::vector<ai::MessageVariant> retained_tail,
     std::optional<ai::Usage> usage) {
@@ -210,11 +210,11 @@ util::ExpectedVoid JsonlSessionStore::append_compaction(
         usage));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_branch_summary(
+support::ExpectedVoid JsonlSessionStore::append_branch_summary(
     std::optional<std::string> parent_id,
     std::string from_id,
     std::string summary,
-    std::optional<util::JsonValue> details,
+    std::optional<support::JsonValue> details,
     std::optional<bool> from_hook) {
     EntrySerializer serializer;
     return impl_->append_serialized(serializer.serialize_branch_summary(
@@ -225,7 +225,7 @@ util::ExpectedVoid JsonlSessionStore::append_branch_summary(
         from_hook));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_session_info(
+support::ExpectedVoid JsonlSessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
     EntrySerializer serializer;
@@ -233,7 +233,7 @@ util::ExpectedVoid JsonlSessionStore::append_session_info(
         std::move(parent_id), std::move(name)));
 }
 
-util::ExpectedVoid JsonlSessionStore::append_leaf(
+support::ExpectedVoid JsonlSessionStore::append_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) {
     // The marker target is also the new in-process append parent: copy it

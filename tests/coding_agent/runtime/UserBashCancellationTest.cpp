@@ -45,7 +45,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("immediate reply");
         response.provider = "immediate-fake";
@@ -59,7 +59,7 @@ public:
     std::vector<tests::RecordedProviderRequest> requests;
 };
 
-[[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> make_session(
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> make_session(
     const std::filesystem::path& workspace,
     std::shared_ptr<ai::Provider> client,
     std::unique_ptr<tests::FakeUserShell> shell,
@@ -108,11 +108,11 @@ TEST_CASE(
             false,
             [&progress_commands](const coding_agent::runtime::UserBashProgress& progress) {
                 progress_commands.push_back(progress.command);
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             }),
         [&result](
             std::exception_ptr exception,
-            util::Expected<coding_agent::runtime::UserBashCompletion> completion) {
+            support::Expected<coding_agent::runtime::UserBashCompletion> completion) {
             REQUIRE(exception == nullptr);
             result.emplace(std::move(completion));
         });
@@ -181,8 +181,8 @@ TEST_CASE(
     shell->enqueue({
         .updates = {},
         .result = {},
-        .infrastructure_failure = util::make_error(
-            util::ErrorCode::Process,
+        .infrastructure_failure = support::make_error(
+            support::ErrorCode::Process,
             message,
             detail,
             context),
@@ -353,8 +353,8 @@ TEST_CASE(
     shell_pointer->enqueue({
         .updates = {},
         .result = {},
-        .infrastructure_failure = util::make_error(
-            util::ErrorCode::Process,
+        .infrastructure_failure = support::make_error(
+            support::ErrorCode::Process,
             "shell spawn failed"),
         .gated = false,
     });

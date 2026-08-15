@@ -9,10 +9,10 @@
 // presentation and the completed Bash Message) and, once the tail truncates,
 // a complete spill file in the OS temporary directory.
 
-#include "util/UniqueFd.hpp"
-#include "util/OutputLimiter.hpp"
+#include "support/UniqueFd.hpp"
+#include "harness/OutputLimiter.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -28,7 +28,7 @@ inline constexpr std::string_view kUtf8Replacement{"\xef\xbf\xbd"};
 
 // --- Stage 1: incremental UTF-8 safety -------------------------------------
 // Holds back a trailing incomplete-but-plausible multibyte prefix; every other
-// invalid byte becomes U+FFFD, matching util::bounded_utf8 whole-buffer rules.
+// invalid byte becomes U+FFFD, matching ai::bounded_utf8 whole-buffer rules.
 
 class Utf8Safety {
 public:
@@ -47,7 +47,7 @@ private:
 };
 
 // --- Stage 2: incremental ANSI stripping ------------------------------------
-// Mirrors util::strip_terminal_escape_sequences while holding back an
+// Mirrors tools::strip_terminal_escape_sequences while holding back an
 // unterminated escape. An unterminated sequence longer than kMaxEscapeBytes is
 // dropped outright: over-stripping is safe, emitting partial controls is not.
 // (Bounded memory requires the cap; the whole-buffer stripper would consume
@@ -91,29 +91,29 @@ public:
 
     // Creates the artifact and writes the complete stream so far: the
     // retained tail plus the arriving increment.
-    [[nodiscard]] util::ExpectedVoid start(
+    [[nodiscard]] support::ExpectedVoid start(
         std::string_view retained,
         std::string_view incoming);
-    [[nodiscard]] util::ExpectedVoid write(std::string_view bytes);
+    [[nodiscard]] support::ExpectedVoid write(std::string_view bytes);
     // Flushes ownership of the artifact to the caller-visible state: after a
     // successful close the path() is valid and persistent.
-    [[nodiscard]] util::ExpectedVoid finish();
+    [[nodiscard]] support::ExpectedVoid finish();
     // A failed artifact is incomplete and misleading: close and remove it.
     void abandon();
 
 private:
-    [[nodiscard]] static util::Error spill_error(std::string message, std::string detail);
+    [[nodiscard]] static support::Error spill_error(std::string message, std::string detail);
     [[nodiscard]] static std::string random_suffix();
 #if defined(__unix__) || defined(__APPLE__)
-    [[nodiscard]] static util::ExpectedVoid write_all(int fd, std::string_view bytes);
+    [[nodiscard]] static support::ExpectedVoid write_all(int fd, std::string_view bytes);
     static void remove_candidate(
-        util::UniqueFd& fd,
+        support::UniqueFd& fd,
         const std::filesystem::path& candidate);
 #endif
     void remove_file();
 
 #if defined(__unix__) || defined(__APPLE__)
-    util::UniqueFd fd_;
+    support::UniqueFd fd_;
 #endif
     std::filesystem::path path_;
     bool active_{false};
@@ -125,7 +125,7 @@ private:
 /// Agent Session runtime executor; not thread-safe.
 class UserBashOutputAccumulator {
 public:
-    explicit UserBashOutputAccumulator(util::OutputLimit limit = {}) : limit_(limit) {}
+    explicit UserBashOutputAccumulator(harness::OutputLimit limit = {}) : limit_(limit) {}
 
     /// Feed one raw stdout/stderr chunk in callback-arrival order. The
     /// sanitized increment is reflected in tail() on return.
@@ -147,7 +147,7 @@ public:
         return full_output_path_;
     }
     /// A spill failure never erases the bounded truncated result.
-    [[nodiscard]] const std::optional<util::Error>& artifact_error() const {
+    [[nodiscard]] const std::optional<support::Error>& artifact_error() const {
         return artifact_error_;
     }
 
@@ -156,7 +156,7 @@ private:
     // construct) through the three-stage pipeline into the rolling tail.
     void pump(std::string_view raw, bool flush);
     // Retain the sanitized increment in the rolling tail, applying the same
-    // tail semantics as util::limit_output_tail on the complete stream. Once
+    // tail semantics as harness::limit_output_tail on the complete stream. Once
     // the tail truncates, the complete sanitized stream is spilled
     // incrementally; a spill failure preserves the bounded truncated result
     // and records a bounded redacted diagnostic instead of a path.
@@ -165,7 +165,7 @@ private:
     // exactly when its bytes exceed max_bytes or its lines exceed max_lines.
     [[nodiscard]] bool would_truncate(const std::string& emitted) const;
     [[nodiscard]] std::size_t tail_newlines() const;
-    // Backward-walk trim identical to util::limit_output_tail: at most
+    // Backward-walk trim identical to harness::limit_output_tail: at most
     // limit_.max_bytes bytes and limit_.max_lines lines, never splitting a
     // multibyte sequence at the cut point.
     void trim_tail();
@@ -173,7 +173,7 @@ private:
     // One maximum-length UTF-8 sequence: keeps the lead byte of a sequence
     // straddling the pre-cut window boundary available to the trim below.
     static constexpr std::size_t kBoundarySlack{4};
-    util::OutputLimit limit_;
+    harness::OutputLimit limit_;
     user_bash_output_detail::Utf8Safety utf8_;
     user_bash_output_detail::AnsiStrip ansi_;
     user_bash_output_detail::ControlFilter control_filter_;
@@ -181,7 +181,7 @@ private:
     std::string tail_;
     bool truncated_{false};
     std::optional<std::string> full_output_path_;
-    std::optional<util::Error> artifact_error_;
+    std::optional<support::Error> artifact_error_;
 };
 
 } // namespace cch::coding_agent::runtime

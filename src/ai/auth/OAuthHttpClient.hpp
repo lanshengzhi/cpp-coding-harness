@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -24,7 +24,7 @@ class OAuthHttpClient {
 public:
     virtual ~OAuthHttpClient() = default;
 
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<OAuthHttpResponse>> post(
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post(
         std::string url,
         std::map<std::string, std::string, std::less<>> headers,
         std::string body,
@@ -34,7 +34,7 @@ public:
 /// Default Boost.Beast/OpenSSL implementation for `https://` endpoints.
 class BoostBeastOAuthHttpClient final : public OAuthHttpClient {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<OAuthHttpResponse>> post(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post(
         std::string url,
         std::map<std::string, std::string, std::less<>> headers,
         std::string body,

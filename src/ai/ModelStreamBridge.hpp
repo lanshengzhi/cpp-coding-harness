@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/ModelStream.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include "ai/AsyncResultBridge.hpp"
 
@@ -16,7 +16,7 @@ namespace cch::ai::detail {
 /// Wraps a one-shot awaitable producer into a move-only `ModelStream`
 /// (ADR 0040 / #455). `make_awaitable` is invoked exactly once at consumption
 /// with the event sink and must return a fresh `boost::asio::awaitable` whose
-/// terminal `util::Expected<AssistantMessage>` is the stream's one terminal
+/// terminal `support::Expected<AssistantMessage>` is the stream's one terminal
 /// outcome. The producer reads the initiating executor captured by `consume`
 /// (AsyncResultBridge) so the wrapped coroutine runs in the consuming
 /// serialized domain; event order, retry boundaries, cooperative cancellation,
@@ -39,18 +39,18 @@ template <typename AwaitableFactory>
                         [shared,
                          completion = std::move(completion)](
                             std::exception_ptr eptr,
-                            util::Expected<AssistantMessage> result) mutable noexcept {
+                            support::Expected<AssistantMessage> result) mutable noexcept {
                             if (eptr) {
-                                completion(std::unexpected(util::make_error(
-                                    util::ErrorCode::Stream,
+                                completion(std::unexpected(support::make_error(
+                                    support::ErrorCode::Stream,
                                     "model stream failed")));
                             } else {
                                 completion(std::move(result));
                             }
                         }));
             } catch (...) {
-                completion(std::unexpected(util::make_error(
-                    util::ErrorCode::Stream,
+                completion(std::unexpected(support::make_error(
+                    support::ErrorCode::Stream,
                     "model stream initiation failed")));
             }
         }}};

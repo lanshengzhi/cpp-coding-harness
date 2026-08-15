@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,10 +18,10 @@ namespace detail {
 
 [[nodiscard]] inline std::string mismatch_message(
     const std::string& path,
-    const util::JsonValue& expected,
-    const util::JsonValue& actual) {
-    auto expected_text = util::write_json(expected);
-    auto actual_text = util::write_json(actual);
+    const support::JsonValue& expected,
+    const support::JsonValue& actual) {
+    auto expected_text = support::write_json(expected);
+    auto actual_text = support::write_json(actual);
     return path + ": expected " +
            (expected_text ? *expected_text : std::string{"<unserializable>"}) +
            ", actual " +
@@ -36,8 +36,8 @@ namespace detail {
 /// value compares exactly. Returns the first mismatch path and values, or
 /// nullopt when the values match.
 [[nodiscard]] inline std::optional<std::string> json_mismatch(
-    const util::JsonValue& expected,
-    const util::JsonValue& actual,
+    const support::JsonValue& expected,
+    const support::JsonValue& actual,
     std::string path = "$") {
     if (const auto* expected_number = expected.get_if<double>()) {
         const auto* actual_number = actual.get_if<double>();
@@ -49,8 +49,8 @@ namespace detail {
         }
         return std::nullopt;
     }
-    if (const auto* expected_object = expected.get_if<util::JsonValue::object_t>()) {
-        const auto* actual_object = actual.get_if<util::JsonValue::object_t>();
+    if (const auto* expected_object = expected.get_if<support::JsonValue::object_t>()) {
+        const auto* actual_object = actual.get_if<support::JsonValue::object_t>();
         if (!actual_object) {
             return detail::mismatch_message(path, expected, actual);
         }
@@ -70,8 +70,8 @@ namespace detail {
         }
         return std::nullopt;
     }
-    if (const auto* expected_array = expected.get_if<util::JsonValue::array_t>()) {
-        const auto* actual_array = actual.get_if<util::JsonValue::array_t>();
+    if (const auto* expected_array = expected.get_if<support::JsonValue::array_t>()) {
+        const auto* actual_array = actual.get_if<support::JsonValue::array_t>();
         if (!actual_array) {
             return detail::mismatch_message(path, expected, actual);
         }

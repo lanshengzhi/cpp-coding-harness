@@ -1,7 +1,7 @@
 #include "ai/glaze/AiJson.hpp"
 #include "support/ComplexToolSchemaFixture.hpp"
-#include "util/Json.hpp"
-#include <cch/util/Error.hpp>
+#include "support/Json.hpp"
+#include <cch/support/Error.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,7 +13,7 @@
 using namespace cch;
 
 TEST_CASE("tool-result message round-trips linkage details and error state", "[ai][u2][glaze]") {
-    auto details = util::read_json(R"({"exitCode":2,"stderr":"denied"})");
+    auto details = support::read_json(R"({"exitCode":2,"stderr":"denied"})");
     REQUIRE(details);
 
     ai::ToolResultMessage result;
@@ -51,7 +51,7 @@ TEST_CASE("tool-result message round-trips linkage details and error state", "[a
     REQUIRE(std::holds_alternative<ai::ImageContent>(round_trip.content[1]));
     CHECK(std::get<ai::ImageContent>(round_trip.content[1]).mime_type == "image/png");
     REQUIRE(round_trip.details);
-    const auto& detail_object = round_trip.details->get<util::JsonValue::object_t>();
+    const auto& detail_object = round_trip.details->get<support::JsonValue::object_t>();
     CHECK(static_cast<int>(detail_object.at("exitCode").get<double>()) == 2);
     CHECK(detail_object.at("stderr").get_string() == "denied");
 }
@@ -152,7 +152,7 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
 }
 
 TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24]") {
-    auto expected_contract = util::read_json(tests::kComplexToolArgumentContract);
+    auto expected_contract = support::read_json(tests::kComplexToolArgumentContract);
     REQUIRE(expected_contract);
 
     ai::AiContext context;
@@ -178,8 +178,8 @@ TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", 
     REQUIRE(parsed->tools.size() == 1);
     CHECK(parsed->tools[0].name == "read_file");
 
-    auto expected_json = util::write_json(*expected_contract);
-    auto restored_json = util::write_json(parsed->tools[0].parameters);
+    auto expected_json = support::write_json(*expected_contract);
+    auto restored_json = support::write_json(parsed->tools[0].parameters);
     REQUIRE(expected_json);
     REQUIRE(restored_json);
     CHECK(*restored_json == *expected_json);
@@ -227,7 +227,7 @@ TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[ai][u2][glaze]") {
 
     const auto parsed = ai::glaze::read_message_json(*json);
     REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+    CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 
 TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze]") {
@@ -244,7 +244,7 @@ TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze]") {
 
     const auto parsed = ai::glaze::read_message_json(*json);
     REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+    CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 
 TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2][glaze]") {
@@ -252,13 +252,13 @@ TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2
     std::string accepted_json(kMaximumDepth, '[');
     accepted_json += '0';
     accepted_json.append(kMaximumDepth, ']');
-    REQUIRE(util::read_json<glz::generic>(accepted_json));
+    REQUIRE(support::read_json<glz::generic>(accepted_json));
 
     std::string rejected_json(kMaximumDepth + 1, '[');
     rejected_json += '0';
     rejected_json.append(kMaximumDepth + 1, ']');
-    const auto parsed = util::read_json<glz::generic>(rejected_json);
+    const auto parsed = support::read_json<glz::generic>(rejected_json);
     REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+    CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 

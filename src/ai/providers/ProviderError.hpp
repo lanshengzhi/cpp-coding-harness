@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/BoundedText.hpp"
+#include "ai/BoundedText.hpp"
 
 #include <cstddef>
 #include <string>
@@ -11,7 +11,7 @@ namespace cch::ai::providers {
 inline constexpr std::size_t kMaxProviderErrorDetailBytes = 4096;
 
 [[nodiscard]] inline std::string bounded_provider_error_detail(std::string detail) {
-    return util::bounded_redacted_text(
+    return ai::bounded_redacted_text(
         std::move(detail),
         kMaxProviderErrorDetailBytes);
 }

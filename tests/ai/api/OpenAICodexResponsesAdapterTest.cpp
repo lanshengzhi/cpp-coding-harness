@@ -7,7 +7,7 @@
 #include "support/PiFixture.hpp"
 #include "support/ScriptedWebSocket.hpp"
 #include "support/StreamAdapterFixture.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -44,7 +44,7 @@ constexpr std::string_view kCodexToken =
 constexpr std::string_view kCodexAccountId = "acc_test";
 
 struct RunResult {
-    util::Expected<ai::AssistantMessage> result;
+    support::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
@@ -110,11 +110,11 @@ struct CodexHarness {
     context.tools.push_back(ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     });
@@ -130,7 +130,7 @@ struct CodexHarness {
     auto stream = models.stream(model, std::move(context), std::move(options));
     auto result = run_async_result(
         std::move(stream).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -147,11 +147,11 @@ struct CodexHarness {
     return ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     };
@@ -207,8 +207,8 @@ struct CodexHarness {
     return result;
 }
 
-[[nodiscard]] std::string json_string(const util::JsonValue& value) {
-    auto text = util::write_json(value);
+[[nodiscard]] std::string json_string(const support::JsonValue& value) {
+    auto text = support::write_json(value);
     REQUIRE(text);
     return std::move(*text);
 }
@@ -216,19 +216,19 @@ struct CodexHarness {
 [[nodiscard]] std::string terminal_frame(
     std::string type,
     std::string status,
-    util::JsonValue::object_t extra = {}) {
-    util::JsonValue::object_t response{
+    support::JsonValue::object_t extra = {}) {
+    support::JsonValue::object_t response{
         {"id", "resp_terminal"},
         {"status", std::move(status)},
     };
     for (auto& [key, value] : extra) {
         response.emplace(std::move(key), std::move(value));
     }
-    util::JsonValue::object_t event{
+    support::JsonValue::object_t event{
         {"type", std::move(type)},
         {"response", std::move(response)},
     };
-    return json_string(util::JsonValue{std::move(event)});
+    return json_string(support::JsonValue{std::move(event)});
 }
 
 [[nodiscard]] std::string simple_terminal(
@@ -237,8 +237,8 @@ struct CodexHarness {
     return terminal_frame(
         std::move(type),
         std::move(status),
-        util::JsonValue::object_t{
-            {"usage", util::JsonValue::object_t{
+        support::JsonValue::object_t{
+            {"usage", support::JsonValue::object_t{
                 {"input_tokens", 5.0},
                 {"output_tokens", 3.0},
                 {"total_tokens", 8.0},
@@ -247,13 +247,13 @@ struct CodexHarness {
 }
 
 [[nodiscard]] std::string error_frame(std::string code, std::string message) {
-    util::JsonValue::object_t error{{"code", std::move(code)}};
-    util::JsonValue::object_t event{
+    support::JsonValue::object_t error{{"code", std::move(code)}};
+    support::JsonValue::object_t event{
         {"error", std::move(error)},
         {"message", std::move(message)},
         {"type", "error"},
     };
-    return json_string(util::JsonValue{std::move(event)});
+    return json_string(support::JsonValue{std::move(event)});
 }
 
 } // namespace
@@ -264,13 +264,13 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     const auto ws_fixture = tests::read_pi_fixture("wire/openai-codex-responses-ws.json");
     REQUIRE(ws_fixture);
-    const auto* ws_object = ws_fixture->get_if<util::JsonValue::object_t>();
+    const auto* ws_object = ws_fixture->get_if<support::JsonValue::object_t>();
     REQUIRE(ws_object);
     const auto request_found = ws_object->find("request");
     const auto events_found = ws_object->find("events");
     REQUIRE(request_found != ws_object->end());
     REQUIRE(events_found != ws_object->end());
-    const auto* events = events_found->second.get_if<util::JsonValue::array_t>();
+    const auto* events = events_found->second.get_if<support::JsonValue::array_t>();
     REQUIRE(events);
     const auto expected_request_bytes = json_string(request_found->second);
 
@@ -315,7 +315,7 @@ TEST_CASE(
     const auto& text = std::get<ai::TextContent>(run.result->content[1]);
     CHECK(text.text == "Hello");
     REQUIRE(text.text_signature);
-    const auto signature = util::read_json(*text.text_signature);
+    const auto signature = support::read_json(*text.text_signature);
     REQUIRE(signature);
     CHECK(signature->at("id").get_string() == "msg_1");
     CHECK(signature->at("v").get_number() == 1);
@@ -360,13 +360,13 @@ TEST_CASE(
     const auto ws_fixture = tests::read_pi_fixture(
         "wire/openai-codex-responses-string-content-ws.json");
     REQUIRE(ws_fixture);
-    const auto* ws_object = ws_fixture->get_if<util::JsonValue::object_t>();
+    const auto* ws_object = ws_fixture->get_if<support::JsonValue::object_t>();
     REQUIRE(ws_object);
     const auto request_found = ws_object->find("request");
     const auto events_found = ws_object->find("events");
     REQUIRE(request_found != ws_object->end());
     REQUIRE(events_found != ws_object->end());
-    const auto* events = events_found->second.get_if<util::JsonValue::array_t>();
+    const auto* events = events_found->second.get_if<support::JsonValue::array_t>();
     REQUIRE(events);
     const auto expected_request_bytes = json_string(request_found->second);
 
@@ -403,7 +403,7 @@ TEST_CASE(
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
     REQUIRE(sent.size() == 1);
     CHECK(sent.front() == expected_request_bytes);
-    const auto body = util::read_json(sent.front());
+    const auto body = support::read_json(sent.front());
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty block-array message is omitted; the string alternative becomes
@@ -424,13 +424,13 @@ TEST_CASE(
     const auto ws_fixture = tests::read_pi_fixture(
         "wire/openai-codex-responses-empty-string-ws.json");
     REQUIRE(ws_fixture);
-    const auto* ws_object = ws_fixture->get_if<util::JsonValue::object_t>();
+    const auto* ws_object = ws_fixture->get_if<support::JsonValue::object_t>();
     REQUIRE(ws_object);
     const auto request_found = ws_object->find("request");
     const auto events_found = ws_object->find("events");
     REQUIRE(request_found != ws_object->end());
     REQUIRE(events_found != ws_object->end());
-    const auto* events = events_found->second.get_if<util::JsonValue::array_t>();
+    const auto* events = events_found->second.get_if<support::JsonValue::array_t>();
     REQUIRE(events);
     const auto expected_request_bytes = json_string(request_found->second);
 
@@ -467,7 +467,7 @@ TEST_CASE(
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
     REQUIRE(sent.size() == 1);
     CHECK(sent.front() == expected_request_bytes);
-    const auto body = util::read_json(sent.front());
+    const auto body = support::read_json(sent.front());
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty string is still emitted as exactly one input_text item.
@@ -485,8 +485,8 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connect refused"),
         });
     const auto sse = read_fixture_text("wire/openai-codex-responses.sse");
@@ -547,7 +547,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    REQUIRE(util::read_json(request.body));
+    REQUIRE(support::read_json(request.body));
 }
 
 TEST_CASE(
@@ -593,8 +593,8 @@ TEST_CASE(
             "{\"type\":\"response.output_item.added\",\"output_index\":0,"
             "\"item\":{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\","
             "\"status\":\"in_progress\",\"content\":[]}}");
-        socket.session()->receive_failures.push_back(util::make_error(
-            util::ErrorCode::Network,
+        socket.session()->receive_failures.push_back(support::make_error(
+            support::ErrorCode::Network,
             "connection reset"));
     };
     harness.ws->connect_scripts.push_back(
@@ -615,7 +615,7 @@ TEST_CASE(
     const auto& diagnostic = run.result->diagnostics->front();
     REQUIRE(diagnostic.details);
     const auto& details = diagnostic.details->get_object();
-    CHECK(details.at("fallbackTransport").holds<util::JsonValue::null_t>());
+    CHECK(details.at("fallbackTransport").holds<support::JsonValue::null_t>());
     CHECK(details.at("eventsEmitted").get_boolean());
     CHECK(details.at("phase").get_string() == "after_message_stream_start");
     CHECK(harness.http->requests.empty());
@@ -689,17 +689,17 @@ TEST_CASE(
     REQUIRE(harness.ws->requests.size() == 2);
     REQUIRE(first->sent_frames.size() == 2);
     REQUIRE(second->sent_frames.size() == 1);
-    const auto first_body = util::read_json(first->sent_frames[0]);
+    const auto first_body = support::read_json(first->sent_frames[0]);
     REQUIRE(first_body);
     CHECK_FALSE(first_body->get_object().contains("previous_response_id"));
-    const auto delta_body = util::read_json(first->sent_frames[1]);
+    const auto delta_body = support::read_json(first->sent_frames[1]);
     REQUIRE(delta_body);
     CHECK(delta_body->at("previous_response_id").get_string() == "resp_terminal");
     CHECK_FALSE(delta_body->at("store").get_boolean());
     const auto& delta_input = delta_body->at("input").get_array();
     REQUIRE(delta_input.size() == 1);
     CHECK(delta_input[0].at("role").get_string() == "user");
-    const auto retry_body = util::read_json(second->sent_frames[0]);
+    const auto retry_body = support::read_json(second->sent_frames[0]);
     REQUIRE(retry_body);
     CHECK_FALSE(retry_body->get_object().contains("previous_response_id"));
     REQUIRE(retry_body->at("input").get_array().size() == 2);
@@ -741,8 +741,8 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connect refused"),
         });
     const auto terminal = "data: " + terminal_frame("response.completed", "completed") + "\n\n";
@@ -813,14 +813,14 @@ TEST_CASE(
     CHECK(harness.ws->requests.size() == 1);
     REQUIRE(session->sent_frames.size() == 2);
 
-    const auto first_body = util::read_json(session->sent_frames[0]);
+    const auto first_body = support::read_json(session->sent_frames[0]);
     REQUIRE(first_body);
     CHECK_FALSE(first_body->get_object().contains("previous_response_id"));
     REQUIRE(first_body->at("input").get_array().size() == 1);
     CHECK(first_body->at("prompt_cache_key").get_string() == "session-1");
     CHECK_FALSE(first_body->at("store").get_boolean());
 
-    const auto delta_body = util::read_json(session->sent_frames[1]);
+    const auto delta_body = support::read_json(session->sent_frames[1]);
     REQUIRE(delta_body);
     CHECK(delta_body->at("previous_response_id").get_string() == "resp_terminal");
     CHECK_FALSE(delta_body->at("store").get_boolean());
@@ -916,7 +916,7 @@ TEST_CASE(
     for (const auto& socket : harness.ws->sockets) {
         CHECK(socket->session()->close_count == 1);
         REQUIRE(socket->session()->sent_frames.size() == 1);
-        const auto body = util::read_json(socket->session()->sent_frames[0]);
+        const auto body = support::read_json(socket->session()->sent_frames[0]);
         REQUIRE(body);
         CHECK_FALSE(body->get_object().contains("prompt_cache_key"));
     }
@@ -1034,8 +1034,8 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connect refused"),
         });
     const auto terminal = "data: " + terminal_frame("response.completed", "completed") + "\n\n";
@@ -1062,8 +1062,8 @@ TEST_CASE(
     auto quota_harness = make_codex_harness(codex_model());
     quota_harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connect refused"),
         });
     quota_harness.http->attempts.push_back(TransportAttempt{
@@ -1148,8 +1148,8 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connect refused"),
         });
     const auto terminal = "data: " + terminal_frame("response.completed", "completed") + "\n\n";
@@ -1158,7 +1158,7 @@ TEST_CASE(
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
     options.transform_headers = [](ai::RequestHeaders headers)
-        -> util::Expected<ai::RequestHeaders> {
+        -> support::Expected<ai::RequestHeaders> {
         headers.insert_or_assign("Accept", "application/x-test-sse");
         headers.insert_or_assign("Content-Type", "application/x-test-json");
         headers.insert_or_assign("x-custom", "custom-value");
@@ -1203,40 +1203,40 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     const auto message_item = [](std::string_view status, bool with_content) {
-        util::JsonValue::object_t item{
+        support::JsonValue::object_t item{
             {"type", "message"},
             {"id", "msg_1"},
             {"role", "assistant"},
             {"status", std::string{status}},
             {"content",
              with_content
-                 ? util::JsonValue{util::JsonValue::array_t{util::JsonValue{
-                       util::JsonValue::object_t{
+                 ? support::JsonValue{support::JsonValue::array_t{support::JsonValue{
+                       support::JsonValue::object_t{
                            {"type", "output_text"},
                            {"text", "Hi"},
-                           {"annotations", util::JsonValue{util::JsonValue::array_t{}}},
+                           {"annotations", support::JsonValue{support::JsonValue::array_t{}}},
                        }}}}
-                 : util::JsonValue{util::JsonValue::array_t{}}},
+                 : support::JsonValue{support::JsonValue::array_t{}}},
             {"phase", "final_answer"},
         };
-        return util::JsonValue{std::move(item)};
+        return support::JsonValue{std::move(item)};
     };
-    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+    session->frames.push_back(json_string(support::JsonValue{support::JsonValue::object_t{
         {"type", "response.created"},
         {"response",
-         util::JsonValue{util::JsonValue::object_t{{"id", "resp_pending"}}}},
+         support::JsonValue{support::JsonValue::object_t{{"id", "resp_pending"}}}},
     }}));
-    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+    session->frames.push_back(json_string(support::JsonValue{support::JsonValue::object_t{
         {"type", "response.output_item.added"},
         {"output_index", 0.0},
         {"item", message_item("in_progress", false)},
     }}));
-    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+    session->frames.push_back(json_string(support::JsonValue{support::JsonValue::object_t{
         {"type", "response.output_text.delta"},
         {"output_index", 0.0},
         {"delta", "Hi"},
     }}));
-    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+    session->frames.push_back(json_string(support::JsonValue{support::JsonValue::object_t{
         {"type", "response.output_item.done"},
         {"output_index", 0.0},
         {"item", message_item("completed", true)},
@@ -1276,8 +1276,8 @@ TEST_CASE(
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connect refused"),
         });
     harness.http->attempts.push_back(TransportAttempt{.chunks = {
@@ -1325,8 +1325,8 @@ TEST_CASE(
         auto harness = make_codex_harness(codex_model());
         harness.ws->connect_scripts.push_back(
             ScriptedWebSocketTransport::ConnectScript{
-                .failure = util::make_error(
-                    util::ErrorCode::Network,
+                .failure = support::make_error(
+                    support::ErrorCode::Network,
                     "connect refused"),
             });
         harness.http->attempts.push_back(TransportAttempt{.chunks = {test_case.sse}});

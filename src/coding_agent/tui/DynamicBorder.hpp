@@ -2,7 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Style.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 
@@ -15,7 +15,7 @@ public:
     explicit DynamicBorder(cch::tui::TextStyleHook color)
         : color_(std::move(color)) {}
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         // U+2500 BOX DRAWINGS LIGHT HORIZONTAL, repeated to the width.
         std::string rule;
         rule.reserve(width * 3);

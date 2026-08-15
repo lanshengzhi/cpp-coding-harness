@@ -11,7 +11,7 @@
 
 #include <cch/ai/Message.hpp>
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include "coding_agent/SessionDiscovery.hpp"
 
@@ -23,7 +23,7 @@
 #include "support/JsonCompare.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -74,7 +74,7 @@ public:
          ai::ProviderStreamOptions) override {
     return ai::detail::make_model_stream(
         [this, model = std::move(model)](ai::AssistantEventSink sink) mutable
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
     REQUIRE(!turns_.empty());
     auto response = std::move(turns_.front());
     turns_.pop_front();
@@ -159,16 +159,16 @@ struct SettingsFixture {
 // response ids, and engine-specific fields are dropped; entry ids project to
 // positional ordinals; session ids/paths are identity, not value.
 
-[[nodiscard]] util::JsonValue
-canonical_content_block(const util::JsonValue &block) {
-  const auto *object = block.get_if<util::JsonValue::object_t>();
+[[nodiscard]] support::JsonValue
+canonical_content_block(const support::JsonValue &block) {
+  const auto *object = block.get_if<support::JsonValue::object_t>();
   REQUIRE(object != nullptr);
   const auto type = [&]() -> std::string {
     const auto it = object->find("type");
     REQUIRE(it != object->end());
     return it->second.get<std::string>();
   }();
-  util::JsonValue::object_t out{{"type", type}};
+  support::JsonValue::object_t out{{"type", type}};
   if (type == "text") {
     const auto it = object->find("text");
     REQUIRE(it != object->end());
@@ -191,14 +191,14 @@ canonical_content_block(const util::JsonValue &block) {
       }
     }
   }
-  return util::JsonValue{std::move(out)};
+  return support::JsonValue{std::move(out)};
 }
 
-[[nodiscard]] util::JsonValue
-canonical_message(const util::JsonValue &message) {
-  const auto *object = message.get_if<util::JsonValue::object_t>();
+[[nodiscard]] support::JsonValue
+canonical_message(const support::JsonValue &message) {
+  const auto *object = message.get_if<support::JsonValue::object_t>();
   REQUIRE(object != nullptr);
-  util::JsonValue::object_t out;
+  support::JsonValue::object_t out;
   const auto copy_field = [&](const char *key) {
     if (const auto it = object->find(key); it != object->end()) {
       out.emplace(key, it->second);
@@ -207,18 +207,18 @@ canonical_message(const util::JsonValue &message) {
   copy_field("role");
   if (const auto it = object->find("content"); it != object->end()) {
     if (const auto *text = it->second.get_if<std::string>()) {
-      out.emplace("content", util::JsonValue{util::JsonValue::array_t{
-                                 util::JsonValue{util::JsonValue::object_t{
+      out.emplace("content", support::JsonValue{support::JsonValue::array_t{
+                                 support::JsonValue{support::JsonValue::object_t{
                                      {"type", "text"},
                                      {"text", *text},
                                  }}}});
     } else if (const auto *array =
-                   it->second.get_if<util::JsonValue::array_t>()) {
-      util::JsonValue::array_t blocks;
+                   it->second.get_if<support::JsonValue::array_t>()) {
+      support::JsonValue::array_t blocks;
       for (const auto &block : *array) {
         blocks.push_back(canonical_content_block(block));
       }
-      out.emplace("content", util::JsonValue{std::move(blocks)});
+      out.emplace("content", support::JsonValue{std::move(blocks)});
     }
   }
   const auto role = [&]() -> std::string {
@@ -239,26 +239,26 @@ canonical_message(const util::JsonValue &message) {
   }
   copy_field("summary");
   copy_field("customType");
-  return util::JsonValue{std::move(out)};
+  return support::JsonValue{std::move(out)};
 }
 
-[[nodiscard]] util::JsonValue
+[[nodiscard]] support::JsonValue
 canonical_message(const ai::MessageVariant &message) {
-  auto serialized = util::write_json(ai::glaze::to_message_dto(message));
+  auto serialized = support::write_json(ai::glaze::to_message_dto(message));
   REQUIRE(serialized);
-  auto parsed = util::read_json(*serialized);
+  auto parsed = support::read_json(*serialized);
   REQUIRE(parsed);
   return canonical_message(*parsed);
 }
 
-[[nodiscard]] util::JsonValue
+[[nodiscard]] support::JsonValue
 canonical_messages(const std::vector<ai::MessageVariant> &messages) {
-  util::JsonValue::array_t out;
+  support::JsonValue::array_t out;
   out.reserve(messages.size());
   for (const auto &message : messages) {
     out.push_back(canonical_message(message));
   }
-  return util::JsonValue{std::move(out)};
+  return support::JsonValue{std::move(out)};
 }
 
 /// pi `convertToLlm`-equivalent applied to the live history (the C++
@@ -291,9 +291,9 @@ to_llm_messages(const std::vector<ai::MessageVariant> &messages) {
 /// canonical entry shape: type + positional id/parentId + type-specific
 /// value fields. Header entries are excluded (pi `getEntries()` excludes the
 /// header too).
-[[nodiscard]] util::JsonValue
+[[nodiscard]] support::JsonValue
 project_entries(const harness::session::LoadedSession &loaded) {
-  util::JsonValue::array_t out;
+  support::JsonValue::array_t out;
   std::size_t ordinal = 0;
   std::map<std::string, std::size_t> id_to_ordinal;
   // First pass: assign ordinals by position among non-header entries.
@@ -308,18 +308,18 @@ project_entries(const harness::session::LoadedSession &loaded) {
     if (entry.kind == harness::session::SessionEntryKind::Header) {
       continue;
     }
-    auto parsed = util::read_json(entry.raw_line);
+    auto parsed = support::read_json(entry.raw_line);
     REQUIRE(parsed);
-    const auto *object = parsed->get_if<util::JsonValue::object_t>();
+    const auto *object = parsed->get_if<support::JsonValue::object_t>();
     REQUIRE(object != nullptr);
-    util::JsonValue::object_t projected{{"type", util::JsonValue{"message"}}};
+    support::JsonValue::object_t projected{{"type", support::JsonValue{"message"}}};
     if (const auto it = object->find("type"); it != object->end()) {
       projected["type"] = it->second;
     }
     // Entry ids are identity and parentId chains are tree-structure; both
     // project out (linear order is the structure, like the TS side).
     projected.emplace("id",
-                      util::JsonValue{"entry-" + std::to_string(ordinal)});
+                      support::JsonValue{"entry-" + std::to_string(ordinal)});
     const auto type = projected["type"].get<std::string>();
     if (type == "message") {
       const auto it = object->find("message");
@@ -345,7 +345,7 @@ project_entries(const harness::session::LoadedSession &loaded) {
         if (found != id_to_ordinal.end()) {
           projected.emplace(
               "firstKeptEntryId",
-              util::JsonValue{"entry-" + std::to_string(found->second)});
+              support::JsonValue{"entry-" + std::to_string(found->second)});
         }
       }
     } else if (type == "session_info") {
@@ -354,10 +354,10 @@ project_entries(const harness::session::LoadedSession &loaded) {
         projected.emplace("name", it->second);
       }
     }
-    out.push_back(util::JsonValue{std::move(projected)});
+    out.push_back(support::JsonValue{std::move(projected)});
     ++ordinal;
   }
-  return util::JsonValue{std::move(out)};
+  return support::JsonValue{std::move(out)};
 }
 
 // ── Fixture I/O ─────────────────────────────────────────────────────────────
@@ -366,23 +366,23 @@ project_entries(const harness::session::LoadedSession &loaded) {
   return std::string{CCH_SOURCE_DIR} + "/fixtures/pi-coding-agent/sessions/";
 }
 
-[[nodiscard]] util::Expected<util::JsonValue>
+[[nodiscard]] support::Expected<support::JsonValue>
 read_snapshot(std::string_view name) {
   const auto path = std::filesystem::path{fixture_dir()} / name;
   std::ifstream input{path, std::ios::binary};
   if (!input) {
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Unknown, "Failed to open snapshot: " + path.string()));
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Unknown, "Failed to open snapshot: " + path.string()));
   }
   const std::string json{std::istreambuf_iterator<char>{input},
                          std::istreambuf_iterator<char>{}};
-  return util::read_json(json);
+  return support::read_json(json);
 }
 
-[[nodiscard]] util::Expected<coding_agent::CompactionResult>
+[[nodiscard]] support::Expected<coding_agent::CompactionResult>
 run_compact(coding_agent::AgentSession &session) {
   boost::asio::io_context io;
-  std::optional<util::Expected<coding_agent::CompactionResult>> result;
+  std::optional<support::Expected<coding_agent::CompactionResult>> result;
   boost::asio::co_spawn(
       io,
       [&]() -> boost::asio::awaitable<void> {
@@ -395,13 +395,13 @@ run_compact(coding_agent::AgentSession &session) {
   return std::move(*result);
 }
 
-void check_snapshot(std::string_view name, const util::JsonValue &actual) {
+void check_snapshot(std::string_view name, const support::JsonValue &actual) {
   const auto expected = read_snapshot(name);
   REQUIRE(expected);
   if (auto mismatch = tests::json_mismatch(*expected, actual); mismatch) {
     std::cerr << "SESSION GOLDEN MISMATCH (" << name << "):\n"
               << *mismatch << "\n--- actual ---\n"
-              << util::write_json(actual).value_or("") << "\n";
+              << support::write_json(actual).value_or("") << "\n";
     CHECK(false);
   }
 }
@@ -441,8 +441,8 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
   auto loaded = harness::session::JsonlSessionStore::load(path);
   REQUIRE(loaded);
 
-  util::JsonValue::object_t golden{
-      {"meta", util::JsonValue{util::JsonValue::object_t{
+  support::JsonValue::object_t golden{
+      {"meta", support::JsonValue{support::JsonValue::object_t{
                    {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
                    {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
                    {"family", "session-lifecycle"},
@@ -450,14 +450,14 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
       {"messages", canonical_messages(messages)},
       {"context", canonical_messages(to_llm_messages(messages))},
       {"entries", project_entries(*loaded)},
-      {"values", util::JsonValue{util::JsonValue::object_t{
+      {"values", support::JsonValue{support::JsonValue::object_t{
                      {"model", "faux-1"},
                      {"provider", "fake"},
                      {"thinkingLevel", "off"},
                  }}},
   };
 
-  check_snapshot("session-lifecycle.json", util::JsonValue{std::move(golden)});
+  check_snapshot("session-lifecycle.json", support::JsonValue{std::move(golden)});
   session->close();
 }
 
@@ -505,8 +505,8 @@ TEST_CASE("session resume golden: persisted history restores at message level",
   auto loaded = harness::session::JsonlSessionStore::load(path);
   REQUIRE(loaded);
 
-  util::JsonValue::object_t golden{
-      {"meta", util::JsonValue{util::JsonValue::object_t{
+  support::JsonValue::object_t golden{
+      {"meta", support::JsonValue{support::JsonValue::object_t{
                    {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
                    {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
                    {"family", "session-resume"},
@@ -514,14 +514,14 @@ TEST_CASE("session resume golden: persisted history restores at message level",
       {"messages", canonical_messages(messages)},
       {"context", canonical_messages(to_llm_messages(messages))},
       {"entries", project_entries(*loaded)},
-      {"values", util::JsonValue{util::JsonValue::object_t{
+      {"values", support::JsonValue{support::JsonValue::object_t{
                      {"model", "faux-1"},
                      {"provider", "fake"},
                      {"thinkingLevel", "off"},
                  }}},
   };
 
-  check_snapshot("session-resume.json", util::JsonValue{std::move(golden)});
+  check_snapshot("session-resume.json", support::JsonValue{std::move(golden)});
   session->close();
 }
 
@@ -568,8 +568,8 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
   auto loaded = harness::session::JsonlSessionStore::load(path);
   REQUIRE(loaded);
 
-  util::JsonValue::object_t golden{
-      {"meta", util::JsonValue{util::JsonValue::object_t{
+  support::JsonValue::object_t golden{
+      {"meta", support::JsonValue{support::JsonValue::object_t{
                    {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
                    {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
                    {"family", "session-compaction"},
@@ -577,12 +577,12 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
       {"messages", canonical_messages(messages)},
       {"context", canonical_messages(to_llm_messages(messages))},
       {"entries", project_entries(*loaded)},
-      {"values", util::JsonValue{util::JsonValue::object_t{
+      {"values", support::JsonValue{support::JsonValue::object_t{
                      {"summary", compacted->summary},
                  }}},
   };
 
-  check_snapshot("session-compaction.json", util::JsonValue{std::move(golden)});
+  check_snapshot("session-compaction.json", support::JsonValue{std::move(golden)});
   session->close();
 }
 
@@ -624,8 +624,8 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
   auto loaded = harness::session::JsonlSessionStore::load(path);
   REQUIRE(loaded);
 
-  util::JsonValue::object_t golden{
-      {"meta", util::JsonValue{util::JsonValue::object_t{
+  support::JsonValue::object_t golden{
+      {"meta", support::JsonValue{support::JsonValue::object_t{
                    {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
                    {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
                    {"family", "session-model-switch"},
@@ -633,7 +633,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
       {"messages", canonical_messages(messages)},
       {"context", canonical_messages(to_llm_messages(messages))},
       {"entries", project_entries(*loaded)},
-      {"values", util::JsonValue{util::JsonValue::object_t{
+      {"values", support::JsonValue{support::JsonValue::object_t{
                      {"model", "faux-2"},
                      {"provider", "fake"},
                      {"thinkingLevel", "medium"},
@@ -641,7 +641,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
   };
 
   check_snapshot("session-model-switch.json",
-                 util::JsonValue{std::move(golden)});
+                 support::JsonValue{std::move(golden)});
   session->close();
 }
 
@@ -690,15 +690,15 @@ TEST_CASE("session-family golden: most-recent selection and header values",
   auto loaded = harness::session::JsonlSessionStore::load(most_recent->path);
   REQUIRE(loaded);
 
-  util::JsonValue::object_t golden{
-      {"meta", util::JsonValue{util::JsonValue::object_t{
+  support::JsonValue::object_t golden{
+      {"meta", support::JsonValue{support::JsonValue::object_t{
                    {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
                    {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
                    {"family", "session-family"},
                }}},
-      {"mostRecent", util::JsonValue{most_recent->path.stem().string()}},
+      {"mostRecent", support::JsonValue{most_recent->path.stem().string()}},
       {"entries", project_entries(*loaded)},
   };
 
-  check_snapshot("session-family.json", util::JsonValue{std::move(golden)});
+  check_snapshot("session-family.json", support::JsonValue{std::move(golden)});
 }

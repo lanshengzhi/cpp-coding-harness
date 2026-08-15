@@ -4,7 +4,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -76,9 +76,9 @@ std::string header_session_id(const std::filesystem::path& path) {
     const auto content = read_file(path);
     const auto newline = content.find('\n');
     REQUIRE(newline != std::string::npos);
-    auto parsed = cch::util::read_json(content.substr(0, newline));
+    auto parsed = cch::support::read_json(content.substr(0, newline));
     REQUIRE(parsed.has_value());
-    const auto& object = parsed->get<cch::util::JsonValue::object_t>();
+    const auto& object = parsed->get<cch::support::JsonValue::object_t>();
     return object.at("id").get<std::string>();
 }
 
@@ -87,9 +87,9 @@ std::optional<std::string> header_parent_session(const std::filesystem::path& pa
     const auto content = read_file(path);
     const auto newline = content.find('\n');
     REQUIRE(newline != std::string::npos);
-    auto parsed = cch::util::read_json(content.substr(0, newline));
+    auto parsed = cch::support::read_json(content.substr(0, newline));
     REQUIRE(parsed.has_value());
-    const auto& object = parsed->get<cch::util::JsonValue::object_t>();
+    const auto& object = parsed->get<cch::support::JsonValue::object_t>();
     const auto parent = object.find("parentSession");
     if (parent == object.end()) {
         return std::nullopt;
@@ -106,11 +106,11 @@ std::size_t user_message_count(const std::filesystem::path& path) {
         if (line.empty()) {
             continue;
         }
-        auto parsed = cch::util::read_json(line);
+        auto parsed = cch::support::read_json(line);
         if (!parsed) {
             continue;
         }
-        const auto* object = parsed->get_if<cch::util::JsonValue::object_t>();
+        const auto* object = parsed->get_if<cch::support::JsonValue::object_t>();
         if (object == nullptr) {
             continue;
         }
@@ -118,7 +118,7 @@ std::size_t user_message_count(const std::filesystem::path& path) {
         if (type == object->end() || type->second.get<std::string>() != "message") {
             continue;
         }
-        const auto& message = object->at("message").get<cch::util::JsonValue::object_t>();
+        const auto& message = object->at("message").get<cch::support::JsonValue::object_t>();
         if (message.at("role").get<std::string>() == "user") {
             ++count;
         }
@@ -135,11 +135,11 @@ std::vector<std::string> session_info_names(const std::filesystem::path& path) {
         if (line.empty()) {
             continue;
         }
-        auto parsed = cch::util::read_json(line);
+        auto parsed = cch::support::read_json(line);
         if (!parsed) {
             continue;
         }
-        const auto* object = parsed->get_if<cch::util::JsonValue::object_t>();
+        const auto* object = parsed->get_if<cch::support::JsonValue::object_t>();
         if (object == nullptr) {
             continue;
         }
@@ -675,7 +675,7 @@ TEST_CASE("session-family: --session-dir equal to the default directory skips th
     return [picked, called](
                cch::coding_agent::tui::SessionListLoader current_loader,
                cch::coding_agent::tui::SessionListLoader all_loader)
-        -> cch::util::Expected<std::optional<std::filesystem::path>> {
+        -> cch::support::Expected<std::optional<std::filesystem::path>> {
         if (called != nullptr) *called = true;
         // The picker host receives the effective session space loaders (pi
         // `SessionManager.list`/`listAll`); a selected run must see the
@@ -826,7 +826,7 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
             {"--resume"},
             [session](cch::coding_agent::tui::SessionListLoader,
                       cch::coding_agent::tui::SessionListLoader)
-                -> cch::util::Expected<
+                -> cch::support::Expected<
                     std::optional<std::filesystem::path>> {
                 return session;
             });

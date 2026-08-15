@@ -12,7 +12,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -152,8 +152,8 @@ constexpr std::string_view kReasoningAndPlainProviders = R"({
     return found;
 }
 
-[[nodiscard]] util::JsonValue settings_object(const Fixture& fixture) {
-    const auto parsed = util::read_json(fixture.read_settings());
+[[nodiscard]] support::JsonValue settings_object(const Fixture& fixture) {
+    const auto parsed = support::read_json(fixture.read_settings());
     REQUIRE(parsed.has_value());
     return *parsed;
 }

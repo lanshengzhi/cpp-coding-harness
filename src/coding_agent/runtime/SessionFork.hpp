@@ -3,7 +3,7 @@
 #include "AgentSessionCreationRequest.hpp"
 
 #include <cch/agent/harness/session/SessionTree.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -70,7 +70,7 @@ struct ForkSource {
 /// yet. Wait for the first assistant response before cloning or forking it."
 /// (persisted source whose file is missing), and "Failed to create forked
 /// session" (branch file load/write failures).
-[[nodiscard]] util::Expected<ForkPreparation> prepare_fork(
+[[nodiscard]] support::Expected<ForkPreparation> prepare_fork(
     const ForkSource& source,
     std::string_view entry_id,
     ForkPosition position);

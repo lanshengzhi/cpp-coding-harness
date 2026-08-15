@@ -1,6 +1,6 @@
 #include "ModelConfig.hpp"
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -10,7 +10,7 @@
 namespace cch::coding_agent {
 namespace {
 
-using cch::util::JsonValue;
+using cch::support::JsonValue;
 
 [[nodiscard]] std::string dotted_path(std::string path, std::string_view child) {
     if (path.empty()) {
@@ -457,7 +457,7 @@ ModelConfig ModelConfig::load(const std::filesystem::path& path) {
         return ModelConfig({}, "Failed to parse models.json: Unexpected end of JSON input\n\nFile: " + path.string());
     }
 
-    auto parsed = util::read_json(content);
+    auto parsed = support::read_json(content);
     if (!parsed) {
         return ModelConfig(
             {},
@@ -465,7 +465,7 @@ ModelConfig ModelConfig::load(const std::filesystem::path& path) {
                 "\n\nFile: " + path.string());
     }
 
-    const auto* root = parsed->get_if<util::JsonValue::object_t>();
+    const auto* root = parsed->get_if<support::JsonValue::object_t>();
     if (root == nullptr) {
         return ModelConfig(
             {},
@@ -482,7 +482,7 @@ ModelConfig ModelConfig::load(const std::filesystem::path& path) {
 
     ConfigValidator validator{"providers"};
     std::map<std::string, ModelsJsonProvider, std::less<>> providers;
-    const auto* providers_object = providers_found->second.get_if<util::JsonValue::object_t>();
+    const auto* providers_object = providers_found->second.get_if<support::JsonValue::object_t>();
     if (providers_object == nullptr) {
         validator.error("", "Expected object");
     } else {

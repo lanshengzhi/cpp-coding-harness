@@ -14,7 +14,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "ai/providers/FakeProvider.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -178,14 +178,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture.session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -243,14 +243,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -293,14 +293,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture.session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -372,14 +372,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -453,14 +453,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -533,15 +533,15 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
-    std::optional<util::Expected<coding_agent::CompactionResult>> compact_result;
+    std::optional<support::ExpectedVoid> run_result;
+    std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -594,7 +594,7 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     coding_agent::tui::InteractiveModeConfig config;
     config.agent_config_directory = fixture.config.path();
     // The test never sends a real SIGTSTP to its own process group; the
@@ -602,7 +602,7 @@ TEST_CASE(
     config.action_sink =
         [&suspend_calls](std::size_t /* action_generation */,
                         coding_agent::tui::TuiActionVariant action)
-        -> util::Expected<coding_agent::tui::TuiActionResultVariant> {
+        -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
             if (std::holds_alternative<coding_agent::tui::SuspendProcessAction>(
                     action)) {
                 ++suspend_calls;
@@ -615,7 +615,7 @@ TEST_CASE(
             *fixture.session,
             terminal,
             std::move(config)),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -672,14 +672,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *fixture.session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -731,14 +731,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = fixture.config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });

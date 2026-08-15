@@ -3,8 +3,8 @@
 #include "ai/AsyncResultBridge.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include "SimpleOptions.hpp"
-#include "util/BoundedText.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "ai/BoundedText.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/bind_executor.hpp>
@@ -41,38 +41,38 @@ constexpr std::size_t kMaxPublicErrorBytes = 1024;
     return credential.expires <= now + kOAuthMinimumValidity.count();
 }
 
-[[nodiscard]] util::Error categorized_error(
-    util::ErrorCode code,
+[[nodiscard]] support::Error categorized_error(
+    support::ErrorCode code,
     std::string message,
-    const util::Error& cause) {
+    const support::Error& cause) {
     std::string detail = cause.message;
     if (!cause.detail.empty()) {
         detail += ": ";
         detail += cause.detail;
     }
-    return util::make_error(
+    return support::make_error(
         code,
-        util::bounded_redacted_text(std::move(message), kMaxPublicErrorBytes, "..."),
-        util::bounded_redacted_text(std::move(detail), kMaxPublicErrorBytes, "..."));
+        ai::bounded_redacted_text(std::move(message), kMaxPublicErrorBytes, "..."),
+        ai::bounded_redacted_text(std::move(detail), kMaxPublicErrorBytes, "..."));
 }
 
-[[nodiscard]] util::Error safe_error(util::Error error) {
-    error.message = util::bounded_redacted_text(
+[[nodiscard]] support::Error safe_error(support::Error error) {
+    error.message = ai::bounded_redacted_text(
         std::move(error.message), kMaxPublicErrorBytes, "...");
-    error.detail = util::bounded_redacted_text(
+    error.detail = ai::bounded_redacted_text(
         std::move(error.detail), kMaxPublicErrorBytes, "...");
     if (error.context) {
-        error.context = util::bounded_redacted_text(
+        error.context = ai::bounded_redacted_text(
             std::move(*error.context), kMaxPublicErrorBytes, "...");
     }
     return error;
 }
 
-[[nodiscard]] util::Error callback_exception_error(
-    util::ErrorCode code,
+[[nodiscard]] support::Error callback_exception_error(
+    support::ErrorCode code,
     std::string message,
     std::string detail = "unknown exception") {
-    return safe_error(util::make_error(
+    return safe_error(support::make_error(
         code,
         std::move(message),
         std::move(detail)));
@@ -93,7 +93,7 @@ template <typename Operation>
 [[nodiscard]] boost::asio::awaitable<
     typename AsyncResultValue<std::invoke_result_t<Operation&>>::type>
 invoke_async_operation(
-    util::ErrorCode code,
+    support::ErrorCode code,
     std::string message,
     Operation operation) {
     using Result = typename AsyncResultValue<std::invoke_result_t<Operation&>>::type;
@@ -112,7 +112,7 @@ invoke_async_operation(
     }
 }
 
-[[nodiscard]] util::ExpectedVoid emit_assistant_event(
+[[nodiscard]] support::ExpectedVoid emit_assistant_event(
     AssistantEventSink& sink,
     const AssistantStreamEvent& event) {
     if (!sink) {
@@ -122,17 +122,17 @@ invoke_async_operation(
         return sink(event);
     } catch (const std::exception& error) {
         return std::unexpected(callback_exception_error(
-            util::ErrorCode::Unknown,
+            support::ErrorCode::Unknown,
             "Assistant event sink failed",
             error.what()));
     } catch (...) {
         return std::unexpected(callback_exception_error(
-            util::ErrorCode::Unknown,
+            support::ErrorCode::Unknown,
             "Assistant event sink failed"));
     }
 }
 
-[[nodiscard]] std::string public_error_diagnostic(const util::Error& error) {
+[[nodiscard]] std::string public_error_diagnostic(const support::Error& error) {
     std::string diagnostic = error.message;
     if (!error.detail.empty() && diagnostic.find(error.detail) == std::string::npos) {
         if (!diagnostic.empty()) {
@@ -140,15 +140,15 @@ invoke_async_operation(
         }
         diagnostic += error.detail;
     }
-    return util::bounded_redacted_text(
+    return ai::bounded_redacted_text(
         std::move(diagnostic), kMaxPublicErrorBytes, "...");
 }
 
 [[nodiscard]] AssistantMessage safe_terminal_message(
     AssistantMessage message,
-    const std::optional<util::Error>& failure = std::nullopt) {
+    const std::optional<support::Error>& failure = std::nullopt) {
     if (message.error_message) {
-        message.error_message = util::bounded_redacted_text(
+        message.error_message = ai::bounded_redacted_text(
             std::move(*message.error_message), kMaxPublicErrorBytes, "...");
     } else if (failure) {
         message.error_message = public_error_diagnostic(*failure);
@@ -248,7 +248,7 @@ void set_request_header(RequestHeaders& target, std::string name, std::string va
     });
 }
 
-[[nodiscard]] util::ExpectedVoid assert_request_auth(
+[[nodiscard]] support::ExpectedVoid assert_request_auth(
     const Model& model,
     const ModelAuth& auth) {
     const bool scoped_api = model.api == "openai-codex-responses" ||
@@ -260,12 +260,12 @@ void set_request_header(RequestHeaders& target, std::string name, std::string va
         has_non_empty_header(auth.headers, "cf-aig-authorization")) {
         return {};
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Auth,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Auth,
         "No API key for provider: " + model.provider));
 }
 
-[[nodiscard]] util::Expected<RequestHeaders> transform_request_headers(
+[[nodiscard]] support::Expected<RequestHeaders> transform_request_headers(
     RequestHeaders headers,
     TransformHeadersHook& transform) {
     if (!transform) {
@@ -275,12 +275,12 @@ void set_request_header(RequestHeaders& target, std::string name, std::string va
         return transform(std::move(headers));
     } catch (const std::exception& error) {
         return std::unexpected(callback_exception_error(
-            util::ErrorCode::Stream,
+            support::ErrorCode::Stream,
             "Header transform failed",
             error.what()));
     } catch (...) {
         return std::unexpected(callback_exception_error(
-            util::ErrorCode::Stream,
+            support::ErrorCode::Stream,
             "Header transform failed"));
     }
 }
@@ -308,7 +308,7 @@ struct PreparedProviderRequest {
     ProviderStreamOptions options{};
 };
 
-[[nodiscard]] util::Expected<PreparedProviderRequest> prepare_provider_request(
+[[nodiscard]] support::Expected<PreparedProviderRequest> prepare_provider_request(
     Model model,
     const AiContext& context,
     AuthResult auth_result,
@@ -378,18 +378,18 @@ struct PreparedProviderRequest {
     };
 }
 
-[[nodiscard]] bool is_models_domain_error(util::ErrorCode code) {
-    return code == util::ErrorCode::ModelSource ||
-           code == util::ErrorCode::ModelValidation ||
-           code == util::ErrorCode::Provider ||
-           code == util::ErrorCode::Stream ||
-           code == util::ErrorCode::Auth ||
-           code == util::ErrorCode::OAuth;
+[[nodiscard]] bool is_models_domain_error(support::ErrorCode code) {
+    return code == support::ErrorCode::ModelSource ||
+           code == support::ErrorCode::ModelValidation ||
+           code == support::ErrorCode::Provider ||
+           code == support::ErrorCode::Stream ||
+           code == support::ErrorCode::Auth ||
+           code == support::ErrorCode::OAuth;
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> terminal_failure(
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> terminal_failure(
     const Model& model,
-    util::Error failure,
+    support::Error failure,
     AssistantEventSink& sink,
     AssistantStopReason reason = AssistantStopReason::Error) {
     failure = safe_error(std::move(failure));
@@ -412,9 +412,9 @@ struct PreparedProviderRequest {
     co_return message;
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> terminal_message_value(
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> terminal_message_value(
     AssistantMessage message,
-    util::Error failure,
+    support::Error failure,
     AssistantEventSink& sink) {
     failure = safe_error(std::move(failure));
     message = safe_terminal_message(std::move(message), failure);
@@ -435,33 +435,33 @@ struct Models::Impl {
     std::shared_ptr<AuthContext> auth_context;
     std::map<std::string, std::shared_ptr<Provider>, std::less<>> providers;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> resolve_api_key(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> resolve_api_key(
         const Provider& provider,
         ApiKeyAuth& auth,
         std::optional<ApiKeyCredential> credential) {
         auto resolved = co_await invoke_async_operation(
-            util::ErrorCode::Auth,
+            support::ErrorCode::Auth,
             "API key auth callback failed for provider " + std::string{provider.id()},
             [&]() {
                 return auth.resolve(*auth_context, std::move(credential));
             });
         if (!resolved) {
             co_return std::unexpected(categorized_error(
-                util::ErrorCode::Auth,
+                support::ErrorCode::Auth,
                 "API key auth failed for provider " + std::string{provider.id()},
                 resolved.error()));
         }
         co_return std::move(*resolved);
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> resolve_oauth(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> resolve_oauth(
         const Provider& provider,
         OAuthAuth& auth,
         OAuthCredential credential) {
         const std::string provider_id{provider.id()};
         if (expires_soon(credential)) {
             auto modified = co_await invoke_async_operation(
-                util::ErrorCode::Auth,
+                support::ErrorCode::Auth,
                 "Credential store modify callback failed for " + provider_id,
                 [&]() -> cch::support::AsyncResult<std::optional<Credential>> {
                     return credentials->modify(
@@ -470,7 +470,7 @@ struct Models::Impl {
                             -> cch::support::AsyncResult<std::optional<Credential>> {
                             return detail::make_async_result(
                                 [&auth, provider_id, current = std::move(current)]()
-                                    -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
+                                    -> boost::asio::awaitable<support::Expected<std::optional<Credential>>> {
                                     auto* current_oauth = current
                                         ? std::get_if<OAuthCredential>(&*current)
                                         : nullptr;
@@ -478,14 +478,14 @@ struct Models::Impl {
                                         co_return std::optional<Credential>{};
                                     }
                                     auto refreshed = co_await invoke_async_operation(
-                                        util::ErrorCode::OAuth,
+                                        support::ErrorCode::OAuth,
                                         "OAuth refresh callback failed for " + provider_id,
                                         [&]() {
                                             return auth.refresh(*current_oauth);
                                         });
                                     if (!refreshed) {
                                         co_return std::unexpected(categorized_error(
-                                            util::ErrorCode::OAuth,
+                                            support::ErrorCode::OAuth,
                                             "OAuth refresh failed for " + provider_id,
                                             refreshed.error()));
                                     }
@@ -494,11 +494,11 @@ struct Models::Impl {
                         });
                 });
             if (!modified) {
-                if (modified.error().code == util::ErrorCode::OAuth) {
+                if (modified.error().code == support::ErrorCode::OAuth) {
                     co_return std::unexpected(modified.error());
                 }
                 co_return std::unexpected(categorized_error(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "Credential store modify failed for " + provider_id,
                     modified.error()));
             }
@@ -513,14 +513,14 @@ struct Models::Impl {
         }
 
         auto request_auth = co_await invoke_async_operation(
-            util::ErrorCode::OAuth,
+            support::ErrorCode::OAuth,
             "OAuth auth derivation callback failed for " + provider_id,
             [&]() {
                 return auth.to_auth(credential);
             });
         if (!request_auth) {
             co_return std::unexpected(categorized_error(
-                util::ErrorCode::OAuth,
+                support::ErrorCode::OAuth,
                 "OAuth auth derivation failed for " + provider_id,
                 request_auth.error()));
         }
@@ -545,16 +545,16 @@ Models::Models(Models&&) noexcept = default;
 Models& Models::operator=(Models&&) noexcept = default;
 Models::~Models() = default;
 
-util::ExpectedVoid Models::set_provider(std::shared_ptr<Provider> provider_value) {
+support::ExpectedVoid Models::set_provider(std::shared_ptr<Provider> provider_value) {
     if (!provider_value || provider_value->id().empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Provider,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Provider,
             "provider id is required"));
     }
     const auto& auth = provider_value->auth();
     if (!auth.api_key && !auth.oauth) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "provider must define authentication",
             std::string{provider_value->id()}));
     }
@@ -622,19 +622,19 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
     std::string provider_id) {
     return detail::make_async_result(
         [this, provider_id = std::move(provider_id)]()
-            -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
+            -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
             const auto selected = provider(provider_id);
             if (!selected) {
                 co_return std::optional<AuthCheck>{};
             }
 
             auto stored = co_await invoke_async_operation(
-                util::ErrorCode::Auth,
+                support::ErrorCode::Auth,
                 "Credential store read callback failed for " + provider_id,
                 [&]() { return impl_->credentials->read(provider_id); });
             if (!stored) {
                 co_return std::unexpected(categorized_error(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "Credential store read failed for " + provider_id,
                     stored.error()));
             }
@@ -653,14 +653,14 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
                 const auto credential = std::get<ApiKeyCredential>(**stored);
                 if (auth.api_key->check) {
                     auto checked = co_await invoke_async_operation(
-                        util::ErrorCode::Auth,
+                        support::ErrorCode::Auth,
                         "API key auth check callback failed for provider " + provider_id,
                         [&]() {
                             return auth.api_key->check(*impl_->auth_context, credential);
                         });
                     if (!checked) {
                         co_return std::unexpected(categorized_error(
-                            util::ErrorCode::Auth,
+                            support::ErrorCode::Auth,
                             "API key auth check failed for provider " + provider_id,
                             checked.error()));
                     }
@@ -682,14 +682,14 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
             }
             if (auth.api_key->check) {
                 auto checked = co_await invoke_async_operation(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "API key auth check callback failed for provider " + provider_id,
                     [&]() {
                         return auth.api_key->check(*impl_->auth_context, std::nullopt);
                     });
                 if (!checked) {
                     co_return std::unexpected(categorized_error(
-                        util::ErrorCode::Auth,
+                        support::ErrorCode::Auth,
                         "API key auth check failed for provider " + provider_id,
                         checked.error()));
                 }
@@ -712,7 +712,7 @@ cch::support::AsyncResult<std::optional<AuthResult>> Models::get_auth(
     std::optional<std::string> explicit_api_key) {
     return detail::make_async_result(
         [this, provider_id = std::move(provider_id), explicit_api_key = std::move(explicit_api_key)]()
-            -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+            -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
             const auto selected = provider(provider_id);
             if (!selected) {
                 co_return std::optional<AuthResult>{};
@@ -728,12 +728,12 @@ cch::support::AsyncResult<std::optional<AuthResult>> Models::get_auth(
             }
 
             auto stored = co_await invoke_async_operation(
-                util::ErrorCode::Auth,
+                support::ErrorCode::Auth,
                 "Credential store read callback failed for " + provider_id,
                 [&]() { return impl_->credentials->read(provider_id); });
             if (!stored) {
                 co_return std::unexpected(categorized_error(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "Credential store read failed for " + provider_id,
                     stored.error()));
             }
@@ -770,7 +770,7 @@ cch::support::AsyncResult<std::optional<AuthResult>> Models::get_auth(
     std::optional<std::string> explicit_api_key) {
     return detail::make_async_result(
         [this, model_value = std::move(model_value), explicit_api_key = std::move(explicit_api_key)]()
-            -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+            -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
             CCH_TRY(resolved, co_await detail::await_async_result(get_auth(
                 model_value.provider, std::move(explicit_api_key))));
             if (!resolved || !model_value.headers) {
@@ -795,18 +795,18 @@ cch::support::AsyncResult<void> Models::logout(
     std::string provider_id) {
     return detail::make_async_result(
         [this, provider_id = std::move(provider_id)]()
-            -> boost::asio::awaitable<util::ExpectedVoid> {
+            -> boost::asio::awaitable<support::ExpectedVoid> {
             auto removed = co_await invoke_async_operation(
-                util::ErrorCode::Auth,
+                support::ErrorCode::Auth,
                 "Credential store delete callback failed for " + provider_id,
                 [&]() { return impl_->credentials->remove(provider_id); });
             if (!removed) {
                 co_return std::unexpected(categorized_error(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "Credential store delete failed for " + provider_id,
                     removed.error()));
             }
-            co_return util::ExpectedVoid{};
+            co_return support::ExpectedVoid{};
         });
 }
 
@@ -816,26 +816,26 @@ cch::support::AsyncResult<Credential> Models::login(
     AuthInteraction interaction) {
     return detail::make_async_result(
         [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction)]() mutable
-            -> boost::asio::awaitable<util::Expected<Credential>> {
+            -> boost::asio::awaitable<support::Expected<Credential>> {
             const auto selected = provider(provider_id);
             if (!selected) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Provider,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Provider,
                     "Unknown provider: " + provider_id));
             }
             auto& auth = selected->auth();
             const auto type_name = std::string{auth_type_string(type)};
 
-            util::Expected<Credential> flow_result;
+            support::Expected<Credential> flow_result;
             if (type == AuthType::OAuth) {
                 if (!auth.oauth || !auth.oauth->login) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Auth,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Auth,
                         std::string{selected->name()} + " does not support " +
                             type_name + " login"));
                 }
                 auto credential = co_await invoke_async_operation(
-                    util::ErrorCode::OAuth,
+                    support::ErrorCode::OAuth,
                     "OAuth login callback failed for " + provider_id,
                     [&]() {
                         return auth.oauth->login(std::move(interaction));
@@ -847,13 +847,13 @@ cch::support::AsyncResult<Credential> Models::login(
                 flow_result = std::move(*credential);
             } else {
                 if (!auth.api_key || !auth.api_key->login) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Auth,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Auth,
                         std::string{selected->name()} + " does not support " +
                             type_name + " login"));
                 }
                 auto credential = co_await invoke_async_operation(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "API key login callback failed for " + provider_id,
                     [&]() {
                         return auth.api_key->login(std::move(interaction));
@@ -866,9 +866,9 @@ cch::support::AsyncResult<Credential> Models::login(
 
             // Persist exclusively through CredentialStore::modify, the only write
             // path. Only CredentialStore failures wrap as the `auth` category.
-            util::Expected<Credential> login_credential = std::move(flow_result);
+            support::Expected<Credential> login_credential = std::move(flow_result);
             auto stored = co_await invoke_async_operation(
-                util::ErrorCode::Auth,
+                support::ErrorCode::Auth,
                 "Credential store modify callback failed for " + provider_id,
                 [&]() -> cch::support::AsyncResult<std::optional<Credential>> {
                     return impl_->credentials->modify(
@@ -882,7 +882,7 @@ cch::support::AsyncResult<Credential> Models::login(
                 });
             if (!stored) {
                 co_return std::unexpected(categorized_error(
-                    util::ErrorCode::Auth,
+                    support::ErrorCode::Auth,
                     "Credential store modify failed for " + provider_id,
                     stored.error()));
             }
@@ -898,7 +898,7 @@ namespace {
 /// event, delegates to the Provider's move-only `ModelStream`, and reaches
 /// exactly one terminal outcome. `self` keeps the Models Runtime alive for the
 /// whole stream.
-[[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream_impl(
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> stream_impl(
     std::shared_ptr<Models> self,
     Model model_value,
     AiContext context,
@@ -908,15 +908,15 @@ namespace {
     if (!selected) {
         CCH_TRY(terminal, co_await terminal_failure(
             model_value,
-            util::make_error(
-                util::ErrorCode::Provider,
+            support::make_error(
+                support::ErrorCode::Provider,
                 "Unknown provider: " + model_value.provider),
             sink));
         co_return terminal;
     }
 
     auto auth = co_await invoke_async_operation(
-        util::ErrorCode::Auth,
+        support::ErrorCode::Auth,
         "Authentication resolution failed for provider " + model_value.provider,
         [&]() {
             return self->get_auth(model_value, std::move(options.api_key));
@@ -929,8 +929,8 @@ namespace {
     if (!*auth) {
         CCH_TRY(terminal, co_await terminal_failure(
             model_value,
-            util::make_error(
-                util::ErrorCode::Auth,
+            support::make_error(
+                support::ErrorCode::Auth,
                 "Provider is not configured: " + model_value.provider),
             sink));
         co_return terminal;
@@ -940,7 +940,7 @@ namespace {
         CCH_TRY(terminal, co_await terminal_failure(
             model_value,
             categorized_error(
-                util::ErrorCode::ModelValidation,
+                support::ErrorCode::ModelValidation,
                 valid.error().message,
                 valid.error()),
             sink));
@@ -956,10 +956,10 @@ namespace {
     }
 
     std::optional<AssistantMessage> terminal_message;
-    std::optional<util::Error> sink_failure;
+    std::optional<support::Error> sink_failure;
     AssistantEventSink forwarding_sink =
         [&sink, &terminal_message, &sink_failure](
-            const AssistantStreamEvent& event) -> util::ExpectedVoid {
+            const AssistantStreamEvent& event) -> support::ExpectedVoid {
             if (sink_failure) {
                 return std::unexpected(*sink_failure);
             }
@@ -995,7 +995,7 @@ namespace {
             }
             return {};
         };
-    auto result = co_await [&]() -> boost::asio::awaitable<util::Expected<AssistantMessage>> {
+    auto result = co_await [&]() -> boost::asio::awaitable<support::Expected<AssistantMessage>> {
         auto provider_stream = selected->stream(
             std::move(prepared->model),
             std::move(context),
@@ -1015,8 +1015,8 @@ namespace {
         if (reason == AssistantStopReason::Error ||
             reason == AssistantStopReason::Aborted) {
             const auto code = reason == AssistantStopReason::Aborted
-                ? util::ErrorCode::Cancelled
-                : util::ErrorCode::Stream;
+                ? support::ErrorCode::Cancelled
+                : support::ErrorCode::Stream;
             const auto diagnostic = result->error_message.value_or(
                 reason == AssistantStopReason::Aborted
                     ? "Request was aborted"
@@ -1024,7 +1024,7 @@ namespace {
             auto message = std::move(*result);
             CCH_TRY(terminal, co_await terminal_message_value(
                 std::move(message),
-                util::make_error(code, diagnostic),
+                support::make_error(code, diagnostic),
                 sink));
             co_return terminal;
         }
@@ -1038,14 +1038,14 @@ namespace {
     }
 
     if (terminal_message &&
-        (result.error().code == util::ErrorCode::Cancelled ||
+        (result.error().code == support::ErrorCode::Cancelled ||
          is_models_domain_error(result.error().code))) {
         co_return std::move(*terminal_message);
     }
-    if (result.error().code == util::ErrorCode::Cancelled) {
+    if (result.error().code == support::ErrorCode::Cancelled) {
         CCH_TRY(terminal, co_await terminal_failure(
             model_value,
-            util::make_error(util::ErrorCode::Cancelled, "Request was aborted"),
+            support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
             sink,
             AssistantStopReason::Aborted));
         co_return terminal;
@@ -1072,7 +1072,7 @@ ModelStream Models::stream(
          context = std::move(context),
          options = std::move(options)](
             AssistantEventSink sink) mutable
-            -> boost::asio::awaitable<util::Expected<AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<AssistantMessage>> {
             co_return co_await stream_impl(
                 self,
                 std::move(model),

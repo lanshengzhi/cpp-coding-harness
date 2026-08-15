@@ -1,7 +1,7 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
@@ -94,25 +94,25 @@ private:
 /// out-of-workspace paths (the ancestor chain and the Agent Config
 /// Directory). A non-regular entry fails like pi's `readFileSync` throw on
 /// a directory.
-[[nodiscard]] util::Expected<std::string> read_text_file(
+[[nodiscard]] support::Expected<std::string> read_text_file(
     const std::filesystem::path& path) {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec) || ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "could not read " + path.string()));
     }
     std::ifstream input(path, std::ios::binary);
     if (!input) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "could not read " + path.string()));
     }
     std::ostringstream content;
     content << input.rdbuf();
     if (input.bad()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "could not read " + path.string()));
     }
     return content.str();

@@ -12,19 +12,19 @@
 namespace cch::cli {
 namespace {
 
-[[nodiscard]] util::Error file_error(
+[[nodiscard]] support::Error file_error(
     std::string message,
     const std::filesystem::path& path,
     std::string detail = {}) {
     if (detail.empty()) detail = message;
-    return util::make_error(
-        util::ErrorCode::Validation,
+    return support::make_error(
+        support::ErrorCode::Validation,
         std::move(message),
         std::move(detail),
         path.string());
 }
 
-[[nodiscard]] util::Expected<std::filesystem::path> resolve_file_path(
+[[nodiscard]] support::Expected<std::filesystem::path> resolve_file_path(
     std::string_view argument,
     const std::filesystem::path& working_directory) {
     if (argument.empty()) {
@@ -82,7 +82,7 @@ namespace {
     return reference;
 }
 
-[[nodiscard]] util::Expected<std::vector<std::uint8_t>> read_file_bytes(
+[[nodiscard]] support::Expected<std::vector<std::uint8_t>> read_file_bytes(
     const std::filesystem::path& path) {
     std::error_code status_error;
     const auto status = std::filesystem::status(path, status_error);
@@ -118,7 +118,7 @@ namespace {
 
 /// pi `processFileArguments`: process every `@file` argument into text
 /// references and image content, in order.
-[[nodiscard]] util::Expected<InitialMessageResult> process_file_arguments(
+[[nodiscard]] support::Expected<InitialMessageResult> process_file_arguments(
     const std::vector<std::string>& file_arguments,
     const std::filesystem::path& working_directory) {
     InitialMessageResult processed;
@@ -148,7 +148,7 @@ namespace {
 
 } // namespace
 
-util::Expected<InitialMessageResult> build_initial_message(
+support::Expected<InitialMessageResult> build_initial_message(
     const InitialMessageInput& input) {
     // pi `prepareInitialMessage` (main.ts): process the @file arguments first,
     // then merge with pi `buildInitialMessage`.

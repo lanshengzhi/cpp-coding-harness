@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../include/cch/util/Error.hpp"
+#include <cch/support/Error.hpp>
 #include "PosixWrite.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -24,11 +24,11 @@ inline std::filesystem::path atomic_temp_path(const std::filesystem::path& targe
     return target.parent_path() / ("." + target.filename().string() + ".tmp-" + std::to_string(suffix));
 }
 
-inline util::Error write_error(std::string message) {
-    return util::make_error(util::ErrorCode::Workspace, message, message);
+inline support::Error write_error(std::string message) {
+    return support::make_error(support::ErrorCode::Workspace, message, message);
 }
 
-inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target, const std::string& content) {
+inline support::ExpectedVoid write_atomic_file(const std::filesystem::path& target, const std::string& content) {
     std::error_code ec;
     std::filesystem::path temp;
 #if defined(__unix__) || defined(__APPLE__)
@@ -67,7 +67,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
 #ifdef O_NOFOLLOW
     dir_flags |= O_NOFOLLOW;
 #endif
-    const util::UniqueFd dir_fd(::open(parent.c_str(), dir_flags));
+    const support::UniqueFd dir_fd(::open(parent.c_str(), dir_flags));
     if (!dir_fd) {
         return std::unexpected(write_error("could not open target parent directory: " + std::string(std::strerror(errno))));
     }
@@ -77,7 +77,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
 #ifdef O_NOFOLLOW
     flags |= O_NOFOLLOW;
 #endif
-    util::UniqueFd file_fd(::openat(dir_fd.get(), temp_filename.c_str(), flags, mode));
+    support::UniqueFd file_fd(::openat(dir_fd.get(), temp_filename.c_str(), flags, mode));
     if (!file_fd) {
         return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }

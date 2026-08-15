@@ -3,9 +3,9 @@
 #include <cch/tui/TerminalImage.hpp>
 
 #include "KeyboardProtocol.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <array>
 #include <cerrno>
 #include <charconv>
@@ -80,16 +80,16 @@ constexpr std::size_t kOutputQueueMaxBytes = 256 * 1024;
 /// stuck terminal (undrained queued output is dropped on exit).
 constexpr auto kStopDrainTimeout = std::chrono::milliseconds(250);
 
-[[nodiscard]] util::Error process_error(std::string message, std::string_view operation, int error_number) {
-    return util::make_error(
-        util::ErrorCode::Process,
+[[nodiscard]] support::Error process_error(std::string message, std::string_view operation, int error_number) {
+    return support::make_error(
+        support::ErrorCode::Process,
         std::move(message),
         std::format("{} failed (errno {})", operation, error_number));
 }
 
 #if defined(__linux__) || defined(__APPLE__)
 struct WriteAttempt {
-    util::ExpectedVoid result;
+    support::ExpectedVoid result;
     std::size_t bytes_written{0};
 };
 
@@ -115,7 +115,7 @@ struct WriteAttempt {
     return attempt;
 }
 
-[[nodiscard]] util::ExpectedVoid write_all(int descriptor, std::string_view output) {
+[[nodiscard]] support::ExpectedVoid write_all(int descriptor, std::string_view output) {
     return attempt_write_all(descriptor, output).result;
 }
 
@@ -470,7 +470,7 @@ struct ProcessTerminal::Impl {
     AppearanceInputState startup_appearance;
 #endif
     std::jthread worker;
-    std::optional<util::Error> worker_error;
+    std::optional<support::Error> worker_error;
     bool keyboard_protocol_pushed{false};
     bool modify_other_keys_active{false};
     std::size_t synchronized_update_depth{0};
@@ -496,8 +496,8 @@ struct ProcessTerminal::Impl {
     /// descriptor: stop() and output enqueue write one byte so the worker's
     /// blocking readiness wait returns immediately (issue #462) instead of
     /// periodic polling.
-    cch::util::UniqueFd wakeup_read;
-    cch::util::UniqueFd wakeup_write;
+    cch::support::UniqueFd wakeup_read;
+    cch::support::UniqueFd wakeup_write;
     /// Original descriptor flags (O_NONBLOCK is added to the output
     /// descriptor at start and restored on every exit path).
     int original_fd_flags{-1};
@@ -519,15 +519,15 @@ struct ProcessTerminal::Impl {
 namespace {
 
 template <typename T>
-[[nodiscard]] util::ExpectedVoid require_started(const T& impl) {
+[[nodiscard]] support::ExpectedVoid require_started(const T& impl) {
     if (impl.modes.started) return {};
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "Process Terminal must be started before terminal operations"));
 }
 
 #if defined(__linux__) || defined(__APPLE__)
-[[nodiscard]] util::Expected<TerminalDimensions> read_dimensions(int descriptor) {
+[[nodiscard]] support::Expected<TerminalDimensions> read_dimensions(int descriptor) {
     winsize size{};
     if (::ioctl(descriptor, TIOCGWINSZ, &size) != 0) {
         return std::unexpected(process_error(
@@ -536,8 +536,8 @@ template <typename T>
             errno));
     }
     if (size.ws_col == 0 || size.ws_row == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Process Terminal requires positive terminal dimensions"));
     }
     return TerminalDimensions{
@@ -546,16 +546,16 @@ template <typename T>
     };
 }
 
-[[nodiscard]] std::string describe_error(const util::Error& error) {
+[[nodiscard]] std::string describe_error(const support::Error& error) {
     if (error.detail.empty()) return error.message;
     return std::format("{} [{}]", error.message, error.detail);
 }
 
-[[nodiscard]] util::Error combine_errors(
-    util::Error primary,
-    const util::Error& secondary,
+[[nodiscard]] support::Error combine_errors(
+    support::Error primary,
+    const support::Error& secondary,
     std::string message) {
-    return util::make_error(
+    return support::make_error(
         primary.code,
         std::move(message),
         std::format(
@@ -564,7 +564,7 @@ template <typename T>
             describe_error(secondary)));
 }
 
-void retain_error(util::ExpectedVoid& accumulated, util::ExpectedVoid candidate) {
+void retain_error(support::ExpectedVoid& accumulated, support::ExpectedVoid candidate) {
     if (candidate) return;
     if (accumulated) {
         accumulated = std::unexpected(candidate.error());
@@ -576,9 +576,9 @@ void retain_error(util::ExpectedVoid& accumulated, util::ExpectedVoid candidate)
         "Process Terminal restoration encountered multiple failures"));
 }
 
-[[nodiscard]] util::Error startup_failure(
-    util::Error acquisition_error,
-    const util::ExpectedVoid& rollback) {
+[[nodiscard]] support::Error startup_failure(
+    support::Error acquisition_error,
+    const support::ExpectedVoid& rollback) {
     if (rollback) return acquisition_error;
     return combine_errors(
         std::move(acquisition_error),
@@ -587,7 +587,7 @@ void retain_error(util::ExpectedVoid& accumulated, util::ExpectedVoid candidate)
 }
 
 template <typename T>
-void record_worker_error(T& impl, util::Error error) {
+void record_worker_error(T& impl, support::Error error) {
     std::lock_guard lock(impl.mutex);
     if (!impl.worker_error) impl.worker_error = std::move(error);
 }
@@ -604,15 +604,15 @@ void invoke_input(T& impl, std::string input) {
     try {
         (*sink)(std::move(input));
     } catch (const std::exception&) {
-        record_worker_error(impl, util::make_error(
-            util::ErrorCode::Unknown,
+        record_worker_error(impl, support::make_error(
+            support::ErrorCode::Unknown,
             "Process Terminal input sink failed",
             "the input callback threw an exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.input_sink == sink) impl.input_sink.reset();
     } catch (...) {
-        record_worker_error(impl, util::make_error(
-            util::ErrorCode::Unknown,
+        record_worker_error(impl, support::make_error(
+            support::ErrorCode::Unknown,
             "Process Terminal input sink failed",
             "the input callback threw an unknown exception"));
         std::lock_guard lock(impl.mutex);
@@ -645,15 +645,15 @@ void deliver_resize_if_changed(T& impl) {
     try {
         (*sink)(dimensions);
     } catch (const std::exception&) {
-        record_worker_error(impl, util::make_error(
-            util::ErrorCode::Unknown,
+        record_worker_error(impl, support::make_error(
+            support::ErrorCode::Unknown,
             "Process Terminal resize sink failed",
             "the resize callback threw an exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     } catch (...) {
-        record_worker_error(impl, util::make_error(
-            util::ErrorCode::Unknown,
+        record_worker_error(impl, support::make_error(
+            support::ErrorCode::Unknown,
             "Process Terminal resize sink failed",
             "the resize callback threw an unknown exception"));
         std::lock_guard lock(impl.mutex);
@@ -754,7 +754,7 @@ bool output_pending(const T& impl) {
 /// empty, so a large one-shot render (e.g. an inline image) is never rejected
 /// on a healthy, draining terminal (issue #462).
 template <typename T>
-[[nodiscard]] util::ExpectedVoid enqueue_output(T& impl, std::string_view bytes) {
+[[nodiscard]] support::ExpectedVoid enqueue_output(T& impl, std::string_view bytes) {
     if (bytes.empty()) return {};
     if (impl.output_queue.empty() && !impl.output_draining) {
         const auto written = ::write(impl.options.output_fd, bytes.data(), bytes.size());
@@ -771,8 +771,8 @@ template <typename T>
     }
     if (!impl.output_queue.empty() &&
         impl.output_queued_bytes + bytes.size() > kOutputQueueMaxBytes) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Busy,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Busy,
             "Process Terminal output is backed up",
             std::format(
                 "the bounded output queue ({} bytes) cannot admit more output",
@@ -832,7 +832,7 @@ enum class WorkerEventKind {
 struct WorkerEvent {
     WorkerEventKind kind{WorkerEventKind::Timeout};
     std::string input;
-    std::optional<util::Error> error{std::nullopt};
+    std::optional<support::Error> error{std::nullopt};
 };
 
 /// What one blocking readiness wait observed. The worker drains the wakeup
@@ -848,7 +848,7 @@ struct WorkerWake {
     bool input_closed{false};
     /// Bytes read from the input descriptor (empty when none were available).
     std::string input;
-    std::optional<util::Error> error{std::nullopt};
+    std::optional<support::Error> error{std::nullopt};
 };
 
 struct WorkerInputState {
@@ -995,15 +995,15 @@ void apply_cell_size_response(
     try {
         (*sink)(dimensions);
     } catch (const std::exception&) {
-        record_worker_error(impl, util::make_error(
-            util::ErrorCode::Unknown,
+        record_worker_error(impl, support::make_error(
+            support::ErrorCode::Unknown,
             "Process Terminal resize sink failed",
             "the resize callback threw an exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     } catch (...) {
-        record_worker_error(impl, util::make_error(
-            util::ErrorCode::Unknown,
+        record_worker_error(impl, support::make_error(
+            support::ErrorCode::Unknown,
             "Process Terminal resize sink failed",
             "the resize callback threw an unknown exception"));
         std::lock_guard lock(impl.mutex);
@@ -1163,8 +1163,8 @@ void run_terminal_worker(T& impl, std::stop_token stop_token) {
 }
 
 template <typename T>
-[[nodiscard]] util::ExpectedVoid restore_terminal_modes(T& impl) {
-    util::ExpectedVoid first_error;
+[[nodiscard]] support::ExpectedVoid restore_terminal_modes(T& impl) {
+    support::ExpectedVoid first_error;
 
     // Restore the output descriptor to its original flags first so the
     // restoration writes below run on a blocking descriptor (the worker has
@@ -1242,27 +1242,27 @@ ProcessTerminal::~ProcessTerminal() {
     (void)stop();
 }
 
-util::ExpectedVoid ProcessTerminal::start(
+support::ExpectedVoid ProcessTerminal::start(
     TerminalInputSink input_sink,
     TerminalResizeSink resize_sink) {
     std::unique_lock lifecycle_lock(impl_->lifecycle_mutex);
     impl_->lifecycle_cv.wait(lifecycle_lock, [this] { return !impl_->stop_in_progress; });
     std::lock_guard lock(impl_->mutex);
     if (impl_->modes.started) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Process Terminal is already started"));
     }
     if (impl_->worker.joinable()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Process Terminal delivery worker is still stopping"));
     }
 #if !defined(__linux__) && !defined(__APPLE__)
     (void)input_sink;
     (void)resize_sink;
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "Process Terminal is unsupported on this platform",
         "supported platforms are Linux and macOS"));
 #else
@@ -1270,13 +1270,13 @@ util::ExpectedVoid ProcessTerminal::start(
         !impl_->modes.cursor_visible || impl_->keyboard_protocol_pushed ||
         impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 ||
         impl_->progress_active) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "Process Terminal has unrestored state from a previous stop"));
     }
     if (::isatty(impl_->options.input_fd) != 1 || ::isatty(impl_->options.output_fd) != 1) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Process Terminal requires TTY input and output descriptors",
             std::format(
                 "input fd {} and output fd {} must both refer to terminals",
@@ -1308,7 +1308,7 @@ util::ExpectedVoid ProcessTerminal::start(
     auto owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
     // One startup-failure path: roll back acquired terminal state and combine
     // the acquisition error with any incomplete rollback (issue #462).
-    const auto fail_startup = [this](util::Error acquisition_error) -> util::ExpectedVoid {
+    const auto fail_startup = [this](support::Error acquisition_error) -> support::ExpectedVoid {
         auto rollback = restore_terminal_modes(*impl_);
         return std::unexpected(
             startup_failure(std::move(acquisition_error), rollback));
@@ -1381,8 +1381,8 @@ util::ExpectedVoid ProcessTerminal::start(
         // when the pipe is empty after consuming the wake bytes, and a full
         // pipe must never block a wake_worker() write. UniqueFd owns the raw
         // descriptors from here on, so every failure path cleans them up.
-        cch::util::UniqueFd read_end(wakeup_pipe[0]);
-        cch::util::UniqueFd write_end(wakeup_pipe[1]);
+        cch::support::UniqueFd read_end(wakeup_pipe[0]);
+        cch::support::UniqueFd write_end(wakeup_pipe[1]);
         const int read_flags = ::fcntl(read_end.get(), F_GETFL);
         const int write_flags = ::fcntl(write_end.get(), F_GETFL);
         if (read_flags < 0 || write_flags < 0 ||
@@ -1436,8 +1436,8 @@ util::ExpectedVoid ProcessTerminal::start(
         impl_->modes.started = false;
         impl_->input_sink.reset();
         impl_->resize_sink.reset();
-        return fail_startup(util::make_error(
-            util::ErrorCode::Process,
+        return fail_startup(support::make_error(
+            support::ErrorCode::Process,
             "Process Terminal could not start input and resize delivery",
             std::format("thread creation failed (code {})", error.code().value())));
     } catch (const std::exception& error) {
@@ -1447,16 +1447,16 @@ util::ExpectedVoid ProcessTerminal::start(
         impl_->modes.started = false;
         impl_->input_sink.reset();
         impl_->resize_sink.reset();
-        return fail_startup(util::make_error(
-            util::ErrorCode::Process,
+        return fail_startup(support::make_error(
+            support::ErrorCode::Process,
             "Process Terminal could not start input and resize delivery",
             std::format("startup failed ({})", error.what())));
     } catch (...) {
         impl_->modes.started = false;
         impl_->input_sink.reset();
         impl_->resize_sink.reset();
-        return fail_startup(util::make_error(
-            util::ErrorCode::Process,
+        return fail_startup(support::make_error(
+            support::ErrorCode::Process,
             "Process Terminal could not start input and resize delivery",
             "startup failed with an unknown exception"));
     }
@@ -1464,7 +1464,7 @@ util::ExpectedVoid ProcessTerminal::start(
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::stop() {
+support::ExpectedVoid ProcessTerminal::stop() {
     std::unique_lock lifecycle_lock(impl_->lifecycle_mutex);
 #if !defined(__linux__) && !defined(__APPLE__)
     return {};
@@ -1491,7 +1491,7 @@ util::ExpectedVoid ProcessTerminal::stop() {
     }
     if (impl_->worker.joinable() && !called_from_worker) impl_->worker.join();
 
-    util::ExpectedVoid result;
+    support::ExpectedVoid result;
     {
         std::lock_guard lock(impl_->mutex);
         if (impl_->worker_error) {
@@ -1530,7 +1530,7 @@ TerminalModeState ProcessTerminal::modes() const {
     return impl_->modes;
 }
 
-util::ExpectedVoid ProcessTerminal::clear_screen() {
+support::ExpectedVoid ProcessTerminal::clear_screen() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     // pi's resize full-redraw clears scrollback too (`\x1b[3J`): the native
@@ -1543,7 +1543,7 @@ util::ExpectedVoid ProcessTerminal::clear_screen() {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::write(std::string_view output) {
+support::ExpectedVoid ProcessTerminal::write(std::string_view output) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
@@ -1553,12 +1553,12 @@ util::ExpectedVoid ProcessTerminal::write(std::string_view output) {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
+support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (position.column > impl_->dimensions.columns) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Process Terminal cursor position is outside its dimensions"));
     }
     // `row` is a buffer row under the main-screen scrollback flow: the
@@ -1602,7 +1602,7 @@ util::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
+support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->modes.cursor_visible == visible) return {};
@@ -1616,7 +1616,7 @@ util::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
 #endif
 }
 
-util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage& image) {
+support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage& image) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
@@ -1630,8 +1630,8 @@ util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalI
     if (!encoded) return std::unexpected(encoded.error());
     if (image.region.column >= impl_->dimensions.columns ||
         image.region.columns > impl_->dimensions.columns - image.region.column) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image region is outside terminal dimensions"));
     }
     // Image regions are buffer-absolute under the main-screen scrollback flow.
@@ -1647,8 +1647,8 @@ util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalI
     const auto screen_row = image.region.row - impl_->viewport_top;
     if (screen_row >= impl_->dimensions.rows ||
         image.region.rows > impl_->dimensions.rows - screen_row) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image region is outside terminal dimensions"));
     }
     // Both protocols anchor the image's top-left at the cursor, so position
@@ -1666,21 +1666,21 @@ util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalI
     return handle;
 #else
     (void)image;
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "Process Terminal does not support inline images"));
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::remove_image(
+support::ExpectedVoid ProcessTerminal::remove_image(
     TerminalImageHandle handle,
     const CellRegion& region) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
     if (region.column >= impl_->dimensions.columns) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image removal region is outside terminal dimensions"));
     }
     // Buffer-absolute removal region (fork-B): regions that scrolled into the
@@ -1690,8 +1690,8 @@ util::ExpectedVoid ProcessTerminal::remove_image(
         const auto screen_row = region.row - impl_->viewport_top;
         const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
         if (screen_row >= impl_->dimensions.rows) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "Inline image removal region is outside terminal dimensions"));
         }
         const auto rows = std::min(region.rows, impl_->dimensions.rows - screen_row);
@@ -1725,7 +1725,7 @@ util::ExpectedVoid ProcessTerminal::remove_image(
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
+support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->synchronized_update_depth > 0) {
@@ -1742,12 +1742,12 @@ util::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::end_synchronized_update() {
+support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->synchronized_update_depth == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Process Terminal synchronized update is not active"));
     }
     if (impl_->synchronized_update_depth > 1) {
@@ -1764,7 +1764,7 @@ util::ExpectedVoid ProcessTerminal::end_synchronized_update() {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
+support::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
@@ -1774,7 +1774,7 @@ util::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::set_progress(bool active) {
+support::ExpectedVoid ProcessTerminal::set_progress(bool active) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
@@ -1797,7 +1797,7 @@ util::ExpectedVoid ProcessTerminal::set_progress(bool active) {
 #endif
 }
 
-util::ExpectedVoid ProcessTerminal::drain_input(
+support::ExpectedVoid ProcessTerminal::drain_input(
     std::chrono::milliseconds max_ms,
     std::chrono::milliseconds idle_ms) {
     std::unique_lock lock(impl_->mutex);

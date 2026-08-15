@@ -40,7 +40,7 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 requests.push_back(RecordedProviderRequest{model, context, options});
                 const auto turn = requests.size();
 

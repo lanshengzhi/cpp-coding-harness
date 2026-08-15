@@ -33,17 +33,17 @@ private:
     const AgentSession::Impl* previous_;
 };
 
-[[nodiscard]] util::ExpectedVoid prompt_exception(std::exception_ptr exception) {
+[[nodiscard]] support::ExpectedVoid prompt_exception(std::exception_ptr exception) {
     try {
         std::rethrow_exception(exception);
     } catch (const std::exception& error) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session prompt coroutine failed",
             error.what()));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session prompt coroutine failed",
             "unknown exception"));
     }
@@ -119,7 +119,7 @@ AgentSession::~AgentSession() {
     }
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AgentSession::prompt(
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::prompt(
     std::string text,
     PromptOptions options) {
     // AgentSessionPromptAccess::prompt is deliberately an ordinary function
@@ -134,7 +134,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSession::prompt(
         {});
 }
 
-util::ExpectedVoid AgentSession::prompt_blocking(
+support::ExpectedVoid AgentSession::prompt_blocking(
     std::string text,
     PromptOptions options) {
     return detail::AgentSessionPromptAccess::prompt_blocking(
@@ -145,12 +145,12 @@ util::ExpectedVoid AgentSession::prompt_blocking(
         {});
 }
 
-util::ExpectedVoid AgentSession::steer(
+support::ExpectedVoid AgentSession::steer(
     std::string text,
     PromptOptions options) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->steer(
@@ -159,12 +159,12 @@ util::ExpectedVoid AgentSession::steer(
         options.expand_prompt_templates);
 }
 
-util::ExpectedVoid AgentSession::follow_up(
+support::ExpectedVoid AgentSession::follow_up(
     std::string text,
     PromptOptions options) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->follow_up(
@@ -173,62 +173,62 @@ util::ExpectedVoid AgentSession::follow_up(
         options.expand_prompt_templates);
 }
 
-util::ExpectedVoid AgentSession::set_steering_mode(agent::InputQueueMode mode) {
+support::ExpectedVoid AgentSession::set_steering_mode(agent::InputQueueMode mode) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->set_steering_mode(mode);
 }
 
-util::ExpectedVoid AgentSession::set_follow_up_mode(agent::InputQueueMode mode) {
+support::ExpectedVoid AgentSession::set_follow_up_mode(agent::InputQueueMode mode) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->set_follow_up_mode(mode);
 }
 
-util::ExpectedVoid AgentSession::clear_steering_queue() {
+support::ExpectedVoid AgentSession::clear_steering_queue() {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->clear_steering_queue();
 }
 
-util::ExpectedVoid AgentSession::clear_follow_up_queue() {
+support::ExpectedVoid AgentSession::clear_follow_up_queue() {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->clear_follow_up_queue();
 }
 
-util::ExpectedVoid AgentSession::clear_input_queues() {
+support::ExpectedVoid AgentSession::clear_input_queues() {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->clear_input_queues();
 }
 
-util::Expected<std::string> AgentSession::set_thinking_level(
+support::Expected<std::string> AgentSession::set_thinking_level(
     std::string_view level) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->set_thinking_level(level);
 }
 
-boost::asio::awaitable<util::Expected<CompactionResult>> AgentSession::compact(
+boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::compact(
     std::string custom_instructions) {
     // Same impl_ copying contract as prompt(): the lazy awaitable is safe to
     // return even if the public handle moves or is destroyed first.
@@ -248,7 +248,7 @@ bool detail::AgentSessionInteractiveAccess::is_project_trusted(
         session.impl_->runtime->is_project_trusted();
 }
 
-boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
+boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
 detail::AgentSessionInteractiveAccess::run_user_bash(
     AgentSession& session,
     std::string command,
@@ -261,15 +261,15 @@ detail::AgentSessionInteractiveAccess::run_user_bash(
         std::move(progress_sink));
 }
 
-boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
+boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
 detail::AgentSessionInteractiveAccess::run_user_bash_impl(
     std::shared_ptr<AgentSession::Impl> impl,
     std::string command,
     bool exclude_from_context,
     runtime::UserBashProgressSink progress_sink) {
     if (!impl || !impl->runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     co_return co_await impl->runtime->run_user_bash(
@@ -285,12 +285,12 @@ void detail::AgentSessionInteractiveAccess::cancel_user_bash(
     }
 }
 
-boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt(
+boost::asio::awaitable<support::ExpectedVoid> detail::AgentSessionPromptAccess::prompt(
     AgentSession& session,
     std::string text,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
-    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    std::move_only_function<support::ExpectedVoid()> on_preflight_accepted) {
     return prompt_impl(
         session.impl_,
         std::move(text),
@@ -299,15 +299,15 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
         std::move(on_preflight_accepted));
 }
 
-boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt_impl(
+boost::asio::awaitable<support::ExpectedVoid> detail::AgentSessionPromptAccess::prompt_impl(
     std::shared_ptr<AgentSession::Impl> impl,
     std::string text,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
-    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    std::move_only_function<support::ExpectedVoid()> on_preflight_accepted) {
     if (!impl || !impl->runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     try {
@@ -321,35 +321,35 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
     }
 }
 
-boost::asio::awaitable<util::ExpectedVoid>
+boost::asio::awaitable<support::ExpectedVoid>
 detail::AgentSessionPromptAccess::wait_for_idle(
     AgentSession& session) {
     return wait_for_idle_impl(session.impl_);
 }
 
-boost::asio::awaitable<util::ExpectedVoid>
+boost::asio::awaitable<support::ExpectedVoid>
 detail::AgentSessionPromptAccess::wait_for_idle_impl(
     std::shared_ptr<AgentSession::Impl> impl) {
     if (impl && impl->runtime) {
         co_await impl->runtime->wait_for_idle();
     }
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
-boost::asio::awaitable<util::Expected<CompactionResult>>
+boost::asio::awaitable<support::Expected<CompactionResult>>
 detail::AgentSessionPromptAccess::compact(
     AgentSession& session,
     std::string custom_instructions) {
     return compact_impl(session.impl_, std::move(custom_instructions));
 }
 
-boost::asio::awaitable<util::Expected<CompactionResult>>
+boost::asio::awaitable<support::Expected<CompactionResult>>
 detail::AgentSessionPromptAccess::compact_impl(
     std::shared_ptr<AgentSession::Impl> impl,
     std::string custom_instructions) {
     if (!impl || !impl->runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     try {
@@ -360,30 +360,30 @@ detail::AgentSessionPromptAccess::compact_impl(
     }
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AgentSession::set_model(
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::set_model(
     ai::Model model) {
     return detail::AgentSessionPromptAccess::set_model(*this, std::move(model));
 }
 
-util::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
+support::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
     return detail::AgentSessionPromptAccess::set_model_blocking(
         *this, std::move(model));
 }
 
-boost::asio::awaitable<util::ExpectedVoid>
+boost::asio::awaitable<support::ExpectedVoid>
 detail::AgentSessionPromptAccess::set_model(
     AgentSession& session,
     ai::Model model) {
     return set_model_impl(session.impl_, std::move(model));
 }
 
-boost::asio::awaitable<util::ExpectedVoid>
+boost::asio::awaitable<support::ExpectedVoid>
 detail::AgentSessionPromptAccess::set_model_impl(
     std::shared_ptr<AgentSession::Impl> impl,
     ai::Model model) {
     if (!impl || !impl->runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     try {
@@ -394,22 +394,22 @@ detail::AgentSessionPromptAccess::set_model_impl(
     }
 }
 
-util::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
+support::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
     AgentSession& session,
     ai::Model model) {
     const auto impl = session.impl_;
     if (!impl) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     std::exception_ptr exception;
     boost::asio::co_spawn(
         io,
         set_model(session, std::move(model)),
-        [&](std::exception_ptr completion_exception, util::ExpectedVoid completion) {
+        [&](std::exception_ptr completion_exception, support::ExpectedVoid completion) {
             exception = completion_exception;
             result.emplace(std::move(completion));
         });
@@ -419,38 +419,38 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
         return prompt_exception(exception);
     }
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session set_model coroutine did not complete"));
     }
     return std::move(*result);
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
 AgentSession::cycle_model(std::string direction) {
     return detail::AgentSessionPromptAccess::cycle_model(*this, std::move(direction));
 }
 
-util::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blocking(
+support::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blocking(
     std::string direction) {
     return detail::AgentSessionPromptAccess::cycle_model_blocking(
         *this, std::move(direction));
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
 detail::AgentSessionPromptAccess::cycle_model(
     AgentSession& session,
     std::string direction) {
     return cycle_model_impl(session.impl_, std::move(direction));
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
 detail::AgentSessionPromptAccess::cycle_model_impl(
     std::shared_ptr<AgentSession::Impl> impl,
     std::string direction) {
     if (!impl || !impl->runtime) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     try {
@@ -461,24 +461,24 @@ detail::AgentSessionPromptAccess::cycle_model_impl(
     }
 }
 
-util::Expected<std::optional<ModelCycleResult>>
+support::Expected<std::optional<ModelCycleResult>>
 detail::AgentSessionPromptAccess::cycle_model_blocking(
     AgentSession& session,
     std::string direction) {
     const auto impl = session.impl_;
     if (!impl) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     boost::asio::io_context io;
-    std::optional<util::Expected<std::optional<ModelCycleResult>>> result;
+    std::optional<support::Expected<std::optional<ModelCycleResult>>> result;
     std::exception_ptr exception;
     boost::asio::co_spawn(
         io,
         cycle_model(session, std::move(direction)),
         [&](std::exception_ptr completion_exception,
-            util::Expected<std::optional<ModelCycleResult>> completion) {
+            support::Expected<std::optional<ModelCycleResult>> completion) {
             exception = completion_exception;
             result.emplace(std::move(completion));
         });
@@ -489,17 +489,17 @@ detail::AgentSessionPromptAccess::cycle_model_blocking(
         return std::unexpected(failure.error());
     }
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session cycle_model coroutine did not complete"));
     }
     return std::move(*result);
 }
 
-util::Expected<std::optional<std::string>> AgentSession::cycle_thinking_level() {
+support::Expected<std::optional<std::string>> AgentSession::cycle_thinking_level() {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->cycle_thinking_level();
@@ -516,25 +516,25 @@ const std::vector<ScopedModel>& AgentSession::scoped_models() const {
     return impl_ && impl_->runtime ? impl_->runtime->scoped_models() : kEmpty;
 }
 
-util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
+support::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
     AgentSession& session,
     std::string text,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
-    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    std::move_only_function<support::ExpectedVoid()> on_preflight_accepted) {
     const auto impl = session.impl_;
     if (!impl) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     if (blocking_prompt_wait == impl.get()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     std::exception_ptr exception;
     BlockingPromptWaitScope wait_scope{impl.get()};
 
@@ -546,7 +546,7 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
             std::move(images),
             expand_prompt_templates,
             std::move(on_preflight_accepted)),
-        [&](std::exception_ptr completion_exception, util::ExpectedVoid completion) {
+        [&](std::exception_ptr completion_exception, support::ExpectedVoid completion) {
             exception = completion_exception;
             result.emplace(std::move(completion));
         });
@@ -556,19 +556,19 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
         return prompt_exception(exception);
     }
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "session prompt coroutine did not complete"));
     }
     return std::move(*result);
 }
 
-util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {
+support::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {
     if (!impl_) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
     if (!sink) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "event sink is empty"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "event sink is empty"));
     }
 
     auto subscribed = impl_->runtime->subscribe(std::move(sink));
@@ -584,16 +584,16 @@ util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink 
     return sub;
 }
 
-util::Expected<SessionEventSubscription> AgentSession::subscribe_session(
+support::Expected<SessionEventSubscription> AgentSession::subscribe_session(
     AgentSessionEventSink sink) {
     if (!impl_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     if (!sink) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session event sink is empty"));
     }
     return impl_->runtime->subscribe_session(std::move(sink));
@@ -618,11 +618,11 @@ std::optional<std::string> AgentSession::session_name() const {
     return impl_ && impl_->runtime ? impl_->runtime->session_name() : std::nullopt;
 }
 
-util::Expected<std::optional<std::string>> AgentSession::set_session_name(
+support::Expected<std::optional<std::string>> AgentSession::set_session_name(
     std::string name) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->set_session_name(std::move(name));
@@ -765,13 +765,13 @@ std::vector<runtime::UserForkMessage> AgentSession::get_user_messages_for_forkin
     return runtime::user_messages_for_forking(source);
 }
 
-util::Expected<runtime::ForkPreparation> AgentSession::prepare_fork(
+support::Expected<runtime::ForkPreparation> AgentSession::prepare_fork(
     std::string_view entry_id,
     runtime::ForkPosition position) const {
     runtime::ForkSource source;
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Session,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Session,
             "Invalid entry ID for forking"));
     }
     source.session_path = impl_->runtime->session_path();
@@ -782,35 +782,35 @@ util::Expected<runtime::ForkPreparation> AgentSession::prepare_fork(
     return runtime::prepare_fork(source, entry_id, position);
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AgentSession::wait_for_idle() {
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::wait_for_idle() {
     return detail::AgentSessionPromptAccess::wait_for_idle(*this);
 }
 
-util::Expected<SessionTreeTopology> AgentSession::session_tree() const {
+support::Expected<SessionTreeTopology> AgentSession::session_tree() const {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->session_tree();
 }
 
-util::Expected<TreeNavigationResult> AgentSession::navigate_tree(
+support::Expected<TreeNavigationResult> AgentSession::navigate_tree(
     std::string_view target_id) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->navigate_tree(target_id);
 }
 
-util::ExpectedVoid AgentSession::set_entry_label(
+support::ExpectedVoid AgentSession::set_entry_label(
     std::string_view entry_id,
     std::optional<std::string> label) {
     if (!impl_ || !impl_->runtime) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session is not initialized"));
     }
     return impl_->runtime->set_entry_label(entry_id, std::move(label));
@@ -824,16 +824,16 @@ namespace detail {
 
 class AgentSessionRuntimeAccess {
 public:
-    [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::AgentSessionReloadResult>>
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<runtime::AgentSessionReloadResult>>
     reload(AgentSession& session) {
         return reload_impl(session.impl_);
     }
 
-    [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::AgentSessionReloadResult>>
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<runtime::AgentSessionReloadResult>>
     reload_impl(std::shared_ptr<AgentSession::Impl> impl) {
         if (!impl || !impl->runtime) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
                 "session is not initialized"));
         }
         try {
@@ -844,8 +844,8 @@ public:
         }
     }
 
-    [[nodiscard]] static util::Expected<CreateAgentSessionResult> wrap_factory_result(
-        util::Expected<runtime::CreateAgentSessionResult> factory_result) {
+    [[nodiscard]] static support::Expected<CreateAgentSessionResult> wrap_factory_result(
+        support::Expected<runtime::CreateAgentSessionResult> factory_result) {
         if (!factory_result) {
             return std::unexpected(factory_result.error());
         }
@@ -873,7 +873,7 @@ public:
 
 } // namespace detail
 
-boost::asio::awaitable<util::Expected<runtime::AgentSessionReloadResult>>
+boost::asio::awaitable<support::Expected<runtime::AgentSessionReloadResult>>
 AgentSession::reload() {
     // Same impl_ copying contract as prompt()/set_model: session.impl_ is
     // copied into the reload frame synchronously at the call, so moving or
@@ -882,13 +882,13 @@ AgentSession::reload() {
     return detail::AgentSessionRuntimeAccess::reload(*this);
 }
 
-util::Expected<CreateAgentSessionResult> create_agent_session(
+support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request) {
     return detail::AgentSessionRuntimeAccess::wrap_factory_result(
         runtime::SessionFactory::create(std::move(request)));
 }
 
-util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models) {
     return detail::AgentSessionRuntimeAccess::wrap_factory_result(
@@ -896,7 +896,7 @@ util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
             std::move(request), std::move(models)));
 }
 
-util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models,
     std::unique_ptr<runtime::AsyncUserShell> user_shell) {

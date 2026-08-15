@@ -1,7 +1,7 @@
 #include "SessionDiscovery.hpp"
 
 #include "SessionPathPolicy.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 
 #include <algorithm>
@@ -160,11 +160,11 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
     if (!line || line->empty()) {
         return std::nullopt;
     }
-    auto parsed = util::read_json(*line);
+    auto parsed = support::read_json(*line);
     if (!parsed) {
         return std::nullopt;
     }
-    const auto* object = parsed->get_if<util::JsonValue::object_t>();
+    const auto* object = parsed->get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return std::nullopt;
     }
@@ -248,11 +248,11 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
     const auto handle_line = [&](std::string line) {
         if (first_entry) {
             first_entry = false;
-            auto parsed = util::read_json(line);
+            auto parsed = support::read_json(line);
             if (!parsed) {
                 return;
             }
-            const auto* object = parsed->get_if<util::JsonValue::object_t>();
+            const auto* object = parsed->get_if<support::JsonValue::object_t>();
             if (object == nullptr) {
                 return;
             }
@@ -294,11 +294,11 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
         if (!info) {
             return;
         }
-        auto parsed = util::read_json(line);
+        auto parsed = support::read_json(line);
         if (!parsed) {
             return;
         }
-        const auto* object = parsed->get_if<util::JsonValue::object_t>();
+        const auto* object = parsed->get_if<support::JsonValue::object_t>();
         if (object == nullptr) {
             return;
         }
@@ -352,7 +352,7 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
         }
         const auto message_field = object->find("message");
         if (message_field == object->end() ||
-            !message_field->second.holds<util::JsonValue::object_t>()) {
+            !message_field->second.holds<support::JsonValue::object_t>()) {
             if (entry_ms) {
                 last_activity_ms = std::max(
                     last_activity_ms.value_or(0), *entry_ms);
@@ -398,9 +398,9 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
             if (content->second.holds<std::string>()) {
                 text = content->second.get_string();
             } else if (
-                content->second.holds<util::JsonValue::array_t>()) {
+                content->second.holds<support::JsonValue::array_t>()) {
                 for (const auto& block : content->second.get_array()) {
-                    if (!block.holds<util::JsonValue::object_t>()) {
+                    if (!block.holds<support::JsonValue::object_t>()) {
                         continue;
                     }
                     const auto& block_object = block.get_object();

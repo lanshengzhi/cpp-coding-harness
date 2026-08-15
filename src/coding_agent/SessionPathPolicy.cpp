@@ -129,13 +129,13 @@ AutomaticSessionTarget make_custom_automatic_session_target(
     return target;
 }
 
-util::Expected<std::filesystem::path> resolve_session_dir_value(
+support::Expected<std::filesystem::path> resolve_session_dir_value(
     const std::string& value,
     const std::filesystem::path& canonical_workspace,
     const std::filesystem::path& home_dir) {
     if (value.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "session directory override is empty",
             "supply a non-empty --session-dir, PI_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
     }
@@ -148,8 +148,8 @@ util::Expected<std::filesystem::path> resolve_session_dir_value(
 #endif
         ;
     if (needs_home && home_dir.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "cannot expand leading '~' in session directory override",
             "no home directory is available to expand " + value));
     }
@@ -196,7 +196,7 @@ std::filesystem::path resolve_session_path_value(
     return resolved.lexically_normal();
 }
 
-util::Expected<std::optional<std::filesystem::path>> resolve_effective_session_dir(
+support::Expected<std::optional<std::filesystem::path>> resolve_effective_session_dir(
     const std::optional<std::string>& flag_value,
     const std::optional<std::string>& env_value,
     const std::optional<std::string>& settings_value,

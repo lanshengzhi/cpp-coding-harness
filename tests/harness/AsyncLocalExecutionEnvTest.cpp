@@ -6,7 +6,7 @@
 #include "harness/SyncLocalExecutionEnv.hpp"
 #include "harness/RuntimeRoot.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/Process.hpp"
+#include "harness/Process.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -41,25 +41,25 @@ using namespace cch;
 
 namespace {
 
-class FakeAsyncProcessRunner final : public util::AsyncProcessRunner {
+class FakeAsyncProcessRunner final : public harness::AsyncProcessRunner {
 public:
-    boost::asio::awaitable<util::Expected<util::ProcessResult>> run(util::ProcessRequest request) override {
+    boost::asio::awaitable<support::Expected<harness::ProcessResult>> run(harness::ProcessRequest request) override {
         requests.push_back(std::move(request));
         if (!error.empty()) {
-            co_return std::unexpected(util::make_error(util::ErrorCode::Process, "fake process failed", error));
+            co_return std::unexpected(support::make_error(support::ErrorCode::Process, "fake process failed", error));
         }
         co_return next;
     }
 
-    util::ProcessResult next;
+    harness::ProcessResult next;
     std::string error;
-    std::vector<util::ProcessRequest> requests;
+    std::vector<harness::ProcessRequest> requests;
 };
 
 template <typename T, typename Start>
-util::Expected<T> run_awaitable(Start start) {
+support::Expected<T> run_awaitable(Start start) {
     boost::asio::io_context io;
-    std::optional<util::Expected<T>> result;
+    std::optional<support::Expected<T>> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -73,7 +73,7 @@ util::Expected<T> run_awaitable(Start start) {
 }
 
 /// Like run_awaitable but for pi-shaped methods that return std::expected<T, E>
-/// (not util::Expected<T>). Returns the raw std::expected<T, E>.
+/// (not support::Expected<T>). Returns the raw std::expected<T, E>.
 class TestRuntime final {
 public:
     TestRuntime()
@@ -154,8 +154,8 @@ bool path_exists(const std::filesystem::path& path) {
 } // namespace
 
 TEST_CASE("process runner capability follows async naming and ownership rules", "[harness][async][issue75]") {
-    static_assert(std::is_abstract_v<util::AsyncProcessRunner>);
-    static_assert(std::is_final_v<util::DefaultAsyncProcessRunner>);
+    static_assert(std::is_abstract_v<harness::AsyncProcessRunner>);
+    static_assert(std::is_final_v<harness::DefaultAsyncProcessRunner>);
 }
 
 TEST_CASE("every async filesystem operation observes a pre-requested cancellation", "[harness][async][issue40]") {
@@ -664,19 +664,19 @@ TEST_CASE(
 }
 
 TEST_CASE("default process runner caps newline-free output without waiting for line breaks", "[harness][async][process]") {
-    util::DefaultAsyncProcessRunner runner;
-    util::ProcessRequest request;
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
     request.executable = "/bin/bash";
     request.arguments = {"-c", "printf '%60000s' '' | tr ' ' x"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
-    request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
     std::string streamed_output;
     request.on_stdout = [&](std::string_view chunk) {
         streamed_output.append(chunk);
     };
 
-    auto result = run_awaitable<util::ProcessResult>([&]() {
+    auto result = run_awaitable<harness::ProcessResult>([&]() {
         return runner.run(std::move(request));
     });
 
@@ -687,16 +687,16 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
 }
 
 TEST_CASE("default process runner bounds truncated output on UTF-8 character boundaries", "[harness][async][process][issue72]") {
-    util::DefaultAsyncProcessRunner runner;
-    util::ProcessRequest request;
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
     request.executable = "/bin/bash";
     // 500 euro signs (3 bytes each); a byte-exact 1024 cap would split the last one.
     request.arguments = {"-c", "printf '€%.0s' {1..500}"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
-    request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
 
-    auto result = run_awaitable<util::ProcessResult>([&]() {
+    auto result = run_awaitable<harness::ProcessResult>([&]() {
         return runner.run(std::move(request));
     });
 
@@ -769,18 +769,18 @@ TEST_CASE("pi-shaped public types compile with aggregate construction", "[harnes
     CHECK(std::holds_alternative<harness::BinaryData>(bytes));
 }
 
-TEST_CASE("pi-shaped error conversion helpers map to util::Error", "[harness][u1]") {
-    // FileError → util::Error
+TEST_CASE("pi-shaped error conversion helpers map to support::Error", "[harness][u1]") {
+    // FileError → support::Error
     auto ue = harness::to_util_error(harness::FileError{
         harness::FileErrorCode::PermissionDenied, "denied", std::string{"/x"}});
-    CHECK(ue.code == util::ErrorCode::Workspace);
+    CHECK(ue.code == support::ErrorCode::Workspace);
     CHECK(ue.detail.find("denied") != std::string::npos);
     CHECK(ue.context == "/x");
 
-    // ExecutionError → util::Error
+    // ExecutionError → support::Error
     auto ee = harness::to_util_error(harness::ExecutionError{
         harness::ExecutionErrorCode::Timeout, "too slow"});
-    CHECK(ee.code == util::ErrorCode::Timeout);
+    CHECK(ee.code == support::ErrorCode::Timeout);
     CHECK(ee.detail.find("too slow") != std::string::npos);
 
     // Every FileErrorCode maps without unknown fallback (except Unknown/NotSupported)
@@ -791,7 +791,7 @@ TEST_CASE("pi-shaped error conversion helpers map to util::Error", "[harness][u1
         auto err = harness::to_util_error(harness::FileError{code, "test", std::nullopt});
         bool allowed_unknown = (code == harness::FileErrorCode::Unknown ||
                                 code == harness::FileErrorCode::NotSupported);
-        CHECK((static_cast<int>(err.code) != static_cast<int>(util::ErrorCode::Unknown) || allowed_unknown));
+        CHECK((static_cast<int>(err.code) != static_cast<int>(support::ErrorCode::Unknown) || allowed_unknown));
     }
 
     // Every ExecutionErrorCode maps without unknown fallback
@@ -803,7 +803,7 @@ TEST_CASE("pi-shaped error conversion helpers map to util::Error", "[harness][u1
         auto err = harness::to_util_error(harness::ExecutionError{code, "test"});
         bool allowed_unknown = (code == harness::ExecutionErrorCode::Unknown ||
                                 code == harness::ExecutionErrorCode::NotSupported);
-        CHECK((static_cast<int>(err.code) != static_cast<int>(util::ErrorCode::Unknown) || allowed_unknown));
+        CHECK((static_cast<int>(err.code) != static_cast<int>(support::ErrorCode::Unknown) || allowed_unknown));
     }
 }
 

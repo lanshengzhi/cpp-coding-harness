@@ -35,8 +35,8 @@ cch_parity_declare_target(
     SOURCES ${CCH_PARITY_FIXTURE_SRC}/ai/model.cpp
     DEPENDS cch_support
     INTERFACE_DEPENDS cch_support
-    FORCED_INCLUDES ${CCH_PARITY_FIXTURE_ROOT}/include/cch/ai/force.hpp
-    PCH_INPUT ${CCH_PARITY_FIXTURE_ROOT}/include/cch/ai/pch.hpp
+    FORCED_INCLUDES ${CCH_PARITY_FIXTURE_ROOT}/src/ai/include/cch/ai/force.hpp
+    PCH_INPUT ${CCH_PARITY_FIXTURE_ROOT}/src/ai/include/cch/ai/pch.hpp
 )
 
 cch_parity_declare_target(

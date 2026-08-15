@@ -11,8 +11,8 @@
 #include "RuntimeApiKeyOverlay.hpp"
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Process.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "harness/Process.hpp"
 
 #include <map>
 #include <memory>
@@ -150,13 +150,13 @@ ModelRuntime::ModelRuntime(ModelRuntime&&) noexcept = default;
 ModelRuntime& ModelRuntime::operator=(ModelRuntime&&) noexcept = default;
 ModelRuntime::~ModelRuntime() = default;
 
-util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
+support::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
     ModelRuntimeOptions options) {
     return create_model_runtime_for_testing(
         std::move(options), ModelRuntimeTransportOptions{});
 }
 
-util::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
+support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
     ModelRuntimeOptions options,
     ModelRuntimeTransportOptions transports) {
     std::filesystem::path agent_dir = options.agent_dir.empty()
@@ -189,8 +189,8 @@ util::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
     if (!ws_transport) {
         ws_transport = std::make_shared<ai::providers::BoostBeastWebSocketTransport>();
     }
-    std::shared_ptr<util::AsyncProcessRunner> process_runner =
-        std::make_shared<util::DefaultAsyncProcessRunner>();
+    std::shared_ptr<harness::AsyncProcessRunner> process_runner =
+        std::make_shared<harness::DefaultAsyncProcessRunner>();
 
     auto impl = std::make_unique<ModelRuntime::Impl>(ModelRuntime::Impl{
         .agent_dir = std::move(agent_dir),
@@ -224,7 +224,7 @@ util::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
     return runtime;
 }
 
-util::Expected<std::shared_ptr<ModelRuntime>>
+support::Expected<std::shared_ptr<ModelRuntime>>
 ModelRuntime::create_from_models_for_testing(
     std::shared_ptr<ai::Models> models,
     ModelRuntimeOptions options) {
@@ -270,11 +270,11 @@ const std::filesystem::path& ModelRuntime::models_path() const noexcept {
     return impl_->models_path;
 }
 
-util::ExpectedVoid ModelRuntime::refresh() {
+support::ExpectedVoid ModelRuntime::refresh() {
     impl_->config = ModelConfig::load(impl_->models_path);
     impl_->config_error = impl_->config.error();
     impl_->rebuild_providers();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
 std::optional<std::string> ModelRuntime::get_error() const {
@@ -319,7 +319,7 @@ std::optional<ai::Model> ModelRuntime::model(
     return impl_->models->model(provider_id, model_id);
 }
 
-boost::asio::awaitable<util::Expected<std::vector<ai::Model>>>
+boost::asio::awaitable<support::Expected<std::vector<ai::Model>>>
 ModelRuntime::get_available(std::optional<std::string_view> provider_id) {
     if (provider_id) {
         const auto selected = provider(*provider_id);
@@ -368,13 +368,13 @@ std::vector<ai::Model> ModelRuntime::get_available_snapshot() const {
     return impl_ ? impl_->available_models : std::vector<ai::Model>{};
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>>
+boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>>
 ModelRuntime::check_auth(std::string provider_id) {
     co_return co_await ai::detail::await_async_result(
         impl_->models->check_auth(std::move(provider_id)));
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>>
+boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>>
 ModelRuntime::get_auth(
     std::string provider_id,
     std::optional<std::string> explicit_api_key) {
@@ -383,7 +383,7 @@ ModelRuntime::get_auth(
             std::move(provider_id), std::move(explicit_api_key)));
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>>
+boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>>
 ModelRuntime::get_auth(
     ai::Model model,
     std::optional<std::string> explicit_api_key) {
@@ -404,13 +404,13 @@ bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
     return selected != nullptr && selected->auth().oauth.has_value();
 }
 
-util::ExpectedVoid ModelRuntime::set_runtime_api_key(
+support::ExpectedVoid ModelRuntime::set_runtime_api_key(
     std::string provider_id,
     std::string api_key) {
     auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get());
     if (overlay == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "runtime API key override unavailable for provider " + provider_id));
     }
     overlay->set_runtime_api_key(provider_id, std::move(api_key));
@@ -425,15 +425,15 @@ util::ExpectedVoid ModelRuntime::set_runtime_api_key(
         .type = ai::AuthType::ApiKey,
     };
     impl_->recompute_available_models();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid ModelRuntime::remove_runtime_api_key(
+support::ExpectedVoid ModelRuntime::remove_runtime_api_key(
     std::string provider_id) {
     auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get());
     if (overlay == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "runtime API key override unavailable for provider " + provider_id));
     }
     overlay->remove_runtime_api_key(provider_id);
@@ -441,7 +441,7 @@ util::ExpectedVoid ModelRuntime::remove_runtime_api_key(
     impl_->auth_snapshot.erase(provider_id);
     // Restore the structural availability snapshot.
     impl_->update_snapshot();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
 bool ModelRuntime::has_runtime_api_key(std::string_view provider_id) const {
@@ -481,12 +481,12 @@ std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
     return ModelRuntimeAuthStatus{.configured = false};
 }
 
-boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>>
+boost::asio::awaitable<support::Expected<std::vector<ai::CredentialInfo>>>
 ModelRuntime::list_credentials() {
     co_return co_await ai::detail::await_async_result(impl_->credentials->list());
 }
 
-boost::asio::awaitable<util::Expected<ai::Credential>> ModelRuntime::login(
+boost::asio::awaitable<support::Expected<ai::Credential>> ModelRuntime::login(
     std::string provider_id,
     ai::AuthType type,
     ai::AuthInteraction interaction) {
@@ -500,7 +500,7 @@ boost::asio::awaitable<util::Expected<ai::Credential>> ModelRuntime::login(
     co_return credential;
 }
 
-boost::asio::awaitable<util::ExpectedVoid> ModelRuntime::logout(
+boost::asio::awaitable<support::ExpectedVoid> ModelRuntime::logout(
     std::string provider_id) {
     CCH_TRY_VOID(co_await ai::detail::await_async_result(
         impl_->models->logout(provider_id)));
@@ -509,20 +509,20 @@ boost::asio::awaitable<util::ExpectedVoid> ModelRuntime::logout(
     // refresh; order preserved).
     impl_->recompose_provider(provider_id);
     static_cast<void>(refresh());
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
-util::ExpectedVoid ModelRuntime::register_native_provider(
+support::ExpectedVoid ModelRuntime::register_native_provider(
     std::shared_ptr<ai::Provider> provider_value) {
     if (!provider_value || provider_value->id().empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Provider,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Provider,
             "provider id is required"));
     }
     impl_->native_extensions[std::string{provider_value->id()}] = provider_value;
     impl_->recompose_provider(provider_value->id());
     impl_->update_snapshot();
-    return util::ExpectedVoid{};
+    return support::ExpectedVoid{};
 }
 
 std::vector<std::string> ModelRuntime::configured_api_key_env_names() const {

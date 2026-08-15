@@ -60,7 +60,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-gated-fake";
@@ -69,15 +69,15 @@ public:
         response.timestamp = now_ms();
 
         if (requests.size() == 1) {
-            util::JsonValue::object_t arguments;
-            arguments.emplace("path", util::JsonValue{read_path_});
+            support::JsonValue::object_t arguments;
+            arguments.emplace("path", support::JsonValue{read_path_});
             response.content.clear();
             response.content.emplace_back(ai::text_content("reading file"));
             response.content.emplace_back(ai::tool_call_content(
                 "fake-read-1",
                 "read",
                 std::format(R"({{"path":"{}"}})", read_path_),
-                util::JsonValue{std::move(arguments)}));
+                support::JsonValue{std::move(arguments)}));
             response.stop_reason = ai::AssistantStopReason::ToolUse;
             co_return response;
         }

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
@@ -53,7 +53,7 @@ struct DevicePollResult {
 
 template <typename T>
 using DevicePollFn = std::move_only_function<
-    boost::asio::awaitable<util::Expected<DevicePollResult<T>>>()>;
+    boost::asio::awaitable<support::Expected<DevicePollResult<T>>>()>;
 
 template <typename T>
 struct DevicePollOptions {
@@ -66,12 +66,12 @@ struct DevicePollOptions {
 
 namespace detail {
 
-[[nodiscard]] inline boost::asio::awaitable<util::ExpectedVoid> abortable_sleep(
+[[nodiscard]] inline boost::asio::awaitable<support::ExpectedVoid> abortable_sleep(
     std::chrono::milliseconds duration,
     std::stop_token stop_token) {
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             std::string{kDeviceCancelMessage}));
     }
     auto executor = co_await boost::asio::this_coro::executor;
@@ -91,11 +91,11 @@ namespace detail {
         cancellation_signal->slot(),
         boost::asio::redirect_error(boost::asio::use_awaitable, error)));
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
             std::string{kDeviceCancelMessage}));
     }
-    co_return util::ExpectedVoid{};
+    co_return support::ExpectedVoid{};
 }
 
 } // namespace detail
@@ -106,7 +106,7 @@ namespace detail {
 /// messages. `slow_down` honors the server interval when supplied, otherwise
 /// adds 5 seconds.
 template <typename T>
-[[nodiscard]] inline boost::asio::awaitable<util::Expected<T>> poll_device_flow(
+[[nodiscard]] inline boost::asio::awaitable<support::Expected<T>> poll_device_flow(
     DevicePollOptions<T> options) {
     constexpr auto kMinimumInterval = std::chrono::milliseconds{1000};
     constexpr auto kDefaultInterval = std::chrono::seconds{5};
@@ -133,8 +133,8 @@ template <typename T>
 
     while (std::chrono::steady_clock::now() < deadline) {
         if (options.stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 std::string{kDeviceCancelMessage}));
         }
         CCH_TRY(result, co_await options.poll());
@@ -144,8 +144,8 @@ template <typename T>
         }
         if (auto* failed = std::get_if<typename DevicePollResult<T>::Failed>(
                 &result.kind)) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::OAuth,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::OAuth,
                 failed->message));
         }
         if (auto* slow = std::get_if<typename DevicePollResult<T>::SlowDown>(
@@ -166,8 +166,8 @@ template <typename T>
             options.stop_token));
     }
 
-    co_return std::unexpected(util::make_error(
-        util::ErrorCode::Timeout,
+    co_return std::unexpected(support::make_error(
+        support::ErrorCode::Timeout,
         std::string{slow_down_count > 0
             ? kDeviceSlowDownTimeoutMessage
             : kDeviceTimeoutMessage}));

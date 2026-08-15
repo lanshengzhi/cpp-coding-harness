@@ -13,7 +13,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "harness/session/SessionJournalTestHooks.hpp"
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/providers/FakeProvider.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
@@ -126,7 +126,7 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 ++request_count;
                 requests.push_back(tests::RecordedProviderRequest{
                     .model = model,
@@ -155,8 +155,8 @@ public:
                         if (auto failed = sink(ai::AssistantErrorEvent{
                                 .reason = terminal.stop_reason,
                                 .error = terminal,
-                                .failure = util::make_error(
-                                    util::ErrorCode::Cancelled,
+                                .failure = support::make_error(
+                                    support::ErrorCode::Cancelled,
                                     "Request was aborted"),
                             });
                             !failed) {
@@ -188,8 +188,8 @@ public:
                         if (auto failed = sink(ai::AssistantErrorEvent{
                                 .reason = response.stop_reason,
                                 .error = response,
-                                .failure = util::make_error(
-                                    util::ErrorCode::Stream,
+                                .failure = support::make_error(
+                                    support::ErrorCode::Stream,
                                     response.error_message.value_or(
                                         "terminal error")),
                             });
@@ -242,7 +242,7 @@ private:
 
 /// One spawned manual compaction with a result slot.
 using CompactResult =
-    std::optional<util::Expected<coding_agent::CompactionResult>>;
+    std::optional<support::Expected<coding_agent::CompactionResult>>;
 
 void spawn_compact(
     boost::asio::io_context& io,
@@ -253,7 +253,7 @@ void spawn_compact(
         session.compact(),
         [&slot](
             std::exception_ptr exception,
-            util::Expected<coding_agent::CompactionResult> result) {
+            support::Expected<coding_agent::CompactionResult> result) {
             REQUIRE(exception == nullptr);
             slot.emplace(std::move(result));
         });
@@ -289,7 +289,7 @@ TEST_CASE(
     CHECK(followed.error().message == "session is closed");
 
     auto subscription = session.subscribe(
-        [](const agent::AgentLifecycleEvent&) { return util::ExpectedVoid{}; });
+        [](const agent::AgentLifecycleEvent&) { return support::ExpectedVoid{}; });
     REQUIRE_FALSE(subscription.has_value());
     CHECK(subscription.error().message == "session is closed");
 
@@ -310,7 +310,7 @@ TEST_CASE(
     bool closed_from_sink = false;
     auto subscribed = session->subscribe(
         [session, &closed_from_sink](const agent::AgentLifecycleEvent&)
-            -> util::ExpectedVoid {
+            -> support::ExpectedVoid {
             if (!closed_from_sink) {
                 closed_from_sink = true;
                 // Close from inside an admitted callback is safe and
@@ -465,14 +465,14 @@ TEST_CASE(
 
     std::size_t delivered = 0;
     auto subscribed = session.subscribe(
-        [&delivered](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&delivered](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++delivered;
             return {};
         });
     REQUIRE(subscribed.has_value());
     auto subscription = std::move(*subscribed);
     auto session_subscribed = session.subscribe_session(
-        [](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+        [](const coding_agent::AgentSessionEvent&) -> support::ExpectedVoid {
             return {};
         });
     REQUIRE(session_subscribed.has_value());
@@ -489,7 +489,7 @@ TEST_CASE(
 
     // New subscriptions are rejected after Close.
     auto late = session.subscribe(
-        [](const agent::AgentLifecycleEvent&) { return util::ExpectedVoid{}; });
+        [](const agent::AgentLifecycleEvent&) { return support::ExpectedVoid{}; });
     REQUIRE_FALSE(late.has_value());
 
     // Unsubscribing either handle after Close is a benign no-op.
@@ -518,7 +518,7 @@ TEST_CASE(
     bool retry_started = false;
     bool retry_cancelled = false;
     auto session_subscribed = session.subscribe_session(
-        [&](const coding_agent::AgentSessionEvent& event) -> util::ExpectedVoid {
+        [&](const coding_agent::AgentSessionEvent& event) -> support::ExpectedVoid {
             if (std::holds_alternative<coding_agent::AutoRetryStartEvent>(
                     event)) {
                 retry_started = true;
@@ -587,7 +587,7 @@ TEST_CASE(
 
     // The admitted run settles with the typed persistence failure.
     REQUIRE_FALSE(prompt_result->has_value());
-    CHECK(prompt_result->error().code == util::ErrorCode::Session);
+    CHECK(prompt_result->error().code == support::ErrorCode::Session);
     CHECK(prompt_result->error().message == "could not persist session entry");
 
     // Close still finalizes: the failed channel drains fail-fast instead of

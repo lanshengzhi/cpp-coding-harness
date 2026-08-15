@@ -47,15 +47,15 @@ FrontendEnvironment detect_frontend_environment() {
     };
 }
 
-util::Expected<Frontend> select_frontend(
+support::Expected<Frontend> select_frontend(
     const CliConfig& config,
     FrontendEnvironment environment) {
     if (config.print || !environment.stdin_is_terminal || !environment.stdout_is_terminal) {
         return Frontend::Print;
     }
     if (!environment.interactive_supported) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Native TUI interactive mode is not supported on this platform",
             "use --print instead"));
     }

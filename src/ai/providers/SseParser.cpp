@@ -15,10 +15,10 @@ void strip_trailing_cr(std::string& line) {
 
 } // namespace
 
-util::Expected<std::vector<SseEvent>> SseParser::append(std::string_view bytes) {
+support::Expected<std::vector<SseEvent>> SseParser::append(std::string_view bytes) {
     if (pending_.size() + bytes.size() > max_pending_bytes) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Provider,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Provider,
             "SSE stream buffer limit exceeded",
             "provider sent an unbounded SSE line"));
     }
@@ -47,7 +47,7 @@ util::Expected<std::vector<SseEvent>> SseParser::append(std::string_view bytes) 
     return events;
 }
 
-util::Expected<std::optional<SseEvent>> SseParser::finish() {
+support::Expected<std::optional<SseEvent>> SseParser::finish() {
     if (!pending_.empty()) {
         auto line = std::move(pending_);
         pending_.clear();
@@ -70,7 +70,7 @@ void SseParser::reset() {
     data_lines_.clear();
 }
 
-util::Expected<std::optional<SseEvent>> SseParser::consume_line(std::string line) {
+support::Expected<std::optional<SseEvent>> SseParser::consume_line(std::string line) {
     if (line.empty()) {
         return dispatch_event();
     }

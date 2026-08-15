@@ -1,7 +1,7 @@
 #pragma once
 
 #include "coding_agent/AgentSession.hpp"
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/runtime/UserBash.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -21,7 +21,7 @@ public:
     /// `settingsManager.isProjectTrusted()`).
     [[nodiscard]] static bool is_project_trusted(const AgentSession& session);
 
-    [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
     run_user_bash(
         AgentSession& session,
         std::string command,
@@ -31,7 +31,7 @@ public:
     static void cancel_user_bash(AgentSession& session);
 
 private:
-    [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
     run_user_bash_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         std::string command,

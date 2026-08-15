@@ -6,7 +6,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <format>
 #include <span>
@@ -253,7 +253,7 @@ void AssistantMessageComponent::rebuild() {
     }
 }
 
-util::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std::size_t width) {
     auto rendered = content_.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     if (!has_tool_calls_ && !rendered->lines.empty()) {

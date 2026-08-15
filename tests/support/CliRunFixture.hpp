@@ -138,9 +138,9 @@ inline CliRunResult run_cli(CliRunOptions options) {
             options.resume_picker =
                 [](coding_agent::tui::SessionListLoader,
                    coding_agent::tui::SessionListLoader)
-                -> util::Expected<std::optional<std::filesystem::path>> {
-                    return std::unexpected(util::make_error(
-                        util::ErrorCode::Validation,
+                -> support::Expected<std::optional<std::filesystem::path>> {
+                    return std::unexpected(support::make_error(
+                        support::ErrorCode::Validation,
                         "the in-process CLI seam has no startup-TUI picker; "
                         "inject a scripted resume_picker"));
                 };

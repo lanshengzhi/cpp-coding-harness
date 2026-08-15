@@ -13,14 +13,14 @@
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "ai/glaze/AiJson.hpp"
 #include "harness/compaction/Compaction.hpp"
 #include <cch/ai/Models.hpp>
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -53,9 +53,9 @@ namespace {
 }
 
 void expect_json_equal(
-    const util::JsonValue& actual,
+    const support::JsonValue& actual,
     std::string_view fixture_name) {
-    auto serialized = util::write_json(actual);
+    auto serialized = support::write_json(actual);
     REQUIRE(serialized);
     const auto expected = read_fixture_text(fixture_name);
     if (*serialized != expected) {
@@ -155,33 +155,33 @@ void expect_json_equal(
 /// The model-visible side of one recorded summarization request at the fake
 /// ModelRuntime seam: the options prove `cacheRetention: "none"` plus the
 /// fresh session id, and the context proves the prompt construction.
-[[nodiscard]] util::JsonValue summarization_request_to_json(
+[[nodiscard]] support::JsonValue summarization_request_to_json(
     const tests::RecordedStreamSimpleCall& call) {
-    util::JsonValue object{util::JsonValue::object_t{}};
+    support::JsonValue object{support::JsonValue::object_t{}};
     auto& o = object.get_object();
-    util::JsonValue model_object{util::JsonValue::object_t{}};
-    model_object.get_object().emplace("id", util::JsonValue(call.model.id));
+    support::JsonValue model_object{support::JsonValue::object_t{}};
+    model_object.get_object().emplace("id", support::JsonValue(call.model.id));
     model_object.get_object().emplace(
-        "provider", util::JsonValue(call.model.provider));
+        "provider", support::JsonValue(call.model.provider));
     o.emplace("model", std::move(model_object));
 
     if (call.context.system_prompt) {
-        o.emplace("systemPrompt", util::JsonValue(*call.context.system_prompt));
+        o.emplace("systemPrompt", support::JsonValue(*call.context.system_prompt));
     }
-    util::JsonValue messages{util::JsonValue::array_t{}};
+    support::JsonValue messages{support::JsonValue::array_t{}};
     for (const auto& message : call.context.messages) {
-        auto serialized = util::write_json(ai::glaze::to_message_dto(message));
+        auto serialized = support::write_json(ai::glaze::to_message_dto(message));
         REQUIRE(serialized);
-        auto parsed = util::read_json(*serialized);
+        auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);
         messages.get_array().push_back(std::move(*parsed));
     }
     o.emplace("messages", std::move(messages));
 
-    util::JsonValue options{util::JsonValue::object_t{}};
+    support::JsonValue options{support::JsonValue::object_t{}};
     if (call.options.max_tokens) {
         options.get_object().emplace(
-            "maxTokens", util::JsonValue(static_cast<int>(*call.options.max_tokens)));
+            "maxTokens", support::JsonValue(static_cast<int>(*call.options.max_tokens)));
     }
     if (call.options.cache_retention) {
         std::string retention;
@@ -196,11 +196,11 @@ void expect_json_equal(
             retention = "long";
             break;
         }
-        options.get_object().emplace("cacheRetention", util::JsonValue(retention));
+        options.get_object().emplace("cacheRetention", support::JsonValue(retention));
     }
     if (call.options.session_id) {
         options.get_object().emplace(
-            "sessionId", util::JsonValue(*call.options.session_id));
+            "sessionId", support::JsonValue(*call.options.session_id));
     }
     if (call.options.reasoning) {
         std::string reasoning;
@@ -224,7 +224,7 @@ void expect_json_equal(
             reasoning = "max";
             break;
         }
-        options.get_object().emplace("reasoning", util::JsonValue(reasoning));
+        options.get_object().emplace("reasoning", support::JsonValue(reasoning));
     }
     o.emplace("options", std::move(options));
     return object;
@@ -234,7 +234,7 @@ void expect_json_equal(
 /// fake ModelRuntime invokes the sink for non-terminal responses, so the
 /// machinery tests supply a passive sink instead of an empty one.
 [[nodiscard]] ai::AssistantEventSink noop_sink() {
-    return [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; };
+    return [](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; };
 }
 
 /// A deterministic fresh-session-id factory for goldens: sequential
@@ -501,14 +501,14 @@ TEST_CASE(
     ai::AssistantMessage tool_message;
     tool_message.content.push_back(ai::tool_call_content(
         "tool-1", "write", R"({"path":"written.ts"})",
-        *util::read_json(R"({"path":"written.ts"})")));
+        *support::read_json(R"({"path":"written.ts"})")));
     tool_message.usage = mock_usage(100, 50);
     a1.message = std::move(tool_message);
     harness::session::SessionEntry c1 = compaction_entry("c1", "First summary", "u1");
     auto* c1_value = std::get_if<harness::session::CompactionEntryValue>(&c1.value);
-    c1_value->details = util::JsonValue::object_t{
-        {"readFiles", util::JsonValue::array_t{"old-read.ts"}},
-        {"modifiedFiles", util::JsonValue::array_t{"old-edit.ts"}},
+    c1_value->details = support::JsonValue::object_t{
+        {"readFiles", support::JsonValue::array_t{"old-read.ts"}},
+        {"modifiedFiles", support::JsonValue::array_t{"old-edit.ts"}},
     };
     harness::session::SessionEntry u2 = user_entry("u2", "large turn");
     harness::session::SessionEntry a2 = assistant_entry(
@@ -623,7 +623,7 @@ TEST_CASE(
         [runtime, model](
             ai::AiContext context,
             ai::SimpleStreamOptions options)
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
         co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
@@ -695,7 +695,7 @@ TEST_CASE(
         [runtime, model](
             ai::AiContext context,
             ai::SimpleStreamOptions options)
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
         co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
@@ -741,7 +741,7 @@ TEST_CASE(
         return [runtime](
                    ai::AiContext context,
                    ai::SimpleStreamOptions options)
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
             auto stream = runtime->factory()(tests::make_model("gpt-test"), std::move(context), std::move(options));
             co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
         };
@@ -759,7 +759,7 @@ TEST_CASE(
         auto result = run_awaitable(compact(
             preparation, model, std::move(options)));
         REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().code == util::ErrorCode::Stream);
+        CHECK(result.error().code == support::ErrorCode::Stream);
         CHECK(result.error().message == "Summarization failed: boom");
     }
 
@@ -775,7 +775,7 @@ TEST_CASE(
         auto result = run_awaitable(compact(
             preparation, model, std::move(options)));
         REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().code == util::ErrorCode::Cancelled);
+        CHECK(result.error().code == support::ErrorCode::Cancelled);
         CHECK(result.error().message == "stopped");
     }
 
@@ -789,7 +789,7 @@ TEST_CASE(
         auto result = run_awaitable(compact(
             empty_preparation, model, std::move(options)));
         REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().code == util::ErrorCode::Session);
+        CHECK(result.error().code == support::ErrorCode::Session);
         CHECK(result.error().message ==
               "First kept entry has no UUID - session may need migration");
     }
@@ -807,7 +807,7 @@ TEST_CASE(
     ai::AssistantMessage tool_message;
     tool_message.content.push_back(ai::tool_call_content(
         "tool-1", "read", R"({"path":"src/index.ts"})",
-        *util::read_json(R"({"path":"src/index.ts"})")));
+        *support::read_json(R"({"path":"src/index.ts"})")));
     tool_message.usage = mock_usage(1000, 200);
     a1.message = std::move(tool_message);
     harness::session::SessionEntry u2 = user_entry("u2", "continue");
@@ -835,7 +835,7 @@ TEST_CASE(
         [runtime, model](
             ai::AiContext context,
             ai::SimpleStreamOptions options)
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
         co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
@@ -848,11 +848,11 @@ TEST_CASE(
     CHECK(result->summary.find("<read-files>\nsrc/index.ts\n</read-files>") !=
           std::string::npos);
     REQUIRE(result->details.has_value());
-    const auto* details = result->details->get_if<util::JsonValue::object_t>();
+    const auto* details = result->details->get_if<support::JsonValue::object_t>();
     REQUIRE(details != nullptr);
     const auto read_it = details->find("readFiles");
     REQUIRE(read_it != details->end());
-    const auto* read_files = read_it->second.get_if<util::JsonValue::array_t>();
+    const auto* read_files = read_it->second.get_if<support::JsonValue::array_t>();
     REQUIRE(read_files != nullptr);
     REQUIRE(read_files->size() == 1);
     const auto* name = (*read_files)[0].get_if<std::string>();
@@ -903,7 +903,7 @@ TEST_CASE(
         [runtime, model](
             ai::AiContext context,
             ai::SimpleStreamOptions options)
-            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
         co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
@@ -946,11 +946,11 @@ TEST_CASE(
     REQUIRE(loaded->entries.size() == 2);  // header + compaction
     const auto& compaction_entry = loaded->entries[1];
     CHECK(compaction_entry.kind == harness::session::SessionEntryKind::Compaction);
-    auto line_json = util::read_json(compaction_entry.raw_line);
+    auto line_json = support::read_json(compaction_entry.raw_line);
     REQUIRE(line_json.has_value());
     auto& line_object = line_json->get_object();
-    line_object.at("id") = util::JsonValue("<compaction-entry-id>");
-    line_object.at("timestamp") = util::JsonValue("<compaction-entry-timestamp>");
+    line_object.at("id") = support::JsonValue("<compaction-entry-id>");
+    line_object.at("timestamp") = support::JsonValue("<compaction-entry-timestamp>");
     expect_json_equal(*line_json, "compaction-persistence.jsonl");
 
     // Rebuild golden: the rebuilt context is compactionSummary + retained
@@ -960,15 +960,15 @@ TEST_CASE(
     auto context = tree->buildSessionContext();
     REQUIRE(context.messages.size() == 5);
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(context.messages[0]));
-    util::JsonValue rebuild{util::JsonValue::array_t{}};
+    support::JsonValue rebuild{support::JsonValue::array_t{}};
     for (const auto& message : context.messages) {
-        auto serialized = util::write_json(ai::glaze::to_message_dto(message));
+        auto serialized = support::write_json(ai::glaze::to_message_dto(message));
         REQUIRE(serialized);
-        auto parsed = util::read_json(*serialized);
+        auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);
         if (std::holds_alternative<ai::CompactionSummaryMessage>(message)) {
             parsed->get_object().at("timestamp") =
-                util::JsonValue("<compaction-entry-timestamp>");
+                support::JsonValue("<compaction-entry-timestamp>");
         }
         rebuild.get_array().push_back(std::move(*parsed));
     }

@@ -2,9 +2,9 @@
 
 #include "BuiltinThemes.hpp"
 #include "coding_agent/BoundedText.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -52,11 +52,11 @@ constexpr std::array<bool, kThemeTokenCount> kThemeTokenRequired{
 static_assert(kAllThemeTokens.size() == kThemeTokenNames.size());
 static_assert(static_cast<std::size_t>(ThemeToken::BashMode) + 1 == kThemeTokenCount);
 
-[[nodiscard]] util::Error theme_error(
-    util::ErrorCode code,
+[[nodiscard]] support::Error theme_error(
+    support::ErrorCode code,
     std::string message,
     std::string detail = {}) {
-    return util::make_error(
+    return support::make_error(
         code,
         bounded_redacted_presentation(std::move(message)),
         bounded_redacted_presentation(std::move(detail)));
@@ -66,8 +66,8 @@ static_assert(static_cast<std::size_t>(ThemeToken::BashMode) + 1 == kThemeTokenC
 /// redaction over the fixed wording: the redactor's secret-key heuristic
 /// would mangle pi's "Missing required color tokens:" lines. Every
 /// user-controlled fragment is bounded and redacted before composition.
-[[nodiscard]] util::Error verbatim_validation_error(util::ErrorCode code, std::string message) {
-    return util::make_error(code, bounded_presentation(std::move(message)));
+[[nodiscard]] support::Error verbatim_validation_error(support::ErrorCode code, std::string message) {
+    return support::make_error(code, bounded_presentation(std::move(message)));
 }
 
 [[nodiscard]] std::string safe_label(std::string_view label) {
@@ -124,7 +124,7 @@ struct SchemaErrorLine {
 [[nodiscard]] std::optional<RawColorValue> check_color_value(
     std::vector<SchemaErrorLine>& errors,
     std::string path,
-    const util::JsonValue& value) {
+    const support::JsonValue& value) {
     if (const auto* text = value.get_if<std::string>()) return *text;
     if (const auto* number = value.get_if<double>()) {
         const auto integral = std::floor(*number) == *number;
@@ -151,7 +151,7 @@ struct SchemaErrorLine {
     return std::nullopt;
 }
 
-[[nodiscard]] util::Expected<RgbThemeColor> parse_rgb(std::string_view value) {
+[[nodiscard]] support::Expected<RgbThemeColor> parse_rgb(std::string_view value) {
     // Mirrors pi's hexToRgb (theme.ts): exactly six characters after '#', with
     // each channel pair parsed like parseInt(pair, 16) — the first character
     // must be a hex digit, and a non-hex second character ends the parse.
@@ -159,7 +159,7 @@ struct SchemaErrorLine {
     // uint8_t color model and are rejected here as C++ hardening.
     if (value.size() != 7) {
         return std::unexpected(verbatim_validation_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
     }
     const auto channel = [&](std::size_t offset) -> std::optional<std::uint8_t> {
@@ -175,13 +175,13 @@ struct SchemaErrorLine {
     const auto blue = channel(5);
     if (!red || !green || !blue) {
         return std::unexpected(verbatim_validation_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
     }
     return RgbThemeColor{.red = *red, .green = *green, .blue = *blue};
 }
 
-[[nodiscard]] util::Expected<ResolvedThemeColor> resolve_color(
+[[nodiscard]] support::Expected<ResolvedThemeColor> resolve_color(
     const RawColorValue& value,
     const RawColorMap& variables) {
     const RawColorValue* current = &value;
@@ -199,14 +199,14 @@ struct SchemaErrorLine {
         }
         if (visited.contains(text)) {
             return std::unexpected(verbatim_validation_error(
-                util::ErrorCode::Validation,
+                support::ErrorCode::Validation,
                 "Circular variable reference detected: " +
                     bounded_redacted_presentation(text)));
         }
         const auto found = variables.find(text);
         if (found == variables.end()) {
             return std::unexpected(verbatim_validation_error(
-                util::ErrorCode::Validation,
+                support::ErrorCode::Validation,
                 "Variable reference not found: " + bounded_redacted_presentation(text)));
         }
         visited.insert(text);
@@ -315,16 +315,16 @@ const ResolvedThemeColor& color_for(const ResolvedTheme& theme, ThemeToken token
 
 namespace {
 
-[[nodiscard]] util::Expected<ResolvedTheme> resolve_theme_value(
+[[nodiscard]] support::Expected<ResolvedTheme> resolve_theme_value(
     std::string_view label,
-    const util::JsonValue& parsed) {
+    const support::JsonValue& parsed) {
     std::vector<SchemaErrorLine> other_errors;
     std::vector<std::string> missing_colors;
 
-    const auto* root = parsed.get_if<util::JsonValue::object_t>();
+    const auto* root = parsed.get_if<support::JsonValue::object_t>();
     if (root == nullptr) {
         return std::unexpected(verbatim_validation_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             invalid_theme_message(label, missing_colors, {{ "/", "must be object" }})));
     }
 
@@ -345,7 +345,7 @@ namespace {
 
     RawColorMap variables;
     if (const auto vars_value = root->find("vars"); vars_value != root->end()) {
-        const auto* vars_object = vars_value->second.get_if<util::JsonValue::object_t>();
+        const auto* vars_object = vars_value->second.get_if<support::JsonValue::object_t>();
         if (vars_object == nullptr) {
             other_errors.push_back({"/vars", "must be object"});
         } else {
@@ -362,11 +362,11 @@ namespace {
 
     RawColorMap raw_colors;
     ThemeExportColors export_colors;
-    const util::JsonValue::object_t* colors_object = nullptr;
+    const support::JsonValue::object_t* colors_object = nullptr;
     const auto colors_value = root->find("colors");
     if (colors_value == root->end()) {
         other_errors.push_back({"/", "must have required properties colors"});
-    } else if (colors_object = colors_value->second.get_if<util::JsonValue::object_t>();
+    } else if (colors_object = colors_value->second.get_if<support::JsonValue::object_t>();
                colors_object == nullptr) {
         other_errors.push_back({"/colors", "must be object"});
     } else {
@@ -395,7 +395,7 @@ namespace {
     }
 
     if (const auto export_value = root->find("export"); export_value != root->end()) {
-        const auto* export_object = export_value->second.get_if<util::JsonValue::object_t>();
+        const auto* export_object = export_value->second.get_if<support::JsonValue::object_t>();
         if (export_object == nullptr) {
             other_errors.push_back({"/export", "must be object"});
         } else {
@@ -434,7 +434,7 @@ namespace {
     }
     if (!missing_colors.empty() || !other_errors.empty()) {
         return std::unexpected(verbatim_validation_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             invalid_theme_message(label, missing_colors, other_errors)));
     }
 
@@ -452,7 +452,7 @@ namespace {
     // the slash reserved for automatic light/dark theme settings.
     if (name.find('/') != std::string::npos) {
         return std::unexpected(verbatim_validation_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             std::format(
                 "Invalid theme name \"{}\": theme names cannot contain \"/\" because it is reserved for automatic light/dark theme settings.",
                 bounded_redacted_presentation(name))));
@@ -477,24 +477,24 @@ namespace {
 
 } // namespace
 
-util::Expected<ResolvedTheme> parse_theme_json(std::string_view label, std::string_view json) {
-    auto parsed = util::read_json(json);
+support::Expected<ResolvedTheme> parse_theme_json(std::string_view label, std::string_view json) {
+    auto parsed = support::read_json(json);
     if (!parsed) {
         const auto& parse_error = parsed.error();
         const auto& detail = parse_error.detail.empty() ? parse_error.message : parse_error.detail;
         return std::unexpected(verbatim_validation_error(
-            util::ErrorCode::JsonParse,
+            support::ErrorCode::JsonParse,
             "Failed to parse theme " + safe_label(label) + ": " +
                 bounded_redacted_presentation(detail)));
     }
     return resolve_theme_value(label, *parsed);
 }
 
-util::Expected<ResolvedTheme> load_theme_file(const std::filesystem::path& path) {
+support::Expected<ResolvedTheme> load_theme_file(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input.is_open()) {
         return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             "failed to load theme file",
             "could not open explicit theme path '" + path.string() + "'"));
     }
@@ -502,7 +502,7 @@ util::Expected<ResolvedTheme> load_theme_file(const std::filesystem::path& path)
     content << input.rdbuf();
     if (!input.good() && !input.eof()) {
         return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             "failed to load theme file",
             "could not read explicit theme path '" + path.string() + "'"));
     }

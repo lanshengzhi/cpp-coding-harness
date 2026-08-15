@@ -8,7 +8,7 @@
 #include "support/TextHelpers.hpp"
 
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <array>
@@ -106,17 +106,17 @@ std::vector<std::string> non_empty_lines(const std::string& text) {
     return result;
 }
 
-cch::util::JsonValue parse_json_line(const std::string& line) {
-    auto parsed = cch::util::read_json(line);
+cch::support::JsonValue parse_json_line(const std::string& line) {
+    auto parsed = cch::support::read_json(line);
     REQUIRE(parsed.has_value());
     return *parsed;
 }
 
-const cch::util::JsonValue::object_t& as_object(const cch::util::JsonValue& value) {
-    return value.get<cch::util::JsonValue::object_t>();
+const cch::support::JsonValue::object_t& as_object(const cch::support::JsonValue& value) {
+    return value.get<cch::support::JsonValue::object_t>();
 }
 
-std::string json_string_at(const cch::util::JsonValue::object_t& object, const std::string& key) {
+std::string json_string_at(const cch::support::JsonValue::object_t& object, const std::string& key) {
     return object.at(key).get<std::string>();
 }
 
@@ -159,7 +159,7 @@ struct AutomaticSessionFile {
     std::filesystem::path path;
     std::string file_timestamp;
     std::string file_session_id;
-    cch::util::JsonValue::object_t header;
+    cch::support::JsonValue::object_t header;
 };
 
 /// Verify one automatic session file at path: pi-shaped filename whose UTC

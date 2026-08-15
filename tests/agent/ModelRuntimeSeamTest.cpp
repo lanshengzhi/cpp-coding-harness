@@ -5,8 +5,8 @@
 #include "ai/SimpleOptions.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,9 +24,9 @@ using namespace cch;
 
 namespace {
 
-util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
+support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -36,15 +36,15 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
         boost::asio::detached);
     io.run();
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
 }
 
 struct LoopRun {
-    util::Expected<agent::AsyncAgentRunResult> result;
+    support::Expected<agent::AsyncAgentRunResult> result;
     std::vector<agent::AgentLifecycleEvent> events;
 };
 
@@ -53,7 +53,7 @@ LoopRun run_loop(
     std::string prompt,
     std::stop_token stop_token = {}) {
     boost::asio::io_context io;
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
     boost::asio::co_spawn(
         io,
@@ -63,7 +63,7 @@ LoopRun run_loop(
                 std::move(prompt),
                 [&](const agent::AgentLifecycleEvent& event) {
                     events.push_back(event);
-                    return util::ExpectedVoid{};
+                    return support::ExpectedVoid{};
                 },
                 stop_token);
             co_return;
@@ -240,7 +240,7 @@ namespace {
 }
 
 void expect_terminal_matrix_row(
-    util::ErrorCode category,
+    support::ErrorCode category,
     const std::string& category_name) {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->terminal_failure_code = category;
@@ -255,7 +255,7 @@ void expect_terminal_matrix_row(
     auto run = run_loop(loop, "hi");
 
     // Exactly one terminal event plus an agreeing final AssistantMessage, with
-    // the category flowing through the single util::Expected error value (the
+    // the category flowing through the single support::Expected error value (the
     // #326 six-category channel; no second exception hierarchy).
     REQUIRE(run.result.has_value());
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -279,13 +279,13 @@ TEST_CASE(
     "six-category terminal matrix yields exactly one terminal event plus a final AssistantMessage each",
     "[agent][streamSimple][terminal][issue351]") {
     expect_terminal_matrix_row(
-        util::ErrorCode::ModelSource, "model_source");
+        support::ErrorCode::ModelSource, "model_source");
     expect_terminal_matrix_row(
-        util::ErrorCode::ModelValidation, "model_validation");
-    expect_terminal_matrix_row(util::ErrorCode::Provider, "provider");
-    expect_terminal_matrix_row(util::ErrorCode::Stream, "stream");
-    expect_terminal_matrix_row(util::ErrorCode::Auth, "auth");
-    expect_terminal_matrix_row(util::ErrorCode::OAuth, "oauth");
+        support::ErrorCode::ModelValidation, "model_validation");
+    expect_terminal_matrix_row(support::ErrorCode::Provider, "provider");
+    expect_terminal_matrix_row(support::ErrorCode::Stream, "stream");
+    expect_terminal_matrix_row(support::ErrorCode::Auth, "auth");
+    expect_terminal_matrix_row(support::ErrorCode::OAuth, "oauth");
 }
 
 TEST_CASE(
@@ -529,7 +529,7 @@ TEST_CASE(
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
-                -> util::Expected<
+                -> support::Expected<
                     std::optional<agent::AgentLoopTurnUpdate>> {
                 return agent::AgentLoopTurnUpdate{
                     .model = tests::make_model("gpt-basic"),
@@ -538,7 +538,7 @@ TEST_CASE(
     options.validate_turn_update =
         agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate&)
-                -> util::ExpectedVoid { return {}; });
+                -> support::ExpectedVoid { return {}; });
 
     agent::Agent subject(
         runtime->factory(),
@@ -646,7 +646,7 @@ TEST_CASE(
 
     auto invalid = subject.set_thinking_level("sometimes");
     REQUIRE_FALSE(invalid.has_value());
-    CHECK(invalid.error().code == util::ErrorCode::Validation);
+    CHECK(invalid.error().code == support::ErrorCode::Validation);
     CHECK(subject.state().thinking_level == "high");
 
     // A request whose clamped level equals the current level is a no-op

@@ -103,28 +103,28 @@ public:
         std::string body;
     };
 
-    boost::asio::awaitable<util::Expected<ai::auth::OAuthHttpResponse>> post(
+    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> post(
         std::string url,
         std::map<std::string, std::string, std::less<>>,
         std::string body,
         std::stop_token stop_token) override {
         requests.push_back({url, std::move(body)});
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "fake client cancelled"));
         }
         auto& queue = responses[requests.back().url];
         if (queue.empty()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Network,
                 "no scripted response for " + requests.back().url));
         }
         auto scripted = std::move(queue.front());
         queue.pop_front();
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "fake client cancelled"));
         }
         co_return ai::auth::OAuthHttpResponse{
@@ -300,7 +300,7 @@ TEST_CASE("Kimi login cancellation persists nothing", "[coding_agent][auth][issu
         harness.interaction(cancel.get_token())));
 
     REQUIRE(!credential);
-    CHECK(credential.error().code == util::ErrorCode::Cancelled);
+    CHECK(credential.error().code == support::ErrorCode::Cancelled);
     CHECK(credential.error().message == "Login cancelled");
     CHECK(read_text(harness.auth_path) == "{}");
 }
@@ -316,7 +316,7 @@ TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue
     auto resolved = run_async_result(harness.models->get_auth("kimi-coding"));
 
     REQUIRE(!resolved);
-    CHECK(resolved.error().code == util::ErrorCode::OAuth);
+    CHECK(resolved.error().code == support::ErrorCode::OAuth);
     // The stored credential is preserved for retry: no proactive removal.
     auto persisted = read_text(harness.auth_path);
     CHECK(persisted.find("dummy-refresh-token") != std::string::npos);
@@ -331,7 +331,7 @@ TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue
     // A second request fails the same way (the dead credential is not removed).
     auto again = run_async_result(harness.models->get_auth("kimi-coding"));
     REQUIRE(!again);
-    CHECK(again.error().code == util::ErrorCode::OAuth);
+    CHECK(again.error().code == support::ErrorCode::OAuth);
     CHECK(read_text(harness.auth_path).find("dummy-refresh-token") !=
           std::string::npos);
 }

@@ -1,6 +1,6 @@
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <utf8proc.h>
 
 #include <algorithm>
@@ -79,7 +79,7 @@ namespace {
     return true;
 }
 
-[[nodiscard]] util::Expected<AnsiCode> parse_supported_ansi(
+[[nodiscard]] support::Expected<AnsiCode> parse_supported_ansi(
     std::string_view text,
     std::size_t position) {
     if (position >= text.size() || text[position] != '\x1b') {
@@ -283,7 +283,7 @@ std::optional<AnsiCode> extract_ansi_code(std::string_view text, std::size_t pos
     return std::move(*parsed);
 }
 
-util::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text) {
+support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text) {
     std::vector<TerminalToken> tokens;
     std::size_t position = 0;
     while (position < text.size()) {
@@ -492,13 +492,13 @@ void AnsiStyleState::reset() {
     bg_color.clear();
 }
 
-util::Expected<std::string> normalize_terminal_output(std::string_view text) {
+support::Expected<std::string> normalize_terminal_output(std::string_view text) {
     auto tokens = tokenize_terminal_output(text);
     if (!tokens) return std::unexpected(tokens.error());
     return normalized_text(*tokens);
 }
 
-util::Expected<std::string> prepare_rendered_line(std::string_view line, std::size_t width) {
+support::Expected<std::string> prepare_rendered_line(std::string_view line, std::size_t width) {
     auto tokens = tokenize_terminal_output(line);
     if (!tokens) return std::unexpected(tokens.error());
     auto line_width = token_width(*tokens);

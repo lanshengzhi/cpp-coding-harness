@@ -13,7 +13,7 @@
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
@@ -109,7 +109,7 @@ struct RuntimeFixture {
 
     /// Populate the availability snapshot before the component renders.
     void prime(boost::asio::io_context& io) {
-        auto result = std::optional<util::ExpectedVoid>{};
+        auto result = std::optional<support::ExpectedVoid>{};
         boost::asio::co_spawn(
             io,
             [runtime = runtime]() -> boost::asio::awaitable<void> {

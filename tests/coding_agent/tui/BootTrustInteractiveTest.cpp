@@ -19,7 +19,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "ai/providers/FakeProvider.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -80,7 +80,7 @@ struct TrustIsolatedWorkspace {
 struct BootTrustRun {
     tui::VirtualTerminal terminal{{.columns = 120, .rows = 30}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     /// Every session-creation request the factory saw (the boot request and
     /// each in-session replacement), so tests can assert the decided trust
     /// override.
@@ -93,7 +93,7 @@ struct BootTrustRun {
         std::shared_ptr<ai::Models> models) {
         recorder.replace_session =
             [this, models](coding_agent::runtime::AgentSessionCreationRequest req)
-            -> util::Expected<coding_agent::CreateAgentSessionResult> {
+            -> support::Expected<coding_agent::CreateAgentSessionResult> {
                 request_overrides.push_back(req.project_trust_override);
                 req.provide_user_shell = true;
                 return coding_agent::create_agent_session_for_testing(
@@ -108,7 +108,7 @@ struct BootTrustRun {
                     .action_sink = recorder.make_sink(),
                     .boot_request = std::move(request),
                 }),
-            [this](std::exception_ptr exception, util::ExpectedVoid result) {
+            [this](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
             });
@@ -399,12 +399,12 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal{{.columns = 120, .rows = 30}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     coding_agent::tui::testing::ActionSinkRecorder recorder;
     recorder.replace_session =
         [models = ai::providers::make_scripted_fake_models()](
             coding_agent::runtime::AgentSessionCreationRequest req)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             req.provide_user_shell = true;
             return coding_agent::create_agent_session_for_testing(
                 std::move(req), models);
@@ -418,7 +418,7 @@ TEST_CASE(
                 .action_sink = recorder.make_sink(),
                 .boot_request = std::move(request),
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });

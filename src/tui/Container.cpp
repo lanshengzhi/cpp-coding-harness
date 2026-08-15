@@ -5,7 +5,7 @@
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <format>
 #include <string>
 #include <utility>
@@ -17,7 +17,7 @@ Container::Container(Container&&) noexcept = default;
 Container& Container::operator=(Container&&) noexcept = default;
 Container::~Container() = default;
 
-util::Expected<std::reference_wrapper<Component>> Container::add_child(
+support::Expected<std::reference_wrapper<Component>> Container::add_child(
     std::unique_ptr<Component> component) {
     return detail::attach_child(children_, std::move(component), "Container");
 }
@@ -26,10 +26,10 @@ void Container::clear() {
     children_.clear();
 }
 
-util::Expected<RenderResult> Container::render(std::size_t width) {
+support::Expected<RenderResult> Container::render(std::size_t width) {
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Container requires a positive visible width"));
     }
 
@@ -67,7 +67,7 @@ Box::Box(Box&&) noexcept = default;
 Box& Box::operator=(Box&&) noexcept = default;
 Box::~Box() = default;
 
-util::Expected<std::reference_wrapper<Component>> Box::add_child(
+support::Expected<std::reference_wrapper<Component>> Box::add_child(
     std::unique_ptr<Component> component) {
     return detail::attach_child(children_, std::move(component), "Box");
 }
@@ -80,15 +80,15 @@ void Box::set_background_hook(BackgroundHook background_hook) {
     background_hook_ = std::move(background_hook);
 }
 
-util::Expected<RenderResult> Box::render(std::size_t width) {
+support::Expected<RenderResult> Box::render(std::size_t width) {
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Box requires a positive visible width"));
     }
     if (padding_x_ >= width || padding_x_ >= width - padding_x_) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Box width is too small for padding",
             std::format("width {} padding_x {}", width, padding_x_)));
     }
@@ -96,7 +96,7 @@ util::Expected<RenderResult> Box::render(std::size_t width) {
 
     const auto content_width = width - padding_x_ - padding_x_;
     RenderResult result;
-    const auto make_line = [&](std::string line) -> util::Expected<std::string> {
+    const auto make_line = [&](std::string line) -> support::Expected<std::string> {
         const auto visible = visible_width(line);
         if (visible < width) line.append(width - visible, ' ');
         return detail::apply_background(background_hook_, std::move(line), width, "Box");
@@ -148,7 +148,7 @@ void Spacer::set_lines(std::size_t lines) {
     lines_ = lines;
 }
 
-util::Expected<RenderResult> Spacer::render(std::size_t) {
+support::Expected<RenderResult> Spacer::render(std::size_t) {
     return RenderResult{.lines = std::vector<std::string>(lines_)};
 }
 

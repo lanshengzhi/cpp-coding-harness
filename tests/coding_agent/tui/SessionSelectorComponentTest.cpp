@@ -10,7 +10,7 @@
 
 #include <cch/tui/Keybindings.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <chrono>
 #include <iterator>
 #include <filesystem>
@@ -137,7 +137,7 @@ TEST_CASE(
         [](std::string) {},
         [] {},
         [] {},
-        [](std::string, std::string) { return util::ExpectedVoid{}; },
+        [](std::string, std::string) { return support::ExpectedVoid{}; },
         [] {});
 
     const auto text = render_text(component);
@@ -172,7 +172,7 @@ TEST_CASE(
         [](std::string) {},
         [] {},
         [] {},
-        [](std::string, std::string) { return util::ExpectedVoid{}; },
+        [](std::string, std::string) { return support::ExpectedVoid{}; },
         [] {});
 
     // Ctrl+s cycles Threaded -> Recent -> Fuzzy.
@@ -211,7 +211,7 @@ TEST_CASE(
         [](std::string) {},
         [] {},
         [] {},
-        [](std::string, std::string) { return util::ExpectedVoid{}; },
+        [](std::string, std::string) { return support::ExpectedVoid{}; },
         [] {});
 
     // Ctrl+p toggles the path display on.
@@ -250,7 +250,7 @@ TEST_CASE(
             renamed_path = std::move(path);
             renamed_value = std::move(name);
             sessions[0].name = renamed_value;
-            return util::ExpectedVoid{};
+            return support::ExpectedVoid{};
         },
         [] {});
 

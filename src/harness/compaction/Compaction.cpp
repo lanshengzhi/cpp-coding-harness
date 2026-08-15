@@ -1,8 +1,8 @@
 #include "Compaction.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/util/JsonValue.hpp>
-#include "util/Json.hpp"
+#include <cch/support/JsonValue.hpp>
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,10 +22,10 @@ namespace {
 constexpr std::size_t kEstimatedImageChars = 4800;
 constexpr std::size_t kToolResultMaxChars = 2000;
 
-[[nodiscard]] util::Error compaction_error(
-    util::ErrorCode code,
+[[nodiscard]] support::Error compaction_error(
+    support::ErrorCode code,
     std::string message) {
-    return util::make_error(code, std::move(message));
+    return support::make_error(code, std::move(message));
 }
 
 [[nodiscard]] bool is_assistant_usage_valid(const ai::AssistantMessage& message) {
@@ -72,7 +72,7 @@ constexpr std::size_t kToolResultMaxChars = 2000;
         return call.raw_arguments;
     }
     if (call.arguments) {
-        if (auto serialized = util::write_json(*call.arguments)) {
+        if (auto serialized = support::write_json(*call.arguments)) {
             return std::move(*serialized);
         }
     }
@@ -212,7 +212,7 @@ constexpr std::size_t kToolResultMaxChars = 2000;
     if (!call.arguments) {
         return text;
     }
-    const auto* object = call.arguments->get_if<util::JsonValue::object_t>();
+    const auto* object = call.arguments->get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return text;
     }
@@ -224,7 +224,7 @@ constexpr std::size_t kToolResultMaxChars = 2000;
         first = false;
         text += key;
         text += "=";
-        if (auto serialized = util::write_json(value)) {
+        if (auto serialized = support::write_json(value)) {
             text += *serialized;
         }
     }
@@ -298,18 +298,18 @@ struct SummarizationOutcome {
     ai::Usage usage;
 };
 
-[[nodiscard]] util::Error summarization_failure(
+[[nodiscard]] support::Error summarization_failure(
     ai::AssistantStopReason reason,
     const std::optional<std::string>& error_message,
     std::string_view aborted_fallback,
     std::string_view failed_prefix) {
     if (reason == ai::AssistantStopReason::Aborted) {
         return compaction_error(
-            util::ErrorCode::Cancelled,
+            support::ErrorCode::Cancelled,
             error_message.value_or(std::string{aborted_fallback}));
     }
     return compaction_error(
-        util::ErrorCode::Stream,
+        support::ErrorCode::Stream,
         std::string{failed_prefix} +
             (error_message.value_or(std::string{"Unknown error"})));
 }
@@ -677,7 +677,7 @@ void extract_file_ops_from_message(
         if (call == nullptr || !call->arguments) {
             continue;
         }
-        const auto* object = call->arguments->get_if<util::JsonValue::object_t>();
+        const auto* object = call->arguments->get_if<support::JsonValue::object_t>();
         if (object == nullptr) {
             continue;
         }
@@ -824,7 +824,7 @@ std::string serialize_conversation(
     return result;
 }
 
-util::Expected<std::optional<CompactionPreparation>> prepare_compaction(
+support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
     const std::vector<const SessionEntry*>& path,
     CompactionSettings settings) {
     if (path.empty() || path.back()->kind == SessionEntryKind::Compaction) {
@@ -871,7 +871,7 @@ util::Expected<std::optional<CompactionPreparation>> prepare_compaction(
     const auto* first_kept_entry = path[cut_point.first_kept_entry_index];
     if (first_kept_entry == nullptr || first_kept_entry->entry_id.empty()) {
         return std::unexpected(compaction_error(
-            util::ErrorCode::Session,
+            support::ErrorCode::Session,
             "First kept entry has no UUID - session may need migration"));
     }
     const std::string first_kept_entry_id = first_kept_entry->entry_id;
@@ -915,11 +915,11 @@ util::Expected<std::optional<CompactionPreparation>> prepare_compaction(
         if (value != nullptr && !value->from_hook.value_or(false) &&
             value->details.has_value()) {
             const auto* details =
-                value->details->get_if<util::JsonValue::object_t>();
+                value->details->get_if<support::JsonValue::object_t>();
             if (details != nullptr) {
                 if (const auto read_it = details->find("readFiles");
                     read_it != details->end()) {
-                    if (const auto* files = read_it->second.get_if<util::JsonValue::array_t>()) {
+                    if (const auto* files = read_it->second.get_if<support::JsonValue::array_t>()) {
                         for (const auto& file : *files) {
                             if (const auto* name = file.get_if<std::string>()) {
                                 file_ops.read.insert(*name);
@@ -930,7 +930,7 @@ util::Expected<std::optional<CompactionPreparation>> prepare_compaction(
                 if (const auto modified_it = details->find("modifiedFiles");
                     modified_it != details->end()) {
                     if (const auto* files =
-                            modified_it->second.get_if<util::JsonValue::array_t>()) {
+                            modified_it->second.get_if<support::JsonValue::array_t>()) {
                         for (const auto& file : *files) {
                             if (const auto* name = file.get_if<std::string>()) {
                                 file_ops.edited.insert(*name);
@@ -957,7 +957,7 @@ namespace {
 
 /// pi `generateSummaryWithUsage`: summarize `current_messages` into text plus
 /// usage through one `cacheRetention:"none"` + fresh-session-id request.
-[[nodiscard]] boost::asio::awaitable<util::Expected<SummarizationOutcome>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>>
 generate_summary_with_usage(
     const std::vector<ai::MessageVariant>& current_messages,
     const ai::Model& model,
@@ -1002,7 +1002,7 @@ generate_summary_with_usage(
 
 /// pi `generateTurnPrefixSummary`: a separate smaller-budget summarization
 /// for the prefix of a split turn.
-[[nodiscard]] boost::asio::awaitable<util::Expected<SummarizationOutcome>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>>
 generate_turn_prefix_summary(
     const std::vector<ai::MessageVariant>& turn_prefix_messages,
     const ai::Model& model,
@@ -1057,18 +1057,18 @@ generate_turn_prefix_summary(
 
 } // namespace
 
-boost::asio::awaitable<util::Expected<CompactionResult>> compact(
+boost::asio::awaitable<support::Expected<CompactionResult>> compact(
     const CompactionPreparation& preparation,
     const ai::Model& model,
     CompactionRunOptions run_options) {
     if (preparation.first_kept_entry_id.empty()) {
         co_return std::unexpected(compaction_error(
-            util::ErrorCode::Session,
+            support::ErrorCode::Session,
             "First kept entry has no UUID - session may need migration"));
     }
     if (!run_options.summarization_stream) {
         co_return std::unexpected(compaction_error(
-            util::ErrorCode::Validation,
+            support::ErrorCode::Validation,
             "summarization stream is unavailable"));
     }
     SummarizationSessionIdFactory session_id_factory =
@@ -1143,18 +1143,18 @@ boost::asio::awaitable<util::Expected<CompactionResult>> compact(
 
     const auto lists = compute_file_lists(preparation.file_ops);
     result.summary += format_file_operations(lists.read_files, lists.modified_files);
-    util::JsonValue::object_t details_object;
-    util::JsonValue::array_t read_array;
+    support::JsonValue::object_t details_object;
+    support::JsonValue::array_t read_array;
     for (const auto& file : lists.read_files) {
         read_array.emplace_back(file);
     }
-    util::JsonValue::array_t modified_array;
+    support::JsonValue::array_t modified_array;
     for (const auto& file : lists.modified_files) {
         modified_array.emplace_back(file);
     }
     details_object.emplace("readFiles", std::move(read_array));
     details_object.emplace("modifiedFiles", std::move(modified_array));
-    result.details = util::JsonValue{std::move(details_object)};
+    result.details = support::JsonValue{std::move(details_object)};
     co_return result;
 }
 

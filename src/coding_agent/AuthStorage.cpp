@@ -1,9 +1,9 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/JsonValue.hpp>
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/error.hpp>
@@ -39,7 +39,7 @@
 namespace cch::coding_agent {
 namespace {
 
-using JsonObject = util::JsonValue::object_t;
+using JsonObject = support::JsonValue::object_t;
 
 constexpr auto kSyncLockPollInterval = std::chrono::milliseconds{20};
 constexpr auto kLockStaleAfter = std::chrono::seconds{30};
@@ -58,34 +58,34 @@ constexpr auto kAsyncLockRetryCount = 10;
     return std::min(randomized, std::chrono::milliseconds{10000});
 }
 
-[[nodiscard]] util::Error storage_error(
+[[nodiscard]] support::Error storage_error(
     std::string message,
     const std::filesystem::path& path,
     std::string detail = {}) {
     if (detail.empty()) {
         detail = message;
     }
-    return util::make_error(util::ErrorCode::Unknown, std::move(message), std::move(detail), path.string());
+    return support::make_error(support::ErrorCode::Unknown, std::move(message), std::move(detail), path.string());
 }
 
-[[nodiscard]] util::Expected<JsonObject> parse_auth_data(
+[[nodiscard]] support::Expected<JsonObject> parse_auth_data(
     std::string_view content,
     const std::filesystem::path& path) {
     if (content.empty()) {
         return JsonObject{};
     }
-    auto parsed = util::read_json(content);
+    auto parsed = support::read_json(content);
     if (!parsed) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::JsonParse,
             "failed to parse auth file",
             "auth file contains invalid JSON",
             path.string()));
     }
     const auto* object = parsed->get_if<JsonObject>();
     if (object == nullptr) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::JsonParse,
             "auth file is not a JSON object",
             "auth file root must be an object",
             path.string()));
@@ -93,8 +93,8 @@ constexpr auto kAsyncLockRetryCount = 10;
     return *object;
 }
 
-[[nodiscard]] util::ExpectedVoid append_pretty_json(
-    const util::JsonValue& value,
+[[nodiscard]] support::ExpectedVoid append_pretty_json(
+    const support::JsonValue& value,
     std::string& output,
     std::size_t indentation) {
     if (const auto* object = value.get_if<JsonObject>()) {
@@ -104,7 +104,7 @@ constexpr auto kAsyncLockRetryCount = 10;
             auto current = object->begin();
             while (current != object->end()) {
                 output.append(indentation + 2, ' ');
-                auto key = util::write_json(util::JsonValue{current->first});
+                auto key = support::write_json(support::JsonValue{current->first});
                 if (!key) {
                     return std::unexpected(key.error());
                 }
@@ -125,7 +125,7 @@ constexpr auto kAsyncLockRetryCount = 10;
         return {};
     }
 
-    if (const auto* array = value.get_if<util::JsonValue::array_t>()) {
+    if (const auto* array = value.get_if<support::JsonValue::array_t>()) {
         output.push_back('[');
         if (!array->empty()) {
             output.push_back('\n');
@@ -145,7 +145,7 @@ constexpr auto kAsyncLockRetryCount = 10;
         return {};
     }
 
-    auto serialized = util::write_json(value);
+    auto serialized = support::write_json(value);
     if (!serialized) {
         return std::unexpected(serialized.error());
     }
@@ -153,9 +153,9 @@ constexpr auto kAsyncLockRetryCount = 10;
     return {};
 }
 
-[[nodiscard]] util::Expected<std::string> serialize_auth_data(const JsonObject& data) {
+[[nodiscard]] support::Expected<std::string> serialize_auth_data(const JsonObject& data) {
     std::string output;
-    if (auto appended = append_pretty_json(util::JsonValue{data}, output, 0); !appended) {
+    if (auto appended = append_pretty_json(support::JsonValue{data}, output, 0); !appended) {
         return std::unexpected(appended.error());
     }
     return output;
@@ -166,7 +166,7 @@ constexpr auto kAsyncLockRetryCount = 10;
     return found == object.end() ? nullptr : found->second.get_if<std::string>();
 }
 
-[[nodiscard]] std::optional<ai::Credential> credential_from_json(const util::JsonValue& value) {
+[[nodiscard]] std::optional<ai::Credential> credential_from_json(const support::JsonValue& value) {
     const auto* object = value.get_if<JsonObject>();
     if (object == nullptr) {
         return std::nullopt;
@@ -227,7 +227,7 @@ constexpr auto kAsyncLockRetryCount = 10;
 
 [[nodiscard]] JsonObject credential_to_json(
     const ai::Credential& credential,
-    const util::JsonValue* current) {
+    const support::JsonValue* current) {
     JsonObject object;
     if (const auto* current_object = current == nullptr ? nullptr : current->get_if<JsonObject>()) {
         const auto* current_type = string_field(*current_object, "type");
@@ -257,9 +257,9 @@ constexpr auto kAsyncLockRetryCount = 10;
         } else {
             JsonObject env;
             for (const auto& [name, value] : api_key->env) {
-                env.emplace(name, util::JsonValue{value});
+                env.emplace(name, support::JsonValue{value});
             }
-            object["env"] = util::JsonValue{std::move(env)};
+            object["env"] = support::JsonValue{std::move(env)};
         }
         return object;
     }
@@ -277,7 +277,7 @@ constexpr auto kAsyncLockRetryCount = 10;
     return object;
 }
 
-[[nodiscard]] util::Expected<std::string> read_file(const std::filesystem::path& path) {
+[[nodiscard]] support::Expected<std::string> read_file(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input.is_open()) {
         return std::unexpected(storage_error("failed to read auth file", path));
@@ -290,7 +290,7 @@ constexpr auto kAsyncLockRetryCount = 10;
     return contents.str();
 }
 
-[[nodiscard]] util::ExpectedVoid set_private_permissions(
+[[nodiscard]] support::ExpectedVoid set_private_permissions(
     const std::filesystem::path& path,
     std::filesystem::perms permissions,
     std::string_view kind) {
@@ -305,7 +305,7 @@ constexpr auto kAsyncLockRetryCount = 10;
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid ensure_storage_directory(const std::filesystem::path& path) {
+[[nodiscard]] support::ExpectedVoid ensure_storage_directory(const std::filesystem::path& path) {
     if (path.empty()) {
         return std::unexpected(storage_error("auth file path is empty", path));
     }
@@ -325,7 +325,7 @@ constexpr auto kAsyncLockRetryCount = 10;
     return {};
 }
 
-[[nodiscard]] util::ExpectedVoid ensure_auth_file(const std::filesystem::path& path) {
+[[nodiscard]] support::ExpectedVoid ensure_auth_file(const std::filesystem::path& path) {
     std::error_code error;
     const bool existed = std::filesystem::exists(path, error);
     if (error) {
@@ -353,7 +353,7 @@ constexpr auto kAsyncLockRetryCount = 10;
         "file");
 }
 
-[[nodiscard]] util::ExpectedVoid write_file(const std::filesystem::path& path, const std::string& content) {
+[[nodiscard]] support::ExpectedVoid write_file(const std::filesystem::path& path, const std::string& content) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     if (!output.is_open()) {
         return std::unexpected(storage_error("failed to write auth file", path));
@@ -369,14 +369,14 @@ constexpr auto kAsyncLockRetryCount = 10;
         "file");
 }
 
-[[nodiscard]] util::ExpectedVoid ensure_storage_path(const std::filesystem::path& path) {
+[[nodiscard]] support::ExpectedVoid ensure_storage_path(const std::filesystem::path& path) {
     if (auto directory = ensure_storage_directory(path); !directory) {
         return directory;
     }
     return ensure_auth_file(path);
 }
 
-[[nodiscard]] util::Expected<JsonObject> read_current_data(const std::filesystem::path& path) {
+[[nodiscard]] support::Expected<JsonObject> read_current_data(const std::filesystem::path& path) {
     auto content = read_file(path);
     if (!content) {
         return std::unexpected(content.error());
@@ -496,7 +496,7 @@ private:
     return modified;
 }
 
-[[nodiscard]] util::Expected<std::unique_ptr<LockLease>> try_acquire_lock(
+[[nodiscard]] support::Expected<std::unique_ptr<LockLease>> try_acquire_lock(
     const std::filesystem::path& auth_path) {
     const auto lock_path = std::filesystem::path{auth_path.string() + ".lock"};
     std::error_code error;
@@ -539,7 +539,7 @@ private:
     return std::unique_ptr<LockLease>{};
 }
 
-[[nodiscard]] util::Expected<std::unique_ptr<LockLease>> acquire_lock_sync(
+[[nodiscard]] support::Expected<std::unique_ptr<LockLease>> acquire_lock_sync(
     const std::filesystem::path& auth_path) {
     for (int attempt = 0; attempt < 10; ++attempt) {
         auto acquired = try_acquire_lock(auth_path);
@@ -554,7 +554,7 @@ private:
         "timed out acquiring the auth file lock"));
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<std::unique_ptr<LockLease>>> acquire_lock_async(
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::unique_ptr<LockLease>>> acquire_lock_async(
     const std::filesystem::path& auth_path) {
     auto executor = co_await boost::asio::this_coro::executor;
     for (int attempt = 0; attempt <= kAsyncLockRetryCount; ++attempt) {
@@ -570,8 +570,8 @@ private:
         boost::system::error_code timer_error;
         co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, timer_error));
         if (timer_error == boost::asio::error::operation_aborted) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "auth file lock acquisition was cancelled"));
         }
         if (timer_error) {
@@ -644,7 +644,7 @@ struct AuthStorage::Impl {
         return entries;
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify_awaitable(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ai::Credential>>> modify_awaitable(
         std::string provider_id,
         ai::CredentialModifyHook modifier) {
         CCH_TRY_VOID(ensure_storage_path(auth_path_));
@@ -656,13 +656,13 @@ struct AuthStorage::Impl {
             ? std::optional<ai::Credential>{}
             : credential_from_json(current_it->second);
 
-        util::Expected<std::optional<ai::Credential>> next_result;
+        support::Expected<std::optional<ai::Credential>> next_result;
         try {
             next_result = co_await cch::ai::detail::await_async_result(modifier(current));
         } catch (const boost::system::system_error& exception) {
             if (exception.code() == boost::asio::error::operation_aborted) {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Cancelled,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled,
                     "credential modification was cancelled"));
             }
             co_return std::unexpected(storage_error(
@@ -686,8 +686,8 @@ struct AuthStorage::Impl {
             co_return std::unexpected(storage_error("auth file lock was compromised", auth_path_));
         }
 
-        const util::JsonValue* current_json = current_it == current_data.end() ? nullptr : &current_it->second;
-        current_data[provider_id] = util::JsonValue{credential_to_json(*next, current_json)};
+        const support::JsonValue* current_json = current_it == current_data.end() ? nullptr : &current_it->second;
+        current_data[provider_id] = support::JsonValue{credential_to_json(*next, current_json)};
         CCH_TRY(serialized, serialize_auth_data(current_data));
         CCH_TRY_VOID(write_file(auth_path_, serialized));
         if (!lease->valid()) {
@@ -697,7 +697,7 @@ struct AuthStorage::Impl {
         co_return std::move(next);
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove_awaitable(std::string provider_id) {
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> remove_awaitable(std::string provider_id) {
         CCH_TRY_VOID(ensure_storage_path(auth_path_));
         CCH_TRY(lease, co_await acquire_lock_async(auth_path_));
         CCH_TRY(current_data, read_current_data(auth_path_));
@@ -712,7 +712,7 @@ struct AuthStorage::Impl {
             co_return std::unexpected(storage_error("auth file lock was compromised", auth_path_));
         }
         set_snapshot(std::move(current_data));
-        co_return util::ExpectedVoid{};
+        co_return support::ExpectedVoid{};
     }
 
     // Execution context for blocking file I/O and the modify hook's OAuth
@@ -771,10 +771,10 @@ cch::support::AsyncResult<std::optional<ai::Credential>> AuthStorage::modify(
                 impl->modify_awaitable(std::move(provider_id), std::move(modifier)),
                 [completion = std::move(completion)](
                     std::exception_ptr eptr,
-                    util::Expected<std::optional<ai::Credential>> result) mutable noexcept {
+                    support::Expected<std::optional<ai::Credential>> result) mutable noexcept {
                     if (eptr) {
-                        completion(std::unexpected(util::make_error(
-                            util::ErrorCode::Unknown,
+                        completion(std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown,
                             "credential modification failed")));
                     } else {
                         completion(std::move(result));
@@ -793,10 +793,10 @@ cch::support::AsyncResult<void> AuthStorage::remove(std::string provider_id) {
                 impl->remove_awaitable(std::move(provider_id)),
                 [completion = std::move(completion)](
                     std::exception_ptr eptr,
-                    util::ExpectedVoid result) mutable noexcept {
+                    support::ExpectedVoid result) mutable noexcept {
                     if (eptr) {
-                        completion(std::unexpected(util::make_error(
-                            util::ErrorCode::Unknown,
+                        completion(std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown,
                             "credential removal failed")));
                     } else {
                         completion(std::move(result));

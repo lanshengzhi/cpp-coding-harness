@@ -4,7 +4,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Models.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -32,18 +32,18 @@ public:
         ToolRegistry registry,
         AsyncAgentOptions options = {});
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> run(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> run(
         std::string user_prompt,
         AgentEventSink sink = {},
         std::stop_token stop_token = {});
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> continue_with(
         std::vector<ai::MessageVariant> history,
         std::string user_prompt,
         AgentEventSink sink = {},
         std::stop_token stop_token = {});
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> continue_with(
         std::vector<ai::MessageVariant> history,
         ai::UserMessage user_message,
         AgentEventSink sink = {},
@@ -55,7 +55,7 @@ public:
     /// result message. Rejects an empty history and a history whose last
     /// message is an assistant message (pi's "Cannot continue from message
     /// role: assistant").
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> continue_with(
         std::vector<ai::MessageVariant> history,
         AgentEventSink sink = {},
         std::stop_token stop_token = {});
@@ -67,7 +67,7 @@ private:
     using InputQueueDrainer = std::move_only_function<
         std::vector<ai::MessageVariant>(InputQueueKind queue_kind)>;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> continue_with(
         std::vector<ai::MessageVariant> history,
         std::optional<ai::UserMessage> user_message,
         AgentEventSink sink,

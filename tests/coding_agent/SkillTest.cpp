@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/Skill.hpp"
+#include <cch/coding_agent/Skill.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

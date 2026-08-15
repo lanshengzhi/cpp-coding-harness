@@ -13,7 +13,7 @@
 
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
@@ -84,7 +84,7 @@ struct Running {
     // the interactive-mode coroutine frame (and its Tui) last.
     tui::VirtualTerminal terminal{tui::VirtualTerminalOptions{.columns = 100, .rows = 40}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
 };
 
 void drain_ready(boost::asio::io_context& io) {
@@ -122,7 +122,7 @@ void drain_ready(boost::asio::io_context& io) {
             *created->session,
             running.terminal,
             {.agent_config_directory = fixture.agent_dir.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });

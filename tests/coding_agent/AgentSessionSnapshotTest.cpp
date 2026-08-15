@@ -66,7 +66,7 @@ struct TestPaths {
     return options;
 }
 
-[[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
     const TestPaths& paths) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.no_skills = true;
@@ -89,7 +89,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto partial = ai::assistant_text_message("");
         partial.provider = "snapshot-fake";
         partial.api = "fake";
@@ -142,7 +142,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto response = ai::assistant_text_message("captured");
         response.provider = "snapshot-fake";
         response.api = "fake";
@@ -223,7 +223,7 @@ TEST_CASE(
     REQUIRE(created.has_value());
 
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> prompt_result;
+    std::optional<support::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -267,9 +267,9 @@ TEST_CASE(
     REQUIRE(created.has_value());
 
     auto failing = created->session->subscribe(
-        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+        [](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "snapshot subscriber failed"));
         });
     REQUIRE(failing.has_value());

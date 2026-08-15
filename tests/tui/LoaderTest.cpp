@@ -4,7 +4,7 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
@@ -21,7 +21,7 @@ namespace {
 
 class ManualAnimationTimer final : public cch::tui::AnimationTimer {
 public:
-    [[nodiscard]] cch::util::ExpectedVoid start(
+    [[nodiscard]] cch::support::ExpectedVoid start(
         std::chrono::milliseconds interval,
         cch::tui::AnimationTickSink tick) override {
         interval_ = interval;

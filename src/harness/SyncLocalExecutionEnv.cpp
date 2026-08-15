@@ -18,7 +18,7 @@ SyncLocalExecutionEnv::SyncLocalExecutionEnv(
     bool bash_enabled,
     std::vector<std::string> secret_environment_names,
     ShellConfig shell_config,
-    std::shared_ptr<util::AsyncProcessRunner> runner)
+    std::shared_ptr<harness::AsyncProcessRunner> runner)
     : workspace_(std::move(workspace)),
       bash_enabled_(bash_enabled),
       secret_environment_names_(std::move(secret_environment_names)),
@@ -98,7 +98,7 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
 // Pi-shaped shell methods
 // ---------------------------------------------------------------------------
 
-std::expected<util::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::make_exec_request(
+std::expected<harness::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::make_exec_request(
     std::string command,
     ExecOptions options) const {
     if (options.stop_token.stop_requested()) {
@@ -164,7 +164,7 @@ std::expected<util::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::make_
         script = *shell_config_.command_prefix + "\n" + script;
     }
 
-    util::ProcessRequest request;
+    harness::ProcessRequest request;
     request.executable = std::move(executable);
     request.arguments = {"-c", std::move(script)};
     request.stop_token = options.stop_token;
@@ -184,7 +184,7 @@ std::expected<util::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::make_
     return request;
 }
 
-ShellExecResult SyncLocalExecutionEnv::exec_result_from_process(const util::ProcessResult& process) const {
+ShellExecResult SyncLocalExecutionEnv::exec_result_from_process(const harness::ProcessResult& process) const {
     ShellExecResult result;
     result.stdout_output = process.stdout_output;
     result.stderr_output = process.stderr_output;
@@ -201,7 +201,7 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     }
 
     boost::asio::io_context io;
-    std::optional<util::Expected<util::ProcessResult>> process;
+    std::optional<support::Expected<harness::ProcessResult>> process;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {

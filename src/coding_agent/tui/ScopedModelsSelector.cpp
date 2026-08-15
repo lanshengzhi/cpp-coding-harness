@@ -10,7 +10,7 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <exception>
 #include <iterator>
@@ -238,7 +238,7 @@ std::string ScopedModelsSelectorComponent::footer_text() const {
         : theme_.foreground(ThemeToken::Dim, std::move(text));
 }
 
-util::ExpectedVoid ScopedModelsSelectorComponent::update_list(std::vector<std::string>& out_lines, std::size_t width) const {
+support::ExpectedVoid ScopedModelsSelectorComponent::update_list(std::vector<std::string>& out_lines, std::size_t width) const {
     // Every emitted line is bounded to the render width (the SessionSelector
     // pattern): the render path asserts each line's visible width <= the
     // bound, so a single untruncated line would abort the TUI. ANSI styling
@@ -246,7 +246,7 @@ util::ExpectedVoid ScopedModelsSelectorComponent::update_list(std::vector<std::s
     // truncation failure is propagated rather than falling back to the
     // (potentially over-wide) line.
     std::vector<std::string> lines;
-    const auto emit = [&lines, width](std::string line) -> util::ExpectedVoid {
+    const auto emit = [&lines, width](std::string line) -> support::ExpectedVoid {
         auto truncated = cch::tui::truncate_text(line, width, "");
         if (!truncated) return std::unexpected(truncated.error());
         lines.push_back(std::move(*truncated));
@@ -322,9 +322,9 @@ util::ExpectedVoid ScopedModelsSelectorComponent::update_list(std::vector<std::s
     return {};
 }
 
-util::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(std::size_t width) {
     cch::tui::RenderResult result;
-    const auto append = [&result, width](cch::tui::Component& component) -> util::ExpectedVoid {
+    const auto append = [&result, width](cch::tui::Component& component) -> support::ExpectedVoid {
         auto rendered = component.render(width);
         if (!rendered) return std::unexpected(rendered.error());
         for (auto& line : rendered->lines) result.lines.push_back(std::move(line));

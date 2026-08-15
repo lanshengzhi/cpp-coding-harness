@@ -3,8 +3,8 @@
 #include "DevicePoll.hpp"
 #include "Pkce.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -64,14 +64,14 @@ struct DeviceAuthorization {
 }
 
 [[nodiscard]] const std::string* json_object_string_field(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     std::string_view name) {
     const auto found = object.find(std::string{name});
     return found == object.end() ? nullptr : found->second.get_if<std::string>();
 }
 
 [[nodiscard]] const double* json_object_number_field(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     std::string_view name) {
     const auto found = object.find(std::string{name});
     return found == object.end() ? nullptr : found->second.get_if<double>();
@@ -156,7 +156,7 @@ private:
 /// POST with the composed per-request timeout and login cancellation. An
 /// aborted login normalizes to the stable "Login cancelled" error; a fired
 /// request timeout surfaces as `Timeout`; other transport failures propagate.
-[[nodiscard]] boost::asio::awaitable<util::Expected<OAuthHttpResponse>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>>
 post_kimi_request(
     const std::shared_ptr<OAuthHttpClient>& http_client,
     std::string url,
@@ -172,13 +172,13 @@ post_kimi_request(
         scope.token());
     if (!response) {
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "Login cancelled"));
         }
         if (scope.timed_out()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Timeout,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Timeout,
                 "Kimi Code OAuth request timed out"));
         }
         co_return std::unexpected(std::move(response.error()));
@@ -189,17 +189,17 @@ post_kimi_request(
 /// pi `parseTokenResponse`: `access_token`/`refresh_token` non-empty strings
 /// and a positive finite `expires_in`; `expires` is a wall-clock millisecond
 /// timestamp.
-[[nodiscard]] util::Expected<OAuthToken> parse_token_response(
+[[nodiscard]] support::Expected<OAuthToken> parse_token_response(
     const OAuthHttpResponse& response,
     std::string_view operation) {
     const auto missing_fields = [&response, operation]() {
-        return util::make_error(
-            util::ErrorCode::OAuth,
+        return support::make_error(
+            support::ErrorCode::OAuth,
             "Kimi Code token " + std::string{operation} +
                 " response missing fields: " + response.body);
     };
-    auto json = util::read_json(response.body);
-    const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
+    auto json = support::read_json(response.body);
+    const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
     const auto* access = object == nullptr
         ? nullptr
         : json_object_string_field(*object, "access_token");
@@ -235,8 +235,8 @@ post_kimi_request(
         };
     }
 
-    auto json = util::read_json(response.body);
-    const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
+    auto json = support::read_json(response.body);
+    const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
     const auto* access = object == nullptr
         ? nullptr
         : json_object_string_field(*object, "access_token");
@@ -324,7 +324,7 @@ post_kimi_request(
 /// pi `startDeviceAuthorization`: POST the device_authorization form, validate
 /// the RFC 8628 fields (with `verification_uri`/`verification_uri_complete`
 /// http(s)-only), and apply the 5s/15min interval/expires defaults.
-[[nodiscard]] boost::asio::awaitable<util::Expected<DeviceAuthorization>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<DeviceAuthorization>>
 start_device_authorization(
     const std::shared_ptr<OAuthHttpClient>& http_client,
     std::string oauth_host,
@@ -338,15 +338,15 @@ start_device_authorization(
         stop_token,
         request_timeout));
     if (response.status_code < 200 || response.status_code >= 300) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Kimi Code device authorization failed with status " +
                 std::to_string(response.status_code) +
                 (response.body.empty() ? "" : ": " + response.body)));
     }
 
-    auto json = util::read_json(response.body);
-    const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
+    auto json = support::read_json(response.body);
+    const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
     const auto* device_code = object == nullptr
         ? nullptr
         : json_object_string_field(*object, "device_code");
@@ -363,8 +363,8 @@ start_device_authorization(
         verification_uri == nullptr || verification_uri_complete == nullptr ||
         !trusted_http_url(*verification_uri_complete) ||
         !trusted_http_url(*verification_uri)) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Invalid Kimi Code device authorization response: " + response.body));
     }
 
@@ -390,7 +390,7 @@ start_device_authorization(
 
 /// pi `pollForToken`: the shared device-poll loop with wait-before-first-poll
 /// and the RFC 8628 error decision table.
-[[nodiscard]] boost::asio::awaitable<util::Expected<OAuthToken>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthToken>>
 poll_for_token(
     const std::shared_ptr<OAuthHttpClient>& http_client,
     const std::string& oauth_host,
@@ -404,7 +404,7 @@ poll_for_token(
             .wait_before_first_poll = true,
             .poll = [http_client, oauth_host, device, stop_token, request_timeout]()
                 -> boost::asio::awaitable<
-                       util::Expected<DevicePollResult<OAuthToken>>> {
+                       support::Expected<DevicePollResult<OAuthToken>>> {
                 const std::string body =
                     "client_id=" + url_query_encode(kClientId) +
                     "&device_code=" + url_query_encode(device.device_code) +
@@ -443,11 +443,11 @@ KimiCodingOAuth::KimiCodingOAuth(
 
 KimiCodingOAuth::~KimiCodingOAuth() = default;
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 KimiCodingOAuth::login(ai::AuthInteraction interaction) {
     if (!interaction.notify) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "login interaction has no notify hook"));
     }
 
@@ -482,12 +482,12 @@ KimiCodingOAuth::login(ai::AuthInteraction interaction) {
     };
 }
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 KimiCodingOAuth::refresh(
     ai::OAuthCredential credential,
     std::stop_token stop_token) {
     const auto oauth_host = resolve_oauth_host(options_);
-    std::optional<util::Error> last_error;
+    std::optional<support::Error> last_error;
     for (int attempt = 0; attempt <= options_.refresh_max_retries; ++attempt) {
         if (attempt > 0) {
             auto backoff = options_.refresh_backoff_base;
@@ -497,8 +497,8 @@ KimiCodingOAuth::refresh(
             co_await backoff_sleep(backoff);
         }
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "Kimi Code token refresh aborted"));
         }
 
@@ -528,8 +528,8 @@ KimiCodingOAuth::refresh(
             };
         }
 
-        auto json = util::read_json(response->body);
-        const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
+        auto json = support::read_json(response->body);
+        const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
         const auto* error = object == nullptr
             ? nullptr
             : json_object_string_field(*object, "error");
@@ -544,8 +544,8 @@ KimiCodingOAuth::refresh(
         // every subsequent request fails with re-auth guidance.
         if (response->status_code == 401 || response->status_code == 403 ||
             (error != nullptr && *error == "invalid_grant")) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::OAuth,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::OAuth,
                 "Kimi Code token refresh unauthorized (status " +
                     std::to_string(response->status_code) + ")" +
                     description_suffix));
@@ -553,15 +553,15 @@ KimiCodingOAuth::refresh(
 
         if (is_retryable_refresh_failure(response->status_code) &&
             attempt < options_.refresh_max_retries) {
-            last_error = util::make_error(
-                util::ErrorCode::OAuth,
+            last_error = support::make_error(
+                support::ErrorCode::OAuth,
                 "Kimi Code token refresh failed with status " +
                     std::to_string(response->status_code));
             continue;
         }
 
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Kimi Code token refresh failed with status " +
                 std::to_string(response->status_code) +
                 (response->body.empty() ? "" : ": " + response->body)));
@@ -569,12 +569,12 @@ KimiCodingOAuth::refresh(
 
     co_return std::unexpected(last_error.has_value()
         ? std::move(*last_error)
-        : util::make_error(
-              util::ErrorCode::OAuth,
+        : support::make_error(
+              support::ErrorCode::OAuth,
               "Kimi Code token refresh failed"));
 }
 
-boost::asio::awaitable<util::Expected<ai::ModelAuth>>
+boost::asio::awaitable<support::Expected<ai::ModelAuth>>
 KimiCodingOAuth::to_auth(const ai::OAuthCredential& credential) const {
     co_return ai::ModelAuth{
         .headers = {{"Authorization", "Bearer " + credential.access}},
@@ -596,7 +596,7 @@ ai::OAuthAuth make_kimi_coding_oauth_auth(
         -> cch::support::AsyncResult<ai::OAuthCredential> {
         return cch::ai::detail::make_async_result(
             [impl, interaction = std::move(interaction)]() mutable
-                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                 co_return co_await impl->login(std::move(interaction));
             });
     };
@@ -606,7 +606,7 @@ ai::OAuthAuth make_kimi_coding_oauth_auth(
         -> cch::support::AsyncResult<ai::OAuthCredential> {
         return cch::ai::detail::make_async_result(
             [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                 co_return co_await impl->refresh(std::move(credential));
             });
     };
@@ -614,7 +614,7 @@ ai::OAuthAuth make_kimi_coding_oauth_auth(
         -> cch::support::AsyncResult<ai::ModelAuth> {
         return cch::ai::detail::make_async_result(
             [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
+                -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
                 co_return co_await impl->to_auth(credential);
             });
     };

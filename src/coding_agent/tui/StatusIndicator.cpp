@@ -1,7 +1,7 @@
 #include "coding_agent/tui/StatusIndicator.hpp"
 
 #include "coding_agent/tui/KeybindingHints.hpp"
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <format>
 #include <string>
@@ -32,7 +32,7 @@ void StatusIndicator::set_message(std::string message) {
     loader_->set_message(std::move(message));
 }
 
-util::Expected<cch::tui::RenderResult> StatusIndicator::render(std::size_t width) {
+support::Expected<cch::tui::RenderResult> StatusIndicator::render(std::size_t width) {
     return loader_->render(width);
 }
 

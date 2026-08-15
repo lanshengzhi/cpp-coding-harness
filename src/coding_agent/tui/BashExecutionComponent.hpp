@@ -4,7 +4,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Loader.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -49,7 +49,7 @@ public:
     /// view's invalidation. Ignored once the outcome is set.
     void start_loader(cch::tui::RenderRequestSink request_render);
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

@@ -22,7 +22,7 @@ namespace runtime = cch::coding_agent::runtime;
 
 namespace {
 
-[[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> create_cli_session(
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_cli_session(
     const tests::TempWorkspace& workspace,
     bool provide_user_shell) {
     runtime::AgentSessionCreationRequest request;
@@ -56,7 +56,7 @@ namespace {
     return count;
 }
 
-[[nodiscard]] util::Expected<runtime::UserBashCompletion> run_user_bash_blocking(
+[[nodiscard]] support::Expected<runtime::UserBashCompletion> run_user_bash_blocking(
     coding_agent::AgentSession& session,
     std::string command) {
     boost::asio::io_context io;
@@ -67,7 +67,7 @@ namespace {
     return std::move(*slot);
 }
 
-[[nodiscard]] util::ExpectedVoid run_prompt_blocking(
+[[nodiscard]] support::ExpectedVoid run_prompt_blocking(
     coding_agent::AgentSession& session,
     std::string text) {
     boost::asio::io_context io;

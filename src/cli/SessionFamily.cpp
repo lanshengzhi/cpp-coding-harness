@@ -139,7 +139,7 @@ std::optional<std::string> session_name_guard_error(const CliConfig& config) {
     return std::nullopt;
 }
 
-util::Expected<SessionFamilyAssembly> assemble_session_target(
+support::Expected<SessionFamilyAssembly> assemble_session_target(
     const CliConfig& config,
     const std::optional<std::string>& settings_session_dir,
     std::istream& input,
@@ -187,8 +187,8 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                     return session.id == *config.session_id;
                 });
             if (occupied != local.end()) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Session,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
                     "Session already exists with id '" + *config.session_id + "'"));
             }
         }
@@ -209,8 +209,8 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                 .session_file = std::nullopt,
             };
         case coding_agent::session_discovery::SessionArgKind::NotFound:
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 "No session found matching '" + resolved.arg + "'"));
         }
     }
@@ -265,8 +265,8 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
             };
         }
         case coding_agent::session_discovery::SessionArgKind::NotFound:
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 "No session found matching '" + resolved.arg + "'"));
         }
     }
@@ -279,8 +279,8 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
         // main.ts console.log + process.exit(0); stdout lands on stderr in
         // print mode via the output-guard takeover).
         if (!resume_picker) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 "--resume requires the startup session picker"));
         }
         const auto local_directory = space.local_directory;

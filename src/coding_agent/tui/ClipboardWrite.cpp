@@ -1,6 +1,6 @@
 #include "coding_agent/tui/ClipboardWrite.hpp"
 
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <cstdlib>
 #include <optional>
@@ -62,8 +62,8 @@ struct ClipboardToolCommand {
     if (::pipe(pipe_fds) < 0) return false;
     // The descriptors are RAII-owned (CODING_STANDARDS 7.8); the pipe's read
     // end feeds the child's stdin.
-    util::UniqueFd read_end{pipe_fds[0]};
-    util::UniqueFd write_end{pipe_fds[1]};
+    support::UniqueFd read_end{pipe_fds[0]};
+    support::UniqueFd write_end{pipe_fds[1]};
     const auto pid = ::fork();
     if (pid < 0) return false;
     if (pid == 0) {
@@ -72,7 +72,7 @@ struct ClipboardToolCommand {
         (void)::dup2(read_end.get(), STDIN_FILENO);
         (void)read_end.close();
         (void)write_end.close();
-        util::UniqueFd null_fd{::open("/dev/null", O_RDWR)};
+        support::UniqueFd null_fd{::open("/dev/null", O_RDWR)};
         if (null_fd) {
             (void)::dup2(null_fd.get(), STDOUT_FILENO);
             (void)::dup2(null_fd.get(), STDERR_FILENO);

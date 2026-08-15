@@ -2,11 +2,11 @@
 
 #include "tools/EditDiff.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/BoundedText.hpp"
-#include "util/Json.hpp"
-#include "util/JsonGlaze.hpp"
-#include "util/OutputLimiter.hpp"
-#include "util/TerminalText.hpp"
+#include "ai/BoundedText.hpp"
+#include "support/Json.hpp"
+#include "support/JsonGlaze.hpp"
+#include "harness/OutputLimiter.hpp"
+#include "tools/TerminalText.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -49,25 +49,25 @@ struct BashArgs {
     std::optional<int> timeout;  // seconds, optional (no default = no timeout)
 };
 
-[[nodiscard]] util::JsonValue typed_schema(
+[[nodiscard]] support::JsonValue typed_schema(
     std::string type,
     std::optional<std::string> description = std::nullopt) {
-    util::JsonValue::object_t schema{{"type", std::move(type)}};
+    support::JsonValue::object_t schema{{"type", std::move(type)}};
     if (description) {
         schema.emplace("description", std::move(*description));
     }
     return schema;
 }
 
-[[nodiscard]] util::JsonValue object_schema(
-    util::JsonValue::object_t properties,
+[[nodiscard]] support::JsonValue object_schema(
+    support::JsonValue::object_t properties,
     std::vector<std::string> required) {
-    util::JsonValue::array_t required_values;
+    support::JsonValue::array_t required_values;
     required_values.reserve(required.size());
     for (auto& name : required) {
         required_values.emplace_back(std::move(name));
     }
-    return util::JsonValue::object_t{
+    return support::JsonValue::object_t{
         {"type", "object"},
         {"properties", std::move(properties)},
         {"required", std::move(required_values)},
@@ -75,8 +75,8 @@ struct BashArgs {
     };
 }
 
-[[nodiscard]] util::JsonValue array_schema(
-    util::JsonValue items,
+[[nodiscard]] support::JsonValue array_schema(
+    support::JsonValue items,
     std::optional<std::string> description = std::nullopt) {
     auto schema = typed_schema("array", std::move(description)).get_object();
     schema.emplace("items", std::move(items));
@@ -108,16 +108,16 @@ template <typename Error>
 }
 
 template <typename Args>
-[[nodiscard]] util::Expected<Args> parse_invocation_args(const agent::ToolInvocation& invocation) {
-    auto serialized = util::write_json(invocation.arguments);
+[[nodiscard]] support::Expected<Args> parse_invocation_args(const agent::ToolInvocation& invocation) {
+    auto serialized = support::write_json(invocation.arguments);
     if (!serialized) {
         return std::unexpected(serialized.error());
     }
-    return util::read_json<Args>(*serialized);
+    return support::read_json<Args>(*serialized);
 }
 
-[[nodiscard]] util::Error missing_env_error() {
-    return util::make_error(util::ErrorCode::Tool, "missing execution environment");
+[[nodiscard]] support::Error missing_env_error() {
+    return support::make_error(support::ErrorCode::Tool, "missing execution environment");
 }
 
 /// Build a pending `AsyncResult` whose producer runs `body` (a fresh
@@ -132,8 +132,8 @@ template <typename Body>
             agent::ToolExecuteResult::completion_type completion) mutable noexcept {
             auto executor = ai::detail::t_initiating_executor;
             if (!executor) {
-                completion(std::unexpected(util::make_error(
-                    util::ErrorCode::Tool, "tool execution has no initiating executor")));
+                completion(std::unexpected(support::make_error(
+                    support::ErrorCode::Tool, "tool execution has no initiating executor")));
                 return;
             }
             try {
@@ -142,17 +142,17 @@ template <typename Body>
                     body(),
                     [completion = std::move(completion)](
                         std::exception_ptr eptr,
-                        util::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
+                        support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
                         if (eptr) {
-                            completion(std::unexpected(util::make_error(
-                                util::ErrorCode::Tool, "tool execution failed")));
+                            completion(std::unexpected(support::make_error(
+                                support::ErrorCode::Tool, "tool execution failed")));
                         } else {
                             completion(std::move(result));
                         }
                     });
             } catch (...) {
-                completion(std::unexpected(util::make_error(
-                    util::ErrorCode::Tool, "tool execution failed")));
+                completion(std::unexpected(support::make_error(
+                    support::ErrorCode::Tool, "tool execution failed")));
             }
         }};
 }
@@ -161,7 +161,7 @@ template <typename Body>
 // Built-in tool coroutine bodies (pi `core/tools/*.ts`).
 // ---------------------------------------------------------------------------
 
-boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> read_file_execute(
+boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_file_execute(
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
@@ -179,7 +179,7 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> read_fil
     }
     // offset is 1-based; limit 0 means no explicit limit.
     const auto offset = std::max(1, parsed->offset);
-    const util::OutputLimit output_limit;
+    const harness::OutputLimit output_limit;
     std::string result;
     std::size_t bytes = 0;
     int emitted = 0;
@@ -217,7 +217,7 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> read_fil
     };
 }
 
-boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> write_file_execute(
+boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> write_file_execute(
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
@@ -240,7 +240,7 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> write_fi
     };
 }
 
-boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_execute(
+boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_execute(
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
@@ -293,14 +293,14 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_exe
         applied->base_content, applied->new_content);
     const std::string patch = tools::generate_unified_patch(
         parsed->path, applied->base_content, applied->new_content);
-    util::JsonValue details{util::JsonValue::object_t{}};
+    support::JsonValue details{support::JsonValue::object_t{}};
     auto& detail_object = details.get_object();
-    detail_object.emplace("diff", util::JsonValue(diff_result.diff));
-    detail_object.emplace("patch", util::JsonValue(patch));
+    detail_object.emplace("diff", support::JsonValue(diff_result.diff));
+    detail_object.emplace("patch", support::JsonValue(patch));
     if (diff_result.first_changed_line) {
         detail_object.emplace(
             "firstChangedLine",
-            util::JsonValue(*diff_result.first_changed_line));
+            support::JsonValue(*diff_result.first_changed_line));
     }
     co_return agent::AsyncToolExecutionResult{
         .content = std::vector<ai::Content>{ai::text_content(
@@ -310,7 +310,7 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_exe
     };
 }
 
-boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> bash_execute(
+boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_execute(
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     std::shared_ptr<BashSessionEnvironment> session_environment,
     agent::ToolInvocation invocation,
@@ -369,12 +369,12 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> bash_exe
     const bool streamed = received_stdout || received_stderr;
     const std::string& stdout_source = streamed ? full_stdout : shell->stdout_output;
     const std::string& stderr_source = streamed ? full_stderr : shell->stderr_output;
-    std::string full_output = util::strip_terminal_escape_sequences(
+    std::string full_output = tools::strip_terminal_escape_sequences(
         combine_output(stdout_source, stderr_source));
 
     // Redact the complete output before splitting between model-visible and spill.
-    std::string redacted_full = util::redact_text(full_output);
-    auto limited_output = util::limit_output_tail(redacted_full);
+    std::string redacted_full = ai::redact_text(full_output);
+    auto limited_output = harness::limit_output_tail(redacted_full);
     bool truncated = limited_output.truncated;
     std::string output = std::move(limited_output.text);
     if (truncated && streamed) {

@@ -5,7 +5,7 @@
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -51,9 +51,9 @@ std::string event_label(const agent::AgentLifecycleEvent& event) {
     return "tool_end";
 }
 
-util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
+support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -63,19 +63,19 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
         boost::asio::detached);
     io.run();
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
 }
 
-util::ExpectedVoid run_prompt(
+support::ExpectedVoid run_prompt(
     agent::Agent& subject,
     std::string prompt,
     agent::AgentEventCommitter commitment) {
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -86,8 +86,8 @@ util::ExpectedVoid run_prompt(
         boost::asio::detached);
     io.run();
     if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
@@ -98,7 +98,7 @@ util::ExpectedVoid run_prompt(
         ai::Tool{"read", "Read a file", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
         [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             agent::AsyncToolExecutionResult result;
             result.content.push_back(ai::text_content("file contents"));
             co_return result;
@@ -117,7 +117,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -126,8 +126,8 @@ public:
         calls.push_back(tests::RecordedStreamSimpleCall{
             std::move(model), std::move(context), std::move(options)});
         if (responses.empty()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Provider,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Provider,
                 "no scripted response"));
         }
         auto response = std::move(responses.front());
@@ -148,10 +148,10 @@ public:
 /// Emits one complete assistant lifecycle for a scripted response: a start,
 /// then per content block the text/tool-call deltas, matching the scripted
 /// fake provider's observable event shape.
-[[nodiscard]] util::ExpectedVoid emit_scripted_lifecycle(
+[[nodiscard]] support::ExpectedVoid emit_scripted_lifecycle(
     ai::AssistantEventSink& sink,
     const ai::AssistantMessage& final_message) {
-    auto emit = [&sink](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+    auto emit = [&sink](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
         return sink(event);
     };
     auto partial = final_message;
@@ -201,7 +201,7 @@ public:
         partial.content.emplace_back(ai::ToolCallContent{
             .id = tool_call.id,
             .name = tool_call.name,
-            .arguments = util::JsonValue{util::JsonValue::object_t{}},
+            .arguments = support::JsonValue{support::JsonValue::object_t{}},
             .raw_arguments = {},
             .thought_signature = std::nullopt,
             .arguments_valid = true,
@@ -257,7 +257,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -278,8 +278,8 @@ public:
             if (auto emitted = sink(ai::AssistantErrorEvent{
                     .reason = assistant.stop_reason,
                     .error = assistant,
-                    .failure = util::make_error(
-                        util::ErrorCode::Cancelled, *assistant.error_message),
+                    .failure = support::make_error(
+                        support::ErrorCode::Cancelled, *assistant.error_message),
                 });
                 !emitted) {
                 co_return std::unexpected(emitted.error());
@@ -316,8 +316,8 @@ public:
             const auto raw = "{\"path\":\"" + prompt.substr(5) + "\"}";
             call.raw_arguments = raw;
             call.arguments_valid = true;
-            call.arguments = util::JsonValue{util::JsonValue::object_t{}};
-            if (auto parsed = util::read_json(call.raw_arguments)) {
+            call.arguments = support::JsonValue{support::JsonValue::object_t{}};
+            if (auto parsed = support::read_json(call.raw_arguments)) {
                 call.arguments = std::move(*parsed);
             }
             assistant.content.emplace_back(ai::text_content("reading " + prompt.substr(5)));
@@ -345,7 +345,7 @@ ai::AssistantMessage read_tool_call_response() {
     ai::ToolCallContent call;
     call.id = "read-1";
     call.name = "read";
-    call.arguments = util::JsonValue{util::JsonValue::object_t{}};
+    call.arguments = support::JsonValue{support::JsonValue::object_t{}};
     call.raw_arguments = "{}";
     response.content.emplace_back(std::move(call));
     return response;
@@ -363,7 +363,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model,
         ai::AiContext,
         ai::SimpleStreamOptions,
@@ -396,7 +396,7 @@ public:
             });
     }
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model,
         ai::AiContext,
         ai::SimpleStreamOptions options,
@@ -536,7 +536,7 @@ TEST_CASE(
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     subject.abort();
-    std::optional<util::ExpectedVoid> result;
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -604,7 +604,7 @@ TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only obser
                 agent_end_observed_active_run =
                     subject.state().is_running && ended->messages.size() == 2;
             }
-            return util::ExpectedVoid{};
+            return support::ExpectedVoid{};
         });
     REQUIRE(subscribed);
     auto subscription = std::move(*subscribed);
@@ -643,7 +643,7 @@ TEST_CASE(
 
     std::vector<std::string> ordering;
     auto subscribed = subject.subscribe(
-        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
                 ordering.push_back("observer");
                 const auto snapshot = subject.state();
@@ -658,7 +658,7 @@ TEST_CASE(
     auto prompted = run_prompt(
         subject,
         "hello",
-        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             if (std::holds_alternative<agent::MessageEndEvent>(event)) {
                 ordering.push_back("commitment");
             }
@@ -683,17 +683,17 @@ TEST_CASE(
 
     int failing_calls = 0;
     auto failing_result = subject.subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++failing_calls;
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown, "observer failed"));
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown, "observer failed"));
         });
     REQUIRE(failing_result);
     auto failing = std::move(*failing_result);
 
     int healthy_calls = 0;
     auto healthy_result = subject.subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++healthy_calls;
             return {};
         });
@@ -704,7 +704,7 @@ TEST_CASE(
     REQUIRE(run_prompt(
         subject,
         "hello",
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++committed_events;
             return {};
         }));
@@ -729,17 +729,17 @@ TEST_CASE(
     auto failed = run_prompt(
         subject,
         "first",
-        [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        [](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             const auto* end = std::get_if<agent::MessageEndEvent>(&event);
             if (end != nullptr && std::holds_alternative<ai::UserMessage>(end->message)) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Session,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
                     "commitment rejected user message"));
             }
             return {};
         });
     REQUIRE_FALSE(failed);
-    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(failed.error().code == support::ErrorCode::Session);
     CHECK(failed.error().message == "commitment rejected user message");
     CHECK_FALSE(subject.state().is_running);
     REQUIRE(subject.state().messages.size() == 1);
@@ -758,10 +758,10 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
 
     int failing_calls = 0;
     auto failing_result = subject.subscribe(
-        [&failing_calls](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&failing_calls](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++failing_calls;
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "observer failed"));
         });
     REQUIRE(failing_result);
@@ -769,7 +769,7 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
 
     int throwing_calls = 0;
     auto throwing_result = subject.subscribe(
-        [&throwing_calls](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&throwing_calls](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++throwing_calls;
             throw std::runtime_error("observer threw");
         });
@@ -778,7 +778,7 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
 
     int healthy_calls = 0;
     auto healthy_result = subject.subscribe(
-        [&healthy_calls](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&healthy_calls](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++healthy_calls;
             return {};
         });
@@ -813,9 +813,9 @@ TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent
     std::vector<agent::AgentEventSubscription> subscriptions;
     for (int index = 0; index < 20; ++index) {
         auto subscribed = subject.subscribe(
-            [index](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Unknown,
+            [index](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Unknown,
                     "observer " + std::to_string(index),
                     std::string(2048, 'x')));
             });
@@ -849,7 +849,7 @@ TEST_CASE(
     // The first observer runs first and unsubscribes the second observer on
     // the very first event, before the second observer's turn for that event.
     auto first_result = subject.subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++first_events;
             if (second && *second) {
                 second->unsubscribe();
@@ -860,7 +860,7 @@ TEST_CASE(
     auto first = std::move(*first_result);
 
     auto second_result = subject.subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
             ++second_events;
             return {};
         });
@@ -891,13 +891,13 @@ TEST_CASE(
     bool subscribed_late = false;
     std::optional<agent::AgentEventSubscription> late;
     auto first_result = subject.subscribe(
-        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             if (!subscribed_late &&
                 std::holds_alternative<agent::AgentStartEvent>(event)) {
                 subscribed_late = true;
                 auto result = subject.subscribe(
                     [&late_events](const agent::AgentLifecycleEvent& later)
-                        -> util::ExpectedVoid {
+                        -> support::ExpectedVoid {
                         late_events.push_back(event_label(later));
                         return {};
                     });
@@ -944,7 +944,7 @@ TEST_CASE(
         agent::Agent subject(client->factory(), std::move(tools), std::move(options));
 
         auto subscribed = subject.subscribe(
-            [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            [](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
                 return {};
             });
         REQUIRE(subscribed);
@@ -974,7 +974,7 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
             if (const auto* ended = std::get_if<agent::AgentEndEvent>(&event)) {
                 invocation_message_counts.push_back(ended->messages.size());
             }
-            return util::ExpectedVoid{};
+            return support::ExpectedVoid{};
         });
     REQUIRE(subscribed);
     auto subscription = std::move(*subscribed);
@@ -1000,7 +1000,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     options.model = tests::make_model("fake-model");
     agent::Agent subject(client->factory(), std::move(tools), std::move(options));
 
-    std::optional<util::ExpectedVoid> first_prompt;
+    std::optional<support::ExpectedVoid> first_prompt;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -1015,7 +1015,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     CHECK(active_snapshot.is_running);
     REQUIRE(active_snapshot.messages.size() == 1);
 
-    std::optional<util::ExpectedVoid> second_prompt;
+    std::optional<support::ExpectedVoid> second_prompt;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -1027,7 +1027,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     REQUIRE(io.run_one() == 1);
     REQUIRE(second_prompt.has_value());
     REQUIRE_FALSE(*second_prompt);
-    CHECK(second_prompt->error().code == util::ErrorCode::Validation);
+    CHECK(second_prompt->error().code == support::ErrorCode::Validation);
     CHECK(second_prompt->error().message == "agent is busy (prompt already in flight)");
     CHECK(subject.state().is_running);
     CHECK(subject.state().messages.size() == 1);
@@ -1050,7 +1050,7 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
     options.model = tests::make_model("fake-model");
     agent::Agent original(client->factory(), std::move(tools), std::move(options));
 
-    std::optional<util::ExpectedVoid> prompted;
+    std::optional<support::ExpectedVoid> prompted;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -1085,7 +1085,7 @@ TEST_CASE("stateful Agent releases its active run after an unexpected provider e
     // A throwing provider is caught at the ModelStream boundary (matching
     // `Models::streamSimple`'s provider-exception handling) and reported as a
     // Stream failure rather than escaping as an Unknown run exception.
-    CHECK(failed.error().code == util::ErrorCode::Stream);
+    CHECK(failed.error().code == support::ErrorCode::Stream);
     CHECK_FALSE(subject.state().is_running);
 
     REQUIRE(run_prompt(subject, "second"));
@@ -1109,7 +1109,7 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [&prepared_turns](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepared_turns;
         if (prepared_turns == 1) {
             return agent::AgentLoopTurnUpdate{
@@ -1125,15 +1125,15 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     options.validate_turn_update =
         agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate&)
-        -> util::ExpectedVoid { return {}; });
+        -> support::ExpectedVoid { return {}; });
     options.should_stop_after_turn =
         agent::adapt_sync_should_stop_after_turn(
             [&stop_decisions](const agent::PrepareNextTurnContext&)
-        -> util::Expected<bool> {
+        -> support::Expected<bool> {
         ++stop_decisions;
         if (stop_decisions == 2) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Tool,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
                 "stop policy failed"));
         }
         return false;
@@ -1282,7 +1282,7 @@ TEST_CASE(
     options.max_queued_messages = 1;
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
-    std::optional<util::ExpectedVoid> prompted;
+    std::optional<support::ExpectedVoid> prompted;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {

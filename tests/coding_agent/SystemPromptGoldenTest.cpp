@@ -14,9 +14,9 @@
 
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -97,22 +97,22 @@ namespace {
            ("system-prompt-" + std::string{name} + "-message.json");
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> read_snapshot(std::string_view name) {
+[[nodiscard]] support::Expected<support::JsonValue> read_snapshot(std::string_view name) {
     const auto path = snapshot_path(name);
     std::ifstream input{path, std::ios::binary};
     if (!input) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "Failed to open snapshot: " + path.string()));
     }
     const std::string json{std::istreambuf_iterator<char>{input},
                            std::istreambuf_iterator<char>{}};
-    return util::read_json(json);
+    return support::read_json(json);
 }
 
 /// Navigates `object[key]` and requires a string value.
 [[nodiscard]] std::string required_string(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     std::string_view key) {
     const auto it = object.find(std::string{key});
     REQUIRE(it != object.end());
@@ -120,12 +120,12 @@ namespace {
 }
 
 /// Navigates `object[key]` and requires an object value.
-[[nodiscard]] const util::JsonValue::object_t& required_object(
-    const util::JsonValue::object_t& object,
+[[nodiscard]] const support::JsonValue::object_t& required_object(
+    const support::JsonValue::object_t& object,
     std::string_view key) {
     const auto it = object.find(std::string{key});
     REQUIRE(it != object.end());
-    const auto* nested = it->second.get_if<util::JsonValue::object_t>();
+    const auto* nested = it->second.get_if<support::JsonValue::object_t>();
     REQUIRE(nested != nullptr);
     return *nested;
 }
@@ -154,7 +154,7 @@ void check_message_golden(
     const coding_agent::prompt::BuildSystemPromptOptions& options) {
     const auto snapshot = read_snapshot(scenario);
     REQUIRE(snapshot.has_value());
-    const auto* root = snapshot->get_if<util::JsonValue::object_t>();
+    const auto* root = snapshot->get_if<support::JsonValue::object_t>();
     REQUIRE(root != nullptr);
 
     // Pinned baseline citation (same meta contract as the session suites).
@@ -171,10 +171,10 @@ void check_message_golden(
     CHECK(required_string(message, "role") == "system");
     const auto& content = message.find("content");
     REQUIRE(content != message.end());
-    const auto* blocks = content->second.get_if<util::JsonValue::array_t>();
+    const auto* blocks = content->second.get_if<support::JsonValue::array_t>();
     REQUIRE(blocks != nullptr);
     REQUIRE(blocks->size() == 1);
-    const auto* block = (*blocks)[0].get_if<util::JsonValue::object_t>();
+    const auto* block = (*blocks)[0].get_if<support::JsonValue::object_t>();
     REQUIRE(block != nullptr);
     CHECK(required_string(*block, "type") == "text");
     const auto pi_text = required_string(*block, "text");

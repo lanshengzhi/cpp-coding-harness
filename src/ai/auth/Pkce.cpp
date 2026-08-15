@@ -1,6 +1,6 @@
 #include "Pkce.hpp"
 
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -20,18 +20,18 @@ namespace {
 constexpr std::string_view kBase64Alphabet =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-[[nodiscard]] util::Expected<std::string> random_bytes(std::size_t count) {
+[[nodiscard]] support::Expected<std::string> random_bytes(std::size_t count) {
     std::string bytes(count, '\0');
     if (RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()),
                    static_cast<int>(count)) != 1) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "secure random bytes unavailable"));
     }
     return bytes;
 }
 
-[[nodiscard]] util::Expected<std::string> sha256(std::string_view data) {
+[[nodiscard]] support::Expected<std::string> sha256(std::string_view data) {
     std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
     unsigned int digest_length = 0;
     if (EVP_Digest(
@@ -41,8 +41,8 @@ constexpr std::string_view kBase64Alphabet =
             &digest_length,
             EVP_sha256(),
             nullptr) != 1) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "SHA-256 digest failed"));
     }
     return std::string(
@@ -87,7 +87,7 @@ constexpr std::string_view kBase64Alphabet =
     return result;
 }
 
-[[nodiscard]] util::Expected<std::string> base64_decode(std::string_view text) {
+[[nodiscard]] support::Expected<std::string> base64_decode(std::string_view text) {
     std::string normalized;
     normalized.reserve(text.size());
     for (const char character : text) {
@@ -102,8 +102,8 @@ constexpr std::string_view kBase64Alphabet =
     // atob is forgiving about missing padding; pad to a multiple of four.
     const auto remainder = normalized.size() % 4;
     if (remainder == 1) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::JsonParse,
             "invalid base64 length"));
     }
     if (remainder != 0) {
@@ -120,8 +120,8 @@ constexpr std::string_view kBase64Alphabet =
         if (first < 0 || second < 0 ||
             (normalized[index + 2] != '=' && third < 0) ||
             (normalized[index + 3] != '=' && fourth < 0)) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::JsonParse,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::JsonParse,
                 "invalid base64 character"));
         }
         result.push_back(static_cast<char>((first << 2) | (second >> 4)));
@@ -137,26 +137,26 @@ constexpr std::string_view kBase64Alphabet =
     return result;
 }
 
-[[nodiscard]] util::Expected<util::JsonValue> decode_jwt_payload(
+[[nodiscard]] support::Expected<support::JsonValue> decode_jwt_payload(
     std::string_view token) {
     const std::size_t first_dot = token.find('.');
     if (first_dot == std::string_view::npos) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::JsonParse,
             "JWT has no payload segment"));
     }
     const std::size_t second_dot = token.find('.', first_dot + 1);
     if (second_dot == std::string_view::npos ||
         token.find('.', second_dot + 1) != std::string_view::npos) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::JsonParse,
             "JWT is not a three-part token"));
     }
     const auto payload = token.substr(first_dot + 1, second_dot - first_dot - 1);
     if (auto decoded = base64_decode(payload); !decoded) {
         return std::unexpected(std::move(decoded.error()));
     } else {
-        if (auto json = util::read_json(*decoded); !json) {
+        if (auto json = support::read_json(*decoded); !json) {
             return std::unexpected(std::move(json.error()));
         } else {
             return std::move(*json);
@@ -179,7 +179,7 @@ std::string base64url_encode(std::string_view bytes) {
     return encoded;
 }
 
-util::Expected<PkcePair> generate_pkce() {
+support::Expected<PkcePair> generate_pkce() {
     if (auto verifier_bytes = random_bytes(32); !verifier_bytes) {
         return std::unexpected(std::move(verifier_bytes.error()));
     } else {
@@ -196,7 +196,7 @@ util::Expected<PkcePair> generate_pkce() {
     }
 }
 
-util::Expected<std::string> create_oauth_state() {
+support::Expected<std::string> create_oauth_state() {
     if (auto bytes = random_bytes(16); !bytes) {
         return std::unexpected(std::move(bytes.error()));
     } else {
@@ -370,39 +370,39 @@ AuthorizationInput parse_authorization_input(std::string_view input) {
     return AuthorizationInput{.code = trimmed};
 }
 
-util::Expected<std::string> extract_account_id(std::string_view access_token) {
+support::Expected<std::string> extract_account_id(std::string_view access_token) {
     if (auto payload = decode_jwt_payload(access_token); !payload) {
         return std::unexpected(std::move(payload.error()));
     } else {
         constexpr std::string_view kClaimPath = "https://api.openai.com/auth";
-        const auto* claim = payload->get_if<util::JsonValue::object_t>();
+        const auto* claim = payload->get_if<support::JsonValue::object_t>();
         if (claim == nullptr) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::JsonParse,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::JsonParse,
                 "JWT payload is not an object"));
         }
         const auto claim_found = claim->find(std::string{kClaimPath});
         if (claim_found == claim->end()) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::JsonParse,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::JsonParse,
                 "JWT payload has no auth claim"));
         }
-        const auto* auth = claim_found->second.get_if<util::JsonValue::object_t>();
+        const auto* auth = claim_found->second.get_if<support::JsonValue::object_t>();
         if (auth == nullptr) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::JsonParse,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::JsonParse,
                 "JWT auth claim is not an object"));
         }
         const auto account_found = auth->find("chatgpt_account_id");
         if (account_found == auth->end()) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::JsonParse,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::JsonParse,
                 "JWT auth claim has no chatgpt_account_id"));
         }
         const auto* account_id = account_found->second.get_if<std::string>();
         if (account_id == nullptr || account_id->empty()) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::JsonParse,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::JsonParse,
                 "JWT chatgpt_account_id is not a non-empty string"));
         }
         return *account_id;

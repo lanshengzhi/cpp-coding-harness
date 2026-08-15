@@ -1,6 +1,6 @@
 #include <cch/tui/TerminalImage.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -25,7 +25,7 @@
 #include <unistd.h>
 #endif
 
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal-image.ts
 // (detectCapabilities env rules, probeTmuxHyperlinks, hyperlink,
@@ -278,8 +278,8 @@ bool detail::probe_tmux_hyperlinks() {
     constexpr auto kProbeTimeout = std::chrono::milliseconds(250);
     std::array<int, 2> descriptors{};
     if (::pipe(descriptors.data()) != 0) return false;
-    cch::util::UniqueFd read_end(descriptors[0]);
-    cch::util::UniqueFd write_end(descriptors[1]);
+    cch::support::UniqueFd read_end(descriptors[0]);
+    cch::support::UniqueFd write_end(descriptors[1]);
     const auto child = ::fork();
     if (child < 0) return false;
     if (child == 0) {
@@ -491,36 +491,36 @@ bool protocol_supports_mime(
     return false;
 }
 
-util::Expected<std::string> encode_terminal_image(
+support::Expected<std::string> encode_terminal_image(
     InlineImageProtocol protocol,
     const TerminalImage& image,
     TerminalImageHandle handle) {
     if (image.region.columns == 0 || image.region.rows == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image region must be positive"));
     }
     if (!protocol_supports_mime(protocol, image.mime_type)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "Inline image format is unsupported by the terminal protocol"));
     }
     if (protocol == InlineImageProtocol::Kitty) return encode_kitty(image, handle);
     if (protocol == InlineImageProtocol::ITerm2) return encode_iterm2(image);
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "Terminal does not support inline images"));
 }
 
-util::Expected<std::string> encode_terminal_image_removal(
+support::Expected<std::string> encode_terminal_image_removal(
     InlineImageProtocol protocol,
     TerminalImageHandle handle) {
     if (protocol == InlineImageProtocol::Kitty) {
         return std::format("\x1b_Ga=d,d=I,i={},q=2\x1b\\", handle.value);
     }
     if (protocol == InlineImageProtocol::ITerm2) return std::string{};
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Validation,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Validation,
         "Terminal does not support inline images"));
 }
 

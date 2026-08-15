@@ -6,7 +6,7 @@
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Skill.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
@@ -127,16 +127,16 @@ public:
     /// not an auth failure, and streaming it fails through normal provider
     /// lookup ("Unknown provider: unknown") exactly like pi. `checkAuth`
     /// failures propagate unchanged.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid>
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid>
     preflight_auth_guidance();
 
     /// Run one prompt on the awaiting host executor through optional prompt
     /// interpretation, the stateful Agent, persistence, and event fanout.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_prompt(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_prompt(
         std::string prompt,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates,
-        std::move_only_function<util::ExpectedVoid()> on_preflight_accepted = {});
+        std::move_only_function<support::ExpectedVoid()> on_preflight_accepted = {});
 
     /// Private Native TUI path for one direct-user Shell execution. User Bash
     /// may overlap an active Agent run; a result completed mid-run stays
@@ -149,7 +149,7 @@ public:
         return services_.settings_manager &&
             services_.settings_manager->is_project_trusted();
     }
-    [[nodiscard]] boost::asio::awaitable<util::Expected<UserBashCompletion>> run_user_bash(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<UserBashCompletion>> run_user_bash(
         std::string command,
         bool exclude_from_context,
         UserBashProgressSink progress_sink);
@@ -158,7 +158,7 @@ public:
     // ── Subscriptions ──────────────────────────────────────────────────────
 
     /// Subscribe through the authoritative stateful Agent weak-observer path.
-    [[nodiscard]] util::Expected<agent::AgentEventSubscription> subscribe(
+    [[nodiscard]] support::Expected<agent::AgentEventSubscription> subscribe(
         agent::AgentEventSink sink);
 
     /// Subscribe a weak observer for session-assembly events (pi
@@ -166,24 +166,24 @@ public:
     /// `auto_retry_start`/`auto_retry_end` events. Observer failures are
     /// diagnostic observations and deactivate the observer without vetoing
     /// retry progress (ADR 0017).
-    [[nodiscard]] util::Expected<SessionEventSubscription> subscribe_session(
+    [[nodiscard]] support::Expected<SessionEventSubscription> subscribe_session(
         AgentSessionEventSink sink);
 
     // ── Input queues ───────────────────────────────────────────────────────
 
-    [[nodiscard]] util::ExpectedVoid steer(
+    [[nodiscard]] support::ExpectedVoid steer(
         std::string text,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates);
-    [[nodiscard]] util::ExpectedVoid follow_up(
+    [[nodiscard]] support::ExpectedVoid follow_up(
         std::string text,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates);
-    [[nodiscard]] util::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
-    [[nodiscard]] util::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
-    [[nodiscard]] util::ExpectedVoid clear_steering_queue();
-    [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
-    [[nodiscard]] util::ExpectedVoid clear_input_queues();
+    [[nodiscard]] support::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
+    [[nodiscard]] support::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
+    [[nodiscard]] support::ExpectedVoid clear_steering_queue();
+    [[nodiscard]] support::ExpectedVoid clear_follow_up_queue();
+    [[nodiscard]] support::ExpectedVoid clear_input_queues();
 
     // ── Model / thinking state ────────────────────────────────────────────
 
@@ -197,7 +197,7 @@ public:
     /// failure. Live Agent state advances first; a persistence failure is
     /// reported without rolling the change back (Session Event Commitment
     /// philosophy).
-    [[nodiscard]] util::Expected<std::string> set_thinking_level(
+    [[nodiscard]] support::Expected<std::string> set_thinking_level(
         std::string_view level);
 
     /// Runtime model switch (pi `AgentSession.setModel`, G3 decision 5):
@@ -210,7 +210,7 @@ public:
     /// sequence). Live Agent state advances first; a persistence failure is
     /// reported without rolling the change back (Session Event Commitment
     /// philosophy).
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> set_model(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(
         ai::Model model);
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`, G3 decision 5):
@@ -222,7 +222,7 @@ public:
     /// yields `std::nullopt`. Each cycle applies the model, appends the
     /// `model_change` entry, writes the global settings default, and re-clamps
     /// the thinking level, exactly like `set_model`.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
     cycle_model(std::string_view direction);
 
     /// Cycle the thinking level through the active model's supported set (pi
@@ -230,7 +230,7 @@ public:
     /// one, wrapping. `std::nullopt` when the active model supports no
     /// thinking. Applies `set_thinking_level` (entry + settings default on a
     /// real change).
-    [[nodiscard]] util::Expected<std::optional<std::string>> cycle_thinking_level();
+    [[nodiscard]] support::Expected<std::optional<std::string>> cycle_thinking_level();
 
     /// Replace the session's scoped-model set (pi `setScopedModels`;
     /// session-only, never persisted). An empty set restores un-scoped
@@ -246,7 +246,7 @@ public:
     /// pi `waitForIdle`: settle when an Agent run is active. The run in
     /// flight continues to its normal terminal; a no-op when idle. User Bash
     /// and manual compaction are outside the Agent run and never awaited.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> wait_for_idle();
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> wait_for_idle();
 
     /// The session tree topology for the tree selector (pi
     /// `sessionManager.getTree()` + `getLeafId()`): root nodes with resolved
@@ -254,7 +254,7 @@ public:
     /// Persisted sessions read the file's entries; in-memory sessions derive
     /// a linear tree from the live context with synthetic ids that only the
     /// tree surface understands (the in-memory store keeps no entries).
-    [[nodiscard]] util::Expected<coding_agent::SessionTreeTopology>
+    [[nodiscard]] support::Expected<coding_agent::SessionTreeTopology>
     session_tree() const;
 
     /// pi `AgentSession.navigateTree` subset (G2 decision 13): switch the
@@ -266,7 +266,7 @@ public:
     /// sessions truncate the live context. Branch summarization generation
     /// stays Deferred: no `branch_summary` is ever produced. Rejects an
     /// active Agent run with pi's verbatim error.
-    [[nodiscard]] util::Expected<coding_agent::TreeNavigationResult>
+    [[nodiscard]] support::Expected<coding_agent::TreeNavigationResult>
     navigate_tree(std::string_view target_id);
 
     /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
@@ -274,7 +274,7 @@ public:
     /// Persisted sessions write the entry; in-memory sessions keep no entry
     /// surface and the change is dropped like every in-memory store write.
     /// Verbatim pi errors: `Entry <id> not found` for an unknown target.
-    [[nodiscard]] util::ExpectedVoid set_entry_label(
+    [[nodiscard]] support::ExpectedVoid set_entry_label(
         std::string_view entry_id,
         std::optional<std::string> label);
 
@@ -287,7 +287,7 @@ public:
     /// `compaction` session entry, and rebuilds the live Agent context as
     /// compactionSummary + retained tail. Only persisted sessions (with a
     /// session file) have a tree/entry surface for compaction.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
     compact(std::string custom_instructions);
 
     /// Outcome of the automatic compaction trigger policy (pi
@@ -336,7 +336,7 @@ public:
     /// current leaf. In-memory sessions keep no entry surface and the change
     /// is dropped like every in-memory store write. Returns the stored
     /// (sanitized) name.
-    [[nodiscard]] util::Expected<std::optional<std::string>> set_session_name(
+    [[nodiscard]] support::Expected<std::optional<std::string>> set_session_name(
         std::string name);
 
     /// pi `getSessionStats` subset: per-role message counts and usage/token
@@ -391,7 +391,7 @@ public:
     /// `std::unexpected` (the TUI shows `Reload failed: ...`). Requires an
     /// idle session (streaming/compaction refusal is the TUI's job via
     /// `is_streaming`/`is_compacting`).
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AgentSessionReloadResult>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>>
     reload();
 
     /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
@@ -426,7 +426,7 @@ public:
     /// no persisted entry surface (in-memory sessions keep no entries); a
     /// persisted file that cannot be opened is an error. Reused by
     /// `session_name`, `set_session_name`, and `session_stats`.
-    [[nodiscard]] util::Expected<
+    [[nodiscard]] support::Expected<
         std::optional<harness::session::SessionTree>>
     open_session_tree() const;
 
@@ -442,11 +442,11 @@ private:
     struct PendingUserBashCommit {
         UserBashCompletion completion;
         boost::asio::steady_timer committed_signal;
-        util::ExpectedVoid commit_result;
+        support::ExpectedVoid commit_result;
     };
 
     /// Shared preflight outcome for entry points that require a non-closed session.
-    [[nodiscard]] util::ExpectedVoid reject_if_closed() const;
+    [[nodiscard]] support::ExpectedVoid reject_if_closed() const;
     /// Refresh the model Bash Tool's live PI_* session facts from the current
     /// Agent state (pi `resolveSpawnContext` reads `ctx.model`/
     /// `ctx.thinkingLevel` at execution time). Called after the Agent is
@@ -461,34 +461,34 @@ private:
     /// Shared model-switch tail (pi `setModel`/`cycleModel` after the auth
     /// decision): swap the live Agent model, append the `model_change` entry,
     /// write the global settings default, and re-clamp the thinking level.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> apply_model_switch(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> apply_model_switch(
         ai::Model model,
         std::string thinking_level);
     /// Shared preflight outcome for entry points that reject a concurrent prompt.
-    [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
+    [[nodiscard]] support::ExpectedVoid reject_if_busy() const;
     /// pi `_rebuildSystemPrompt`: build the System Prompt in pi's exact shape
     /// from the current `config_` prompt inputs, `skills_`, and tool metadata
     /// (the identity delta confined to the documentation paths). Called at
     /// construction and on `/reload`.
     [[nodiscard]] std::string rebuild_system_prompt() const;
     /// Shared preflight outcome rejecting a second concurrent User Bash.
-    [[nodiscard]] util::ExpectedVoid reject_if_user_bash_busy() const;
+    [[nodiscard]] support::ExpectedVoid reject_if_user_bash_busy() const;
 
     /// Commit one completed Bash message to Live Session State, then the
     /// Session Store. Store failure is reported on the completion diagnostic
     /// without rolling back Live Session State; a Live Session State failure
     /// is returned so the caller can reject the completion outright.
-    [[nodiscard]] util::ExpectedVoid commit_user_bash_completion(
+    [[nodiscard]] support::ExpectedVoid commit_user_bash_completion(
         UserBashCompletion& completion);
     /// Commit and release every deferred Bash completion in completion order.
     void flush_pending_user_bash();
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_agent_loop(
         ai::UserMessage prompt,
         std::stop_source stop_source);
     /// The compaction body with `compaction_active_` already set; the public
     /// `compact` wrapper resets the flag on every exit path.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
     compact_impl(std::string custom_instructions);
     /// Auto-compaction body (pi `_runAutoCompaction`): prepare, summarize
     /// through the session's `ModelRuntime`, persist, and rebuild context.
@@ -503,7 +503,7 @@ private:
     /// summarize `preparation` through the session's `ModelRuntime`, persist
     /// the `compaction` entry, and rebuild the live Agent context as
     /// compactionSummary + retained tail.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
     execute_compaction(
         const harness::session::CompactionPreparation& preparation,
         const harness::session::CompactionSettings& settings,
@@ -607,7 +607,7 @@ private:
     /// Bounded, redacted diagnostics for session-event observer failures (the
     /// session-assembly mirror of the Agent's weak-observer diagnostics,
     /// ADR 0017). Exposed through `AgentSessionSnapshot::session_event_diagnostics`.
-    std::vector<util::Error> session_event_diagnostics_;
+    std::vector<support::Error> session_event_diagnostics_;
     std::vector<std::shared_ptr<PendingUserBashCommit>> pending_user_bash_;
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;

@@ -32,7 +32,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -67,7 +67,7 @@ void drain_ready(boost::asio::io_context& io) {
 struct Running {
     tui::VirtualTerminal terminal{tui::VirtualTerminalOptions{.columns = 100, .rows = 40}};
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
 };
 
 struct Fixture {
@@ -82,7 +82,7 @@ struct Fixture {
 /// creates an in-memory session from the carried request.
 [[nodiscard]] coding_agent::tui::testing::TestSessionFactorySink in_memory_session_creator() {
     return [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
         request.no_skills = true;
         request.no_prompt_templates = true;
         return coding_agent::create_agent_session(std::move(request));
@@ -110,7 +110,7 @@ void boot(
                 .action_sink = actions->make_sink(),
                 .boot_request = std::move(request),
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
@@ -227,13 +227,13 @@ TEST_CASE(
     int replacement_calls = 0;
     actions->replace_session =
         [&replacement_calls](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+        -> support::Expected<coding_agent::CreateAgentSessionResult> {
             request.no_skills = true;
             request.no_prompt_templates = true;
             ++replacement_calls;
             if (replacement_calls == 2) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Session,
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
                     "host rejected the replacement"));
             }
             return coding_agent::create_agent_session(std::move(request));
@@ -276,7 +276,7 @@ TEST_CASE(
                     return request;
                 }(),
             }),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });

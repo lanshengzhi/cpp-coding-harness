@@ -5,7 +5,7 @@
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -45,7 +45,7 @@ public:
     SteadyAnimationTimer(const SteadyAnimationTimer&) = delete;
     SteadyAnimationTimer& operator=(const SteadyAnimationTimer&) = delete;
 
-    [[nodiscard]] util::ExpectedVoid start(
+    [[nodiscard]] support::ExpectedVoid start(
         std::chrono::milliseconds interval,
         AnimationTickSink tick) override {
         auto state = std::make_shared<State>();
@@ -86,8 +86,8 @@ public:
                 if (state_ == state) state_.reset();
             }
             stop_state(std::move(previous));
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "TUI Loader could not start its animation timer"));
         }
         stop_state(std::move(previous));
@@ -146,7 +146,7 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
     TextStyleHook spinner_style;
     TextStyleHook message_style;
     std::unique_ptr<AnimationTimer> timer;
-    std::optional<util::Error> error;
+    std::optional<support::Error> error;
     std::atomic_flag requesting = ATOMIC_FLAG_INIT;
 
     void request_render() {
@@ -155,8 +155,8 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
             request_render_sink();
         } catch (...) {
             std::lock_guard lock(state_mutex);
-            error = util::make_error(
-                util::ErrorCode::Unknown,
+            error = support::make_error(
+                support::ErrorCode::Unknown,
                 "TUI Loader render request failed",
                 "the render request callback threw an exception");
         }
@@ -174,8 +174,8 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
 
     void report_tick_failure() {
         std::lock_guard lock(state_mutex);
-        error = util::make_error(
-            util::ErrorCode::Unknown,
+        error = support::make_error(
+            support::ErrorCode::Unknown,
             "TUI Loader animation tick failed",
             "the animation callback threw an exception");
         running = false;
@@ -276,11 +276,11 @@ void Loader::set_indicator(std::optional<LoaderIndicatorOptions> indicator) {
     impl->restart();
 }
 
-util::Expected<RenderResult> Loader::render(std::size_t width) {
+support::Expected<RenderResult> Loader::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
             "TUI Loader requires a positive visible width"));
     }
     std::string frame;

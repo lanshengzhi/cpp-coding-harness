@@ -1,7 +1,7 @@
 #include "ai/api/MessageConversion.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,12 +12,12 @@ using namespace cch;
 namespace {
 
 void check_payload_fixture(
-    const util::JsonValue& actual,
+    const support::JsonValue& actual,
     std::string_view relative_path) {
     const auto expected = tests::read_pi_fixture(relative_path);
     REQUIRE(expected);
-    const auto actual_json = util::write_json(actual);
-    const auto expected_json = util::write_json(*expected);
+    const auto actual_json = support::write_json(actual);
+    const auto expected_json = support::write_json(*expected);
     REQUIRE(actual_json);
     REQUIRE(expected_json);
     CHECK(*actual_json == *expected_json);
@@ -58,7 +58,7 @@ ai::AiContext responses_context() {
     foreign_assistant.content.push_back(ai::ToolCallContent{
         .id = "call bad!|item bad!",
         .name = "lookup",
-        .arguments = util::JsonValue::object_t{{"q", "x"}},
+        .arguments = support::JsonValue::object_t{{"q", "x"}},
         .raw_arguments = "{\"q\":\"x\"}",
         .thought_signature = std::nullopt,
         .arguments_valid = true,
@@ -76,9 +76,9 @@ ai::AiContext responses_context() {
     context.tools.push_back(ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{{"q", util::JsonValue::object_t{{"type", "string"}}}}},
-            {"required", util::JsonValue::array_t{"q"}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{{"q", support::JsonValue::object_t{{"type", "string"}}}}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     });
@@ -127,7 +127,7 @@ TEST_CASE(
     assistant.provider = model.provider;
     assistant.model = model.id;
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    assistant.content.push_back(ai::tool_call_content("orphan!", "lookup", "{}", util::JsonValue::object_t{}));
+    assistant.content.push_back(ai::tool_call_content("orphan!", "lookup", "{}", support::JsonValue::object_t{}));
     context.messages.push_back(std::move(assistant));
     ai::ProviderStreamOptions options;
 
@@ -138,7 +138,7 @@ TEST_CASE(
         options);
 
     REQUIRE(payload);
-    const auto serialized = util::write_json(*payload);
+    const auto serialized = support::write_json(*payload);
     REQUIRE(serialized);
     const auto sanitized = std::string{"bad"} + "\xef\xbf\xbd";
     CHECK(serialized->find(sanitized) != std::string::npos);
@@ -208,7 +208,7 @@ TEST_CASE(
 
     REQUIRE(payload);
     CHECK(payload->at("prompt_cache_key").get_string() == std::string(64, 's'));
-    const auto serialized = util::write_json(*payload);
+    const auto serialized = support::write_json(*payload);
     REQUIRE(serialized);
     CHECK(serialized->find("msg_pi_0") != std::string::npos);
     CHECK(serialized->find("Invalid Responses thinking signature") == std::string::npos);
@@ -234,7 +234,7 @@ TEST_CASE("Codex conversion matches the frozen Responses payload golden", "[ai][
         "call bad!|foreign/item|ignored",
         "lookup",
         "{\"q\":\"x\"}",
-        util::JsonValue::object_t{{"q", "x"}}));
+        support::JsonValue::object_t{{"q", "x"}}));
     context.messages.push_back(std::move(foreign_assistant));
     context.messages.push_back(ai::ToolResultMessage{
         .tool_call_id = "call bad!|foreign/item|ignored",
@@ -256,7 +256,7 @@ TEST_CASE("Codex conversion matches the frozen Responses payload golden", "[ai][
         "other call|item bad!",
         "lookup",
         "{}",
-        util::JsonValue::object_t{}));
+        support::JsonValue::object_t{}));
     context.messages.push_back(std::move(different_model_assistant));
     context.messages.push_back(ai::ToolResultMessage{
         .tool_call_id = "other call|item bad!",
@@ -324,7 +324,7 @@ TEST_CASE("Anthropic conversion matches the frozen Kimi payload golden", "[ai][c
     foreign_assistant.content.push_back(ai::ToolCallContent{
         .id = "bad id!",
         .name = "lookup",
-        .arguments = util::JsonValue::object_t{{"q", "x"}},
+        .arguments = support::JsonValue::object_t{{"q", "x"}},
         .raw_arguments = "{\"q\":\"x\"}",
         .thought_signature = std::nullopt,
         .arguments_valid = true,
@@ -387,7 +387,7 @@ TEST_CASE(
         options);
 
     REQUIRE(payload);
-    const auto serialized = util::write_json(*payload);
+    const auto serialized = support::write_json(*payload);
     REQUIRE(serialized);
     CHECK(serialized->find("cache_control") == std::string::npos);
 }
@@ -409,7 +409,7 @@ TEST_CASE(
         context,
         options);
     REQUIRE(responses);
-    const auto responses_serialized = util::write_json(*responses);
+    const auto responses_serialized = support::write_json(*responses);
     REQUIRE(responses_serialized);
     // The string alternative is emitted as exactly one sanitized input_text
     // item and is never rewritten into the placeholder-carrying block shape.
@@ -425,7 +425,7 @@ TEST_CASE(
         context,
         options);
     REQUIRE(anthropic);
-    const auto anthropic_serialized = util::write_json(*anthropic);
+    const auto anthropic_serialized = support::write_json(*anthropic);
     REQUIRE(anthropic_serialized);
     // Anthropic emits the string alternative as a raw JSON string, untouched
     // by the non-vision image downgrade. (Cache-retention promotion of a
@@ -455,16 +455,16 @@ TEST_CASE(
         context,
         options);
     REQUIRE(payload);
-    const auto& input = payload->at("input").get<util::JsonValue::array_t>();
+    const auto& input = payload->at("input").get<support::JsonValue::array_t>();
     REQUIRE(input.size() == 1);
-    const auto& user_message = input.front().get<util::JsonValue::object_t>();
+    const auto& user_message = input.front().get<support::JsonValue::object_t>();
     CHECK(user_message.at("role").get_string() == "user");
     // The synthesized message keeps the block-array alternative: content is a
     // JSON array, never a plain string.
-    REQUIRE(user_message.at("content").holds<util::JsonValue::array_t>());
-    const auto& blocks = user_message.at("content").get<util::JsonValue::array_t>();
+    REQUIRE(user_message.at("content").holds<support::JsonValue::array_t>());
+    const auto& blocks = user_message.at("content").get<support::JsonValue::array_t>();
     REQUIRE(blocks.size() == 1);
-    const auto& block = blocks.front().get<util::JsonValue::object_t>();
+    const auto& block = blocks.front().get<support::JsonValue::object_t>();
     CHECK(block.at("type").get_string() == "input_text");
     CHECK(block.at("text").get_string().find("Ran `echo hello`") != std::string::npos);
 }

@@ -6,7 +6,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -25,7 +25,7 @@ using SessionSelectorCancelSink = std::move_only_function<void()>;
 using SessionSelectorExitSink = std::move_only_function<void()>;
 /// pi `renameSession`: appends the trimmed `session_info` name; returns an
 /// error string on failure (the status line shows it).
-using SessionSelectorRenameSink = std::move_only_function<util::ExpectedVoid(
+using SessionSelectorRenameSink = std::move_only_function<support::ExpectedVoid(
     std::string,
     std::string)>;
 using SessionSelectorInvalidateSink = std::move_only_function<void()>;
@@ -69,7 +69,7 @@ public:
     SessionSelectorComponent(const SessionSelectorComponent&) = delete;
     SessionSelectorComponent& operator=(const SessionSelectorComponent&) = delete;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
     void handle_input(const cch::tui::InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override { return false; }

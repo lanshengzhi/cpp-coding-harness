@@ -8,7 +8,7 @@ namespace cch::ai::providers {
 /// adapter. Supports `wss://` and `ws://` URLs.
 class BoostBeastWebSocketTransport final : public WebSocketTransport {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::shared_ptr<WebSocket>>> async_connect(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::shared_ptr<WebSocket>>> async_connect(
         const WebSocketConnectRequest& request) override;
 };
 

@@ -2,7 +2,7 @@
 
 #include "JsonCompare.hpp"
 #include "PiFixture.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Usage.hpp>
@@ -32,36 +32,36 @@ namespace cch::tests {
 
 [[nodiscard]] inline std::string canonical_signature_string(
     const std::string& signature) {
-    const auto parsed = util::read_json(signature);
+    const auto parsed = support::read_json(signature);
     if (!parsed) {
         return signature;
     }
-    if (!parsed->holds<util::JsonValue::object_t>() &&
-        !parsed->holds<util::JsonValue::array_t>()) {
+    if (!parsed->holds<support::JsonValue::object_t>() &&
+        !parsed->holds<support::JsonValue::array_t>()) {
         return signature;
     }
-    auto canonical = util::write_json(*parsed);
+    auto canonical = support::write_json(*parsed);
     if (!canonical) {
         return signature;
     }
     return std::move(*canonical);
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_content(
+[[nodiscard]] inline support::JsonValue project_snapshot_content(
     const ai::TextContent& content) {
-    util::JsonValue::object_t object{
+    support::JsonValue::object_t object{
         {"type", "text"},
         {"text", content.text},
     };
     if (content.text_signature) {
         object.emplace("textSignature", canonical_signature_string(*content.text_signature));
     }
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_content(
+[[nodiscard]] inline support::JsonValue project_snapshot_content(
     const ai::ThinkingContent& content) {
-    util::JsonValue::object_t object{
+    support::JsonValue::object_t object{
         {"type", "thinking"},
         {"thinking", content.thinking},
     };
@@ -73,12 +73,12 @@ namespace cch::tests {
     if (content.redacted) {
         object.emplace("redacted", true);
     }
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_tool_call(
+[[nodiscard]] inline support::JsonValue project_snapshot_tool_call(
     const ai::ToolCallContent& content) {
-    util::JsonValue::object_t object{
+    support::JsonValue::object_t object{
         {"type", "toolCall"},
         {"id", content.id},
         {"name", content.name},
@@ -89,16 +89,16 @@ namespace cch::tests {
     if (content.thought_signature) {
         object.emplace("thoughtSignature", *content.thought_signature);
     }
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_content(
+[[nodiscard]] inline support::JsonValue project_snapshot_content(
     const ai::AssistantContent& content) {
     // Dispatch explicitly: a generic-lambda call to the overload set would let
     // `ToolCallContent` bind to the `AssistantContent` overload through the
     // variant's converting constructor and recurse forever.
     return std::visit(
-        [](const auto& concrete) -> util::JsonValue {
+        [](const auto& concrete) -> support::JsonValue {
             using Content = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<Content, ai::TextContent>) {
                 return project_snapshot_content(concrete);
@@ -111,8 +111,8 @@ namespace cch::tests {
         content);
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_usage(const ai::Usage& usage) {
-    util::JsonValue::object_t object{
+[[nodiscard]] inline support::JsonValue project_snapshot_usage(const ai::Usage& usage) {
+    support::JsonValue::object_t object{
         {"input", static_cast<double>(usage.input)},
         {"output", static_cast<double>(usage.output)},
         {"cacheRead", static_cast<double>(usage.cache_read)},
@@ -127,27 +127,27 @@ namespace cch::tests {
     object.emplace("totalTokens", static_cast<double>(usage.total_tokens));
     object.emplace(
         "cost",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"input", usage.cost.input},
             {"output", usage.cost.output},
             {"cacheRead", usage.cost.cache_read},
             {"cacheWrite", usage.cost.cache_write},
             {"total", usage.cost.total},
         });
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_diagnostics(
+[[nodiscard]] inline support::JsonValue project_snapshot_diagnostics(
     const std::vector<ai::DiagnosticEntry>& diagnostics) {
-    util::JsonValue::array_t entries;
+    support::JsonValue::array_t entries;
     entries.reserve(diagnostics.size());
     for (const auto& entry : diagnostics) {
-        util::JsonValue::object_t object{
+        support::JsonValue::object_t object{
             {"type", entry.type},
             {"timestamp", 0.0},
         };
         if (entry.error) {
-            util::JsonValue::object_t error{
+            support::JsonValue::object_t error{
                 {"message", entry.error->message},
             };
             if (entry.error->name) {
@@ -161,19 +161,19 @@ namespace cch::tests {
         if (entry.details) {
             object.emplace("details", *entry.details);
         }
-        entries.push_back(util::JsonValue{std::move(object)});
+        entries.push_back(support::JsonValue{std::move(object)});
     }
-    return util::JsonValue{std::move(entries)};
+    return support::JsonValue{std::move(entries)};
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_message(
+[[nodiscard]] inline support::JsonValue project_snapshot_message(
     const ai::AssistantMessage& message) {
-    util::JsonValue::array_t content;
+    support::JsonValue::array_t content;
     content.reserve(message.content.size());
     for (const auto& block : message.content) {
         content.push_back(project_snapshot_content(block));
     }
-    util::JsonValue::object_t object{
+    support::JsonValue::object_t object{
         {"role", "assistant"},
         {"content", std::move(content)},
         {"api", message.api},
@@ -198,32 +198,32 @@ namespace cch::tests {
     if (message.error_message) {
         object.emplace("errorMessage", *message.error_message);
     }
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
 namespace detail {
 
 template <typename Event>
-[[nodiscard]] inline util::JsonValue project_indexed_event(
+[[nodiscard]] inline support::JsonValue project_indexed_event(
     std::string_view type,
     const Event& event) {
-    util::JsonValue::object_t object{
+    support::JsonValue::object_t object{
         {"type", std::string{type}},
         {"contentIndex", static_cast<double>(event.content_index)},
         {"partial", project_snapshot_message(event.partial)},
     };
-    return util::JsonValue{std::move(object)};
+    return support::JsonValue{std::move(object)};
 }
 
 } // namespace detail
 
-[[nodiscard]] inline util::JsonValue project_snapshot_event(
+[[nodiscard]] inline support::JsonValue project_snapshot_event(
     const ai::AssistantStreamEvent& event) {
     return std::visit(
-        [](const auto& concrete) -> util::JsonValue {
+        [](const auto& concrete) -> support::JsonValue {
             using Event = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<Event, ai::AssistantStartEvent>) {
-                return util::JsonValue{util::JsonValue::object_t{
+                return support::JsonValue{support::JsonValue::object_t{
                     {"type", "start"},
                     {"partial", project_snapshot_message(concrete.partial)},
                 }};
@@ -258,13 +258,13 @@ template <typename Event>
                 projected.get_object().emplace("toolCall", project_snapshot_tool_call(concrete.tool_call));
                 return projected;
             } else if constexpr (std::is_same_v<Event, ai::AssistantDoneEvent>) {
-                return util::JsonValue{util::JsonValue::object_t{
+                return support::JsonValue{support::JsonValue::object_t{
                     {"type", "done"},
                     {"reason", ai::stop_reason_to_string(concrete.reason)},
                     {"message", project_snapshot_message(concrete.message)},
                 }};
             } else {
-                return util::JsonValue{util::JsonValue::object_t{
+                return support::JsonValue{support::JsonValue::object_t{
                     {"type", "error"},
                     {"reason", ai::stop_reason_to_string(concrete.reason)},
                     {"error", project_snapshot_message(concrete.error)},
@@ -274,14 +274,14 @@ template <typename Event>
         event);
 }
 
-[[nodiscard]] inline util::JsonValue project_snapshot_events(
+[[nodiscard]] inline support::JsonValue project_snapshot_events(
     const std::vector<ai::AssistantStreamEvent>& events) {
-    util::JsonValue::array_t projected;
+    support::JsonValue::array_t projected;
     projected.reserve(events.size());
     for (const auto& event : events) {
         projected.push_back(project_snapshot_event(event));
     }
-    return util::JsonValue{std::move(projected)};
+    return support::JsonValue{std::move(projected)};
 }
 
 /// Compares the C++ stream events against a frozen full-payload TS event

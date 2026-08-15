@@ -3,8 +3,8 @@
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Provider.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 namespace cch::ai::api {
 
@@ -16,7 +16,7 @@ enum class AdapterKind {
 
 /// Build one transport-independent wire payload using the shared normalized
 /// history and streamSimple values. No provider SDK DTO crosses this boundary.
-[[nodiscard]] util::Expected<util::JsonValue> build_adapter_payload(
+[[nodiscard]] support::Expected<support::JsonValue> build_adapter_payload(
     AdapterKind adapter,
     const Model& model,
     const AiContext& context,
@@ -27,7 +27,7 @@ enum class AdapterKind {
 /// tool outputs (pi `convertResponsesMessages` with `includeSystemPrompt:
 /// false` filtered to non-output items). Used for the `previous_response_id`
 /// input delta on a reused socket.
-[[nodiscard]] util::Expected<util::JsonValue::array_t> build_responses_continuation_items(
+[[nodiscard]] support::Expected<support::JsonValue::array_t> build_responses_continuation_items(
     const Model& model,
     const AssistantMessage& assistant);
 

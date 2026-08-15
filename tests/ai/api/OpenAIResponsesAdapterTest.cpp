@@ -6,7 +6,7 @@
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,7 +34,7 @@ using tests::ScriptedTransport;
 using tests::TransportAttempt;
 
 struct RunResult {
-    util::Expected<ai::AssistantMessage> result;
+    support::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
@@ -92,11 +92,11 @@ struct RunResult {
     context.tools.push_back(ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     });
@@ -107,11 +107,11 @@ struct RunResult {
     return ai::Tool{
         .name = "lookup",
         .description = "Look up a value",
-        .parameters = util::JsonValue::object_t{
-            {"properties", util::JsonValue::object_t{
-                {"q", util::JsonValue::object_t{{"type", "string"}}},
+        .parameters = support::JsonValue::object_t{
+            {"properties", support::JsonValue::object_t{
+                {"q", support::JsonValue::object_t{{"type", "string"}}},
             }},
-            {"required", util::JsonValue::array_t{"q"}},
+            {"required", support::JsonValue::array_t{"q"}},
             {"type", "object"},
         },
     };
@@ -152,7 +152,7 @@ struct RunResult {
     auto stream = models.stream(model, std::move(context), std::move(options));
     auto result = run_async_result(
         std::move(stream).run(
-        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
             events.push_back(event);
             return {};
         }));
@@ -262,7 +262,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    REQUIRE(util::read_json(request.body));
+    REQUIRE(support::read_json(request.body));
 }
 
 TEST_CASE(
@@ -301,7 +301,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    const auto body = util::read_json(request.body);
+    const auto body = support::read_json(request.body);
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty block-array message is omitted; the string alternative becomes
@@ -351,7 +351,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    const auto body = util::read_json(request.body);
+    const auto body = support::read_json(request.body);
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty string is still emitted as exactly one input_text item.
@@ -375,7 +375,7 @@ TEST_CASE(
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
     options.transform_headers = [](ai::RequestHeaders headers)
-        -> util::Expected<ai::RequestHeaders> {
+        -> support::Expected<ai::RequestHeaders> {
         headers.insert_or_assign("Authorization", "Custom dummy-auth");
         headers.insert_or_assign("Accept", "application/x-test-sse");
         headers.insert_or_assign("Content-Type", "application/x-test-json");
@@ -400,7 +400,7 @@ TEST_CASE(
     ai::SimpleStreamOptions deletion_options;
     deletion_options.api_key = "dummy-key";
     deletion_options.transform_headers = [](ai::RequestHeaders transformed)
-        -> util::Expected<ai::RequestHeaders> {
+        -> support::Expected<ai::RequestHeaders> {
         transformed.insert_or_assign("Authorization", std::nullopt);
         transformed.insert_or_assign("Accept", std::nullopt);
         transformed.insert_or_assign("Content-Type", std::nullopt);
@@ -659,8 +659,8 @@ TEST_CASE(
         TransportAttempt{
             .head = {},
             .chunks = {},
-            .failure = util::make_error(
-                util::ErrorCode::Network,
+            .failure = support::make_error(
+                support::ErrorCode::Network,
                 "connection reset"),
         },
         TransportAttempt{
@@ -709,8 +709,8 @@ TEST_CASE(
     transport->attempts.push_back(TransportAttempt{
         .head = {},
         .chunks = {},
-        .failure = util::make_error(
-            util::ErrorCode::Cancelled,
+        .failure = support::make_error(
+            support::ErrorCode::Cancelled,
             "transport cancelled"),
     });
     const auto model = deepseek_model();

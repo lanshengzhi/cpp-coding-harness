@@ -8,7 +8,7 @@
 
 #include "ai/providers/FakeProvider.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -95,7 +95,7 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     boost::asio::io_context io;
-    std::optional<cch::util::ExpectedVoid> run_result;
+    std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     boost::asio::co_spawn(
         io,
@@ -109,7 +109,7 @@ TEST_CASE(
                     .images = {cch::ai::image_content("cG5n", "image/png")},
                 },
             }),
-        [&](std::exception_ptr exception, cch::util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
             run_exception = exception;
             run_result.emplace(std::move(result));
         });

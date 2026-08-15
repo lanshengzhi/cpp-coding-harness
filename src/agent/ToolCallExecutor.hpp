@@ -6,7 +6,7 @@
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -43,17 +43,17 @@ public:
     ToolCallExecutor(const ToolCallExecutor&) = delete;
     ToolCallExecutor& operator=(const ToolCallExecutor&) = delete;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ToolCallBatchResult>> execute(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ToolCallBatchResult>> execute(
         ToolCallBatchRequest request,
         AgentEventSink& sink);
 
 private:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ToolCallBatchResult>> execute_sequential(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ToolCallBatchResult>> execute_sequential(
         ToolCallBatchRequest request,
         const std::vector<ai::ToolCallContent>& calls,
         AgentEventSink& sink);
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ToolCallBatchResult>> execute_parallel(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ToolCallBatchResult>> execute_parallel(
         ToolCallBatchRequest request,
         const std::vector<ai::ToolCallContent>& calls,
         std::size_t max_in_flight,

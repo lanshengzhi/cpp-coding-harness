@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/support/AsyncResult.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <functional>
 #include <optional>
@@ -21,7 +21,7 @@ struct UserShellResult {
 };
 
 using UserShellUpdateSink =
-    std::move_only_function<util::ExpectedVoid(std::string_view)>;
+    std::move_only_function<support::ExpectedVoid(std::string_view)>;
 
 /// Private, independently owned direct-user Shell capability. Implementations
 /// receive the raw command only at process launch and deliver stdout/stderr in

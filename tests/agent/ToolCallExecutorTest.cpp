@@ -4,14 +4,14 @@
 #include "support/FakeTool.hpp"
 #include "support/ToolArgumentCompatibilityFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Tool.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -92,7 +92,7 @@ struct RecordingToolHandle {
             std::move(definition),
             concurrency,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 {
                     std::lock_guard lock(state->invocations_mutex);
                     state->invocations_.push_back(std::move(invocation));
@@ -130,9 +130,9 @@ struct RecordingToolHandle {
         std::move(definition),
         agent::ToolConcurrency::Exclusive,
         [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Tool,
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
                 "tool failed",
                 "boom"));
         });
@@ -165,7 +165,7 @@ struct CancellingParallelToolHandle {
             std::move(definition),
             agent::ToolConcurrency::ParallelSafe,
             [state](agent::ToolInvocation invocation, std::stop_token stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 {
                     std::lock_guard lock(state->invocations_mutex);
                     state->invocations.push_back(std::move(invocation));
@@ -179,8 +179,8 @@ struct CancellingParallelToolHandle {
                     std::chrono::milliseconds{30});
                 co_await timer.async_wait(boost::asio::use_awaitable);
                 if (stop_token.stop_requested()) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Cancelled,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Cancelled,
                         "Operation aborted"));
                 }
                 co_return agent::AsyncToolExecutionResult{};
@@ -190,7 +190,7 @@ struct CancellingParallelToolHandle {
 }
 
 struct ExecuteResult {
-    util::Expected<agent::ToolCallBatchResult> result;
+    support::Expected<agent::ToolCallBatchResult> result;
     std::vector<agent::AgentLifecycleEvent> events;
 };
 
@@ -200,7 +200,7 @@ ExecuteResult run_executor(
     const ai::AiContext& context = {},
     bool* tool_execution_started = nullptr) {
     boost::asio::thread_pool pool{4};
-    std::optional<util::Expected<agent::ToolCallBatchResult>> result;
+    std::optional<support::Expected<agent::ToolCallBatchResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
     std::mutex events_mutex;
 
@@ -212,7 +212,7 @@ ExecuteResult run_executor(
                 *tool_execution_started = true;
             }
             events.push_back(event);
-            return util::ExpectedVoid{};
+            return support::ExpectedVoid{};
         }};
 
     boost::asio::co_spawn(
@@ -245,7 +245,7 @@ ai::ToolCallContent make_call(
     std::string id,
     std::string name,
     std::string raw_arguments = R"({})") {
-    auto arguments = util::read_json(raw_arguments);
+    auto arguments = support::read_json(raw_arguments);
     ai::ToolCallContent call;
     call.id = std::move(id);
     call.name = std::move(name);
@@ -269,8 +269,8 @@ ai::AssistantMessage assistant_with_calls(
     return message;
 }
 
-util::JsonValue fixture_json(std::string_view json) {
-    auto parsed = util::read_json(json);
+support::JsonValue fixture_json(std::string_view json) {
+    auto parsed = support::read_json(json);
     REQUIRE(parsed);
     return std::move(*parsed);
 }
@@ -283,7 +283,7 @@ void check_format_fixture(
     auto tool = make_recording_tool(ai::Tool{
         "format-fixture",
         "Format fixture",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"type", "string"},
             {"format", std::string(format)},
         }});
@@ -292,11 +292,11 @@ void check_format_fixture(
 
     std::vector<ai::ToolCallContent> calls;
     if (valid) {
-        auto valid_json = util::write_json(util::JsonValue{std::string(*valid)});
+        auto valid_json = support::write_json(support::JsonValue{std::string(*valid)});
         REQUIRE(valid_json);
         calls.push_back(make_call("call-valid", "format-fixture", *valid_json));
     }
-    auto invalid_json = util::write_json(util::JsonValue{std::string(invalid)});
+    auto invalid_json = support::write_json(support::JsonValue{std::string(invalid)});
     REQUIRE(invalid_json);
     calls.push_back(make_call("call-invalid", "format-fixture", *invalid_json));
 
@@ -316,7 +316,7 @@ void check_json_format_fixture(const tests::JsonFormatFixture& fixture) {
     auto tool = make_recording_tool(ai::Tool{
         "json-format-fixture",
         "JSON format fixture",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"type", "string"},
             {"format", std::string(fixture.format)},
         }});
@@ -376,55 +376,55 @@ TEST_CASE(
 TEST_CASE(
     "sequential execution coerces and validates the foundational argument contract before hooks and tools",
     "[agent][tool-executor][tool-arguments]") {
-    const util::JsonValue contract = util::JsonValue::object_t{
+    const support::JsonValue contract = support::JsonValue::object_t{
         {"type", "object"},
-        {"properties", util::JsonValue::object_t{
-            {"enabled", util::JsonValue::object_t{{"type", "boolean"}}},
-            {"binary_number", util::JsonValue::object_t{{"type", "number"}}},
-            {"hexadecimal_number", util::JsonValue::object_t{{"type", "number"}}},
-            {"count", util::JsonValue::object_t{{"type", "number"}}},
-            {"label", util::JsonValue::object_t{{"type", "string"}}},
-            {"large_label", util::JsonValue::object_t{{"type", "string"}}},
-            {"scientific_label", util::JsonValue::object_t{{"type", "string"}}},
-            {"tiny_label", util::JsonValue::object_t{{"type", "string"}}},
-            {"spaced_number", util::JsonValue::object_t{{"type", "number"}}},
-            {"nothing", util::JsonValue::object_t{{"type", "null"}}},
-            {"values", util::JsonValue::object_t{{"type", "array"}}},
-            {"operation", util::JsonValue::object_t{
+        {"properties", support::JsonValue::object_t{
+            {"enabled", support::JsonValue::object_t{{"type", "boolean"}}},
+            {"binary_number", support::JsonValue::object_t{{"type", "number"}}},
+            {"hexadecimal_number", support::JsonValue::object_t{{"type", "number"}}},
+            {"count", support::JsonValue::object_t{{"type", "number"}}},
+            {"label", support::JsonValue::object_t{{"type", "string"}}},
+            {"large_label", support::JsonValue::object_t{{"type", "string"}}},
+            {"scientific_label", support::JsonValue::object_t{{"type", "string"}}},
+            {"tiny_label", support::JsonValue::object_t{{"type", "string"}}},
+            {"spaced_number", support::JsonValue::object_t{{"type", "number"}}},
+            {"nothing", support::JsonValue::object_t{{"type", "null"}}},
+            {"values", support::JsonValue::object_t{{"type", "array"}}},
+            {"operation", support::JsonValue::object_t{
                 {"type", "string"},
-                {"enum", util::JsonValue::array_t{"read", "write"}},
+                {"enum", support::JsonValue::array_t{"read", "write"}},
             }},
-            {"metadata", util::JsonValue::object_t{
+            {"metadata", support::JsonValue::object_t{
                 {"type", "object"},
                 {"additionalProperties", true},
             }},
-            {"dynamic", util::JsonValue::object_t{
+            {"dynamic", support::JsonValue::object_t{
                 {"type", "object"},
-                {"additionalProperties", util::JsonValue::object_t{
+                {"additionalProperties", support::JsonValue::object_t{
                     {"type", "object"},
-                    {"properties", util::JsonValue::object_t{
-                        {"active", util::JsonValue::object_t{{"type", "boolean"}}},
+                    {"properties", support::JsonValue::object_t{
+                        {"active", support::JsonValue::object_t{{"type", "boolean"}}},
                     }},
-                    {"required", util::JsonValue::array_t{"active"}},
+                    {"required", support::JsonValue::array_t{"active"}},
                     {"additionalProperties", false},
                 }},
             }},
-            {"settings", util::JsonValue::object_t{
+            {"settings", support::JsonValue::object_t{
                 {"type", "object"},
-                {"properties", util::JsonValue::object_t{
-                    {"level", util::JsonValue::object_t{
-                        {"type", util::JsonValue::array_t{"integer", "null"}},
+                {"properties", support::JsonValue::object_t{
+                    {"level", support::JsonValue::object_t{
+                        {"type", support::JsonValue::array_t{"integer", "null"}},
                         {"const", 2},
                     }},
                 }},
-                {"required", util::JsonValue::array_t{"level"}},
+                {"required", support::JsonValue::array_t{"level"}},
                 {"additionalProperties", false},
             }},
         }},
-        {"required", util::JsonValue::array_t{
+        {"required", support::JsonValue::array_t{
             "enabled", "binary_number", "hexadecimal_number", "count", "label", "large_label",
             "scientific_label", "tiny_label", "spaced_number", "nothing", "values", "operation", "metadata", "dynamic", "settings"}},
-        {"additionalProperties", util::JsonValue::object_t{{"type", "integer"}}},
+        {"additionalProperties", support::JsonValue::object_t{{"type", "integer"}}},
     };
 
     agent::ToolRegistry registry;
@@ -432,12 +432,12 @@ TEST_CASE(
     auto* tool_ptr = tool.state.get();
     REQUIRE(registry.add(std::move(tool.tool)));
 
-    std::optional<util::JsonValue> hook_arguments;
+    std::optional<support::JsonValue> hook_arguments;
     std::optional<std::string> hook_raw_arguments;
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         hook_arguments = context.args;
         hook_raw_arguments = context.tool_call.raw_arguments;
         return agent::BeforeToolCallResult{};
@@ -458,8 +458,8 @@ TEST_CASE(
     REQUIRE(hook_raw_arguments);
     const auto invocation = tool_ptr->first_invocation();
     REQUIRE(invocation);
-    auto hook_json = util::write_json(*hook_arguments);
-    auto invocation_json = util::write_json(invocation->arguments);
+    auto hook_json = support::write_json(*hook_arguments);
+    auto invocation_json = support::write_json(invocation->arguments);
     REQUIRE(hook_json);
     REQUIRE(invocation_json);
     CHECK(*hook_json ==
@@ -480,7 +480,7 @@ TEST_CASE(
     "radix coercion uses the recorded JavaScript number rounding",
     "[agent][tool-executor][tool-arguments]") {
     constexpr double expected = 3.9821406114177461e64;
-    const util::JsonValue contract = util::JsonValue::object_t{
+    const support::JsonValue contract = support::JsonValue::object_t{
         {"type", "number"},
         {"const", expected},
     };
@@ -489,11 +489,11 @@ TEST_CASE(
     auto* tool_ptr = tool.state.get();
     REQUIRE(registry.add(std::move(tool.tool)));
 
-    std::optional<util::JsonValue> hook_arguments;
+    std::optional<support::JsonValue> hook_arguments;
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         hook_arguments = context.args;
         return agent::BeforeToolCallResult{};
     });
@@ -541,7 +541,7 @@ TEST_CASE(
     REQUIRE_FALSE(run.result->results[0].is_error);
     const auto invocation = tool_ptr->first_invocation();
     REQUIRE(invocation);
-    auto prepared = util::write_json(invocation->arguments);
+    auto prepared = support::write_json(invocation->arguments);
     REQUIRE(prepared);
     CHECK(*prepared == tests::kRecursiveCollectionExpected);
 }
@@ -619,11 +619,11 @@ TEST_CASE(
     auto max_one_tool = make_recording_tool(ai::Tool{
         "max-one",
         "Maximum one TypeBox string unit",
-        util::JsonValue::object_t{{"type", "string"}, {"maxLength", 1}}});
+        support::JsonValue::object_t{{"type", "string"}, {"maxLength", 1}}});
     auto min_two_tool = make_recording_tool(ai::Tool{
         "min-two",
         "Minimum two TypeBox string units",
-        util::JsonValue::object_t{{"type", "string"}, {"minLength", 2}}});
+        support::JsonValue::object_t{{"type", "string"}, {"minLength", 2}}});
     auto* max_one_ptr = max_one_tool.state.get();
     auto* min_two_ptr = min_two_tool.state.get();
     REQUIRE(registry.add(std::move(max_one_tool.tool)));
@@ -670,29 +670,29 @@ TEST_CASE(
     auto denied_items = make_recording_tool(ai::Tool{
         "denied-items",
         "Denied items",
-        util::JsonValue::object_t{{"type", "array"}, {"items", false}}});
+        support::JsonValue::object_t{{"type", "array"}, {"items", false}}});
     auto tuple_items = make_recording_tool(ai::Tool{
         "tuple-items",
         "Tuple items",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"type", "array"},
-            {"items", util::JsonValue::array_t{
-                util::JsonValue::object_t{{"type", "string"}, {"pattern", "^[a-z]+$"}},
+            {"items", support::JsonValue::array_t{
+                support::JsonValue::object_t{{"type", "string"}, {"pattern", "^[a-z]+$"}},
             }},
-            {"additionalItems", util::JsonValue::object_t{{"type", "integer"}}},
+            {"additionalItems", support::JsonValue::object_t{{"type", "integer"}}},
         }});
     auto code_point_pattern = make_recording_tool(ai::Tool{
         "code-point-pattern",
         "Code point pattern",
-        util::JsonValue::object_t{{"type", "string"}, {"pattern", "^.$"}}});
+        support::JsonValue::object_t{{"type", "string"}, {"pattern", "^.$"}}});
     auto four_point_pattern = make_recording_tool(ai::Tool{
         "four-point-pattern",
         "Four point pattern",
-        util::JsonValue::object_t{{"type", "string"}, {"pattern", "^....$"}}});
+        support::JsonValue::object_t{{"type", "string"}, {"pattern", "^....$"}}});
     auto unsupported_pattern = make_recording_tool(ai::Tool{
         "unsupported-pattern",
         "Unsupported pattern",
-        util::JsonValue::object_t{{"type", "string"}, {"pattern", R"(^\p{Emoji}$)"}}});
+        support::JsonValue::object_t{{"type", "string"}, {"pattern", R"(^\p{Emoji}$)"}}});
     auto* denied_ptr = denied_items.state.get();
     auto* tuple_ptr = tuple_items.state.get();
     auto* code_point_ptr = code_point_pattern.state.get();
@@ -746,16 +746,16 @@ TEST_CASE(
     auto branch_tool = make_recording_tool(ai::Tool{
         "branch",
         "Branch",
-        util::JsonValue::object_t{{"anyOf", util::JsonValue::array_t{
-            util::JsonValue::object_t{{"type", "integer"}, {"minimum", 2}},
-            util::JsonValue::object_t{{"type", "string"}, {"const", "fallback"}},
+        support::JsonValue::object_t{{"anyOf", support::JsonValue::array_t{
+            support::JsonValue::object_t{{"type", "integer"}, {"minimum", 2}},
+            support::JsonValue::object_t{{"type", "string"}, {"const", "fallback"}},
         }}}});
     auto ambiguous_tool = make_recording_tool(ai::Tool{
         "ambiguous",
         "Ambiguous",
-        util::JsonValue::object_t{{"oneOf", util::JsonValue::array_t{
-            util::JsonValue::object_t{{"type", "number"}},
-            util::JsonValue::object_t{{"type", "integer"}},
+        support::JsonValue::object_t{{"oneOf", support::JsonValue::array_t{
+            support::JsonValue::object_t{{"type", "number"}},
+            support::JsonValue::object_t{{"type", "integer"}},
         }}}});
     auto* composed_ptr = composed_tool.state.get();
     auto* branch_ptr = branch_tool.state.get();
@@ -780,7 +780,7 @@ TEST_CASE(
     CHECK(run.result->results[2].is_error);
     const auto invocation = composed_ptr->first_invocation();
     REQUIRE(invocation);
-    auto prepared = util::write_json(invocation->arguments);
+    auto prepared = support::write_json(invocation->arguments);
     REQUIRE(prepared);
     CHECK(*prepared == tests::kCompositionExpected);
     CHECK(branch_ptr->invocation_count() == 0);
@@ -801,7 +801,7 @@ TEST_CASE(
     auto annotation_tool = make_recording_tool(ai::Tool{
         "annotation-format",
         "Annotation format",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"type", "string"},
             {"format", "project-local-identifier"},
         }});
@@ -834,32 +834,32 @@ TEST_CASE(
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
     agent::ToolRegistry registry;
     std::vector<RecordingToolState*> rejected_tools;
-    auto add_rejected = [&](std::string name, util::JsonValue contract) {
+    auto add_rejected = [&](std::string name, support::JsonValue contract) {
         auto tool = make_recording_tool(
             ai::Tool{name, "Rejected fixture", std::move(contract)});
         rejected_tools.push_back(tool.state.get());
         REQUIRE(registry.add(std::move(tool.tool)));
     };
-    add_rejected("dialect", util::JsonValue::object_t{
+    add_rejected("dialect", support::JsonValue::object_t{
         {"$schema", "https://example.test/unsupported-schema"},
         {"type", "object"},
     });
-    add_rejected("vocabulary", util::JsonValue::object_t{
-        {"$vocabulary", util::JsonValue::object_t{{"https://example.test/vocab", true}}},
+    add_rejected("vocabulary", support::JsonValue::object_t{
+        {"$vocabulary", support::JsonValue::object_t{{"https://example.test/vocab", true}}},
         {"type", "object"},
     });
-    add_rejected("reference", util::JsonValue::object_t{{"$ref", "#/$defs/missing"}});
-    add_rejected("contains", util::JsonValue::object_t{
+    add_rejected("reference", support::JsonValue::object_t{{"$ref", "#/$defs/missing"}});
+    add_rejected("contains", support::JsonValue::object_t{
         {"type", "array"},
-        {"contains", util::JsonValue::object_t{{"type", "string"}}},
+        {"contains", support::JsonValue::object_t{{"type", "string"}}},
     });
-    add_rejected("dialect-items", util::JsonValue::object_t{
+    add_rejected("dialect-items", support::JsonValue::object_t{
         {"$schema", "https://json-schema.org/draft/2020-12/schema"},
         {"type", "array"},
-        {"items", util::JsonValue::array_t{util::JsonValue::object_t{{"type", "string"}}}},
+        {"items", support::JsonValue::array_t{support::JsonValue::object_t{{"type", "string"}}}},
     });
-    add_rejected("mandatory-format", util::JsonValue::object_t{
-        {"$vocabulary", util::JsonValue::object_t{
+    add_rejected("mandatory-format", support::JsonValue::object_t{
+        {"$vocabulary", support::JsonValue::object_t{
             {"https://json-schema.org/draft/2020-12/vocab/format-assertion", true},
         }},
         {"type", "string"},
@@ -869,13 +869,13 @@ TEST_CASE(
     auto annotation_tool = make_recording_tool(ai::Tool{
         "annotations",
         "Annotations",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"$schema", "http://json-schema.org/draft-07/schema#"},
-            {"$vocabulary", util::JsonValue::object_t{{"https://example.test/optional", false}}},
+            {"$vocabulary", support::JsonValue::object_t{{"https://example.test/optional", false}}},
             {"type", "number"},
             {"minimum", 2},
             {"format", "number-format-is-annotation"},
-            {"x-contract", util::JsonValue::object_t{{"minimum", 100}}},
+            {"x-contract", support::JsonValue::object_t{{"minimum", 100}}},
         }});
     auto* annotation_ptr = annotation_tool.state.get();
     REQUIRE(registry.add(std::move(annotation_tool.tool)));
@@ -906,35 +906,35 @@ TEST_CASE(
 TEST_CASE(
     "sequential schema-invalid arguments are isolated before hooks and tools",
     "[agent][tool-executor][tool-arguments]") {
-    const util::JsonValue contract = util::JsonValue::object_t{
+    const support::JsonValue contract = support::JsonValue::object_t{
         {"type", "object"},
         {"description", "annotation remains non-executable"},
         {"x-contract-note", "extension remains non-executable"},
-        {"properties", util::JsonValue::object_t{
-            {"a.b", util::JsonValue::object_t{{"const", "safe"}}},
-            {"a", util::JsonValue::object_t{
+        {"properties", support::JsonValue::object_t{
+            {"a.b", support::JsonValue::object_t{{"const", "safe"}}},
+            {"a", support::JsonValue::object_t{
                 {"type", "object"},
-                {"properties", util::JsonValue::object_t{
-                    {"b", util::JsonValue::object_t{{"const", "safe"}}},
+                {"properties", support::JsonValue::object_t{
+                    {"b", support::JsonValue::object_t{{"const", "safe"}}},
                 }},
             }},
-            {"revision", util::JsonValue::object_t{
+            {"revision", support::JsonValue::object_t{
                 {"type", "integer"},
                 {"const", 1},
             }},
-            {"settings", util::JsonValue::object_t{
+            {"settings", support::JsonValue::object_t{
                 {"type", "object"},
-                {"properties", util::JsonValue::object_t{
-                    {"mode", util::JsonValue::object_t{
+                {"properties", support::JsonValue::object_t{
+                    {"mode", support::JsonValue::object_t{
                         {"type", "string"},
-                        {"enum", util::JsonValue::array_t{"safe"}},
+                        {"enum", support::JsonValue::array_t{"safe"}},
                     }},
                 }},
-                {"required", util::JsonValue::array_t{"mode"}},
+                {"required", support::JsonValue::array_t{"mode"}},
                 {"additionalProperties", false},
             }},
         }},
-        {"required", util::JsonValue::array_t{"a.b", "a", "revision", "settings"}},
+        {"required", support::JsonValue::array_t{"a.b", "a", "revision", "settings"}},
         {"additionalProperties", false},
     };
 
@@ -947,7 +947,7 @@ TEST_CASE(
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext&)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         ++before_calls;
         return agent::BeforeToolCallResult{};
     });
@@ -983,16 +983,16 @@ TEST_CASE(
 TEST_CASE(
     "sequential preparation failures complete their lifecycle without suppressing unrelated calls",
     "[agent][tool-executor][tool-arguments]") {
-    const auto strict_contract = util::JsonValue::object_t{
+    const auto strict_contract = support::JsonValue::object_t{
         {"type", "object"},
-        {"required", util::JsonValue::array_t{std::string(6000, 'x')}},
+        {"required", support::JsonValue::array_t{std::string(6000, 'x')}},
         {"additionalProperties", false},
     };
-    const auto unsupported_contract = util::JsonValue::object_t{
+    const auto unsupported_contract = support::JsonValue::object_t{
         {"type", "array"},
-        {"contains", util::JsonValue::object_t{{"type", "string"}}},
+        {"contains", support::JsonValue::object_t{{"type", "string"}}},
     };
-    const auto compile_invalid_contract = util::JsonValue::object_t{
+    const auto compile_invalid_contract = support::JsonValue::object_t{
         {"type", "object"},
         {"properties", false},
     };
@@ -1003,13 +1003,13 @@ TEST_CASE(
     auto invalid_tool = make_recording_tool(
         ai::Tool{"invalid", "Invalid", strict_contract});
     auto denied_tool = make_recording_tool(
-        ai::Tool{"denied", "Denied", util::JsonValue{false}});
+        ai::Tool{"denied", "Denied", support::JsonValue{false}});
     auto unsupported_tool = make_recording_tool(
         ai::Tool{"unsupported", "Unsupported", unsupported_contract});
     auto compile_invalid_tool = make_recording_tool(
         ai::Tool{"compile-invalid", "Compile invalid", compile_invalid_contract});
     auto valid_tool = make_recording_tool(
-        ai::Tool{"valid", "Valid", util::JsonValue{true}});
+        ai::Tool{"valid", "Valid", support::JsonValue{true}});
     auto* malformed_ptr = malformed_tool.state.get();
     auto* invalid_ptr = invalid_tool.state.get();
     auto* denied_ptr = denied_tool.state.get();
@@ -1029,7 +1029,7 @@ TEST_CASE(
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         const bool arguments_are_boolean = context.args.holds<bool>();
         before_hook_observed_expected_call =
             tool_execution_started && context.tool_call.name == "valid" &&
@@ -1109,7 +1109,7 @@ TEST_CASE(
     auto malformed_tool = make_recording_tool(
         ai::Tool{"malformed", "Malformed", test::empty_object_tool_argument_contract()});
     auto valid_tool = make_recording_tool(
-        ai::Tool{"valid", "Valid", util::JsonValue{true}});
+        ai::Tool{"valid", "Valid", support::JsonValue{true}});
     auto* malformed_ptr = malformed_tool.state.get();
     auto* valid_ptr = valid_tool.state.get();
     REQUIRE(registry.add(std::move(malformed_tool.tool)));
@@ -1120,7 +1120,7 @@ TEST_CASE(
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         ++before_calls;
         before_hook_observed_valid_call = context.tool_call.name == "valid";
         return agent::BeforeToolCallResult{};
@@ -1172,9 +1172,9 @@ TEST_CASE(
     CHECK(*end_diagnostic == diagnostic);
     CHECK(*message_diagnostic == diagnostic);
 
-    auto encoded = util::write_json(util::JsonValue{diagnostic});
+    auto encoded = support::write_json(support::JsonValue{diagnostic});
     REQUIRE(encoded);
-    auto decoded = util::read_json(*encoded);
+    auto decoded = support::read_json(*encoded);
     REQUIRE(decoded);
     CHECK(decoded->get_string() == diagnostic);
 
@@ -1186,12 +1186,12 @@ TEST_CASE(
 TEST_CASE(
     "schema validation diagnostics keep credential-like locations actionable",
     "[agent][tool-executor][tool-arguments][issue33]") {
-    const auto contract = util::JsonValue::object_t{
+    const auto contract = support::JsonValue::object_t{
         {"type", "object"},
-        {"properties", util::JsonValue::object_t{
-            {"api_key", util::JsonValue::object_t{{"type", "string"}}},
+        {"properties", support::JsonValue::object_t{
+            {"api_key", support::JsonValue::object_t{{"type", "string"}}},
         }},
-        {"required", util::JsonValue::array_t{"api_key"}},
+        {"required", support::JsonValue::array_t{"api_key"}},
         {"additionalProperties", false},
     };
 
@@ -1234,9 +1234,9 @@ TEST_CASE(
     CHECK(diagnostic.size() <= 4096);
     CHECK(diagnostic.find("missing-") != std::string::npos);
     CHECK(diagnostic.find("argument location: root") != std::string::npos);
-    auto encoded = util::write_json(util::JsonValue{diagnostic});
+    auto encoded = support::write_json(support::JsonValue{diagnostic});
     REQUIRE(encoded);
-    auto decoded = util::read_json(*encoded);
+    auto decoded = support::read_json(*encoded);
     REQUIRE(decoded);
     CHECK(decoded->get_string() == diagnostic);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
@@ -1292,8 +1292,8 @@ TEST_CASE(
         std::stop_token) {
         (void)stop_source.request_stop();
         return support::AsyncResult<agent::BeforeToolCallResult>{
-            std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "Operation aborted"))};
     };
     agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
@@ -1427,9 +1427,9 @@ TEST_CASE(
         agent::BeforeToolCallHook before_hook =
             agent::adapt_sync_before_tool_call(
                 [&](const agent::BeforeToolCallContext& context)
-            -> util::Expected<agent::BeforeToolCallResult> {
+            -> support::Expected<agent::BeforeToolCallResult> {
             snapshot.before_hook_ids.push_back(context.tool_call.id);
-            auto encoded = util::write_json(context.args);
+            auto encoded = support::write_json(context.args);
             if (!encoded) {
                 snapshot.before_hook_arguments_encoded = false;
                 return std::unexpected(std::move(encoded.error()));
@@ -1503,7 +1503,7 @@ TEST_CASE(
     agent::ToolRegistry registry;
 
     auto add_tool = [&](std::string name,
-                        util::JsonValue contract,
+                        support::JsonValue contract,
                         agent::ToolConcurrency concurrency = agent::ToolConcurrency::ParallelSafe,
                         std::string result = "ok",
                         std::chrono::milliseconds delay = std::chrono::milliseconds{}) {
@@ -1524,9 +1524,9 @@ TEST_CASE(
         "invalid", test::integer_value_tool_argument_contract());
     auto* unsupported = add_tool(
         "unsupported",
-        util::JsonValue::object_t{
+        support::JsonValue::object_t{
             {"type", "array"},
-            {"contains", util::JsonValue::object_t{{"type", "string"}}},
+            {"contains", support::JsonValue::object_t{{"type", "string"}}},
         });
     auto* blocked = add_tool(
         "blocked", test::empty_object_tool_argument_contract());
@@ -1547,7 +1547,7 @@ TEST_CASE(
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         hook_ids.push_back(context.tool_call.id);
         if (context.tool_call.id == "call-blocked") {
             return agent::BeforeToolCallResult{true, "blocked by policy"};
@@ -1769,7 +1769,7 @@ TEST_CASE(
     agent::AfterToolCallHook after_hook = [&](agent::AfterToolCallContext, std::stop_token) {
         enter_hook();
         return ai::detail::make_async_result(
-            [&active_hooks]() -> boost::asio::awaitable<util::Expected<agent::AfterToolCallResult>> {
+            [&active_hooks]() -> boost::asio::awaitable<support::Expected<agent::AfterToolCallResult>> {
                 auto timer = boost::asio::steady_timer(
                     co_await boost::asio::this_coro::executor,
                     std::chrono::milliseconds{15});
@@ -1789,9 +1789,9 @@ TEST_CASE(
     ai::AiContext context;
 
     boost::asio::thread_pool pool{4};
-    std::optional<util::Expected<agent::ToolCallBatchResult>> result;
+    std::optional<support::Expected<agent::ToolCallBatchResult>> result;
     agent::AgentEventSink sink{
-        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
                 enter_lifecycle_callback();
             }
@@ -1845,7 +1845,7 @@ TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][to
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext&)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         return agent::BeforeToolCallResult{true, "blocked"};
     });
     agent::ToolCallExecutorOptions options;
@@ -1872,7 +1872,7 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{
             std::vector<ai::Content>{ai::text_content("overridden")},
             std::nullopt,
@@ -1931,7 +1931,7 @@ namespace {
         concurrency,
         [is_error, terminate, result_text = std::move(result_text)](
             agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             co_return agent::AsyncToolExecutionResult{
                 .content = std::vector<ai::Content>{ai::text_content(result_text)},
                 .details = std::nullopt,
@@ -1956,7 +1956,7 @@ TEST_CASE(
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
             [&](const agent::AfterToolCallContext& context)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         hook_saw_error = context.is_error;
         return agent::AfterToolCallResult{};
     });
@@ -1987,7 +1987,7 @@ TEST_CASE(
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
             [&](const agent::AfterToolCallContext& context)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         hook_saw_error = context.is_error;
         return agent::AfterToolCallResult{};
     });
@@ -2016,7 +2016,7 @@ TEST_CASE(
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
             [&](const agent::AfterToolCallContext&)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         ++after_calls;
         return agent::AfterToolCallResult{};
     });
@@ -2049,10 +2049,10 @@ TEST_CASE(
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         if (context.tool_call.id == "call-1") {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Tool, "policy rejected"));
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool, "policy rejected"));
         }
         return agent::BeforeToolCallResult{};
     });
@@ -2093,10 +2093,10 @@ TEST_CASE(
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext& context)
-        -> util::Expected<agent::BeforeToolCallResult> {
+        -> support::Expected<agent::BeforeToolCallResult> {
         if (context.tool_call.id == "call-1") {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Tool, "policy rejected"));
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool, "policy rejected"));
         }
         return agent::BeforeToolCallResult{};
     });
@@ -2134,10 +2134,10 @@ TEST_CASE(
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext& context)
-        -> util::Expected<agent::AfterToolCallResult> {
+        -> support::Expected<agent::AfterToolCallResult> {
         if (context.tool_call.id == "call-1") {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Tool, "post-processor failed"));
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool, "post-processor failed"));
         }
         return agent::AfterToolCallResult{};
     });

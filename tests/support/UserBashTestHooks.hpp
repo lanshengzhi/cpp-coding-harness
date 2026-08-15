@@ -2,7 +2,7 @@
 
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 
@@ -28,9 +28,9 @@ namespace cch::tests {
     return count;
 }
 
-using PromptResult = std::optional<util::ExpectedVoid>;
+using PromptResult = std::optional<support::ExpectedVoid>;
 using BashResult =
-    std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>>;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>>;
 
 inline void spawn_prompt(
     boost::asio::io_context& io,
@@ -40,7 +40,7 @@ inline void spawn_prompt(
     boost::asio::co_spawn(
         io,
         session.prompt(std::move(text)),
-        [&slot](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&slot](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             slot.emplace(std::move(result));
         });
@@ -58,11 +58,11 @@ inline void spawn_bash(
             std::move(command),
             false,
             [](const coding_agent::runtime::UserBashProgress&) {
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             }),
         [&slot](
             std::exception_ptr exception,
-            util::Expected<coding_agent::runtime::UserBashCompletion> result) {
+            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
             REQUIRE(exception == nullptr);
             slot.emplace(std::move(result));
         });

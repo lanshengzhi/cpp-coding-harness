@@ -1,5 +1,5 @@
 #include "coding_agent/SkillFrontmatterParser.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include <cch/support/Error.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -147,7 +147,7 @@ TEST_CASE("parseFrontmatter fails on malformed line with no colon", "[coding_age
 
     auto result = coding_agent::parseFrontmatter(content);
     REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().code == support::ErrorCode::Validation);
 }
 
 TEST_CASE("parseFrontmatter handles content starting with --- but not \\n", "[coding_agent][skill][u2]") {

@@ -1,6 +1,6 @@
 #include "coding_agent/tui/FooterDataProvider.hpp"
 
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -40,8 +40,8 @@ namespace {
     const std::filesystem::path& repo_dir) {
     int pipe_fds[2];
     if (::pipe(pipe_fds) < 0) return std::nullopt;
-    util::UniqueFd read_end{pipe_fds[0]};
-    util::UniqueFd write_end{pipe_fds[1]};
+    support::UniqueFd read_end{pipe_fds[0]};
+    support::UniqueFd write_end{pipe_fds[1]};
     const auto pid = ::fork();
     if (pid < 0) return std::nullopt;
     if (pid == 0) {
@@ -50,7 +50,7 @@ namespace {
         (void)::dup2(write_end.get(), STDOUT_FILENO);
         (void)read_end.close();
         (void)write_end.close();
-        util::UniqueFd null_fd{::open("/dev/null", O_RDWR)};
+        support::UniqueFd null_fd{::open("/dev/null", O_RDWR)};
         if (null_fd) {
             (void)::dup2(null_fd.get(), STDIN_FILENO);
             (void)::dup2(null_fd.get(), STDERR_FILENO);

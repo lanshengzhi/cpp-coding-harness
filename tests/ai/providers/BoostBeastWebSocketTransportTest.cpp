@@ -13,10 +13,10 @@ using namespace cch;
 
 namespace {
 
-util::Expected<std::shared_ptr<ai::providers::WebSocket>> run_connect(
+support::Expected<std::shared_ptr<ai::providers::WebSocket>> run_connect(
     ai::providers::WebSocketConnectRequest request) {
     boost::asio::io_context io;
-    std::optional<util::Expected<std::shared_ptr<ai::providers::WebSocket>>> result;
+    std::optional<support::Expected<std::shared_ptr<ai::providers::WebSocket>>> result;
 
     ai::providers::BoostBeastWebSocketTransport transport;
     boost::asio::co_spawn(
@@ -44,7 +44,7 @@ TEST_CASE(
     auto connection = run_connect(std::move(request));
 
     REQUIRE_FALSE(connection);
-    CHECK(connection.error().code == util::ErrorCode::Validation);
+    CHECK(connection.error().code == support::ErrorCode::Validation);
     CHECK(connection.error().detail.find("ws") != std::string::npos);
 }
 
@@ -57,7 +57,7 @@ TEST_CASE(
     auto connection = run_connect(std::move(request));
 
     REQUIRE_FALSE(connection);
-    CHECK(connection.error().code == util::ErrorCode::Validation);
+    CHECK(connection.error().code == support::ErrorCode::Validation);
     CHECK(connection.error().detail.find("host") != std::string::npos);
 }
 
@@ -74,6 +74,6 @@ TEST_CASE(
     auto connection = run_connect(std::move(request));
 
     REQUIRE_FALSE(connection);
-    CHECK(connection.error().code == util::ErrorCode::Cancelled);
+    CHECK(connection.error().code == support::ErrorCode::Cancelled);
     CHECK(connection.error().message == "WebSocket transport cancelled");
 }

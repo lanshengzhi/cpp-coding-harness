@@ -16,7 +16,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -148,22 +148,22 @@ struct RichThinkingSession {
 
 class FakeClipboardReader final : public coding_agent::tui::AsyncClipboardReader {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<coding_agent::tui::ClipboardImage>>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<coding_agent::tui::ClipboardImage>>>
     read_image() override {
         if (image_error) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "clipboard image unavailable"));
         }
         if (next_image >= images.size()) co_return std::nullopt;
         co_return std::optional<coding_agent::tui::ClipboardImage>{images[next_image++]};
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>>
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
     read_text() override {
         if (text_error) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Process,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Process,
                 "clipboard text unavailable"));
         }
         co_return text;
@@ -186,10 +186,10 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         if (calls++ == 0) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Provider,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Provider,
                 "provider failed",
                 std::format(
                     "{} api_key=sk-abcdefghijklmnopqrstuvwxyz123456 {}",
@@ -210,38 +210,38 @@ public:
 
 class FailingStartTerminal final : public tui::Terminal {
 public:
-    [[nodiscard]] util::ExpectedVoid start(
+    [[nodiscard]] support::ExpectedVoid start(
         tui::TerminalInputSink,
         tui::TerminalResizeSink) override {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "terminal acquisition failed",
             std::format(
                 "api_key=sk-abcdefghijklmnopqrstuvwxyz123456 {}",
                 std::string(9000, 'x'))));
     }
-    [[nodiscard]] util::ExpectedVoid stop() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid stop() override { return {}; }
     [[nodiscard]] tui::TerminalDimensions dimensions() const override { return {}; }
     [[nodiscard]] tui::TerminalCapabilities capabilities() const override { return {}; }
     [[nodiscard]] tui::TerminalModeState modes() const override { return {}; }
-    [[nodiscard]] util::ExpectedVoid clear_screen() override { return {}; }
-    [[nodiscard]] util::ExpectedVoid write(std::string_view) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_cursor_visible(bool) override { return {}; }
-    [[nodiscard]] util::Expected<tui::TerminalImageHandle> place_image(
+    [[nodiscard]] support::ExpectedVoid clear_screen() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
     }
-    [[nodiscard]] util::ExpectedVoid remove_image(
+    [[nodiscard]] support::ExpectedVoid remove_image(
         tui::TerminalImageHandle,
         const tui::CellRegion&) override {
         return {};
     }
-    [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override { return {}; }
-    [[nodiscard]] util::ExpectedVoid end_synchronized_update() override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_title(std::string_view) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid drain_input(
+    [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid drain_input(
         std::chrono::milliseconds,
         std::chrono::milliseconds) override {
         return {};
@@ -250,7 +250,7 @@ public:
 
 class FailingCleanupTerminal final : public tui::Terminal {
 public:
-    [[nodiscard]] util::ExpectedVoid start(
+    [[nodiscard]] support::ExpectedVoid start(
         tui::TerminalInputSink,
         tui::TerminalResizeSink) override {
         modes_ = {
@@ -261,9 +261,9 @@ public:
         };
         return {};
     }
-    [[nodiscard]] util::ExpectedVoid stop() override {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+    [[nodiscard]] support::ExpectedVoid stop() override {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "terminal restoration failed",
             "api_key=sk-restoration-secret"));
     }
@@ -272,32 +272,32 @@ public:
     }
     [[nodiscard]] tui::TerminalCapabilities capabilities() const override { return {}; }
     [[nodiscard]] tui::TerminalModeState modes() const override { return modes_; }
-    [[nodiscard]] util::ExpectedVoid clear_screen() override { return {}; }
-    [[nodiscard]] util::ExpectedVoid write(std::string_view) override {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Process,
+    [[nodiscard]] support::ExpectedVoid clear_screen() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid write(std::string_view) override {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
             "initial render failed",
             "api_key=sk-render-secret"));
     }
-    [[nodiscard]] util::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_cursor_visible(bool visible) override {
+    [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool visible) override {
         modes_.cursor_visible = visible;
         return {};
     }
-    [[nodiscard]] util::Expected<tui::TerminalImageHandle> place_image(
+    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
     }
-    [[nodiscard]] util::ExpectedVoid remove_image(
+    [[nodiscard]] support::ExpectedVoid remove_image(
         tui::TerminalImageHandle,
         const tui::CellRegion&) override {
         return {};
     }
-    [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override { return {}; }
-    [[nodiscard]] util::ExpectedVoid end_synchronized_update() override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_title(std::string_view) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] util::ExpectedVoid drain_input(
+    [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid drain_input(
         std::chrono::milliseconds,
         std::chrono::milliseconds) override {
         return {};
@@ -323,7 +323,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         if (request_count > 1) {
             recovery_uses_fresh_token = first_stop_token && options.stop_token != *first_stop_token;
@@ -390,8 +390,8 @@ public:
             co_return partial;
         }
 
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "abort-aware fake released without cancellation"));
                 });
     }
@@ -424,7 +424,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto partial = ai::assistant_text_message("");
         partial.content.clear();
         partial.provider = "fake";
@@ -476,7 +476,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         std::vector<std::string> users;
         for (const auto& message : context.messages) {
@@ -528,7 +528,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-fake";
         response.api = "fake";
@@ -548,15 +548,15 @@ public:
             }
         }
         const auto path = prompt.starts_with("read ") ? prompt.substr(5) : prompt;
-        util::JsonValue::object_t arguments;
-        arguments.emplace("path", util::JsonValue{path});
+        support::JsonValue::object_t arguments;
+        arguments.emplace("path", support::JsonValue{path});
         response.content.clear();
         response.content.emplace_back(ai::text_content("reading " + path));
         response.content.emplace_back(ai::tool_call_content(
             "fake-read-1",
             "probe-read",
             std::format(R"({{"path":"{}"}})", path),
-            util::JsonValue{std::move(arguments)}));
+            support::JsonValue{std::move(arguments)}));
         response.stop_reason = ai::AssistantStopReason::ToolUse;
 
         auto partial = response;
@@ -635,7 +635,7 @@ struct GatedPartialReadToolState {
         if (gate) (void)gate->cancel();
     }
 
-    [[nodiscard]] util::ExpectedVoid emit_late_update() {
+    [[nodiscard]] support::ExpectedVoid emit_late_update() {
         std::lock_guard lock(mutex);
         if (!late_update_sink) return {};
         agent::AsyncToolExecutionResult late;
@@ -654,13 +654,13 @@ struct GatedPartialReadToolHandle {
     ai::Tool definition;
     definition.name = "probe-read";
     definition.description = "Stream a deterministic read result";
-    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return GatedPartialReadToolHandle{
         tests::make_fake_tool(
             std::move(definition),
             agent::ToolConcurrency::Exclusive,
             [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink update_sink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 {
                     std::lock_guard lock(state->mutex);
                     state->late_update_sink.emplace(std::move(update_sink));
@@ -698,13 +698,13 @@ struct GatedPartialReadToolHandle {
     ai::Tool definition;
     definition.name = "probe-read";
     definition.description = "Return deterministic text and image content";
-    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return tests::make_fake_tool(
         std::move(definition),
         agent::ToolConcurrency::Exclusive,
         [image_data = std::move(image_data)](
             agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             agent::AsyncToolExecutionResult result;
             result.content = {
                 ai::text_content("live tool before"),
@@ -738,13 +738,13 @@ struct DelayedCancellationToolHandle {
     ai::Tool definition;
     definition.name = "delayed";
     definition.description = "Wait until cancellation is allowed to quiesce";
-    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return DelayedCancellationToolHandle{
         tests::make_fake_tool(
             std::move(definition),
             agent::ToolConcurrency::Exclusive,
             [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink update_sink)
-                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 state->observed_stop_token = stop_token;
                 agent::AsyncToolExecutionResult partial;
                 partial.content.emplace_back(ai::text_content("partial tool output before abort"));
@@ -767,8 +767,8 @@ struct DelayedCancellationToolHandle {
                     boost::asio::redirect_error(boost::asio::use_awaitable, error));
 
                 if (stop_token.stop_requested()) {
-                    co_return std::unexpected(util::make_error(
-                        util::ErrorCode::Cancelled,
+                    co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Cancelled,
                         "delayed tool aborted"));
                 }
                 co_return agent::AsyncToolExecutionResult{};
@@ -787,7 +787,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         if (options.stop_token.stop_requested()) {
             completion_stop_token = options.stop_token;
@@ -834,7 +834,7 @@ public:
             "delayed-call",
             "delayed",
             "{}",
-            util::JsonValue::object_t{}));
+            support::JsonValue::object_t{}));
         response.stop_reason = ai::AssistantStopReason::ToolUse;
         co_return response;
                 });
@@ -856,7 +856,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         std::string prompt;
         for (auto message = context.messages.rbegin();
              message != context.messages.rend();
@@ -917,7 +917,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto partial = ai::assistant_text_message("");
         partial.content.clear();
         partial.provider = "fake";
@@ -1005,7 +1005,7 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 ++request_count;
                 if (request_count == 3) {
                     const auto executor =
@@ -1125,14 +1125,14 @@ TEST_CASE(
         },
     });
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1158,11 +1158,11 @@ TEST_CASE(
 
     coding_agent::PromptOptions live_options;
     live_options.images.push_back(ai::image_content(png_data, "image/png"));
-    std::optional<util::ExpectedVoid> prompt_result;
+    std::optional<support::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(
         io,
         resumed->session->prompt("live user text", std::move(live_options)),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             prompt_result.emplace(std::move(result));
         });
@@ -1205,14 +1205,14 @@ TEST_CASE(
     const auto fallback_before = fallback_session->session->snapshot().agent_state.messages;
     tui::VirtualTerminal fallback_terminal({.columns = 72, .rows = 50});
     boost::asio::io_context fallback_io;
-    std::optional<util::ExpectedVoid> fallback_result;
+    std::optional<support::ExpectedVoid> fallback_result;
     boost::asio::co_spawn(
         fallback_io,
         coding_agent::tui::run_interactive_mode(
             *fallback_session->session,
             fallback_terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             fallback_result.emplace(std::move(result));
         });
@@ -1261,14 +1261,14 @@ TEST_CASE(
         },
     });
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config_directory.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1346,14 +1346,14 @@ TEST_CASE(
         },
     });
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config_directory.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1423,14 +1423,14 @@ TEST_CASE(
     config.clipboard_reader = std::move(reader);
     tui::VirtualTerminal terminal({.columns = 120, .rows = 16});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             std::move(config)),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1505,14 +1505,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 12});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             std::move(config)),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1547,14 +1547,14 @@ TEST_CASE(
     failed_config.clipboard_reader = std::move(failed_reader);
     tui::VirtualTerminal failed_terminal({.columns = 80, .rows = 12});
     boost::asio::io_context failed_io;
-    std::optional<util::ExpectedVoid> failed_result;
+    std::optional<support::ExpectedVoid> failed_result;
     boost::asio::co_spawn(
         failed_io,
         coding_agent::tui::run_interactive_mode(
             *failed_session->session,
             failed_terminal,
             std::move(failed_config)),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             failed_result.emplace(std::move(result));
         });
@@ -1666,14 +1666,14 @@ TEST_CASE(
     // (compaction summary through branch summary) in the chat viewport.
     tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1755,14 +1755,14 @@ TEST_CASE(
 
     tui::VirtualTerminal fresh_terminal({.columns = 64, .rows = 10});
     boost::asio::io_context fresh_io;
-    std::optional<util::ExpectedVoid> fresh_result;
+    std::optional<support::ExpectedVoid> fresh_result;
     boost::asio::co_spawn(
         fresh_io,
         coding_agent::tui::run_interactive_mode(
             *fresh->session,
             fresh_terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             fresh_result.emplace(std::move(result));
         });
@@ -1782,14 +1782,14 @@ TEST_CASE(
 
     tui::VirtualTerminal resumed_terminal({.columns = 64, .rows = 10});
     boost::asio::io_context resumed_io;
-    std::optional<util::ExpectedVoid> resumed_result;
+    std::optional<support::ExpectedVoid> resumed_result;
     boost::asio::co_spawn(
         resumed_io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             resumed_terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             resumed_result.emplace(std::move(result));
         });
@@ -1818,14 +1818,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 32});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1899,14 +1899,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -1978,14 +1978,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 12});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2024,14 +2024,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2101,9 +2101,9 @@ TEST_CASE(
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
         auto subscription = created->session->subscribe(
-            [index](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Unknown,
+            [index](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Unknown,
                     "subscriber failed",
                     std::format(
                         "api_key=sk-subscriber-secret-123456 initial subscriber {}",
@@ -2115,14 +2115,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 40});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2137,9 +2137,9 @@ TEST_CASE(
     CHECK(screen.find("[REDACTED]") != std::string::npos);
 
     auto rollover_subscription = created->session->subscribe(
-        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+        [](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "late subscriber rollover"));
         });
     REQUIRE(rollover_subscription);
@@ -2174,14 +2174,14 @@ TEST_CASE(
     // loaded-resources sections the fixture workspace renders.
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2229,14 +2229,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 20});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2294,14 +2294,14 @@ TEST_CASE(
 
     FailingStartTerminal terminal;
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2329,14 +2329,14 @@ TEST_CASE(
 
     FailingCleanupTerminal terminal;
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2366,14 +2366,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2418,14 +2418,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2512,14 +2512,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2625,14 +2625,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2690,14 +2690,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2756,14 +2756,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2841,14 +2841,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 20});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -2910,14 +2910,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3000,14 +3000,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 90, .rows = 26});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3043,14 +3043,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3099,14 +3099,14 @@ TEST_CASE(
     // tail anchored so the streaming message's head scrolls out.
     tui::VirtualTerminal terminal({.columns = 30, .rows = 15});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3154,14 +3154,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 40, .rows = 16});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr, util::ExpectedVoid result) {
+        [&](std::exception_ptr, support::ExpectedVoid result) {
             run_result.emplace(std::move(result));
         });
     drain_ready(io);
@@ -3200,14 +3200,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3311,14 +3311,14 @@ TEST_CASE(
     // loaded-resources sections the fixture workspace renders.
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3392,14 +3392,14 @@ TEST_CASE(
     // loaded-resources sections the fixture workspace renders.
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3460,14 +3460,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3522,14 +3522,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3588,14 +3588,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3635,14 +3635,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3720,14 +3720,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 20});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr, util::ExpectedVoid result) {
+        [&](std::exception_ptr, support::ExpectedVoid result) {
             run_result.emplace(std::move(result));
         });
     drain_ready(io);
@@ -3765,14 +3765,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3820,14 +3820,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3859,14 +3859,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *resumed->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -3922,14 +3922,14 @@ TEST_CASE(
     auto rebooted = fixture.resume();
     tui::VirtualTerminal reboot_terminal({.columns = 72, .rows = 30});
     boost::asio::io_context reboot_io;
-    std::optional<util::ExpectedVoid> reboot_result;
+    std::optional<support::ExpectedVoid> reboot_result;
     boost::asio::co_spawn(
         reboot_io,
         coding_agent::tui::run_interactive_mode(
             *rebooted->session,
             reboot_terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             reboot_result.emplace(std::move(result));
         });
@@ -3956,14 +3956,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -4026,14 +4026,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
         });
@@ -4089,14 +4089,14 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> run_result;
+    std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
             {.agent_config_directory = config.path()}),
-        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });

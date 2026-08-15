@@ -8,7 +8,7 @@
 #include "ai/providers/CodexCatalog.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "ai/providers/KimiCatalog.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -226,7 +226,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 
 [[nodiscard]] boost::asio::awaitable<std::optional<std::string>> execute_command(
     std::string_view config,
-    std::shared_ptr<util::AsyncProcessRunner> runner) {
+    std::shared_ptr<harness::AsyncProcessRunner> runner) {
     // Process-lifetime result cache (pi `commandResultCache`).
     static std::map<std::string, std::optional<std::string>> cache;
     const std::string key{config};
@@ -236,7 +236,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 
     std::optional<std::string> value;
     if (runner) {
-        util::ProcessRequest request;
+        harness::ProcessRequest request;
         request.executable = shell_executable();
         request.arguments = shell_command_arguments(std::string{config.substr(1)});
         request.timeout = std::chrono::seconds{10};
@@ -252,10 +252,10 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     co_return value;
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> resolve_config_value(
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>> resolve_config_value(
     std::string_view config,
     const ai::ProviderEnv& env,
-    std::shared_ptr<util::AsyncProcessRunner> runner) {
+    std::shared_ptr<harness::AsyncProcessRunner> runner) {
     if (is_command(config)) {
         co_return co_await execute_command(config, std::move(runner));
     }
@@ -273,43 +273,43 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     return result;
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> resolve_config_value_or_throw(
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> resolve_config_value_or_throw(
     std::string_view config,
     std::string description,
     const ai::ProviderEnv& env,
-    std::shared_ptr<util::AsyncProcessRunner> runner) {
+    std::shared_ptr<harness::AsyncProcessRunner> runner) {
     auto resolved = co_await resolve_config_value(config, env, std::move(runner));
     if (resolved && *resolved) {
         co_return **resolved;
     }
     if (is_command(config)) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "Failed to resolve " + description + " from shell command: " +
                 std::string{config.substr(1)}));
     }
     const auto missing = missing_env_var_names(config, env);
     if (missing.size() == 1) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "Failed to resolve " + description + " from environment variable: " +
                 missing.front()));
     }
     if (missing.size() > 1) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Auth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "Failed to resolve " + description + " from environment variables: " +
                 join_strings(missing)));
     }
-    co_return std::unexpected(util::make_error(
-        util::ErrorCode::Auth,
+    co_return std::unexpected(support::make_error(
+        support::ErrorCode::Auth,
         "Failed to resolve " + description));
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::ModelHeaders>>> resolve_headers(
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ai::ModelHeaders>>> resolve_headers(
     const ai::ModelHeaders& headers,
     const ai::ProviderEnv& env,
-    std::shared_ptr<util::AsyncProcessRunner> runner) {
+    std::shared_ptr<harness::AsyncProcessRunner> runner) {
     ai::ModelHeaders resolved;
     for (const auto& [name, value] : headers) {
         auto resolved_value = co_await resolve_config_value(value, env, runner);
@@ -324,7 +324,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 
 } // namespace config_value
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<ai::ProviderEnv>> config_context_env(
+[[nodiscard]] boost::asio::awaitable<support::Expected<ai::ProviderEnv>> config_context_env(
     const std::vector<std::string>& names,
     const ai::AuthContext& context,
     ai::ProviderEnv explicit_env) {
@@ -495,7 +495,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     std::string_view provider_id,
     const std::shared_ptr<ai::Provider>& base,
     const std::optional<ModelsJsonProvider>& config,
-    const std::shared_ptr<util::AsyncProcessRunner>& runner) {
+    const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
     ai::ApiKeyAuth* inherited =
         base && base->auth().api_key ? &*base->auth().api_key : nullptr;
     const std::optional<std::string> raw_key = config ? config->api_key : std::nullopt;
@@ -511,7 +511,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
         -> cch::support::AsyncResult<ai::ApiKeyCredential> {
         return ai::detail::make_async_result(
             [base, interaction = std::move(interaction)]() mutable
-                -> boost::asio::awaitable<util::Expected<ai::ApiKeyCredential>> {
+                -> boost::asio::awaitable<support::Expected<ai::ApiKeyCredential>> {
                 ai::ApiKeyAuth* inherited =
                     base && base->auth().api_key ? &*base->auth().api_key : nullptr;
                 if (inherited && inherited->login) {
@@ -549,7 +549,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
         return ai::detail::make_async_result(
             [&context, credential = std::move(credential), base, raw_key, is_command,
              raw_key_env_names]()
-                -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
+                -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
                 ai::ApiKeyAuth* inherited =
                     base && base->auth().api_key ? &*base->auth().api_key : nullptr;
                 if (credential) {
@@ -607,7 +607,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
         return ai::detail::make_async_result(
             [&context, credential = std::move(credential), provider_id, base, raw_key,
              is_command, raw_key_env_names, config_headers, header_env_names, runner]()
-                -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+                -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
                 ai::ApiKeyAuth* inherited =
                     base && base->auth().api_key ? &*base->auth().api_key : nullptr;
                 std::optional<AuthResult> resolved_result;
@@ -674,7 +674,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     std::string_view provider_id,
     const std::shared_ptr<ai::Provider>& base,
     const std::optional<ModelsJsonProvider>& config,
-    const std::shared_ptr<util::AsyncProcessRunner>& runner) {
+    const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
     ai::ProviderAuth auth;
     auto api_key = compose_api_key_auth(provider_id, base, config, runner);
     if (api_key) {
@@ -730,7 +730,7 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                 if (model.api == "openai-responses") {
                     CCH_TRY(message, co_await responses_adapter_.stream(
                         model, context, std::move(options), std::move(sink)));
@@ -746,8 +746,8 @@ public:
                         model, context, std::move(options), std::move(sink)));
                     co_return message;
                 }
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Stream,
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Stream,
                     "Provider " + provider_id_ +
                         " has no API implementation for \"" + model.api + "\""));
             });

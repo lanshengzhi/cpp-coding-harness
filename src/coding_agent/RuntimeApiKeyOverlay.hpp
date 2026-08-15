@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/CredentialStore.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <memory>
 #include <mutex>

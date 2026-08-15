@@ -15,14 +15,14 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -61,9 +61,9 @@ namespace {
 }
 
 void expect_json_equal(
-    const util::JsonValue& actual,
+    const support::JsonValue& actual,
     std::string_view fixture_name) {
-    auto serialized = util::write_json(actual);
+    auto serialized = support::write_json(actual);
     REQUIRE(serialized);
     const auto expected = read_fixture_text(fixture_name);
     if (*serialized != expected) {
@@ -102,7 +102,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         if (options.stop_token.stop_requested()) {
@@ -117,8 +117,8 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = terminal.stop_reason,
                     .error = terminal,
-                    .failure = util::make_error(
-                        util::ErrorCode::Cancelled, "Request was aborted"),
+                    .failure = support::make_error(
+                        support::ErrorCode::Cancelled, "Request was aborted"),
                 }));
             }
             co_return terminal;
@@ -140,8 +140,8 @@ public:
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = response.stop_reason,
                     .error = response,
-                    .failure = util::make_error(
-                        util::ErrorCode::Stream,
+                    .failure = support::make_error(
+                        support::ErrorCode::Stream,
                         response.error_message.value_or("terminal error")),
                 }));
             } else {
@@ -183,7 +183,7 @@ public:
     ai::Tool definition;
     definition.name = "echo";
     definition.description = "Echo back the input";
-    definition.parameters = util::JsonValue::object_t{
+    definition.parameters = support::JsonValue::object_t{
         {"type", "object"},
         {"additionalProperties", false}};
     return tests::make_fake_tool(
@@ -191,7 +191,7 @@ public:
         agent::ToolConcurrency::Exclusive,
         [execution_count = std::move(execution_count)](
             agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             if (execution_count) {
                 ++*execution_count;
             }
@@ -263,7 +263,7 @@ struct RecordedSessionEvents {
     RecordedSessionEvents& recorded) {
     auto subscription = session.subscribe_session(
         [&recorded](const coding_agent::AgentSessionEvent& event)
-            -> util::ExpectedVoid {
+            -> support::ExpectedVoid {
             if (const auto* start =
                     std::get_if<coding_agent::AutoRetryStartEvent>(&event)) {
                 recorded.starts.push_back(*start);
@@ -338,13 +338,13 @@ TEST_CASE(
     // the first delivery pass, growing the live registry (and forcing a
     // reallocation) without invalidating that pass's stable snapshot.
     auto first = session->subscribe_session(
-        [&](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+        [&](const coding_agent::AgentSessionEvent&) -> support::ExpectedVoid {
             ++first_events;
             if (late_subscriptions.empty()) {
                 for (std::size_t index = 0; index < late_counts.size(); ++index) {
                     auto subscribed = session->subscribe_session(
                         [&, index](const coding_agent::AgentSessionEvent&)
-                            -> util::ExpectedVoid {
+                            -> support::ExpectedVoid {
                             ++late_counts[index];
                             return {};
                         });
@@ -382,10 +382,10 @@ TEST_CASE(
 
     int failing_calls = 0;
     auto failing = session->subscribe_session(
-        [&](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+        [&](const coding_agent::AgentSessionEvent&) -> support::ExpectedVoid {
             ++failing_calls;
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
                 "session observer failed",
                 "api_key=sk-secret-123456"));
         });
@@ -393,7 +393,7 @@ TEST_CASE(
 
     int healthy_calls = 0;
     auto healthy = session->subscribe_session(
-        [&](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+        [&](const coding_agent::AgentSessionEvent&) -> support::ExpectedVoid {
             ++healthy_calls;
             return {};
         });
@@ -429,7 +429,7 @@ TEST_CASE(
         auto under_test = make_retry_session(paths, {});
         auto* session = under_test.session.get();
         auto subscribed = session->subscribe_session(
-            [](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+            [](const coding_agent::AgentSessionEvent&) -> support::ExpectedVoid {
                 return {};
             });
         REQUIRE(subscribed.has_value());
@@ -735,7 +735,7 @@ TEST_CASE(
     std::atomic<bool> retry_started{false};
     auto retry_observer = session->subscribe_session(
         [&retry_started](const coding_agent::AgentSessionEvent& event)
-            -> util::ExpectedVoid {
+            -> support::ExpectedVoid {
             if (std::holds_alternative<coding_agent::AutoRetryStartEvent>(
                     event)) {
                 retry_started.store(true);
@@ -745,7 +745,7 @@ TEST_CASE(
     REQUIRE(retry_observer.has_value());
 
     boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> prompt_result;
+    std::optional<support::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -857,32 +857,32 @@ TEST_CASE(
     auto subscription = subscribe_events(*session, events);
     REQUIRE(session->prompt_blocking("Test").has_value());
 
-    util::JsonValue::object_t record;
-    util::JsonValue::array_t event_records;
+    support::JsonValue::object_t record;
+    support::JsonValue::array_t event_records;
     for (const auto& start : events.starts) {
-        util::JsonValue::object_t event;
-        event.emplace("type", util::JsonValue{"auto_retry_start"});
-        event.emplace("attempt", util::JsonValue{start.attempt});
-        event.emplace("maxAttempts", util::JsonValue{start.max_attempts});
-        event.emplace("delayMs", util::JsonValue{static_cast<int>(start.delay_ms)});
-        event.emplace("errorMessage", util::JsonValue{start.error_message});
-        event_records.push_back(util::JsonValue{std::move(event)});
+        support::JsonValue::object_t event;
+        event.emplace("type", support::JsonValue{"auto_retry_start"});
+        event.emplace("attempt", support::JsonValue{start.attempt});
+        event.emplace("maxAttempts", support::JsonValue{start.max_attempts});
+        event.emplace("delayMs", support::JsonValue{static_cast<int>(start.delay_ms)});
+        event.emplace("errorMessage", support::JsonValue{start.error_message});
+        event_records.push_back(support::JsonValue{std::move(event)});
     }
     for (const auto& end : events.ends) {
-        util::JsonValue::object_t event;
-        event.emplace("type", util::JsonValue{"auto_retry_end"});
-        event.emplace("success", util::JsonValue{end.success});
-        event.emplace("attempt", util::JsonValue{end.attempt});
+        support::JsonValue::object_t event;
+        event.emplace("type", support::JsonValue{"auto_retry_end"});
+        event.emplace("success", support::JsonValue{end.success});
+        event.emplace("attempt", support::JsonValue{end.attempt});
         if (end.final_error) {
             event.emplace(
-                "finalError", util::JsonValue{*end.final_error});
+                "finalError", support::JsonValue{*end.final_error});
         }
-        event_records.push_back(util::JsonValue{std::move(event)});
+        event_records.push_back(support::JsonValue{std::move(event)});
     }
-    record.emplace("events", util::JsonValue{std::move(event_records)});
-    record.emplace("modelRequests", util::JsonValue{client->request_count});
+    record.emplace("events", support::JsonValue{std::move(event_records)});
+    record.emplace("modelRequests", support::JsonValue{client->request_count});
 
-    expect_json_equal(util::JsonValue{std::move(record)}, "auto-retry-lifecycle.json");
+    expect_json_equal(support::JsonValue{std::move(record)}, "auto-retry-lifecycle.json");
 
     session->close();
 }
@@ -901,7 +901,7 @@ TEST_CASE(
     tool_use.content.emplace_back(ai::ToolCallContent{
         .id = "call_1",
         .name = "echo",
-        .arguments = util::JsonValue{util::JsonValue::object_t{}},
+        .arguments = support::JsonValue{support::JsonValue::object_t{}},
         .raw_arguments = {},
         .thought_signature = std::nullopt,
         .arguments_valid = true,

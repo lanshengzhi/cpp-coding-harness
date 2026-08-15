@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
@@ -22,7 +22,7 @@ struct PromptSlot : public std::enable_shared_from_this<PromptSlot> {
 
     /// First resolution wins; the send is posted to the consumer executor so
     /// the channel is only ever touched from one thread.
-    void resolve(util::Expected<std::string> value) {
+    void resolve(support::Expected<std::string> value) {
         if (resolved_.exchange(true)) return;
         const auto self = shared_from_this();
         boost::asio::post(executor, [self, value = std::move(value)]() mutable {
@@ -32,7 +32,7 @@ struct PromptSlot : public std::enable_shared_from_this<PromptSlot> {
 
     boost::asio::any_io_executor executor;
     boost::asio::experimental::concurrent_channel<
-        void(boost::system::error_code, util::Expected<std::string>)>
+        void(boost::system::error_code, support::Expected<std::string>)>
         channel;
 
 private:

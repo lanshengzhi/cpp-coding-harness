@@ -6,7 +6,7 @@
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 
 #include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/Tui.hpp>
@@ -38,7 +38,7 @@ struct StartupSlot : std::enable_shared_from_this<StartupSlot<T>> {
     explicit StartupSlot(boost::asio::any_io_executor executor)
         : executor(std::move(executor)), channel(this->executor, 1) {}
 
-    void resolve(util::Expected<T> value) {
+    void resolve(support::Expected<T> value) {
         if (resolved.exchange(true)) return;
         const auto self = this->shared_from_this();
         boost::asio::post(
@@ -57,7 +57,7 @@ struct StartupSlot : std::enable_shared_from_this<StartupSlot<T>> {
 
     boost::asio::any_io_executor executor;
     boost::asio::experimental::concurrent_channel<
-        void(boost::system::error_code, util::Expected<T>)>
+        void(boost::system::error_code, support::Expected<T>)>
         channel;
     std::atomic<bool> resolved{false};
     bool finished{false};
@@ -67,7 +67,7 @@ struct StartupSlot : std::enable_shared_from_this<StartupSlot<T>> {
 /// startup registry reads <Agent Config Directory>/keybindings.json over the
 /// assembled actions (the session-selector actions for the picker, the tui
 /// builtins alone for the generic selector prompt).
-[[nodiscard]] util::Expected<std::shared_ptr<const cch::tui::KeybindingRegistry>>
+[[nodiscard]] support::Expected<std::shared_ptr<const cch::tui::KeybindingRegistry>>
 startup_keybindings(
     const StartupTuiOptions& options,
     std::span<const std::string_view> application_actions) {
@@ -104,7 +104,7 @@ startup_keybindings(
 /// return its outcome (pi main.ts running `selectSession` /
 /// `promptForMissingSessionCwd` before the main TUI on its own terminal).
 template <typename T, typename Coroutine>
-[[nodiscard]] util::Expected<T> run_process_terminal_host(Coroutine coroutine) {
+[[nodiscard]] support::Expected<T> run_process_terminal_host(Coroutine coroutine) {
     cch::tui::ProcessTerminal terminal;
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
@@ -117,13 +117,13 @@ template <typename T, typename Coroutine>
         }
         return std::move(*result);
     } catch (const std::exception& error) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "startup UI failed",
             error.what()));
     } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
             "startup UI failed",
             "unknown exception"));
     }
@@ -139,7 +139,7 @@ template <typename T, typename Coroutine>
 /// component's sinks to the slot and the host's render-request hook; first
 /// resolution wins.
 template <typename T, typename BuildSelector>
-[[nodiscard]] boost::asio::awaitable<util::Expected<T>> run_startup_host(
+[[nodiscard]] boost::asio::awaitable<support::Expected<T>> run_startup_host(
     cch::tui::Terminal& terminal,
     StartupTuiOptions options,
     std::span<const std::string_view> keybinding_actions,
@@ -188,7 +188,7 @@ template <typename T, typename BuildSelector>
     co_return std::move(*result);
 }
 
-boost::asio::awaitable<util::Expected<StartupPickerResult>>
+boost::asio::awaitable<support::Expected<StartupPickerResult>>
 run_startup_session_picker(
     cch::tui::Terminal& terminal,
     StartupTuiOptions options,
@@ -258,7 +258,7 @@ run_startup_session_picker(
         });
 }
 
-boost::asio::awaitable<util::Expected<bool>> run_startup_missing_cwd_prompt(
+boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
     cch::tui::Terminal& terminal,
     StartupTuiOptions options,
     std::string title) {
@@ -289,7 +289,7 @@ boost::asio::awaitable<util::Expected<bool>> run_startup_missing_cwd_prompt(
         });
 }
 
-util::Expected<std::optional<std::filesystem::path>>
+support::Expected<std::optional<std::filesystem::path>>
 run_process_terminal_resume_picker(
     StartupTuiOptions options,
     coding_agent::tui::SessionListLoader current_loader,
@@ -320,12 +320,12 @@ run_process_terminal_resume_picker(
         // converge here without an observable difference.
         return std::nullopt;
     }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Unknown,
+    return std::unexpected(support::make_error(
+        support::ErrorCode::Unknown,
         "startup session picker returned an unknown outcome"));
 }
 
-util::Expected<bool> run_process_terminal_missing_cwd_prompt(
+support::Expected<bool> run_process_terminal_missing_cwd_prompt(
     StartupTuiOptions options,
     std::string title) {
     return run_process_terminal_host<bool>(

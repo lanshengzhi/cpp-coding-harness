@@ -176,7 +176,7 @@ void ControlFilter::append(std::string_view text, std::string& out) {
 
 // --- Spill artifact ---------------------------------------------------------
 
-util::ExpectedVoid SpillFile::start(
+support::ExpectedVoid SpillFile::start(
     std::string_view retained,
     std::string_view incoming) {
 #if defined(__unix__) || defined(__APPLE__)
@@ -190,7 +190,7 @@ util::ExpectedVoid SpillFile::start(
     for (int attempt = 0; attempt < 16; ++attempt) {
         const auto candidate =
             temp_directory / ("cch-user-bash-" + random_suffix() + ".log");
-        util::UniqueFd fd(::open(
+        support::UniqueFd fd(::open(
             candidate.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
             0600));
@@ -225,7 +225,7 @@ util::ExpectedVoid SpillFile::start(
 #endif
 }
 
-util::ExpectedVoid SpillFile::write(std::string_view bytes) {
+support::ExpectedVoid SpillFile::write(std::string_view bytes) {
 #if defined(__unix__) || defined(__APPLE__)
     return write_all(fd_.get(), bytes);
 #else
@@ -235,7 +235,7 @@ util::ExpectedVoid SpillFile::write(std::string_view bytes) {
 #endif
 }
 
-util::ExpectedVoid SpillFile::finish() {
+support::ExpectedVoid SpillFile::finish() {
     if (!active_) return {};
     active_ = false;
 #if defined(__unix__) || defined(__APPLE__)
@@ -259,9 +259,9 @@ void SpillFile::abandon() {
     remove_file();
 }
 
-util::Error SpillFile::spill_error(std::string message, std::string detail) {
-    return util::make_error(
-        util::ErrorCode::Process,
+support::Error SpillFile::spill_error(std::string message, std::string detail) {
+    return support::make_error(
+        support::ErrorCode::Process,
         std::move(message),
         bounded_redacted_presentation(std::move(detail)));
 }
@@ -277,7 +277,7 @@ std::string SpillFile::random_suffix() {
 }
 
 #if defined(__unix__) || defined(__APPLE__)
-util::ExpectedVoid SpillFile::write_all(int fd, std::string_view bytes) {
+support::ExpectedVoid SpillFile::write_all(int fd, std::string_view bytes) {
     std::size_t written = 0;
     while (written < bytes.size()) {
         const auto count = ::write(fd, bytes.data() + written, bytes.size() - written);
@@ -293,7 +293,7 @@ util::ExpectedVoid SpillFile::write_all(int fd, std::string_view bytes) {
 }
 
 void SpillFile::remove_candidate(
-    util::UniqueFd& fd,
+    support::UniqueFd& fd,
     const std::filesystem::path& candidate) {
     fd.reset();
     std::error_code remove_error;

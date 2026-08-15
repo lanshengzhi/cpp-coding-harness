@@ -7,7 +7,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/EntrySerializer.hpp"
 #include "harness/session/SessionJournal.hpp"
-#include "util/UniqueFd.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <cerrno>
 #include <algorithm>
@@ -43,20 +43,20 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     return first_canonical == second_canonical;
 }
 
-[[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
-    return util::make_error(util::ErrorCode::Session, std::move(message), std::move(detail));
+[[nodiscard]] support::Error session_error(std::string message, std::string detail = {}) {
+    return support::make_error(support::ErrorCode::Session, std::move(message), std::move(detail));
 }
 
-[[nodiscard]] std::string underlying_reason(const util::Error& error) {
+[[nodiscard]] std::string underlying_reason(const support::Error& error) {
     if (error.detail.empty() || error.detail == error.message) {
         return error.message;
     }
     return error.message + ": " + error.detail;
 }
 
-[[nodiscard]] util::Error publication_error(
+[[nodiscard]] support::Error publication_error(
     const std::filesystem::path& attempted_target,
-    const util::Error& underlying) {
+    const support::Error& underlying) {
     const auto display_target = attempted_target.empty()
         ? std::string{"<unresolved agent config sessions root>"}
         : attempted_target.string();
@@ -66,7 +66,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 }
 
 #if defined(_WIN32)
-[[nodiscard]] util::ExpectedVoid reject_windows_reparse_components(
+[[nodiscard]] support::ExpectedVoid reject_windows_reparse_components(
     const std::filesystem::path& path) {
     std::filesystem::path cursor = path.root_path();
     for (const auto& component : path.relative_path()) {
@@ -104,7 +104,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 /// when false an existing final directory keeps its mode (custom override
 /// directories are never chmodded) and only a newly created one is made
 /// private.
-[[nodiscard]] util::ExpectedVoid prepare_session_directory(
+[[nodiscard]] support::ExpectedVoid prepare_session_directory(
     const std::filesystem::path& path,
     bool tighten_existing) {
 #if defined(__unix__) || defined(__APPLE__)
@@ -117,7 +117,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 #endif
 
     const auto start = path.is_absolute() ? path.root_path() : std::filesystem::path{"."};
-    util::UniqueFd current(::open(start.c_str(), open_flags));
+    support::UniqueFd current(::open(start.c_str(), open_flags));
     if (!current) {
         return std::unexpected(session_error(
             "could not open session directory root",
@@ -152,7 +152,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
             final_created = true;
         }
 
-        util::UniqueFd next(::openat(current.get(), component->c_str(), open_flags));
+        support::UniqueFd next(::openat(current.get(), component->c_str(), open_flags));
         if (!next) {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error(
@@ -252,19 +252,19 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 
 /// Harness-owned default sessions roots and workspace-keyed directories are
 /// always created or tightened to owner-only.
-[[nodiscard]] util::ExpectedVoid prepare_default_directory(
+[[nodiscard]] support::ExpectedVoid prepare_default_directory(
     const std::filesystem::path& path) {
     return prepare_session_directory(path, true);
 }
 
 /// Custom override directories are created privately when missing; an
 /// existing custom directory's mode is left untouched.
-[[nodiscard]] util::ExpectedVoid prepare_custom_directory(
+[[nodiscard]] support::ExpectedVoid prepare_custom_directory(
     const std::filesystem::path& path) {
     return prepare_session_directory(path, false);
 }
 
-[[nodiscard]] util::Expected<OpenSession> publish_new_jsonl_session(
+[[nodiscard]] support::Expected<OpenSession> publish_new_jsonl_session(
     std::filesystem::path session_path,
     std::filesystem::path workspace,
     harness::session::SessionMetadata metadata) {
@@ -319,7 +319,7 @@ std::string sanitize_session_name(const std::string& name) {
     return result;
 }
 
-util::Expected<OpenSession> publish_session(
+support::Expected<OpenSession> publish_session(
     NewSessionPublication target,
     std::string provider,
     std::string model) {
@@ -407,7 +407,7 @@ util::Expected<OpenSession> publish_session(
         new_session_metadata(workspace, identity, std::move(provider), std::move(model)));
 }
 
-util::Expected<PreparedResumeTarget> prepare_resume_target(
+support::Expected<PreparedResumeTarget> prepare_resume_target(
     std::filesystem::path resume_path,
     std::filesystem::path explicit_workspace,
     bool workspace_explicit,
@@ -428,8 +428,8 @@ util::Expected<PreparedResumeTarget> prepare_resume_target(
         // the deleted workspace flag never returns, ADR 0036 G1), so the
         // guidance names the recorded directory instead of a removed flag.
         if (workspace_explicit && !same_workspace(workspace, resumed->metadata.workspace)) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Session,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
                 "resume workspace does not match session metadata",
                 "resume from " + resumed->metadata.workspace.string() +
                     " or start a new session"));
@@ -446,7 +446,7 @@ util::Expected<PreparedResumeTarget> prepare_resume_target(
     };
 }
 
-util::Expected<OpenSession> publish_resume_session(
+support::Expected<OpenSession> publish_resume_session(
     const PreparedResumeTarget& target) {
     OpenSession session;
     session.workspace = target.workspace;
@@ -472,7 +472,7 @@ util::Expected<OpenSession> publish_resume_session(
     return session;
 }
 
-util::Expected<PreparedResumeTarget> prepare_fork_target(
+support::Expected<PreparedResumeTarget> prepare_fork_target(
     std::filesystem::path source_path,
     std::filesystem::path target_workspace,
     std::optional<std::filesystem::path> directory_override,

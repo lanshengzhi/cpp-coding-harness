@@ -5,7 +5,7 @@
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <functional>
@@ -22,7 +22,7 @@ namespace cch::cli {
 /// `selectSession`); the host returns the picked session path, or nullopt
 /// when the user cancelled or exited. The CLI installs the ProcessTerminal
 /// host; the in-process CLI test seam injects scripted pickers.
-using ResumePickerSink = std::move_only_function<util::Expected<
+using ResumePickerSink = std::move_only_function<support::Expected<
     std::optional<std::filesystem::path>>(
     coding_agent::tui::SessionListLoader,
     coding_agent::tui::SessionListLoader)>;
@@ -71,7 +71,7 @@ struct SessionFamilyAssembly {
 /// a cancelled picker prints "No session selected" to `output` and aborts
 /// with exit 0. Errors carry pi's exact text (e.g. "No session found
 /// matching '<arg>'") without a prefix.
-[[nodiscard]] util::Expected<SessionFamilyAssembly> assemble_session_target(
+[[nodiscard]] support::Expected<SessionFamilyAssembly> assemble_session_target(
     const CliConfig& config,
     const std::optional<std::string>& settings_session_dir,
     std::istream& input,

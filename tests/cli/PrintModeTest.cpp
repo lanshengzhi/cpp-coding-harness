@@ -54,7 +54,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         ai::AssistantMessage terminal;
         terminal.provider = "host";
@@ -100,7 +100,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         messages.push_back(context.messages);
         ai::AssistantMessage message;
         message.provider = "host";
@@ -138,7 +138,7 @@ public:
         return ai::detail::make_model_stream(
             [this, model = std::move(model), options = std::move(options)](
                 ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ++request_count;
         const auto executor = co_await boost::asio::this_coro::executor;
         boost::asio::steady_timer gate{executor};

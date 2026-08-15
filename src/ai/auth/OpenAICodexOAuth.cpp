@@ -4,8 +4,8 @@
 #include "OAuthCallbackServer.hpp"
 #include "Pkce.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -77,14 +77,14 @@ struct DeviceTokenSuccess {
 }
 
 [[nodiscard]] const std::string* json_object_string_field(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     std::string_view name) {
     const auto found = object.find(std::string{name});
     return found == object.end() ? nullptr : found->second.get_if<std::string>();
 }
 
 [[nodiscard]] const double* json_object_number_field(
-    const util::JsonValue::object_t& object,
+    const support::JsonValue::object_t& object,
     std::string_view name) {
     const auto found = object.find(std::string{name});
     return found == object.end() ? nullptr : found->second.get_if<double>();
@@ -121,18 +121,18 @@ struct DeviceTokenSuccess {
 }
 
 /// pi `parseAuthorizationInput` validation applied to manual code entry.
-[[nodiscard]] util::Expected<std::string> parse_manual_code(
+[[nodiscard]] support::Expected<std::string> parse_manual_code(
     const std::string& input,
     const std::string& expected_state) {
     const auto parsed = parse_authorization_input(input);
     if (parsed.state && *parsed.state != expected_state) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "State mismatch"));
     }
     if (!parsed.code) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Missing authorization code"));
     }
     return *parsed.code;
@@ -140,7 +140,7 @@ struct DeviceTokenSuccess {
 
 /// pi `fetchWithLoginCancellation`: an aborted request normalizes to the
 /// stable "Login cancelled" error; other transport failures propagate.
-[[nodiscard]] boost::asio::awaitable<util::Expected<OAuthHttpResponse>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>>
 post_with_login_cancellation(
     const std::shared_ptr<OAuthHttpClient>& http_client,
     std::string url,
@@ -154,8 +154,8 @@ post_with_login_cancellation(
         stop_token);
     if (!response) {
         if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled,
                 "Login cancelled"));
         }
         co_return std::unexpected(std::move(response.error()));
@@ -166,26 +166,26 @@ post_with_login_cancellation(
 /// pi `readTokenResponse`: non-2xx and missing-field responses carry the
 /// frozen message with the raw body; success yields the OAuth token with
 /// `expires` as a wall-clock millisecond timestamp.
-[[nodiscard]] util::Expected<OAuthToken> read_token_response(
+[[nodiscard]] support::Expected<OAuthToken> read_token_response(
     const OAuthHttpResponse& response,
     std::string_view operation) {
     const auto missing_fields = [&response, operation]() {
-        return util::make_error(
-            util::ErrorCode::OAuth,
+        return support::make_error(
+            support::ErrorCode::OAuth,
             "OpenAI Codex token " + std::string{operation} +
                 " response missing fields: " + response.body);
     };
     if (response.status_code < 200 || response.status_code >= 300) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "OpenAI Codex token " + std::string{operation} + " failed (" +
                 std::to_string(response.status_code) + "): " +
                 (response.body.empty() ? "unknown" : response.body)));
     }
-    if (auto json = util::read_json(response.body); !json) {
+    if (auto json = support::read_json(response.body); !json) {
         return std::unexpected(missing_fields());
     } else {
-        const auto* object = json->get_if<util::JsonValue::object_t>();
+        const auto* object = json->get_if<support::JsonValue::object_t>();
         const auto* access = object == nullptr
             ? nullptr
             : json_object_string_field(*object, "access_token");
@@ -209,11 +209,11 @@ post_with_login_cancellation(
 
 /// pi `credentialsFromToken`: accountId extraction from the unverified JWT is
 /// mandatory; absence fails the operation.
-[[nodiscard]] util::Expected<ai::OAuthCredential> credentials_from_token(
+[[nodiscard]] support::Expected<ai::OAuthCredential> credentials_from_token(
     const OAuthToken& token) {
     if (auto account_id = extract_account_id(token.access); !account_id) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Failed to extract accountId from token"));
     } else {
         return ai::OAuthCredential{
@@ -225,27 +225,27 @@ post_with_login_cancellation(
     }
 }
 
-[[nodiscard]] util::Expected<DeviceAuthInfo> parse_device_auth_response(
+[[nodiscard]] support::Expected<DeviceAuthInfo> parse_device_auth_response(
     const OAuthHttpResponse& response) {
     if (response.status_code == 404) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "OpenAI Codex device code login is not enabled for this server. "
             "Use browser login or verify the server URL."));
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "OpenAI Codex device code request failed with status " +
                 std::to_string(response.status_code) +
                 (response.body.empty() ? "" : ": " + response.body)));
     }
-    if (auto json = util::read_json(response.body); !json) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+    if (auto json = support::read_json(response.body); !json) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Invalid OpenAI Codex device code response: " + response.body));
     } else {
-        const auto* object = json->get_if<util::JsonValue::object_t>();
+        const auto* object = json->get_if<support::JsonValue::object_t>();
         const auto* device_auth_id = object == nullptr
             ? nullptr
             : json_object_string_field(*object, "device_auth_id");
@@ -273,8 +273,8 @@ post_with_login_cancellation(
         }
         if (device_auth_id == nullptr || user_code == nullptr ||
             interval_seconds < 0) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::OAuth,
+            return std::unexpected(support::make_error(
+                support::ErrorCode::OAuth,
                 "Invalid OpenAI Codex device code response: " + response.body));
         }
         return DeviceAuthInfo{
@@ -285,10 +285,10 @@ post_with_login_cancellation(
     }
 }
 
-[[nodiscard]] util::Expected<DevicePollResult<DeviceTokenSuccess>>
+[[nodiscard]] support::Expected<DevicePollResult<DeviceTokenSuccess>>
 poll_device_token(const OAuthHttpResponse& response) {
     if (response.status_code >= 200 && response.status_code < 300) {
-        if (auto json = util::read_json(response.body); !json) {
+        if (auto json = support::read_json(response.body); !json) {
             return DevicePollResult<DeviceTokenSuccess>{
                 .kind = DevicePollResult<DeviceTokenSuccess>::Failed{
                     .message = "Invalid OpenAI Codex device auth token "
@@ -296,7 +296,7 @@ poll_device_token(const OAuthHttpResponse& response) {
                 },
             };
         } else {
-            const auto* object = json->get_if<util::JsonValue::object_t>();
+            const auto* object = json->get_if<support::JsonValue::object_t>();
             const auto* authorization_code = object == nullptr
                 ? nullptr
                 : json_object_string_field(*object, "authorization_code");
@@ -327,14 +327,14 @@ poll_device_token(const OAuthHttpResponse& response) {
         };
     }
     std::optional<std::string> error_code;
-    if (auto json = util::read_json(response.body); json) {
-        if (const auto* object = json->get_if<util::JsonValue::object_t>()) {
+    if (auto json = support::read_json(response.body); json) {
+        if (const auto* object = json->get_if<support::JsonValue::object_t>()) {
             const auto error_found = object->find("error");
             if (error_found != object->end()) {
                 if (const auto* code = error_found->second.get_if<std::string>()) {
                     error_code = *code;
                 } else if (const auto* error_object =
-                               error_found->second.get_if<util::JsonValue::object_t>()) {
+                               error_found->second.get_if<support::JsonValue::object_t>()) {
                     if (const auto* code =
                             json_object_string_field(*error_object, "code")) {
                         error_code = *code;
@@ -372,11 +372,11 @@ OpenAICodexOAuth::OpenAICodexOAuth(
 
 OpenAICodexOAuth::~OpenAICodexOAuth() = default;
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 OpenAICodexOAuth::login(ai::AuthInteraction interaction) {
     if (!interaction.prompt) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "login interaction has no prompt hook"));
     }
 
@@ -401,19 +401,19 @@ OpenAICodexOAuth::login(ai::AuthInteraction interaction) {
         co_return credential;
     }
     if (method != kBrowserMethod) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Unknown OpenAI Codex login method: " + method));
     }
     CCH_TRY(credential, co_await login_browser(std::move(interaction)));
     co_return credential;
 }
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
     if (!interaction.notify) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "login interaction has no notify hook"));
     }
 
@@ -442,7 +442,7 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
         std::stop_source manual_stop;
         bool prompt_settled{false};
         std::optional<std::string> manual_input{std::nullopt};
-        std::optional<util::Error> manual_error{std::nullopt};
+        std::optional<support::Error> manual_error{std::nullopt};
     };
     auto manual_state = std::make_shared<ManualState>();
     auto executor = co_await boost::asio::this_coro::executor;
@@ -464,18 +464,18 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
                 .placeholder = std::string{kRedirectUri},
             };
             manual_prompt.stop_token = manual_state->manual_stop.get_token();
-            util::Expected<std::string> result;
+            support::Expected<std::string> result;
             try {
                 result = co_await cch::ai::detail::await_async_result(
                     interaction_shared->prompt(std::move(manual_prompt)));
             } catch (const std::exception& error) {
-                result = std::unexpected(util::make_error(
-                    util::ErrorCode::OAuth,
+                result = std::unexpected(support::make_error(
+                    support::ErrorCode::OAuth,
                     "login prompt failed",
                     error.what()));
             } catch (...) {
-                result = std::unexpected(util::make_error(
-                    util::ErrorCode::OAuth,
+                result = std::unexpected(support::make_error(
+                    support::ErrorCode::OAuth,
                     "login prompt failed"));
             }
             {
@@ -510,7 +510,7 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
     // server failed to listen (degrade to manual input only).
     CCH_TRY(callback_code, co_await server->wait_for_code());
 
-    std::optional<util::Error> first_error;
+    std::optional<support::Error> first_error;
     std::optional<std::string> manual_input;
     {
         std::scoped_lock lock(manual_state->mutex);
@@ -550,8 +550,8 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
     }
 
     if (!code) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "Missing authorization code"));
     }
 
@@ -560,16 +560,16 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
     co_return credential;
 }
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 OpenAICodexOAuth::login_device_code(ai::AuthInteraction interaction) {
     if (!interaction.notify) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "login interaction has no notify hook"));
     }
 
-    CCH_TRY(usercode_json, util::write_json(util::JsonValue{
-        util::JsonValue::object_t{{"client_id", std::string{kClientId}}}}));
+    CCH_TRY(usercode_json, support::write_json(support::JsonValue{
+        support::JsonValue::object_t{{"client_id", std::string{kClientId}}}}));
     CCH_TRY(response, co_await post_with_login_cancellation(
         http_client_,
         std::string{kDeviceUserCodeUrl},
@@ -595,9 +595,9 @@ OpenAICodexOAuth::login_device_code(ai::AuthInteraction interaction) {
             .expires_in_seconds = kDeviceCodeTimeoutSeconds,
             .poll = [this, device, stop = interaction.stop_token]()
                 -> boost::asio::awaitable<
-                       util::Expected<DevicePollResult<DeviceTokenSuccess>>> {
-                CCH_TRY(poll_json, util::write_json(util::JsonValue{
-                    util::JsonValue::object_t{
+                       support::Expected<DevicePollResult<DeviceTokenSuccess>>> {
+                CCH_TRY(poll_json, support::write_json(support::JsonValue{
+                    support::JsonValue::object_t{
                         {"device_auth_id", device.device_auth_id},
                         {"user_code", device.user_code},
                     }}));
@@ -620,7 +620,7 @@ OpenAICodexOAuth::login_device_code(ai::AuthInteraction interaction) {
     co_return credential;
 }
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 OpenAICodexOAuth::exchange_code(
     std::string code,
     std::string verifier,
@@ -642,7 +642,7 @@ OpenAICodexOAuth::exchange_code(
     co_return credentials_from_token(token);
 }
 
-boost::asio::awaitable<util::Expected<ai::OAuthCredential>>
+boost::asio::awaitable<support::Expected<ai::OAuthCredential>>
 OpenAICodexOAuth::refresh(ai::OAuthCredential credential) {
     const std::string body =
         "grant_type=refresh_token"
@@ -659,15 +659,15 @@ OpenAICodexOAuth::refresh(ai::OAuthCredential credential) {
         if (!response.error().detail.empty()) {
             detail += ": " + response.error().detail;
         }
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::OAuth,
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::OAuth,
             "OpenAI Codex token refresh error: " + detail));
     }
     CCH_TRY(token, read_token_response(*response, "refresh"));
     co_return credentials_from_token(token);
 }
 
-boost::asio::awaitable<util::Expected<ai::ModelAuth>>
+boost::asio::awaitable<support::Expected<ai::ModelAuth>>
 OpenAICodexOAuth::to_auth(const ai::OAuthCredential& credential) const {
     co_return ai::ModelAuth{.api_key = credential.access};
 }
@@ -687,7 +687,7 @@ ai::OAuthAuth make_openai_codex_oauth_auth(
         -> cch::support::AsyncResult<ai::OAuthCredential> {
         return cch::ai::detail::make_async_result(
             [impl, interaction = std::move(interaction)]() mutable
-                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                 co_return co_await impl->login(std::move(interaction));
             });
     };
@@ -695,7 +695,7 @@ ai::OAuthAuth make_openai_codex_oauth_auth(
         -> cch::support::AsyncResult<ai::OAuthCredential> {
         return cch::ai::detail::make_async_result(
             [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                 co_return co_await impl->refresh(std::move(credential));
             });
     };
@@ -703,7 +703,7 @@ ai::OAuthAuth make_openai_codex_oauth_auth(
         -> cch::support::AsyncResult<ai::ModelAuth> {
         return cch::ai::detail::make_async_result(
             [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
+                -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
                 co_return co_await impl->to_auth(credential);
             });
     };

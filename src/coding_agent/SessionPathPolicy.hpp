@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <string>
@@ -64,7 +64,7 @@ struct AutomaticSessionTarget {
 /// the process working directory, and an absolute value stays absolute.
 /// Empty values are rejected; callers treat absent values as no override.
 /// Pure: no filesystem or environment access.
-[[nodiscard]] util::Expected<std::filesystem::path> resolve_session_dir_value(
+[[nodiscard]] support::Expected<std::filesystem::path> resolve_session_dir_value(
     const std::string& value,
     const std::filesystem::path& canonical_workspace,
     const std::filesystem::path& home_dir);
@@ -83,7 +83,7 @@ struct AutomaticSessionTarget {
 /// an absolute directory (empty values are skipped). The caller supplies the
 /// environment value so the helper stays pure. A nullopt result means no
 /// override is in effect (the workspace-keyed default applies).
-[[nodiscard]] util::Expected<std::optional<std::filesystem::path>>
+[[nodiscard]] support::Expected<std::optional<std::filesystem::path>>
 resolve_effective_session_dir(
     const std::optional<std::string>& flag_value,
     const std::optional<std::string>& env_value,

@@ -14,7 +14,7 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
@@ -29,7 +29,7 @@ namespace {
 
 class InvalidatingText final : public tui::Component {
 public:
-    [[nodiscard]] util::Expected<tui::RenderResult> render(std::size_t) override {
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
         return tui::RenderResult{.lines = {"base"}};
     }
 
@@ -244,7 +244,7 @@ TEST_CASE(
             harness, {}, {}, std::optional<std::string>{"dark"},
             [&committed](std::string_view name) {
                 committed.emplace_back(name);
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             });
         controller.apply_from_settings();
         CHECK(controller.active_theme_name() == "dark");
@@ -260,7 +260,7 @@ TEST_CASE(
             harness, {}, {}, std::nullopt,
             [&committed](std::string_view name) {
                 committed.emplace_back(name);
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             });
         controller.apply_from_settings();
         CHECK(controller.active_theme_name() == "light");
@@ -275,7 +275,7 @@ TEST_CASE(
             harness, {}, {}, std::nullopt,
             [&commits](std::string_view) {
                 ++commits;
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             });
         controller.apply_from_settings();
         CHECK(controller.active_theme_name() == "dark");
@@ -291,7 +291,7 @@ TEST_CASE(
             harness, {}, {}, std::optional<std::string>{"light/dark"},
             [&committed](std::string_view name) {
                 committed.emplace_back(name);
-                return util::ExpectedVoid{};
+                return support::ExpectedVoid{};
             });
         controller.apply_from_settings();
         CHECK(controller.active_theme_name() == "dark");

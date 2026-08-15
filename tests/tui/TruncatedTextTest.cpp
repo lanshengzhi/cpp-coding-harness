@@ -1,7 +1,7 @@
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Utils.hpp>
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
@@ -60,12 +60,12 @@ TEST_CASE("TruncatedText rejects width consumed by padding", "[tui][truncated][i
     cch::tui::TruncatedText text("hi", 2, 1);
     const auto result = text.render(4);
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
 }
 
 TEST_CASE("TruncatedText rejects zero width", "[tui][truncated][issue381]") {
     cch::tui::TruncatedText text("hi");
     auto result = text.render(0);
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
 }

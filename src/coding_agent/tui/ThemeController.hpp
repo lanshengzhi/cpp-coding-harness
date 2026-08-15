@@ -4,7 +4,7 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/tui/Tui.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <functional>
@@ -82,7 +82,7 @@ using ThemeSettingProvider = std::move_only_function<std::optional<std::string>(
 /// pi `settingsManager.setTheme(themeSetting)` global-scope write, used by
 /// `applyFromSettings`' high-confidence default persistence.
 using ThemeSettingCommitter =
-    std::move_only_function<util::ExpectedVoid(std::string_view)>;
+    std::move_only_function<support::ExpectedVoid(std::string_view)>;
 
 /// The pi `InteractiveThemeController` subset (`theme-controller.ts`) over
 /// the `theme.ts` subset, owning the live palette every component renders

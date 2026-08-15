@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -44,12 +44,12 @@ public:
 
     /// Sends one text frame. The borrowed view must remain valid until the
     /// returned awaitable completes.
-    [[nodiscard]] virtual boost::asio::awaitable<util::ExpectedVoid> async_send(
+    [[nodiscard]] virtual boost::asio::awaitable<support::ExpectedVoid> async_send(
         std::string_view text) = 0;
 
     /// Next text frame; std::nullopt when the peer closed the connection.
     /// Returns a Cancelled error when the request stop token fires.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<std::string>>> async_receive() = 0;
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<std::optional<std::string>>> async_receive() = 0;
 
     /// Best-effort close; never throws and is idempotent.
     virtual void close() = 0;
@@ -67,7 +67,7 @@ public:
     /// Opens one WebSocket connection. The borrowed WebSocketConnectRequest is
     /// read across suspension points, so it must remain valid until the
     /// returned awaitable completes.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::shared_ptr<WebSocket>>> async_connect(
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<std::shared_ptr<WebSocket>>> async_connect(
         const WebSocketConnectRequest& request) = 0;
 };
 

@@ -3,9 +3,9 @@
 #include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/ExpectedMacros.hpp"
 #include <cch/ai/Content.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -40,7 +40,7 @@ void close_tool_updates(const std::shared_ptr<ToolUpdateGate>& gate) {
     gate->active = false;
 }
 
-[[nodiscard]] boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>>
+[[nodiscard]] boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>>
 execute_with_update_lifetime(
     Tool& tool,
     const ToolInvocation& invocation,
@@ -92,7 +92,7 @@ struct FinalizedToolCall {
 /// produces the call's error result (ADR 0008); the C++ hook error's detail
 /// (or message when the detail is empty) is the closest equivalent of the
 /// thrown message.
-[[nodiscard]] std::string hook_failure_text(const util::Error& error) {
+[[nodiscard]] std::string hook_failure_text(const support::Error& error) {
     return error.detail.empty() ? error.message : error.detail;
 }
 
@@ -139,7 +139,7 @@ ToolCallExecutor::ToolCallExecutor(
     ToolCallExecutorOptions options)
     : registry_(registry), options_(std::move(options)) {}
 
-boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::execute(
+boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute(
     ToolCallBatchRequest request,
     AgentEventSink& sink) {
     const auto calls = tool_calls_from(request.assistant_message);
@@ -166,7 +166,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     co_return co_await execute_parallel(request, calls, parallel->max_in_flight, sink);
 }
 
-boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_sequential(
+boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_sequential(
     ToolCallBatchRequest request,
     const std::vector<ai::ToolCallContent>& calls,
     AgentEventSink& sink) {
@@ -177,7 +177,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         if (options_.stop_token.stop_requested()) {
             break;
         }
-        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
+        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(support::JsonValue{})}));
 
         ai::ToolResultMessage tool_result;
         bool call_terminate = false;
@@ -233,10 +233,10 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                             update_gate,
                             call_id = call.id,
                             tool_name = call.name,
-                            args = call.arguments.value_or(util::JsonValue{})](
+                            args = call.arguments.value_or(support::JsonValue{})](
                                 const AsyncToolExecutionResult& partial_result) {
                             std::lock_guard lock(update_gate->mutex);
-                            if (!update_gate->active) return util::ExpectedVoid{};
+                            if (!update_gate->active) return support::ExpectedVoid{};
                             return emit_agent_event(sink, ToolExecutionUpdateEvent{
                                 .tool_call_id = call_id,
                                 .tool_name = tool_name,
@@ -331,7 +331,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     co_return make_batch_result(std::move(finalized));
 }
 
-boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_parallel(
+boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_parallel(
     ToolCallBatchRequest request,
     const std::vector<ai::ToolCallContent>& calls,
     std::size_t max_in_flight,
@@ -340,7 +340,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         std::size_t source_index{};
         ai::ToolCallContent tool_call;
         Tool* tool{};
-        util::JsonValue arguments;
+        support::JsonValue arguments;
     };
 
     std::vector<PreparedToolCall> prepared;
@@ -349,7 +349,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
 
     auto complete_immediate = [&](std::size_t source_index,
                                   const ai::ToolCallContent& call,
-                                  ai::ToolResultMessage result) -> util::ExpectedVoid {
+                                  ai::ToolResultMessage result) -> support::ExpectedVoid {
         auto emitted = emit_agent_event(sink, ToolExecutionEndEvent{
             call.id,
             call.name,
@@ -367,7 +367,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             break;
         }
         const auto& call = calls[source_index];
-        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
+        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(support::JsonValue{})}));
 
         auto* tool = registry_.find(call.name);
         if (tool == nullptr) {
@@ -433,8 +433,8 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     struct ParallelState {
         std::mutex callback_mutex;
         std::mutex error_mutex;
-        std::optional<util::Error> emit_error;
-        std::optional<util::Error> fatal_error;
+        std::optional<support::Error> emit_error;
+        std::optional<support::Error> fatal_error;
     };
 
     auto executor = co_await boost::asio::this_coro::executor;
@@ -444,8 +444,8 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     if (options_.after_tool_call) {
         after_hook_permits = std::make_shared<HookPermitChannel>(executor, 1);
         if (!after_hook_permits->try_send(boost::system::error_code{})) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Tool,
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
                 "afterToolCall hook serialization failed"));
         }
     }
@@ -467,7 +467,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         max_in_flight == 0 ? prepared_calls->size() : max_in_flight;
     const std::size_t worker_count = std::min(execution_limit, prepared_calls->size());
 
-    auto parallel_emit = [state, sink_ptr = &sink](const AgentLifecycleEvent& event) -> util::ExpectedVoid {
+    auto parallel_emit = [state, sink_ptr = &sink](const AgentLifecycleEvent& event) -> support::ExpectedVoid {
         std::lock_guard callback_lock(state->callback_mutex);
         auto result = emit_agent_event(*sink_ptr, event);
         if (!result) {
@@ -520,10 +520,10 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         update_gate,
                         call_id = prepared_call.tool_call.id,
                         tool_name = prepared_call.tool_call.name,
-                        args = prepared_call.tool_call.arguments.value_or(util::JsonValue{})](
+                        args = prepared_call.tool_call.arguments.value_or(support::JsonValue{})](
                             const AsyncToolExecutionResult& partial_result) {
                         std::lock_guard lock(update_gate->mutex);
-                        if (!update_gate->active) return util::ExpectedVoid{};
+                        if (!update_gate->active) return support::ExpectedVoid{};
                         return parallel_emit(ToolExecutionUpdateEvent{
                             .tool_call_id = call_id,
                             .tool_name = tool_name,
@@ -581,8 +581,8 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         if (permit_error) {
                             std::lock_guard error_lock(state->error_mutex);
                             if (!state->fatal_error) {
-                                state->fatal_error = util::make_error(
-                                    util::ErrorCode::Tool,
+                                state->fatal_error = support::make_error(
+                                    support::ErrorCode::Tool,
                                     "afterToolCall hook serialization failed",
                                     permit_error.message());
                             }
@@ -608,8 +608,8 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                             if (!released) {
                                 std::lock_guard error_lock(state->error_mutex);
                                 if (!state->fatal_error) {
-                                    state->fatal_error = util::make_error(
-                                        util::ErrorCode::Tool,
+                                    state->fatal_error = support::make_error(
+                                        support::ErrorCode::Tool,
                                         "afterToolCall hook serialization failed");
                                 }
                                 outcome.result = error_tool_result(
@@ -650,8 +650,8 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         } catch (...) {
             std::lock_guard error_lock(state->error_mutex);
             if (!state->fatal_error) {
-                state->fatal_error = util::make_error(
-                    util::ErrorCode::Tool,
+                state->fatal_error = support::make_error(
+                    support::ErrorCode::Tool,
                     "bounded parallel tool worker failed");
             }
         }

@@ -1,5 +1,5 @@
 #include "ai/glaze/AiJson.hpp"
-#include "util/Json.hpp"
+#include "support/Json.hpp"
 
 #include <cch/ai/StreamEvent.hpp>
 
@@ -25,7 +25,7 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
     static_assert(std::is_aggregate_v<ai::CustomMessage>);
     static_assert(std::is_aggregate_v<ai::BranchSummaryMessage>);
     static_assert(std::is_aggregate_v<ai::CompactionSummaryMessage>);
-    static_assert(std::is_aggregate_v<util::Error>);
+    static_assert(std::is_aggregate_v<support::Error>);
 
     ai::ToolCallContent call{
         .id = "call-1",
@@ -49,8 +49,8 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
         .diagnostics = std::nullopt,
         .timestamp = 1718000000999,
     };
-    util::Error error{
-        .code = util::ErrorCode::Validation,
+    support::Error error{
+        .code = support::ErrorCode::Validation,
         .message = "invalid contract",
         .detail = "field is required",
         .context = std::string{"message"},
@@ -59,7 +59,7 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
     REQUIRE(assistant.content.size() == 2);
     CHECK(std::holds_alternative<ai::ToolCallContent>(assistant.content[1]));
     CHECK(std::get<ai::ToolCallContent>(assistant.content[1]).name == "read_file");
-    CHECK(error.code == util::ErrorCode::Validation);
+    CHECK(error.code == support::ErrorCode::Validation);
     REQUIRE(error.context);
     CHECK(*error.context == "message");
 }
@@ -198,7 +198,7 @@ TEST_CASE("user text message serializes through explicit Glaze content tags", "[
 }
 
 TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2]") {
-    auto arguments = util::read_json(R"({"path":"README.md","limit":20})");
+    auto arguments = support::read_json(R"({"path":"README.md","limit":20})");
     REQUIRE(arguments);
 
     ai::AssistantMessage assistant;
@@ -259,7 +259,7 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     CHECK(call.name == "read_file");
     CHECK(call.raw_arguments == R"({"path":"README.md","limit":20})");
     REQUIRE(call.arguments);
-    const auto& object = call.arguments->get<util::JsonValue::object_t>();
+    const auto& object = call.arguments->get<support::JsonValue::object_t>();
     CHECK(object.at("path").get_string() == "README.md");
     CHECK(static_cast<int>(object.at("limit").get<double>()) == 20);
 
@@ -331,13 +331,13 @@ TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][is
     const auto missing = ai::glaze::read_message_json(
         R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");
     REQUIRE_FALSE(missing);
-    CHECK(missing.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing.error().code == support::ErrorCode::JsonParse);
     CHECK(missing.error().detail.find("stopReason") != std::string::npos);
 
     const auto unsupported = ai::glaze::read_message_json(
         R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"future_reason","timestamp":1718000000000})");
     REQUIRE_FALSE(unsupported);
-    CHECK(unsupported.error().code == util::ErrorCode::JsonParse);
+    CHECK(unsupported.error().code == support::ErrorCode::JsonParse);
     CHECK(unsupported.error().detail.find("future_reason") != std::string::npos);
 }
 
@@ -346,7 +346,7 @@ TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][
         R"({"role":"user","content":[{"type":"audio","data":"AAAA"}],"timestamp":1718000000000})");
 
     REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+    CHECK(parsed.error().code == support::ErrorCode::JsonParse);
     CHECK(parsed.error().message == "unknown content discriminator");
     CHECK(parsed.error().detail.find("audio") != std::string::npos);
 }
@@ -355,19 +355,19 @@ TEST_CASE("missing required content payload fields return typed JSON errors", "[
     auto missing_text = ai::glaze::read_message_json(
         R"({"role":"user","content":[{"type":"text"}],"timestamp":1718000000000})");
     REQUIRE_FALSE(missing_text);
-    CHECK(missing_text.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing_text.error().code == support::ErrorCode::JsonParse);
     CHECK(missing_text.error().detail.find("text") != std::string::npos);
 
     auto missing_tool_id = ai::glaze::read_message_json(
         R"({"role":"assistant","content":[{"type":"toolCall","name":"read_file","rawArguments":"{}"}],"api":"openai-completions","provider":"openai","model":"gpt-test","timestamp":1718000000000})");
     REQUIRE_FALSE(missing_tool_id);
-    CHECK(missing_tool_id.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing_tool_id.error().code == support::ErrorCode::JsonParse);
     CHECK(missing_tool_id.error().detail.find("id") != std::string::npos);
 
     auto missing_tool_result_link = ai::glaze::read_message_json(
         R"({"role":"toolResult","content":[{"type":"text","text":"ok"}],"timestamp":1718000000000})");
     REQUIRE_FALSE(missing_tool_result_link);
-    CHECK(missing_tool_result_link.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing_tool_result_link.error().code == support::ErrorCode::JsonParse);
     CHECK(missing_tool_result_link.error().detail.find("toolCallId") != std::string::npos);
 }
 
@@ -620,7 +620,7 @@ TEST_CASE("default-constructed AI contracts are empty passive values", "[ai][con
     ai::Tool tool;
     CHECK(tool.name.empty());
     CHECK(tool.description.empty());
-    CHECK(tool.parameters.holds<util::JsonValue::null_t>());
+    CHECK(tool.parameters.holds<support::JsonValue::null_t>());
 
     ai::TextContent text;
     CHECK(text.text.empty());

@@ -5,8 +5,8 @@
 #include <cch/ai/Provider.hpp>
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/providers/StreamEmit.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
+#include "support/ExpectedMacros.hpp"
+#include "support/Json.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -28,10 +28,10 @@ void set_fake_metadata(ai::AssistantMessage& assistant, const ai::Model& model) 
     assistant.usage = ai::Usage{};
 }
 
-[[nodiscard]] util::Expected<std::string> make_tool_arguments(std::string key, std::string value) {
-    util::JsonValue::object_t object;
-    object.emplace(std::move(key), util::JsonValue{std::move(value)});
-    return util::write_json(util::JsonValue{std::move(object)});
+[[nodiscard]] support::Expected<std::string> make_tool_arguments(std::string key, std::string value) {
+    support::JsonValue::object_t object;
+    object.emplace(std::move(key), support::JsonValue{std::move(value)});
+    return support::write_json(support::JsonValue{std::move(object)});
 }
 
 struct FakeToolCallSpec {
@@ -42,7 +42,7 @@ struct FakeToolCallSpec {
     std::string announcement;
 };
 
-[[nodiscard]] util::ExpectedVoid emit_complete_lifecycle(
+[[nodiscard]] support::ExpectedVoid emit_complete_lifecycle(
     const ai::AssistantMessage& final_message,
     ai::AssistantEventSink& sink) {
     auto partial = final_message;
@@ -104,7 +104,7 @@ struct FakeToolCallSpec {
         partial.content.emplace_back(ai::ToolCallContent{
             .id = tool_call.id,
             .name = tool_call.name,
-            .arguments = util::JsonValue{util::JsonValue::object_t{}},
+            .arguments = support::JsonValue{support::JsonValue::object_t{}},
             .raw_arguments = {},
             .thought_signature = std::nullopt,
             .arguments_valid = true,
@@ -155,7 +155,7 @@ struct FakeToolCallSpec {
         });
 }
 
-[[nodiscard]] util::ExpectedVoid respond_with_tool_call(
+[[nodiscard]] support::ExpectedVoid respond_with_tool_call(
     ai::AssistantMessage& assistant,
     ai::AssistantEventSink& sink,
     FakeToolCallSpec spec) {
@@ -163,7 +163,7 @@ struct FakeToolCallSpec {
     if (!raw) {
         return std::unexpected(raw.error());
     }
-    auto args = util::read_json(*raw);
+    auto args = support::read_json(*raw);
     ai::ToolCallContent call;
     call.id = std::move(spec.id);
     call.name = std::move(spec.name);
@@ -240,25 +240,25 @@ ai::ProviderAuth fake_auth() {
     return ai::ProviderAuth{.api_key = std::move(api_key)};
 }
 
-[[nodiscard]] std::optional<util::ErrorCode> scripted_failure_code(
+[[nodiscard]] std::optional<support::ErrorCode> scripted_failure_code(
     std::string_view prompt) {
     if (prompt == "fail model_source") {
-        return util::ErrorCode::ModelSource;
+        return support::ErrorCode::ModelSource;
     }
     if (prompt == "fail model_validation") {
-        return util::ErrorCode::ModelValidation;
+        return support::ErrorCode::ModelValidation;
     }
     if (prompt == "fail provider") {
-        return util::ErrorCode::Provider;
+        return support::ErrorCode::Provider;
     }
     if (prompt == "fail stream") {
-        return util::ErrorCode::Stream;
+        return support::ErrorCode::Stream;
     }
     if (prompt == "fail auth") {
-        return util::ErrorCode::Auth;
+        return support::ErrorCode::Auth;
     }
     if (prompt == "fail oauth") {
-        return util::ErrorCode::OAuth;
+        return support::ErrorCode::OAuth;
     }
     return std::nullopt;
 }
@@ -282,7 +282,7 @@ public:
              context = std::move(context),
              options = std::move(options)](
                 ai::AssistantEventSink sink)
-                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         ai::AssistantMessage assistant;
         set_fake_metadata(assistant, model);
         assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -291,8 +291,8 @@ public:
         if (options.stop_token.stop_requested()) {
             assistant.stop_reason = ai::AssistantStopReason::Aborted;
             assistant.error_message = "Request was aborted";
-            auto failure = util::make_error(
-                util::ErrorCode::Cancelled,
+            auto failure = support::make_error(
+                support::ErrorCode::Cancelled,
                 *assistant.error_message);
             if (auto emitted = emit(
                     sink,
@@ -327,8 +327,8 @@ public:
         if (const auto failure_code = scripted_failure_code(prompt)) {
             assistant.stop_reason = ai::AssistantStopReason::Error;
             assistant.error_message =
-                "scripted fake " + std::string{util::to_string(*failure_code)} + " failure";
-            auto failure = util::make_error(*failure_code, *assistant.error_message);
+                "scripted fake " + std::string{support::to_string(*failure_code)} + " failure";
+            auto failure = support::make_error(*failure_code, *assistant.error_message);
             if (auto emitted = emit(
                     sink,
                     ai::AssistantErrorEvent{

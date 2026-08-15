@@ -6,8 +6,8 @@
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
-#include <cch/util/Error.hpp>
-#include <cch/util/JsonValue.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -181,7 +181,7 @@ struct CompactionPreparation {
 /// is not applicable (pi `prepareCompaction`: an empty path or a path whose
 /// last entry is already a compaction). The path is root-to-leaf, matching pi
 /// `SessionManager.getBranch()`.
-[[nodiscard]] util::Expected<std::optional<CompactionPreparation>>
+[[nodiscard]] support::Expected<std::optional<CompactionPreparation>>
 prepare_compaction(
     const std::vector<const SessionEntry*>& path,
     CompactionSettings settings);
@@ -192,7 +192,7 @@ prepare_compaction(
 /// `ModelRuntime::streamSimple`, mirroring pi's harness passing `models` into
 /// `compact`. The model used for summarization is the caller's captured model.
 using SummarizationStreamFn = std::move_only_function<
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>>(
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>>(
         ai::AiContext context,
         ai::SimpleStreamOptions options)>;
 
@@ -214,7 +214,7 @@ struct CompactionResult {
     /// Retained recent messages stored directly on the compaction entry.
     std::vector<ai::MessageVariant> retained_tail;
     /// pi `CompactionDetails`: `{readFiles, modifiedFiles}`.
-    std::optional<util::JsonValue> details;
+    std::optional<support::JsonValue> details;
 };
 
 /// Options for one `compact` run (pi harness `compact`'s `customInstructions`,
@@ -232,7 +232,7 @@ struct CompactionRunOptions {
 /// Generate compaction summary data from prepared session history (pi harness
 /// `compact`). Summarization requests are issued through the injected stream
 /// seam with `cacheRetention: "none"` and a fresh session id per request.
-[[nodiscard]] boost::asio::awaitable<util::Expected<CompactionResult>> compact(
+[[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> compact(
     const CompactionPreparation& preparation,
     const ai::Model& model,
     CompactionRunOptions run_options);
