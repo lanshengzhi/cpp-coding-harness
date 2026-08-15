@@ -23,6 +23,7 @@
 #include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "harness/compaction/Compaction.hpp"
+#include "harness/RuntimeRoot.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -646,9 +647,9 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     if (lifecycle_ == Lifecycle::Closing) {
         // The prompt awaitable is the existing observation seam for active
         // close: owned environment cleanup finishes before it settles. An
-        // overlapping User Bash finalizes close when it is the last active
-        // work instead.
-        if (!user_bash_active_) {
+        // overlapping User Bash or manual compaction finalizes close when it
+        // is the last active work instead (issue #467).
+        if (!user_bash_active_ && !compaction_active_) {
             co_await finalize_close_after_active_work();
         }
     }
@@ -751,7 +752,8 @@ AgentSessionRuntime::run_user_bash(
     user_bash_active_ = false;
     const auto finalize_if_last_active_work =
         [this]() -> boost::asio::awaitable<void> {
-        if (lifecycle_ == Lifecycle::Closing && !prompt_active_) {
+        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ &&
+            !compaction_active_) {
             co_await finalize_close_after_active_work();
         }
     };
@@ -1881,6 +1883,14 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
             ? std::nullopt
             : std::optional<std::string>{result.error().message},
     });
+    // A Close requested while the compaction was in flight finalizes here,
+    // after the compaction reached its terminal outcome — never while the
+    // compaction could still touch the Agent, the store, or the persistence
+    // channel (issue #467).
+    if (lifecycle_ == Lifecycle::Closing && !prompt_active_ &&
+        !user_bash_active_) {
+        co_await finalize_close_after_active_work();
+    }
     co_return result;
 }
 
@@ -2518,17 +2528,21 @@ void AgentSessionRuntime::close() noexcept {
     }
     lifecycle_ = Lifecycle::Closing;
 
+    // Admission stopped above before any cancellation request below (issue
+    // #467): every entry point's reject_if_closed observes Closing first.
     // Request work-scoped cancellation but retain the active loop, callbacks,
-    // commitment, store, and capabilities until each active operation unwinds
-    // through its ordinary lifecycle. The last active work to settle
-    // finalizes the close.
+    // commitment, store, and capabilities until each admitted operation
+    // (prompt, User Bash, manual compaction) unwinds through its ordinary
+    // lifecycle. An admitted compaction is awaited, not cancelled (ADR 0040:
+    // Close waits for admitted compaction work to reach its terminal
+    // outcome). The last active work to settle finalizes the close.
     if (prompt_active_ && active_stop_source_) {
         (void)active_stop_source_->request_stop();
     }
     if (user_bash_active_ && active_user_bash_stop_source_) {
         (void)active_user_bash_stop_source_->request_stop();
     }
-    if (!prompt_active_ && !user_bash_active_) {
+    if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
         finalize_close();
     }
 }
@@ -2555,6 +2569,17 @@ AgentSessionRuntime::release_close_resources() noexcept {
 }
 
 boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_active_work() {
+    if (lifecycle_ == Lifecycle::Closed) {
+        co_return;
+    }
+    // Every admitted Session Event Commitment reaches its terminal
+    // persistence outcome before the store is released (ADR 0040, issue
+    // #467). The settling work already drained the channel (the prompt
+    // commitment's conclude(), the compaction's mid-run drain), so this wait
+    // is the explicit Close-time quiescence point rather than new blocking.
+    if (persistence_) {
+        co_await persistence_->drain();
+    }
     auto owned_env = release_close_resources();
     if (owned_env) {
         try {
@@ -2570,22 +2595,32 @@ void AgentSessionRuntime::finalize_close() noexcept {
     if (lifecycle_ == Lifecycle::Closed) {
         return;
     }
+    // Idle close: no prompt, User Bash, or compaction is admitted, so no
+    // Session Event Commitment can still be in flight (submissions only
+    // happen inside an admitted run whose settle drains the channel).
     auto owned_env = release_close_resources();
     lifecycle_ = Lifecycle::Closed;
 
     // Idle close has no host executor to await. Transfer the factory-owned
-    // environment to a posted best-effort cleanup task; host-owned environments
-    // were detached above without cleanup().
+    // environment to a posted best-effort cleanup task on the session's
+    // Runtime loop when one exists, so the final application Close drain
+    // quiesces process resources before the loop stops (ADR 0040, issue
+    // #467); a session assembled without a Runtime root falls back to the
+    // shared system executor. Host-owned environments were detached above
+    // without cleanup().
     if (owned_env) {
         try {
             // post() prevents a cleanup coroutine from executing inline on the
             // close() stack before its first suspension point.
+            const auto cleanup_executor = services_.runtime_target
+                ? services_.runtime_target->executor()
+                : boost::asio::any_io_executor{boost::asio::system_executor{}};
             boost::asio::post(
-                boost::asio::system_executor{},
-                [env = std::move(owned_env)]() mutable {
+                cleanup_executor,
+                [env = std::move(owned_env), cleanup_executor]() mutable {
                     try {
                         boost::asio::co_spawn(
-                            boost::asio::system_executor{},
+                            cleanup_executor,
                             [env = std::move(env)]() -> boost::asio::awaitable<void> {
                                 try {
                                     (void)co_await ai::detail::await_async_result(env->cleanup());

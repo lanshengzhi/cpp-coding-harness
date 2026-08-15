@@ -5,6 +5,7 @@
 #include "ai/providers/FakeProvider.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "support/GatedChatProvider.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -34,26 +35,8 @@ namespace {
 
 using tests::drain_ready;
 using tests::PromptResult;
+using tests::pump_until;
 using tests::spawn_prompt;
-
-/// Pump one loop until `done` becomes true (or the budget expires): session
-/// persistence outcomes return from Runtime worker threads through the
-/// fixture Runtime loop, so plain drain_ready can go idle while a prompt is
-/// still settling off-thread.
-[[nodiscard]] bool pump_until(
-    boost::asio::io_context& io,
-    const std::function<bool()>& done,
-    std::chrono::milliseconds budget = std::chrono::milliseconds{10000}) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!done() && std::chrono::steady_clock::now() < deadline) {
-        if (io.stopped()) {
-            io.restart();
-        }
-        (void)io.poll();
-        std::this_thread::sleep_for(std::chrono::microseconds{100});
-    }
-    return done();
-}
 
 struct PersistentSession {
     tests::TempWorkspace workspace;

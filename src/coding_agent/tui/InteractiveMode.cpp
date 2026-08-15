@@ -3466,6 +3466,10 @@ private:
     /// be emitted as an event").
     void post_compact(std::string custom_instructions) {
         const auto weak = weak_from_this();
+        // Admit the compaction as active work before the flow is posted so an
+        // exit requested between the /compact submission and the flow start
+        // still waits for the compaction to settle (issue #467).
+        compaction_active_ = true;
         boost::asio::post(executor_, [weak, custom_instructions = std::move(custom_instructions)]() mutable {
             if (const auto self = weak.lock(); self && self->running_) {
                 self->spawn_flow(
@@ -3492,6 +3496,15 @@ private:
         // session events (`compaction_end`), so no error is reported here.
         static_cast<void>(
             co_await session_->compact(std::move(custom_instructions)));
+        // compact() returns on every outcome — including a rejection that
+        // emits no `compaction_end` — so the active-work fact clears here.
+        // Mirror prompt/User Bash completion: an exit requested while the
+        // compaction was in flight fires only now, once the Session no
+        // longer touches compaction resources (issue #467, ADR 0040).
+        compaction_active_ = false;
+        if (exit_requested_ && !prompt_active_ && !user_bash_active_) {
+            signal_exit();
+        }
     }
 
     /// pi `showTrustSelector`: spawn the `/trust` flow (the generic
@@ -3722,10 +3735,13 @@ private:
         // generations and clear the active-work facts, the working indicator,
         // and any pending-bash progress block (their stale completions are
         // dropped by the generation check).
-        if (prompt_active_ || user_bash_active_) {
+        if (prompt_active_ || user_bash_active_ || compaction_active_) {
             note_prompt_finished();
             prompt_active_ = false;
             user_bash_active_ = false;
+            // A retired Session's compaction keeps no current-Session event
+            // subscription, so its end can never clear this fact here.
+            compaction_active_ = false;
             if (view_ != nullptr) {
                 view_->clear_status_indicator();
                 view_->clear_user_bash_progress();
@@ -5902,7 +5918,9 @@ private:
         if (!running_ || exit_requested_) return;
         exit_requested_ = true;
         session_->close();
-        if (!prompt_active_ && !user_bash_active_) signal_exit();
+        if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
+            signal_exit();
+        }
     }
 
     void signal_exit() {
@@ -6040,6 +6058,13 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
     std::atomic<bool> user_bash_active_{false};
+    /// A manual /compact flow was admitted and has not returned yet. Exit
+    /// defers on it exactly like prompt/User Bash work: the Session Close
+    /// requested by request_exit() finalizes only after the compaction
+    /// settles, and tearing the loop down earlier would destroy Session
+    /// resources the compaction still uses (issue #467, ADR 0040).
+    /// Executor-confined like the flows that set and clear it.
+    std::atomic<bool> compaction_active_{false};
     /// pi `lastEscapeTime`: the double-escape window base (500 ms, empty
     /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
     std::chrono::steady_clock::time_point last_escape_time_{};

@@ -413,6 +413,13 @@ public:
         return lifecycle_ == Lifecycle::Closing || prompt_active_ ||
             user_bash_active_ || compaction_active_;
     }
+    /// Idempotent Close request (ADR 0011/0040, issue #467): stops new work
+    /// admission first, then requests cancellation of the active prompt and
+    /// User Bash, and waits for every admitted prompt, manual compaction,
+    /// Session Event Commitment, and admitted callback to reach its terminal
+    /// outcome before releasing Session resources exactly once. An admitted
+    /// compaction is awaited, never cancelled; a Close requested from inside
+    /// an admitted callback returns without waiting on that callback.
     void close() noexcept;
 
     /// The current session's tree, or an empty optional when the session has

@@ -134,6 +134,13 @@ struct RuntimeRoot::State final {
 
     void shutdown() noexcept {
         stop_admission_and_drain_workers();
+        release_loop_guard();
+    }
+
+    /// Final Close step: release the loop work guard so the caller's drain
+    /// pump returns once every admitted terminal and queued handler has been
+    /// delivered (ADR 0040 final application Close).
+    void release_loop_guard() noexcept {
         work_guard.reset();
     }
 
@@ -365,6 +372,7 @@ RuntimeRoot::~RuntimeRoot() = default;
 void RuntimeRoot::close() noexcept {
     if (state_) {
         state_->stop_admission_and_drain_workers();
+        state_->release_loop_guard();
     }
 }
 

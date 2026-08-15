@@ -48,6 +48,24 @@ namespace {
 /// behavior.
 constexpr harness::RuntimeLimits kRuntimeLimits{};
 
+/// Final application Close (ADR 0040 §Session Event Commitment and Close,
+/// issue #467): with the current Session already closed and quiesced by the
+/// owning mode, stop Runtime admission, drain queued worker work, and join
+/// the workers, then pump the shared loop so every admitted terminal outcome
+/// reaches its target mailbox before the root and the loop are destroyed.
+/// RuntimeRoot::close releases the loop work guard, so the drain returns
+/// once the queued work is delivered.
+void close_runtime(
+    const std::shared_ptr<harness::RuntimeRoot>& runtime_root,
+    boost::asio::io_context& io) {
+    runtime_root->close();
+    if (io.stopped()) {
+        io.restart();
+    }
+    while (io.poll() != 0) {
+    }
+}
+
 /// pi `readPipedStdin`: read all of piped stdin and trim it; empty (or
 /// whitespace-only) content is absent and contributes nothing to the initial
 /// message merge.
@@ -300,6 +318,14 @@ void print_session_diagnostics(
         (void)io->run_one();
     }
 
+    // Final application Close (ADR 0040, issue #467): the interactive mode
+    // already stopped terminal I/O and closed and quiesced the current
+    // Session (its exit waits for active prompt, User Bash, and compaction
+    // work to settle); now stop Runtime
+    // admission, join the workers, and drain the shared loop so admitted
+    // terminals — including retired Sessions' late completions — reach their
+    // mailboxes before the root, the Models runtime, and the loop destruct.
+    int exit_code = 0;
     try {
         if (auto result = future.get(); !result) {
             if (!creation_failure_reported) {
@@ -310,16 +336,17 @@ void print_session_diagnostics(
                 }
                 std::cerr << '\n';
             }
-            return 1;
+            exit_code = 1;
         }
     } catch (const std::exception& error) {
         std::cerr << "Native TUI failed: " << error.what() << '\n';
-        return 1;
+        exit_code = 1;
     } catch (...) {
         std::cerr << "Native TUI failed: unknown exception\n";
-        return 1;
+        exit_code = 1;
     }
-    return 0;
+    close_runtime(runtime_root, *io);
+    return exit_code;
 }
 
 } // namespace
@@ -566,7 +593,7 @@ void print_session_diagnostics(
     }
     print_session_diagnostics(streams.error, created->diagnostics);
 
-    return run_print_mode(
+    const int print_exit_code = run_print_mode(
         *runtime_io,
         *created->session,
         PrintModeConfig{
@@ -581,6 +608,14 @@ void print_session_diagnostics(
                 .images = std::move(initial->initial_images),
             },
         });
+    // Final application Close (ADR 0040, issue #467): the prompts have
+    // settled (a signal already closed the Session inside print mode; the
+    // idempotent request below covers the normal exit), so stop Runtime
+    // admission, join the workers, and drain the shared loop — including
+    // the Session's posted process-resource cleanup — before teardown.
+    created->session->close();
+    close_runtime(runtime_root, *runtime_io);
+    return print_exit_code;
 }
 
 [[nodiscard]] int run_cli_entry(

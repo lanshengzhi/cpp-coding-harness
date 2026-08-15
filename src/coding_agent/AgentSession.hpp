@@ -497,11 +497,14 @@ public:
     void abort();
 
     /// Request session close. Synchronous, non-blocking, idempotent, and safe
-    /// from an event callback. New work is rejected immediately and an active
-    /// prompt receives the same cancellation request as abort(); subscriber
-    /// and owned-resource teardown occurs exactly once after active callbacks
-    /// and operations quiesce. Host-provided execution environments retain
-    /// their ownership contract and are never cleaned up by the session.
+    /// from an event callback. New prompt and work admission stops before an
+    /// active prompt or User Bash receives the same cancellation request as
+    /// abort(); admitted manual compaction is awaited rather than cancelled.
+    /// Subscriber and owned-resource teardown occurs exactly once after every
+    /// admitted prompt, compaction, process, Session Event Commitment, and
+    /// admitted callback quiesces (ADR 0011/0040). Host-provided execution
+    /// environments retain their ownership contract and are never cleaned up
+    /// by the session.
     void close() noexcept;
 
     /// True while the session is open (not closed).

@@ -2,6 +2,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -980,6 +981,62 @@ public:
     }
 
     bool started{false};
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
+/// Requests one and two answer immediately; the third — the /compact
+/// summarization in the Close test below — gates until release(). The
+/// compaction summarization stream carries a never-stopped token, so the
+/// gated request always completes once released: Close awaits admitted
+/// compaction work rather than cancelling it (ADR 0040, issue #467).
+class GatedCompactionChatProvider final : public tests::ScriptedProvider {
+public:
+    GatedCompactionChatProvider() : ScriptedProvider("sdk-host") {}
+
+    [[nodiscard]] ai::ModelStream stream(
+        ai::Model model,
+        ai::AiContext context,
+        ai::ProviderStreamOptions options) override {
+        return ai::detail::make_model_stream(
+            [this,
+             model = std::move(model),
+             context = std::move(context),
+             options = std::move(options)](
+                ai::AssistantEventSink) mutable
+                -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+                ++request_count;
+                if (request_count == 3) {
+                    const auto executor =
+                        co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(
+                        std::chrono::steady_clock::time_point::max());
+                    boost::system::error_code error;
+                    co_await gate_->async_wait(boost::asio::redirect_error(
+                        boost::asio::use_awaitable, error));
+                    gate_.reset();
+                }
+                auto response = ai::assistant_text_message(
+                    request_count == 3 ? "## Goal\nCompacted exit summary"
+                                       : "setup reply");
+                response.provider = "gated-compaction-fake";
+                response.api = "fake";
+                response.model = model.id;
+                // Session files require real epoch timestamps on assistant
+                // messages; stamp the deterministic value the other
+                // scripted fakes use.
+                response.timestamp = 1718000000123;
+                co_return response;
+            });
+    }
+
+    void release() {
+        if (gate_) (void)gate_->cancel();
+    }
+
+    std::size_t request_count{0};
 
 private:
     std::optional<boost::asio::steady_timer> gate_;
@@ -3942,6 +3999,74 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(run_result);
     CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI exit during an admitted manual compaction waits for the compaction to settle",
+    "[coding_agent][tui][close][issue467]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    // Compaction requires a persisted session file and history above the
+    // keep-recent budget: pin the budget to one token through the global
+    // settings the Session factory loads (PI_CODING_AGENT_DIR) so the small
+    // history below compacts. A genuinely big history would keep the loop
+    // busy re-rendering it on every Compaction indicator animation tick in
+    // a Debug build, so the loop would never drain.
+    config.write("settings.json", R"({"compaction": {"keepRecentTokens": 1}})");
+    const tests::EnvVarGuard agent_dir{"PI_CODING_AGENT_DIR", config.path().string()};
+    auto client = std::make_shared<GatedCompactionChatProvider>();
+    auto* gated = client.get();
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{
+        workspace.path() / "compact-exit.jsonl"};
+    options.workspace = workspace.path();
+    options.models = cch::tests::models_from_provider(std::move(client));
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("hello\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("again\r"));
+    drain_ready(io);
+    REQUIRE(gated->request_count == 2);
+    REQUIRE(created->session->message_count() == 4);
+
+    // The /compact summarization request is admitted and gated.
+    REQUIRE(terminal.inject_input("/compact\r"));
+    drain_ready(io);
+    REQUIRE(gated->request_count == 3);
+
+    // Exit requests Session Close but cannot complete — and the run cannot
+    // tear down the loop — while the admitted compaction still uses Session
+    // resources (ADR 0040, issue #467).
+    REQUIRE(terminal.inject_input("/quit\r"));
+    drain_ready(io);
+    CHECK(created->session->is_busy());
+    CHECK_FALSE(run_result.has_value());
+
+    // The compaction reaches its terminal outcome, Close finalizes, and the
+    // deferred exit completes exactly once.
+    gated->release();
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
 }
 
 TEST_CASE(

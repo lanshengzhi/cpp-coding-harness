@@ -5,6 +5,7 @@
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "harness/RuntimeRoot.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,27 +28,10 @@ namespace runtime = cch::coding_agent::runtime;
 
 namespace {
 
+using tests::pump_until;
+
 ai::UserMessage user_msg(std::string text) {
     return ai::user_text_message(std::move(text));
-}
-
-/// Pump one loop until `done` becomes true (or the budget expires). Used
-/// instead of `io.run()` because a live RuntimeRoot holds a work guard, so
-/// `run()` would not return while the root is alive.
-[[nodiscard]] bool pump_until(
-    boost::asio::io_context& io,
-    const std::atomic<bool>& done,
-    std::chrono::milliseconds budget = std::chrono::milliseconds{2000}) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!done.load(std::memory_order_acquire) &&
-           std::chrono::steady_clock::now() < deadline) {
-        if (io.stopped()) {
-            io.restart();
-        }
-        (void)io.poll();
-        std::this_thread::sleep_for(std::chrono::microseconds{100});
-    }
-    return done.load(std::memory_order_acquire);
 }
 
 template <typename T>

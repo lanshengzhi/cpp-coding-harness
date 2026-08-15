@@ -70,9 +70,11 @@ public:
     RuntimeRoot(const RuntimeRoot&) = delete;
     RuntimeRoot& operator=(const RuntimeRoot&) = delete;
 
-    /// Stop admission, drain queued worker work, and join workers. The caller
-    /// keeps pumping the shared loop afterwards so every admitted terminal
-    /// reaches its target mailbox before the root and loop are destroyed.
+    /// Stop admission, drain queued worker work, join workers, and release
+    /// the loop work guard (the final application Close order, ADR 0040).
+    /// The caller keeps pumping the shared loop afterwards so every admitted
+    /// terminal reaches its target mailbox; with the guard released, a
+    /// `run()` drain returns once the queued work is delivered.
     void close() noexcept;
 
     [[nodiscard]] std::shared_ptr<RuntimeTarget> make_target() const;

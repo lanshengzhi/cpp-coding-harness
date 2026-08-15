@@ -701,6 +701,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/TurnAutoRetryTest.cpp
         tests/coding_agent/runtime/LocalUserShellTest.cpp
         tests/coding_agent/runtime/ResourceReloadTest.cpp
+        tests/coding_agent/runtime/SessionCloseTest.cpp
         tests/coding_agent/runtime/SessionCommitmentAsyncTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp

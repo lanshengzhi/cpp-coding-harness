@@ -1,4 +1,5 @@
 #include "harness/RuntimeRoot.hpp"
+#include "support/PumpUntil.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/io_context.hpp>
@@ -17,43 +18,7 @@ using namespace cch;
 
 namespace {
 
-/// Pump one loop until `done` becomes true (or the budget expires). Used
-/// instead of `io.run()` because a live RuntimeRoot holds a work guard, so
-/// `run()` would not return while the root is alive.
-[[nodiscard]] bool pump_until(
-    boost::asio::io_context& io,
-    const std::atomic<bool>& done,
-    std::chrono::milliseconds budget = std::chrono::milliseconds{2000}) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!done.load(std::memory_order_acquire) &&
-           std::chrono::steady_clock::now() < deadline) {
-        if (io.stopped()) {
-            io.restart();
-        }
-        (void)io.poll();
-        std::this_thread::sleep_for(std::chrono::microseconds{100});
-    }
-    return done.load(std::memory_order_acquire);
-}
-
-/// Pump one loop until `done()` returns true (or the budget expires): the
-/// predicate form lets the test poll a composed condition (for example a
-/// loop-serviced flag together with a delivery count) without relying on a
-/// one-shot handler that can never re-check.
-[[nodiscard]] bool pump_until(
-    boost::asio::io_context& io,
-    const std::function<bool()>& done,
-    std::chrono::milliseconds budget = std::chrono::milliseconds{2000}) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!done() && std::chrono::steady_clock::now() < deadline) {
-        if (io.stopped()) {
-            io.restart();
-        }
-        (void)io.poll();
-        std::this_thread::sleep_for(std::chrono::microseconds{100});
-    }
-    return done();
-}
+using tests::pump_until;
 
 } // namespace
 
@@ -587,4 +552,100 @@ TEST_CASE(
     CHECK(delivered_at_close.load(std::memory_order_acquire) < 32);
     CHECK(delivered.load(std::memory_order_acquire) == 32);
     CHECK_FALSE(target->try_admit(4).has_value());
+}
+
+TEST_CASE(
+    "RuntimeRoot Close releases the loop work guard so the final application drain returns",
+    "[harness][runtime][close][issue467]") {
+    auto io = std::make_shared<boost::asio::io_context>();
+    harness::RuntimeRoot root(
+        io,
+        harness::RuntimeLimits{
+            .worker_count = 2,
+            .max_admitted_operations = 8,
+            .max_admitted_bytes = 1024 * 1024,
+        });
+    auto target = root.make_target();
+
+    std::vector<int> delivered;
+    {
+        auto first = target->try_admit(4);
+        auto second = target->try_admit(4);
+        REQUIRE(first.has_value());
+        REQUIRE(second.has_value());
+        std::move(*first).complete(
+            [&delivered]() noexcept { delivered.push_back(1); });
+        std::move(*second).complete(
+            [&delivered]() noexcept { delivered.push_back(2); });
+    }
+
+    // Final application Close (ADR 0040): stop admission and join the
+    // workers, then pump the loop so every admitted terminal reaches its
+    // mailbox.
+    root.close();
+    while (io->poll() > 0) {
+    }
+    CHECK(delivered == std::vector<int>{1, 2});
+
+    // The guard is released: an empty loop returns instead of blocking, so
+    // the application drain after Close terminates deterministically.
+    CHECK(io->run() == 0);
+}
+
+TEST_CASE(
+    "RuntimeRoot Close under load delivers every admitted terminal in per-target order",
+    "[harness][runtime][close][issue467]") {
+    auto io = std::make_shared<boost::asio::io_context>();
+    constexpr std::size_t kOperationsPerTarget = 32;
+    harness::RuntimeRoot root(
+        io,
+        harness::RuntimeLimits{
+            .worker_count = 2,
+            .max_admitted_operations = 2 * kOperationsPerTarget,
+            .max_admitted_bytes = 1024 * 1024,
+        });
+    auto first_target = root.make_target();
+    auto second_target = root.make_target();
+
+    std::vector<int> first_delivered;
+    std::vector<int> second_delivered;
+    const auto admit_worker =
+        [](const std::shared_ptr<harness::RuntimeTarget>& target,
+           std::vector<int>& delivered,
+           int marker) {
+            auto admission = target->try_admit(4);
+            REQUIRE(admission.has_value());
+            auto held = std::make_shared<harness::RuntimeTarget::Admission>(
+                std::move(*admission));
+            REQUIRE(held->post_worker(
+                [held, &delivered, marker]() mutable noexcept {
+                    std::move(*held).complete(
+                        [&delivered, marker]() noexcept {
+                            delivered.push_back(marker);
+                        });
+                }));
+        };
+    for (std::size_t index = 0; index < kOperationsPerTarget; ++index) {
+        admit_worker(first_target, first_delivered, static_cast<int>(index));
+        admit_worker(second_target, second_delivered, static_cast<int>(index));
+    }
+
+    // Close under load: admission stops, queued worker work drains, workers
+    // join, and the caller's pump delivers every admitted terminal through
+    // the per-target mailboxes in admission order.
+    root.close();
+    CHECK_FALSE(first_target->try_admit(4).has_value());
+    CHECK_FALSE(second_target->try_admit(4).has_value());
+    while (io->poll() > 0) {
+    }
+
+    const auto expected = [] {
+        std::vector<int> markers;
+        for (std::size_t index = 0; index < kOperationsPerTarget; ++index) {
+            markers.push_back(static_cast<int>(index));
+        }
+        return markers;
+    }();
+    CHECK(first_delivered == expected);
+    CHECK(second_delivered == expected);
 }
