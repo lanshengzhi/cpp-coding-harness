@@ -14,10 +14,8 @@
 #include <regex>
 #include <string>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 using namespace cch;
 namespace session_paths = cch::coding_agent::session_paths;
@@ -25,13 +23,11 @@ namespace runtime = cch::coding_agent::runtime;
 
 namespace {
 
-#if defined(__unix__) || defined(__APPLE__)
 mode_t permission_bits(const std::filesystem::path& path) {
     struct stat status {};
     REQUIRE(::stat(path.c_str(), &status) == 0);
     return status.st_mode & 0777;
 }
-#endif
 
 } // namespace
 
@@ -163,15 +159,12 @@ TEST_CASE("automatic session publication correlates path header and identity", "
     REQUIRE(loaded);
     CHECK(loaded->metadata.session_id == published->metadata.session_id);
     CHECK(loaded->metadata.created_at == published->metadata.created_at);
-#if defined(__unix__) || defined(__APPLE__)
     CHECK(permission_bits(sessions_root) == 0700);
     CHECK(permission_bits(workspace_directory) == 0700);
     CHECK(permission_bits(session_path) == 0600);
-#endif
 }
 
 TEST_CASE("automatic publication makes default directories and file private", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     config_dir.set((temp.path() / "agent").string());
@@ -196,9 +189,6 @@ TEST_CASE("automatic publication makes default directories and file private", "[
     CHECK(permission_bits(sessions_root) == 0700);
     CHECK(permission_bits(workspace_directory) == 0700);
     CHECK(permission_bits(*published->store->path()) == 0600);
-#else
-    SUCCEED("POSIX permission assertions are not available on this platform");
-#endif
 }
 
 TEST_CASE("custom automatic session target calculation is side effect free", "[coding_agent][session-path-policy]") {
@@ -226,7 +216,6 @@ TEST_CASE("custom automatic session target calculation is side effect free", "[c
 }
 
 TEST_CASE("custom automatic publication creates a missing override directory privately", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "missing" / "custom-sessions";
     const auto workspace = temp.path() / "workspace";
@@ -249,13 +238,9 @@ TEST_CASE("custom automatic publication creates a missing override directory pri
     auto loaded = harness::session::JsonlSessionStore::load(*published->store->path());
     REQUIRE(loaded);
     CHECK(loaded->metadata.session_id == published->metadata.session_id);
-#else
-    SUCCEED("POSIX permission assertions are not available on this platform");
-#endif
 }
 
 TEST_CASE("custom automatic publication preserves an existing override directory mode", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "custom-sessions";
     const auto workspace = temp.path() / "workspace";
@@ -275,13 +260,9 @@ TEST_CASE("custom automatic publication preserves an existing override directory
     REQUIRE(published->store->path());
     CHECK(permission_bits(directory) == 0755);
     CHECK(permission_bits(*published->store->path()) == 0600);
-#else
-    SUCCEED("POSIX permission assertions are not available on this platform");
-#endif
 }
 
 TEST_CASE("custom automatic publication rejects symbolic link override directories", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
     const auto real_directory = temp.path() / "real-sessions";
     const auto linked_directory = temp.path() / "linked-sessions";
@@ -302,9 +283,6 @@ TEST_CASE("custom automatic publication rejects symbolic link override directori
     CHECK(published.error().detail.find(linked_directory.string()) != std::string::npos);
     CHECK(published.error().detail.find("symlink") != std::string::npos);
     CHECK(std::filesystem::is_empty(real_directory));
-#else
-    SUCCEED("symbolic-link publication assertion is not available on this platform");
-#endif
 }
 
 TEST_CASE("custom automatic publication failures include attempted target and reason", "[coding_agent][session-path-policy][publication]") {
@@ -345,7 +323,6 @@ TEST_CASE("custom automatic publication rejects a relative override directory", 
 }
 
 TEST_CASE("explicit publication preserves custom directory mode while making file private", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
     const auto custom_directory = temp.path() / "custom";
     std::filesystem::create_directory(custom_directory);
@@ -363,13 +340,9 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
     REQUIRE(published);
     CHECK(permission_bits(custom_directory) == 0755);
     CHECK(permission_bits(path) == 0600);
-#else
-    SUCCEED("POSIX permission assertions are not available on this platform");
-#endif
 }
 
 TEST_CASE("automatic publication rejects symbolic link directories", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
@@ -394,9 +367,6 @@ TEST_CASE("automatic publication rejects symbolic link directories", "[coding_ag
     CHECK(published.error().detail.find(sessions_root.string()) != std::string::npos);
     CHECK(published.error().detail.find("symlink") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(real_root / session_paths::encode_workspace_key(workspace)));
-#else
-    SUCCEED("symbolic-link publication assertion is not available on this platform");
-#endif
 }
 
 TEST_CASE("automatic publication failures include attempted target and reason", "[coding_agent][session-path-policy][publication]") {

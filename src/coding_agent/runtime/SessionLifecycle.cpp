@@ -18,16 +18,9 @@
 #include <system_error>
 #include <utility>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#elif defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
 
 namespace cch::coding_agent::runtime {
 namespace {
@@ -65,40 +58,6 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
         "attempted target: " + display_target + "; " + underlying_reason(underlying));
 }
 
-#if defined(_WIN32)
-[[nodiscard]] support::ExpectedVoid reject_windows_reparse_components(
-    const std::filesystem::path& path) {
-    std::filesystem::path cursor = path.root_path();
-    for (const auto& component : path.relative_path()) {
-        if (component.empty() || component == ".") {
-            continue;
-        }
-        if (component == "..") {
-            return std::unexpected(session_error(
-                "session directory contains parent traversal",
-                "refusing to create a session directory through '..'"));
-        }
-        cursor /= component;
-        const DWORD attributes = ::GetFileAttributesW(cursor.c_str());
-        if (attributes == INVALID_FILE_ATTRIBUTES) {
-            const auto code = ::GetLastError();
-            if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) {
-                continue;
-            }
-            return std::unexpected(session_error(
-                "could not inspect session directory",
-                cursor.string() + ": Windows error " + std::to_string(code)));
-        }
-        if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-            return std::unexpected(session_error(
-                "session directory contains a symlink or junction",
-                "refusing to publish through reparse point: " + cursor.string()));
-        }
-    }
-    return {};
-}
-#endif
-
 /// Prepare one session directory chain. When tighten_existing is true the
 /// final directory is always made owner-only (harness-owned default roots);
 /// when false an existing final directory keeps its mode (custom override
@@ -107,7 +66,6 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 [[nodiscard]] support::ExpectedVoid prepare_session_directory(
     const std::filesystem::path& path,
     bool tighten_existing) {
-#if defined(__unix__) || defined(__APPLE__)
     int open_flags = O_RDONLY | O_DIRECTORY;
 #ifdef O_CLOEXEC
     open_flags |= O_CLOEXEC;
@@ -176,77 +134,6 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
             "could not close session directory",
             path.string() + ": " + std::strerror(errno)));
     }
-#elif defined(_WIN32)
-    if (auto safe = reject_windows_reparse_components(path); !safe) {
-        return safe;
-    }
-    std::error_code pre_ec;
-    const bool existed_before = std::filesystem::exists(path, pre_ec);
-    std::error_code ec;
-    std::filesystem::create_directories(path, ec);
-    if (ec) {
-        return std::unexpected(session_error(
-            "could not create session directory",
-            path.string() + ": " + ec.message()));
-    }
-    if (auto safe = reject_windows_reparse_components(path); !safe) {
-        return safe;
-    }
-    if (tighten_existing || !existed_before) {
-        std::filesystem::permissions(
-            path,
-            std::filesystem::perms::owner_all,
-            std::filesystem::perm_options::replace,
-            ec);
-        if (ec) {
-            return std::unexpected(session_error(
-                "could not make session directory private",
-                path.string() + ": " + ec.message()));
-        }
-    }
-#else
-    std::filesystem::path cursor = path.root_path();
-    bool existed_before = true;
-    for (const auto& component : path.relative_path()) {
-        if (component.empty() || component == ".") {
-            continue;
-        }
-        if (component == "..") {
-            return std::unexpected(session_error(
-                "session directory contains parent traversal",
-                "refusing to create a session directory through '..'"));
-        }
-        cursor /= component;
-        std::error_code inspect_ec;
-        const auto status = std::filesystem::symlink_status(cursor, inspect_ec);
-        if (!inspect_ec && std::filesystem::is_symlink(status)) {
-            return std::unexpected(session_error(
-                "session directory contains a symlink",
-                "refusing to publish through symlink: " + cursor.string()));
-        }
-        existed_before = existed_before && !inspect_ec && std::filesystem::exists(status);
-    }
-
-    std::error_code ec;
-    std::filesystem::create_directories(path, ec);
-    if (ec) {
-        return std::unexpected(session_error(
-            "could not create session directory",
-            path.string() + ": " + ec.message()));
-    }
-    if (tighten_existing || !existed_before) {
-        std::filesystem::permissions(
-            path,
-            std::filesystem::perms::owner_all,
-            std::filesystem::perm_options::replace,
-            ec);
-        if (ec) {
-            return std::unexpected(session_error(
-                "could not make session directory private",
-                path.string() + ": " + ec.message()));
-        }
-    }
-#endif
     return {};
 }
 

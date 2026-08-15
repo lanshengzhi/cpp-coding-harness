@@ -11,9 +11,8 @@ namespace cch::coding_agent::tui {
 
 /// Resolve the external editor command (pi `SettingsManager
 /// getExternalEditorCommand` with the settings field out of the subset —
-/// env-only per G2): `$VISUAL`, then `$EDITOR`, then the platform default
-/// (`notepad` on Windows, `nano` elsewhere). Empty when no env var is set
-/// and the default cannot be determined.
+/// env-only per G2): `$VISUAL`, then `$EDITOR`, then the default `nano`.
+/// Empty when no env var is set and the default cannot be determined.
 [[nodiscard]] std::string external_editor_command();
 
 /// pi `external-editor.ts` `editInExternalEditor`: write `content` to a

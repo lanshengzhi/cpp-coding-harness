@@ -3,13 +3,9 @@
 // POSIX-only RAII owner for a raw file descriptor (CODING_STANDARDS 7.8);
 // replaces unique_ptr<int> fd guards that heap-allocated an int per descriptor.
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
-#endif
 
 namespace cch::support {
-
-#if defined(__unix__) || defined(__APPLE__)
 
 class UniqueFd final {
 public:
@@ -59,7 +55,5 @@ public:
 private:
     int fd_{-1};
 };
-
-#endif
 
 } // namespace cch::support

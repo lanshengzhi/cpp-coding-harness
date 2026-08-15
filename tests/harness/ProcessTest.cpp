@@ -22,11 +22,9 @@
 #include <stop_token>
 #include <string>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <csignal>
 #include <sys/types.h>
-#endif
 
 using namespace cch;
 
@@ -45,7 +43,6 @@ support::Expected<T> run_awaitable(Start start) {
     return future.get();
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 bool process_gone(const std::string& pid_text) {
     pid_t pid{};
     const auto [end, ec] = std::from_chars(pid_text.data(), pid_text.data() + pid_text.size(), pid);
@@ -55,7 +52,6 @@ bool process_gone(const std::string& pid_text) {
     errno = 0;
     return ::kill(pid, 0) == -1 && errno == ESRCH;
 }
-#endif
 
 } // namespace
 
@@ -179,7 +175,6 @@ TEST_CASE("process runner truncates at the line limit and keeps draining to EOF"
 }
 
 TEST_CASE("process runner timeout terminates and reaps the child", "[harness][process][issue458]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     const auto pid_file = (workspace.path() / "shell.pid").string();
 
@@ -200,13 +195,9 @@ TEST_CASE("process runner timeout terminates and reaps the child", "[harness][pr
     CHECK(result->timed_out);
     CHECK(elapsed < std::chrono::seconds{5});
     CHECK(process_gone(workspace.read("shell.pid")));
-#else
-    SUCCEED("process timeout is covered on supported POSIX platforms");
-#endif
 }
 
 TEST_CASE("process runner cancellation terminates and reaps the process group", "[harness][process][issue458]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     const auto pid_file = (workspace.path() / "shell.pid").string();
     const auto descendant_file = (workspace.path() / "descendant.pid").string();
@@ -252,9 +243,6 @@ TEST_CASE("process runner cancellation terminates and reaps the process group", 
     CHECK(elapsed < std::chrono::seconds{2});
     CHECK(process_gone(workspace.read("shell.pid")));
     CHECK(process_gone(workspace.read("descendant.pid")));
-#else
-    SUCCEED("process-group cancellation is covered on supported POSIX platforms");
-#endif
 }
 
 TEST_CASE("process runner keeps stdout and stderr independent for mixed traffic", "[harness][process][issue458]") {

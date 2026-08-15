@@ -14,7 +14,6 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
-#if defined(__linux__) || defined(__APPLE__)
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -158,12 +157,3 @@ TEST_CASE(
     CHECK(cch::tests::same_terminal_state(restored, original));
 }
 
-#else
-
-TEST_CASE(
-    "Process Native TUI smoke is limited to supported platforms",
-    "[coding_agent][tui][terminal][issue58]") {
-    SUCCEED("Native TUI Process Terminal support is limited to Linux and macOS");
-}
-
-#endif

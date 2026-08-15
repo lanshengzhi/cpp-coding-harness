@@ -18,12 +18,10 @@
 #include <type_traits>
 #include <utility>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <csignal>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#endif
 
 using cch::support::AsyncCompletion;
 using cch::support::AsyncProducer;
@@ -64,7 +62,6 @@ Task co_await_void_into(
     co_return;
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 /// Run `body` in a forked child with stderr silenced. Returns true iff the
 /// child died from SIGABRT — the default `std::terminate` handler — so each
 /// fatal-contract violation is proven in an isolated process.
@@ -96,7 +93,6 @@ bool dies_from_abort(F&& body) {
     }
     return WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT;
 }
-#endif
 
 } // namespace
 
@@ -359,7 +355,6 @@ TEST_CASE("AsyncResult exposes no executor, event bus, polymorphic box, or Boost
     CHECK(text.find("virtual") == std::string::npos);
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("starting an AsyncResult twice terminates the process", "[support][fatal][issue451]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result(std::expected<int, Error>{1});
@@ -396,4 +391,3 @@ TEST_CASE("an empty producer terminates the process", "[support][fatal][issue451
     });
     CHECK(aborted);
 }
-#endif

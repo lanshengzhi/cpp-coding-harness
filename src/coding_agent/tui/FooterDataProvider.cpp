@@ -7,13 +7,11 @@
 #include <fstream>
 #include <sstream>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <array>
 #include <cerrno>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#endif
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -31,8 +29,6 @@ namespace {
     }
     return text;
 }
-
-#if defined(__unix__) || defined(__APPLE__)
 
 /// pi `resolveBranchWithGitSync`: `git --no-optional-locks symbolic-ref
 /// --quiet --short HEAD` in the repo; null on failure or detached HEAD.
@@ -84,17 +80,6 @@ namespace {
     while (!output.empty() && output.back() == '\n') output.pop_back();
     return output.empty() ? std::nullopt : std::optional<std::string>{std::move(output)};
 }
-
-#else
-
-[[nodiscard]] std::optional<std::string> resolve_branch_with_git(
-    const std::filesystem::path& /*repo_dir*/) {
-    // Non-POSIX hosts have no fork/exec pipe here; a `.invalid` HEAD falls
-    // back to "detached" exactly like a failed git query.
-    return std::nullopt;
-}
-
-#endif
 
 } // namespace
 

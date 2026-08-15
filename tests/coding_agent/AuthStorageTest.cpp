@@ -372,7 +372,6 @@ TEST_CASE(
     REQUIRE(remaining);
     REQUIRE(remaining->has_value());
 
-#if defined(__unix__) || defined(__APPLE__)
     std::error_code directory_status_error;
     const auto directory_status = std::filesystem::status(agent_dir, directory_status_error);
     REQUIRE_FALSE(directory_status_error);
@@ -383,7 +382,4 @@ TEST_CASE(
     const auto file_permissions = file_status.permissions() & std::filesystem::perms::all;
     CHECK(directory_permissions == std::filesystem::perms::owner_all);
     CHECK(file_permissions == (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write));
-#else
-    SUCCEED("POSIX permission assertions are not available on this platform");
-#endif
 }

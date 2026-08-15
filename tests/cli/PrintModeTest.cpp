@@ -411,7 +411,6 @@ TEST_CASE(
     CHECK(error.str().empty());
 }
 
-#if !defined(_WIN32)
 TEST_CASE(
     "print mode disposes the session and exits 129 on SIGHUP",
     "[cli][print][signals]") {
@@ -439,7 +438,6 @@ TEST_CASE(
     CHECK(output.str().empty());
     CHECK(error.str().empty());
 }
-#endif
 
 TEST_CASE(
     "print mode keeps the session open after a normal run",

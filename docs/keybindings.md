@@ -9,9 +9,9 @@ baseline). The harness performs one startup read of
 Directory. Discovery reads only that resolved user-level root and never scans a
 project-local `.pi` directory.
 
-On supported Linux/macOS, the production CLI loads this file when interactive
-stdin/stdout selects the Native TUI. Print and unsupported-platform startup do
-not load a Native TUI keybinding registry.
+On supported Linux, the production CLI loads this file when interactive
+stdin/stdout selects the Native TUI. Print startup does not load a Native TUI
+keybinding registry.
 
 ## Format
 
@@ -32,8 +32,7 @@ combination. Keys are letters `a-z`, digits `0-9`, `escape`/`esc`,
 `enter`/`return`, `tab`, `space`, `backspace`, `delete`, `insert`, `clear`,
 `home`, `end`, `pageUp`, `pageDown`, arrow keys, `f1`-`f12`, and the baseline
 ASCII symbols. Aliases and modifier order are canonicalized; repeated
-alternatives are removed while preserving the first occurrence. macOS help
-renders `alt` as `option` without changing configuration syntax.
+alternatives are removed while preserving the first occurrence.
 
 ## Effective reusable actions
 
@@ -98,7 +97,7 @@ set in the main editor:
 | `app.interrupt` | `escape` | Restore pending input, then request one ordinary abort lifecycle. |
 | `app.clear` | `ctrl+c` | Clear the editor. |
 | `app.exit` | `ctrl+d` | Exit when the editor is empty and restore the terminal. |
-| `app.suspend` | `ctrl+z` (`[]` on native Windows) | Suspend to background (SIGTSTP + keep-alive). |
+| `app.suspend` | `ctrl+z` | Suspend to background (SIGTSTP + keep-alive). |
 | `app.thinking.cycle` | `shift+tab` | Cycle thinking level. |
 | `app.model.cycleForward` | `ctrl+p` | Cycle to the next model. |
 | `app.model.cycleBackward` | `shift+ctrl+p` | Cycle to the previous model. |
@@ -110,7 +109,7 @@ set in the main editor:
 | `app.message.followUp` | `alt+enter` | Admit editor text to the Agent Session follow-up queue. |
 | `app.message.dequeue` | `alt+up` | Restore steering, then follow-up, then unsent editor text. |
 
-`app.clipboard.pasteImage` (`ctrl+v`, or `alt+v` on native Windows) is registered
+`app.clipboard.pasteImage` (`ctrl+v`) is registered
 only when the assembling host injects an asynchronous clipboard reader; the
 production CLI does not advertise an unassembled clipboard action. `app.session.*`
 (`new`, `tree`, `fork`, `resume`) stays recognized-but-unbound in the main editor
@@ -138,9 +137,7 @@ execution. When no work is active but the editor holds an unsubmitted Bash-mode
 submission, interrupt clears the editor; otherwise it falls through to the
 baseline editor behavior. A configured known-but-unassembled application
 ID is diagnosed and skipped; it never creates a no-op binding or help entry.
-Platform defaults are resolved at concrete registration: for example,
-`app.suspend` defaults to `ctrl+z` on Linux and macOS, while native Windows has
-no job-control binding and help reports `Unavailable on native Windows`.
+`app.suspend` defaults to `ctrl+z`.
 
 ## Deterministic resolution and diagnostics
 

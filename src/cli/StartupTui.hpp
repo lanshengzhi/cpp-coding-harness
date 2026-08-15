@@ -25,8 +25,6 @@ namespace cch::cli {
 struct StartupTuiOptions {
     std::filesystem::path agent_config_directory;
     std::optional<std::string> theme_setting;
-    cch::tui::KeybindingPlatform platform{
-        cch::tui::native_keybinding_platform()};
 };
 
 /// pi `session-picker.ts` `selectSession` outcome.

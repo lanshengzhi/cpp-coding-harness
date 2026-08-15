@@ -13,9 +13,7 @@
 #include <thread>
 #include <utility>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
-#endif
 
 namespace cch::coding_agent {
 namespace {
@@ -546,9 +544,7 @@ private:
                 "could not create settings directory",
                 directory_error.message()));
         }
-#if defined(__unix__) || defined(__APPLE__)
         (void)::chmod(parent.c_str(), 0700);
-#endif
     }
 
     std::error_code target_error;
@@ -593,9 +589,7 @@ private:
                 temporary.string()));
         }
     }
-#if defined(__unix__) || defined(__APPLE__)
     (void)::chmod(temporary.c_str(), 0600);
-#endif
 
     std::error_code rename_error;
     std::filesystem::rename(temporary, settings_path, rename_error);
@@ -606,9 +600,7 @@ private:
             "could not replace settings file",
             rename_error.message()));
     }
-#if defined(__unix__) || defined(__APPLE__)
     (void)::chmod(settings_path.c_str(), 0600);
-#endif
     return {};
 }
 
@@ -631,9 +623,7 @@ private:
                 "could not create settings directory",
                 directory_error.message()));
         }
-#if defined(__unix__) || defined(__APPLE__)
         (void)::chmod(parent.c_str(), 0700);
-#endif
     }
 
     auto lock = FileLock::acquire(path);

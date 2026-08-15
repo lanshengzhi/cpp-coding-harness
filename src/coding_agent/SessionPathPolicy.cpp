@@ -13,11 +13,7 @@ namespace {
 
 [[nodiscard]] std::tm utc_time(std::time_t value) {
     std::tm result{};
-#if defined(_WIN32)
-    gmtime_s(&result, &value);
-#else
     gmtime_r(&value, &result);
-#endif
     return result;
 }
 
@@ -141,12 +137,8 @@ support::Expected<std::filesystem::path> resolve_session_dir_value(
     }
 
     std::filesystem::path resolved;
-    // pi's normalizePath expands only a leading "~" or "~/" ("~\\" on Windows).
-    const bool needs_home = value == "~" || value.starts_with("~/")
-#if defined(_WIN32)
-                            || value.starts_with("~\\")
-#endif
-        ;
+    // pi's normalizePath expands only a leading "~" or "~/".
+    const bool needs_home = value == "~" || value.starts_with("~/");
     if (needs_home && home_dir.empty()) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
@@ -178,11 +170,7 @@ std::filesystem::path resolve_session_path_value(
     const std::filesystem::path& workspace,
     const std::filesystem::path& home_dir) {
     std::filesystem::path resolved;
-    const bool needs_home = value == "~" || value.starts_with("~/")
-#if defined(_WIN32)
-                            || value.starts_with("~\\")
-#endif
-        ;
+    const bool needs_home = value == "~" || value.starts_with("~/");
     if (value == "~") {
         resolved = home_dir;
     } else if (needs_home) {

@@ -8,10 +8,8 @@
 #include <variant>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <unistd.h>
-#endif
 
 namespace {
 
@@ -734,7 +732,6 @@ TEST_CASE("parse_args exposes the CMake project version", "[cli][parse]") {
     CHECK_FALSE(cch::cli::project_version().empty());
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("parse_args reports a diagnostic when the working directory is unavailable", "[cli][parse][issue67]") {
     const cch::support::UniqueFd saved_cwd(::open(".", O_RDONLY | O_DIRECTORY));
     REQUIRE(saved_cwd);
@@ -756,4 +753,3 @@ TEST_CASE("parse_args reports a diagnostic when the working directory is unavail
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().message.find("working directory") != std::string::npos);
 }
-#endif

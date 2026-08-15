@@ -208,20 +208,12 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 }
 
 [[nodiscard]] std::filesystem::path shell_executable() {
-#if defined(_WIN32)
-    return "cmd";
-#else
     return "/bin/sh";
-#endif
 }
 
 [[nodiscard]] std::vector<std::string> shell_command_arguments(
     const std::string& command) {
-#if defined(_WIN32)
-    return {"/c", command};
-#else
     return {"-c", command};
-#endif
 }
 
 [[nodiscard]] boost::asio::awaitable<std::optional<std::string>> execute_command(

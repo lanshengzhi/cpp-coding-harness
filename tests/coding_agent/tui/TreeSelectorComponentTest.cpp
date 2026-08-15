@@ -38,8 +38,7 @@ namespace {
         "app.tree.filter.cycleBackward",
         "app.message.copy",
     };
-    auto app_definitions = coding_agent::tui::app_keybinding_definitions(
-        actions, tui::native_keybinding_platform());
+    auto app_definitions = coding_agent::tui::app_keybinding_definitions(actions);
     REQUIRE(app_definitions);
     definitions.insert(
         definitions.end(),

@@ -1,16 +1,13 @@
 #include "WorkspaceFileSystem.hpp"
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 namespace cch::harness {
 
-#if defined(__unix__) || defined(__APPLE__)
 support::Expected<support::UniqueFd> WorkspaceFileSystem::open_workspace_root() const {
     support::UniqueFd fd(::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
     if (!fd) {
@@ -94,6 +91,5 @@ support::Expected<void> WorkspaceFileSystem::create_parent_directories(
     }
     return {};
 }
-#endif
 
 } // namespace cch::harness

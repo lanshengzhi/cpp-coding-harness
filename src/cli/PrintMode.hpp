@@ -32,7 +32,7 @@ struct PrintModePlan {
 /// terminal `error`/`aborted` outcome's `errorMessage` (or `Request
 /// <stopReason>`) on stderr with exit 1. Prompt preflight rejections report
 /// `loop failed: <message>` on stderr with exit 1. SIGTERM/SIGHUP dispose the
-/// session and exit 143/129 (SIGHUP outside Windows). Running with no prompt
+/// session and exit 143/129. Running with no prompt
 /// prints nothing and exits 0.
 ///
 /// The session and the configured streams are borrowed and must outlive the

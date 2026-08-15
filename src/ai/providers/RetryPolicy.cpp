@@ -80,11 +80,7 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
     if (input.fail()) {
         return std::nullopt;
     }
-#if defined(_WIN32)
-    const auto seconds = _mkgmtime(&parsed);
-#else
     const auto seconds = timegm(&parsed);
-#endif
     if (seconds < 0) {
         return std::nullopt;
     }

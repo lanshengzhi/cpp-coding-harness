@@ -23,10 +23,8 @@
 #include <system_error>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
 #include <format>
-#endif
 
 #ifndef CCH_BINARY
 #define CCH_BINARY "./cpp_harness"
@@ -63,11 +61,7 @@ CommandResult run_command(const std::string& command) {
         output += buffer.data();
     }
     int status = pclose(pipe);
-#if defined(__unix__) || defined(__APPLE__)
     int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : status;
-#else
-    int exit_code = status;
-#endif
     return {exit_code, output};
 }
 
@@ -76,11 +70,7 @@ SplitCommandResult run_command_split(const std::string& command) {
     const auto stdout_path = capture.path() / "stdout.txt";
     const auto stderr_path = capture.path() / "stderr.txt";
     int status = std::system((command + " > '" + stdout_path.string() + "' 2> '" + stderr_path.string() + "'").c_str());
-#if defined(__unix__) || defined(__APPLE__)
     int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : status;
-#else
-    int exit_code = status;
-#endif
     return {exit_code, read_file(stdout_path), read_file(stderr_path)};
 }
 
@@ -519,7 +509,6 @@ TEST_CASE("CLI --session open resumes and appends to an existing redacted sessio
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE(
     "CLI interactive boot Continue recovers a vanished session cwd",
     "[cli][startup-tui][issue417]") {
@@ -604,9 +593,7 @@ TEST_CASE(
     REQUIRE(WIFEXITED(status));
     CHECK(WEXITSTATUS(status) == 0);
 }
-#endif
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE(
     "CLI --resume opens the startup-TUI picker on a real terminal",
     "[cli][startup-tui][issue417]") {
@@ -676,7 +663,6 @@ TEST_CASE(
     REQUIRE(WIFEXITED(status));
     CHECK(WEXITSTATUS(status) == 0);
 }
-#endif
 
 TEST_CASE("CLI --session open uses session workspace when the launch directory differs", "[cli][u6]") {
     cch::tests::TempWorkspace original;
@@ -1348,7 +1334,6 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
 }
 
 TEST_CASE("CLI default creation shares storage across symbolic-link workspace aliases", "[cli][default-session]") {
-#if defined(__unix__) || defined(__APPLE__)
     cch::tests::TempWorkspace real;
     cch::tests::TempWorkspace alias_root;
     cch::tests::TempWorkspace agent_root;
@@ -1391,9 +1376,6 @@ TEST_CASE("CLI default creation shares storage across symbolic-link workspace al
         const auto header = as_object(parse_json_line(first_line));
         CHECK(json_string_at(header, "cwd") == canonical_workspace.string());
     }
-#else
-    SUCCEED("symbolic-link alias coverage requires POSIX directory symlinks");
-#endif
 }
 
 TEST_CASE("CLI piped print propagates the same default persisted target", "[cli][default-session][issue64]") {

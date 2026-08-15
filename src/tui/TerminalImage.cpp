@@ -17,13 +17,11 @@
 #include <string_view>
 #include <utility>
 
-#if defined(__linux__) || defined(__APPLE__)
 #include <poll.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#endif
 
 #include "support/UniqueFd.hpp"
 
@@ -274,7 +272,6 @@ constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
 } // namespace
 
 bool detail::probe_tmux_hyperlinks() {
-#if defined(__linux__) || defined(__APPLE__)
     constexpr auto kProbeTimeout = std::chrono::milliseconds(250);
     std::array<int, 2> descriptors{};
     if (::pipe(descriptors.data()) != 0) return false;
@@ -317,9 +314,6 @@ bool detail::probe_tmux_hyperlinks() {
     int status = 0;
     (void)::waitpid(child, &status, 0);
     return features_include_hyperlinks(output);
-#else
-    return false;
-#endif
 }
 
 DetectedImageCapabilities detect_image_capabilities(

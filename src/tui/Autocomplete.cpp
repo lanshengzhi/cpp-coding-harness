@@ -18,12 +18,10 @@
 #include <variant>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#endif
 
 namespace cch::tui {
 namespace {
@@ -162,9 +160,7 @@ struct FdEntry {
 }
 
 [[nodiscard]] std::string home_directory() {
-#if defined(__unix__) || defined(__APPLE__)
     if (const char* home = std::getenv("HOME")) return home;
-#endif
     return {};
 }
 
@@ -257,7 +253,6 @@ struct ScopedQuery {
     std::stop_token stop_token) {
     if (stop_token.stop_requested()) return {};
 
-#if defined(__unix__) || defined(__APPLE__)
     std::vector<std::string> args{
         "--base-directory",
         base_dir.string(),
@@ -346,9 +341,6 @@ struct ScopedQuery {
         results.push_back({.path = display_line, .is_directory = has_trailing_separator});
     }
     return results;
-#else
-    return {};
-#endif
 }
 
 /// Score an entry against the query (pi `scoreEntry`); higher is better.

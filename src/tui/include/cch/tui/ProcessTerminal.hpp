@@ -16,7 +16,7 @@ struct ProcessTerminalOptions {
     int output_fd{1};
 };
 
-/// Linux/macOS terminal adapter for the reusable TUI package.
+/// Linux terminal adapter for the reusable TUI package.
 /// Input and resize sinks run serially on an adapter-owned worker. A sink may
 /// request stop without self-joining; a concurrent external stop restores modes
 /// after the active sink quiesces. The adapter must not be destroyed from a sink.

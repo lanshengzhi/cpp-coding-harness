@@ -8,11 +8,9 @@
 #include <system_error>
 #include <utility>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <fcntl.h>
 #include <unistd.h>
-#endif
 
 namespace cch::coding_agent::runtime {
 
@@ -179,7 +177,6 @@ void ControlFilter::append(std::string_view text, std::string& out) {
 support::ExpectedVoid SpillFile::start(
     std::string_view retained,
     std::string_view incoming) {
-#if defined(__unix__) || defined(__APPLE__)
     std::error_code temp_error;
     const auto temp_directory = std::filesystem::temp_directory_path(temp_error);
     if (temp_error || temp_directory.empty()) {
@@ -217,28 +214,15 @@ support::ExpectedVoid SpillFile::start(
     }
     return std::unexpected(
         spill_error("could not allocate a unique User Bash output spill path", {}));
-#else
-    (void)retained;
-    (void)incoming;
-    return std::unexpected(
-        spill_error("User Bash output spill is unavailable on this platform", {}));
-#endif
 }
 
 support::ExpectedVoid SpillFile::write(std::string_view bytes) {
-#if defined(__unix__) || defined(__APPLE__)
     return write_all(fd_.get(), bytes);
-#else
-    (void)bytes;
-    return std::unexpected(
-        spill_error("User Bash output spill is unavailable on this platform", {}));
-#endif
 }
 
 support::ExpectedVoid SpillFile::finish() {
     if (!active_) return {};
     active_ = false;
-#if defined(__unix__) || defined(__APPLE__)
     if (fd_.close() != 0) {
         const auto close_error = errno;
         remove_file();
@@ -246,16 +230,13 @@ support::ExpectedVoid SpillFile::finish() {
             "could not finish the User Bash output spill file",
             std::error_code(close_error, std::generic_category()).message()));
     }
-#endif
     return {};
 }
 
 void SpillFile::abandon() {
     if (!active_) return;
     active_ = false;
-#if defined(__unix__) || defined(__APPLE__)
     fd_.reset();
-#endif
     remove_file();
 }
 
@@ -276,7 +257,6 @@ std::string SpillFile::random_suffix() {
     return suffix;
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 support::ExpectedVoid SpillFile::write_all(int fd, std::string_view bytes) {
     std::size_t written = 0;
     while (written < bytes.size()) {
@@ -299,7 +279,6 @@ void SpillFile::remove_candidate(
     std::error_code remove_error;
     std::filesystem::remove(candidate, remove_error);
 }
-#endif
 
 void SpillFile::remove_file() {
     std::error_code remove_error;

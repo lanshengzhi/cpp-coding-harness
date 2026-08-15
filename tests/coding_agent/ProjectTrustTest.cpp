@@ -6,9 +6,7 @@
 #include <filesystem>
 #include <fstream>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
-#endif
 
 using namespace cch;
 
@@ -67,7 +65,6 @@ TEST_CASE("ProjectTrustStore malformed values fail closed", "[coding_agent][proj
     CHECK_FALSE(entry.has_value());
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("ProjectTrustStore rejects symlinked trust store", "[coding_agent][project-trust]") {
     tests::TempWorkspace workspace;
     auto real_path = workspace.path() / "real-trust.json";
@@ -79,7 +76,6 @@ TEST_CASE("ProjectTrustStore rejects symlinked trust store", "[coding_agent][pro
     auto entry = store.getEntry(workspace.path());
     CHECK_FALSE(entry.has_value());
 }
-#endif
 
 TEST_CASE("resolve_project_trust follows override no-resource store default order", "[coding_agent][project-trust]") {
     tests::TempWorkspace workspace;

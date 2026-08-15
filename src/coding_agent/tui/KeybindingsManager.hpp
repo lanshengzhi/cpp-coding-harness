@@ -29,7 +29,6 @@ struct KeybindingsManagerRequest {
     /// Concrete application actions supplied by the assembling frontend.
     /// Omitted application actions are unavailable and are never registered.
     std::vector<cch::tui::KeybindingDefinition> application_definitions{};
-    cch::tui::KeybindingPlatform platform{cch::tui::native_keybinding_platform()};
 };
 
 struct KeybindingsManagerResult {
@@ -42,11 +41,9 @@ struct KeybindingsManagerResult {
 /// 0036): this returns baseline definitions only for the concrete application
 /// action IDs selected by an assembling frontend, drawn from the full
 /// catalog. Unknown IDs fail rather than creating placeholders.
-/// Platform-specific defaults remain explicit in the result.
 [[nodiscard]] support::Expected<std::vector<cch::tui::KeybindingDefinition>>
 app_keybinding_definitions(
-    std::span<const std::string_view> assembled_action_ids,
-    cch::tui::KeybindingPlatform platform);
+    std::span<const std::string_view> assembled_action_ids);
 
 /// Load exactly <Agent Config Directory>/keybindings.json and resolve one
 /// startup registry (pi `KeybindingsManager.create` + `reload`, ADR 0035).

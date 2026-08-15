@@ -134,7 +134,6 @@ using TuiActionSink = std::move_only_function<
                                            TuiActionVariant action)>;
 struct InteractiveModeConfig {
     std::filesystem::path agent_config_directory;
-    cch::tui::KeybindingPlatform platform{cch::tui::native_keybinding_platform()};
     std::unique_ptr<AsyncClipboardReader> clipboard_reader{nullptr};
     std::optional<std::string> initial_prompt{std::nullopt};
     PromptOptions initial_prompt_options{};

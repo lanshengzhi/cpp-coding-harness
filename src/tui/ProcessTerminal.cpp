@@ -26,13 +26,11 @@
 #include <thread>
 #include <utility>
 
-#if defined(__linux__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
-#endif
 
 namespace cch::tui {
 namespace {
@@ -87,7 +85,6 @@ constexpr auto kStopDrainTimeout = std::chrono::milliseconds(250);
         std::format("{} failed (errno {})", operation, error_number));
 }
 
-#if defined(__linux__) || defined(__APPLE__)
 struct WriteAttempt {
     support::ExpectedVoid result;
     std::size_t bytes_written{0};
@@ -447,7 +444,6 @@ struct AppearanceProbeResult {
     }
     return result;
 }
-#endif
 
 } // namespace
 
@@ -466,9 +462,7 @@ struct ProcessTerminal::Impl {
     std::shared_ptr<TerminalInputSink> input_sink;
     std::shared_ptr<TerminalResizeSink> resize_sink;
     std::string startup_input;
-#if defined(__linux__) || defined(__APPLE__)
     AppearanceInputState startup_appearance;
-#endif
     std::jthread worker;
     std::optional<support::Error> worker_error;
     bool keyboard_protocol_pushed{false};
@@ -489,7 +483,6 @@ struct ProcessTerminal::Impl {
     /// `place_image` convert buffer rows to screen rows using it before
     /// emitting ANSI sequences.
     std::size_t viewport_top{0};
-#if defined(__linux__) || defined(__APPLE__)
     termios original_termios{};
     bool has_original_termios{false};
     /// Wakeup pipe polled by the delivery worker alongside the input
@@ -513,7 +506,6 @@ struct ProcessTerminal::Impl {
     /// wakes at least this often to re-read TIOCGWINSZ, so resizes are
     /// detected even without SIGWINCH delivery.
     std::chrono::steady_clock::time_point last_resize_check{};
-#endif
 };
 
 namespace {
@@ -526,7 +518,6 @@ template <typename T>
         "Process Terminal must be started before terminal operations"));
 }
 
-#if defined(__linux__) || defined(__APPLE__)
 [[nodiscard]] support::Expected<TerminalDimensions> read_dimensions(int descriptor) {
     winsize size{};
     if (::ioctl(descriptor, TIOCGWINSZ, &size) != 0) {
@@ -1231,7 +1222,6 @@ template <typename T>
 
     return first_error;
 }
-#endif
 
 } // namespace
 
@@ -1258,14 +1248,6 @@ support::ExpectedVoid ProcessTerminal::start(
             support::ErrorCode::Validation,
             "Process Terminal delivery worker is still stopping"));
     }
-#if !defined(__linux__) && !defined(__APPLE__)
-    (void)input_sink;
-    (void)resize_sink;
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Validation,
-        "Process Terminal is unsupported on this platform",
-        "supported platforms are Linux and macOS"));
-#else
     if (impl_->has_original_termios || impl_->modes.bracketed_paste ||
         !impl_->modes.cursor_visible || impl_->keyboard_protocol_pushed ||
         impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 ||
@@ -1461,14 +1443,10 @@ support::ExpectedVoid ProcessTerminal::start(
             "startup failed with an unknown exception"));
     }
     return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::stop() {
     std::unique_lock lifecycle_lock(impl_->lifecycle_mutex);
-#if !defined(__linux__) && !defined(__APPLE__)
-    return {};
-#else
     const auto called_from_worker = impl_->worker.joinable() &&
         impl_->worker.get_id() == std::this_thread::get_id();
     if (impl_->stop_in_progress) {
@@ -1512,7 +1490,6 @@ support::ExpectedVoid ProcessTerminal::stop() {
     lifecycle_lock.unlock();
     impl_->lifecycle_cv.notify_all();
     return result;
-#endif
 }
 
 TerminalDimensions ProcessTerminal::dimensions() const {
@@ -1536,21 +1513,13 @@ support::ExpectedVoid ProcessTerminal::clear_screen() {
     // pi's resize full-redraw clears scrollback too (`\x1b[3J`): the native
     // scroll history and the mirrored viewport top both reset.
     impl_->viewport_top = 0;
-#if defined(__linux__) || defined(__APPLE__)
     return enqueue_output(*impl_, kClearScreen);
-#else
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::write(std::string_view output) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-#if defined(__linux__) || defined(__APPLE__)
     return enqueue_output(*impl_, output);
-#else
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
@@ -1582,11 +1551,7 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         impl_->viewport_top += scroll;
         impl_->cursor.row = bottom;
         impl_->cursor.column = position.column;
-#if defined(__linux__) || defined(__APPLE__)
         return enqueue_output(*impl_, sequence);
-#else
-        return {};
-#endif
     }
     if (position.row < impl_->viewport_top) {
         impl_->cursor.row = 0;
@@ -1595,31 +1560,21 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     }
     impl_->cursor.column = position.column;
     sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1);
-#if defined(__linux__) || defined(__APPLE__)
     return enqueue_output(*impl_, sequence);
-#else
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->modes.cursor_visible == visible) return {};
-#if defined(__linux__) || defined(__APPLE__)
     auto result = enqueue_output(*impl_, visible ? kCursorShow : kCursorHide);
     if (result) impl_->modes.cursor_visible = visible;
     return result;
-#else
-    impl_->modes.cursor_visible = visible;
-    return {};
-#endif
 }
 
 support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage& image) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-#if defined(__linux__) || defined(__APPLE__)
     const auto handle = image.preferred_handle
         ? *image.preferred_handle
         : TerminalImageHandle{.value = impl_->next_image_handle};
@@ -1664,12 +1619,6 @@ support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const Termin
     }
     if (!image.preferred_handle) ++impl_->next_image_handle;
     return handle;
-#else
-    (void)image;
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Validation,
-        "Process Terminal does not support inline images"));
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::remove_image(
@@ -1677,7 +1626,6 @@ support::ExpectedVoid ProcessTerminal::remove_image(
     const CellRegion& region) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-#if defined(__linux__) || defined(__APPLE__)
     if (region.column >= impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
@@ -1718,11 +1666,6 @@ support::ExpectedVoid ProcessTerminal::remove_image(
         }
     }
     return {};
-#else
-    (void)handle;
-    (void)region;
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
@@ -1732,14 +1675,9 @@ support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
         ++impl_->synchronized_update_depth;
         return {};
     }
-#if defined(__linux__) || defined(__APPLE__)
     auto result = enqueue_output(*impl_, kBeginSynchronizedUpdate);
     if (result) impl_->synchronized_update_depth = 1;
     return result;
-#else
-    impl_->synchronized_update_depth = 1;
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
@@ -1754,30 +1692,20 @@ support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
         --impl_->synchronized_update_depth;
         return {};
     }
-#if defined(__linux__) || defined(__APPLE__)
     auto ended = enqueue_output(*impl_, kEndSynchronizedUpdate);
     if (ended) impl_->synchronized_update_depth = 0;
     return ended;
-#else
-    impl_->synchronized_update_depth = 0;
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-#if defined(__linux__) || defined(__APPLE__)
     return enqueue_output(*impl_, std::format("\x1b]0;{}\x07", title));
-#else
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::set_progress(bool active) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-#if defined(__linux__) || defined(__APPLE__)
     auto result = enqueue_output(
         *impl_,
         active ? kProgressActiveSequence : kProgressClearSequence);
@@ -1791,10 +1719,6 @@ support::ExpectedVoid ProcessTerminal::set_progress(bool active) {
         impl_->progress_active = false;
     }
     return {};
-#else
-    impl_->progress_active = active;
-    return {};
-#endif
 }
 
 support::ExpectedVoid ProcessTerminal::drain_input(
@@ -1802,11 +1726,6 @@ support::ExpectedVoid ProcessTerminal::drain_input(
     std::chrono::milliseconds idle_ms) {
     std::unique_lock lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-#if !defined(__linux__) && !defined(__APPLE__)
-    (void)max_ms;
-    (void)idle_ms;
-    return {};
-#else
     // Disable the keyboard protocols first so late key releases cannot
     // generate new escape sequences while the buffer drains (pi drainInput).
     // The disables go through the ordered bounded queue so they cannot jump
@@ -1863,7 +1782,6 @@ support::ExpectedVoid ProcessTerminal::drain_input(
     lock.lock();
     impl_->draining = false;
     return {};
-#endif
 }
 
 } // namespace cch::tui

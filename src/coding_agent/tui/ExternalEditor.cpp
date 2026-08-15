@@ -15,12 +15,8 @@
 #include <string>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
 #include <unistd.h>
-#elif defined(_WIN32)
-#include <process.h>
-#endif
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -37,8 +33,7 @@ namespace {
 }
 
 /// pi `external-editor.ts`: split the command on spaces (the editor command
-/// is a plain argv string; pi passes the whole command through `sh` on
-/// Windows only).
+/// is a plain argv string).
 [[nodiscard]] std::vector<std::string> split_command(std::string_view command) {
     std::vector<std::string> parts;
     std::size_t begin = 0;
@@ -67,7 +62,6 @@ namespace {
     const std::vector<std::string>& parts,
     const std::filesystem::path& file_path) {
     if (parts.empty()) return std::nullopt;
-#if defined(__unix__) || defined(__APPLE__)
     const auto pid = ::fork();
     if (pid < 0) return std::nullopt;
     if (pid == 0) {
@@ -89,23 +83,6 @@ namespace {
     }
     if (!WIFEXITED(status)) return std::nullopt;
     return WEXITSTATUS(status);
-#elif defined(_WIN32)
-    std::vector<std::string> argv{parts};
-    argv.push_back(file_path.string());
-    std::vector<char*> raw_argv;
-    raw_argv.reserve(argv.size() + 1);
-    for (auto& part : argv) raw_argv.push_back(part.data());
-    raw_argv.push_back(nullptr);
-    const auto pid = ::_spawnvp(_P_NOWAIT, raw_argv[0], raw_argv.data());
-    if (pid == -1) return std::nullopt;
-    int status = 0;
-    if (::_cwait(&status, pid, _WAIT_CHILD) < 0) return std::nullopt;
-    // _spawnvp packs the exit code into the status like a Unix wait status.
-    return (status >> 8) & 0xFF;
-#else
-    (void)file_path;
-    return std::nullopt;
-#endif
 }
 
 } // namespace
@@ -119,11 +96,7 @@ std::string external_editor_command() {
         editor != nullptr && editor[0] != '\0') {
         return editor;
     }
-#if defined(_WIN32)
-    return "notepad";
-#else
     return "nano";
-#endif
 }
 
 boost::asio::awaitable<support::Expected<std::optional<std::string>>>

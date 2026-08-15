@@ -115,7 +115,6 @@ TEST_CASE("project resource detection reports marker kind mismatches and keeps t
     CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("project resource detection rejects escaping symlink marker", "[coding_agent][project-resources]") {
     tests::TempWorkspace workspace;
     auto outside = std::filesystem::temp_directory_path() / "cch-outside-skills";
@@ -135,7 +134,6 @@ TEST_CASE("project resource detection rejects escaping symlink marker", "[coding
 
     std::filesystem::remove_all(outside);
 }
-#endif
 
 TEST_CASE("project resource detection maps markers with pi diagnostic shape", "[coding_agent][project-resources][issue405]") {
     tests::TempWorkspace workspace;

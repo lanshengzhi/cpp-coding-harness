@@ -314,7 +314,7 @@ restore() {
 }
 
 # ---------------------------------------------------------------------------
-# System caveats (Linux-first, graceful macOS fallback)
+# System caveats (Linux)
 # ---------------------------------------------------------------------------
 
 detect_system() {
@@ -324,33 +324,19 @@ detect_system() {
 	mem_total_bytes="0"
 	mem_available_bytes=""
 
-	if [[ -f /proc/cpuinfo ]]; then
-		cpu_model="$(awk -F': ' '/^model name/{print $2; exit}' /proc/cpuinfo)"
-		cpu_cores="$(nproc 2>/dev/null || echo unknown)"
-		cpu_threads="$(grep -c '^processor' /proc/cpuinfo || true)"
-		mem_total_bytes="$(awk '/^MemTotal:/{print $2 * 1024}' /proc/meminfo)"
-		mem_available_bytes="$(awk '/^MemAvailable:/{print $2 * 1024}' /proc/meminfo)"
-	else
-		# macOS / BSD fallback
-		cpu_model="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)"
-		cpu_cores="$(sysctl -n hw.physicalcpu 2>/dev/null || echo unknown)"
-		cpu_threads="$(sysctl -n hw.logicalcpu 2>/dev/null || echo unknown)"
-		mem_total_bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
-	fi
+	cpu_model="$(awk -F': ' '/^model name/{print $2; exit}' /proc/cpuinfo)"
+	cpu_cores="$(nproc 2>/dev/null || echo unknown)"
+	cpu_threads="$(grep -c '^processor' /proc/cpuinfo || true)"
+	mem_total_bytes="$(awk '/^MemTotal:/{print $2 * 1024}' /proc/meminfo)"
+	mem_available_bytes="$(awk '/^MemAvailable:/{print $2 * 1024}' /proc/meminfo)"
 }
 
 top_processes() {
-	ps -eo pcpu=,comm= --sort=-pcpu 2>/dev/null | head -8 | tr '\n' ';' \
-		|| ps -Ao pcpu=,comm= 2>/dev/null | head -8 | tr '\n' ';' \
-		|| echo "unknown"
+	ps -eo pcpu=,comm= --sort=-pcpu 2>/dev/null | head -8 | tr '\n' ';' || echo "unknown"
 }
 
 current_load() {
-	if [[ -f /proc/loadavg ]]; then
-		cat /proc/loadavg 2>/dev/null || echo unknown
-	else
-		sysctl -n vm.loadavg 2>/dev/null || echo unknown
-	fi
+	cat /proc/loadavg 2>/dev/null || echo unknown
 }
 
 # ---------------------------------------------------------------------------

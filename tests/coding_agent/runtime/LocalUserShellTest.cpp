@@ -80,7 +80,6 @@ TEST_CASE("Local User Shell is an independently owned final capability", "[codin
     static_assert(std::is_base_of_v<runtime::AsyncUserShell, runtime::LocalUserShell>);
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 
 TEST_CASE("Local User Shell streams output and reports exit zero", "[coding_agent][runtime][shell][issue90]") {
     tests::TempWorkspace workspace;
@@ -224,14 +223,3 @@ TEST_CASE(
     REQUIRE_FALSE(run.result);
 }
 
-#else
-
-TEST_CASE("Local User Shell execution is limited to supported platforms", "[coding_agent][runtime][shell][issue90]") {
-    tests::TempWorkspace workspace;
-    runtime::LocalUserShell shell{workspace.path(), {}, {}};
-
-    const auto run = run_user_shell(shell, "echo unsupported");
-    REQUIRE_FALSE(run.result);
-}
-
-#endif

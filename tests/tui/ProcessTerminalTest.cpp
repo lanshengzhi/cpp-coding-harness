@@ -8,7 +8,6 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#if defined(__linux__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -496,21 +495,7 @@ TEST_CASE("Process Terminal rolls back raw input after partial startup failure",
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
-#else
 
-TEST_CASE("Process Terminal reports unsupported platforms without acquisition", "[tui][terminal][issue54]") {
-    cch::tui::ProcessTerminal terminal;
-    const auto result = terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {});
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().message == "Process Terminal is unsupported on this platform");
-    CHECK(result.error().detail.size() < 256);
-    CHECK(terminal.modes() == cch::tui::TerminalModeState{});
-}
-
-#endif
-
-#if defined(__linux__) || defined(__APPLE__)
 TEST_CASE(
     "Process Terminal reports conservative color and appearance observations",
     "[tui][terminal][theme][issue55]") {
@@ -1408,4 +1393,3 @@ TEST_CASE(
     CHECK(second_elapsed < std::chrono::milliseconds(400));
 }
 
-#endif

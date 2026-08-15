@@ -72,14 +72,13 @@ startup_keybindings(
     const StartupTuiOptions& options,
     std::span<const std::string_view> application_actions) {
     auto definitions = coding_agent::tui::app_keybinding_definitions(
-        application_actions, options.platform);
+        application_actions);
     if (!definitions) {
         return std::unexpected(definitions.error());
     }
     auto manager = coding_agent::tui::load_keybindings_manager({
         .agent_config_directory = options.agent_config_directory,
         .application_definitions = std::move(*definitions),
-        .platform = options.platform,
     });
     if (!manager) {
         return std::unexpected(manager.error());

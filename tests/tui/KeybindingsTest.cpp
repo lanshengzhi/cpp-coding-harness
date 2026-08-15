@@ -64,12 +64,11 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Invalid overrides retain defaults and key display follows the registry platform",
+    "Invalid overrides retain defaults and key display follows the registry",
     "[tui][keybindings][issue57]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {{.id = "tui.editor.cursorWordLeft", .keys = {"super+left"}}};
-    request.platform = tui::KeybindingPlatform::MacOS;
 
     const auto resolved = tui::resolve_keybindings(std::move(request));
 
@@ -79,7 +78,7 @@ TEST_CASE(
     CHECK((resolved->registry->keys("tui.editor.cursorWordLeft") ==
         std::vector<std::string>{"alt+left", "ctrl+left", "alt+b"}));
     CHECK(resolved->registry->key_text("tui.editor.cursorWordLeft") ==
-        "option+left/ctrl+left/option+b");
+        "alt+left/ctrl+left/alt+b");
 }
 
 TEST_CASE(

@@ -47,9 +47,7 @@ struct ApplicationTemplate {
 /// (pi:packages/coding-agent/src/core/keybindings.ts at `83114817`, ADR 0036
 /// G2). Descriptions and default keys are pi-verbatim; the category column is
 /// the C++ `/hotkeys` presentation grouping (pi's `handleHotkeysCommand`
-/// renders hardcoded sections instead). Platform-gated defaults
-/// (`app.suspend` absent on Windows, `app.clipboard.pasteImage` alt+v on
-/// Windows, `app.tree.*` order on macOS) resolve at definition time.
+/// renders hardcoded sections instead).
 [[nodiscard]] const std::vector<ApplicationTemplate>& application_templates() {
     static const std::vector<ApplicationTemplate> kTemplates{
         make_application_template("app.interrupt", {"escape"}, "Cancel or abort", "Application"),
@@ -304,8 +302,7 @@ struct ParsedOverrides {
 } // namespace
 
 support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_definitions(
-    std::span<const std::string_view> assembled_action_ids,
-    cch::tui::KeybindingPlatform platform) {
+    std::span<const std::string_view> assembled_action_ids) {
     std::vector<cch::tui::KeybindingDefinition> definitions;
     definitions.reserve(assembled_action_ids.size());
     for (const auto id : assembled_action_ids) {
@@ -315,31 +312,11 @@ support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_de
                 support::ErrorCode::Validation,
                 std::format("unknown baseline application keybinding '{}'", id)));
         }
-        auto keys = source->keys;
-        bool available = true;
-        std::optional<std::string> unavailable_reason;
-        if (id == "app.suspend" &&
-            (platform == cch::tui::KeybindingPlatform::Windows ||
-             platform == cch::tui::KeybindingPlatform::Other)) {
-            keys.clear();
-            available = false;
-            unavailable_reason = platform == cch::tui::KeybindingPlatform::Windows
-                ? "Unavailable on native Windows"
-                : "Unavailable on this platform";
-        } else if (id == "app.clipboard.pasteImage" && platform == cch::tui::KeybindingPlatform::Windows) {
-            keys = {"alt+v"};
-        } else if (id == "app.tree.foldOrUp" && platform == cch::tui::KeybindingPlatform::MacOS) {
-            keys = {"alt+left", "ctrl+left"};
-        } else if (id == "app.tree.unfoldOrDown" && platform == cch::tui::KeybindingPlatform::MacOS) {
-            keys = {"alt+right", "ctrl+right"};
-        }
         definitions.push_back({
             .id = std::string(source->id),
-            .default_keys = std::move(keys),
+            .default_keys = source->keys,
             .description = std::string(source->description),
             .category = std::string(source->category),
-            .available = available,
-            .unavailable_reason = std::move(unavailable_reason),
         });
     }
     return definitions;
@@ -365,7 +342,6 @@ support::Expected<KeybindingsManagerResult> load_keybindings_manager(
     cch::tui::KeybindingResolutionRequest resolution_request;
     resolution_request.definitions = std::move(definitions);
     resolution_request.overrides = std::move(overrides);
-    resolution_request.platform = request.platform;
     if (auto resolution = cch::tui::resolve_keybindings(std::move(resolution_request)); !resolution) {
         return std::unexpected(resolution.error());
     } else {

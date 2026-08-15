@@ -12,9 +12,7 @@
 #include <string>
 #include <system_error>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
-#endif
 
 namespace cch::coding_agent {
 namespace {
@@ -66,14 +64,12 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
         return std::unexpected(trust_error("trust store is not a regular file", path.string()));
     }
 
-#if defined(__unix__) || defined(__APPLE__)
     struct stat st {};
     if (::lstat(path.c_str(), &st) == 0) {
         if ((st.st_mode & S_IWGRP) != 0 || (st.st_mode & S_IWOTH) != 0) {
             return std::unexpected(trust_error("trust store is writable by group or others", path.string()));
         }
     }
-#endif
 
     std::ifstream input(path, std::ios::binary);
     if (!input) {
@@ -112,9 +108,7 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
         if (ec) {
             return std::unexpected(trust_error("could not create trust store directory", ec.message()));
         }
-#if defined(__unix__) || defined(__APPLE__)
         (void)::chmod(parent.c_str(), 0700);
-#endif
     }
 
     auto status = std::filesystem::symlink_status(path, ec);
@@ -147,17 +141,13 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
             return std::unexpected(trust_error("could not write temporary trust store", tmp.string()));
         }
     }
-#if defined(__unix__) || defined(__APPLE__)
     (void)::chmod(tmp.c_str(), 0600);
-#endif
     std::filesystem::rename(tmp, path, ec);
     if (ec) {
         std::filesystem::remove(tmp, ec);
         return std::unexpected(trust_error("could not replace trust store", ec.message()));
     }
-#if defined(__unix__) || defined(__APPLE__)
     (void)::chmod(path.c_str(), 0600);
-#endif
     return {};
 }
 

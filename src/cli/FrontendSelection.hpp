@@ -17,7 +17,6 @@ enum class Frontend {
 struct FrontendEnvironment {
     bool stdin_is_terminal{false};
     bool stdout_is_terminal{false};
-    bool interactive_supported{false};
 };
 
 /// Observe the process streams and compile-time Native TUI platform support.

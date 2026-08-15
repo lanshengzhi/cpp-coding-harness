@@ -5,15 +5,9 @@
 namespace cch::coding_agent {
 
 std::filesystem::path home_directory() {
-#if defined(_WIN32)
-    if (const char* profile = std::getenv("USERPROFILE"); profile != nullptr && profile[0] != '\0') {
-        return profile;
-    }
-#else
     if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
         return home;
     }
-#endif
     return {};
 }
 

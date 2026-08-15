@@ -616,7 +616,6 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
 }
 
 TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a process-lifetime cache", "[coding_agent][model-runtime][issue345]") {
-#if defined(__unix__) || defined(__APPLE__)
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .chunks = {"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n"},
@@ -654,7 +653,6 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");
-#endif
 }
 
 TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not configured", "[coding_agent][model-runtime][issue406]") {

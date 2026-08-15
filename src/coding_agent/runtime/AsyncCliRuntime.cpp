@@ -234,11 +234,9 @@ void print_session_diagnostics(
                         return coding_agent::tui::TuiActionResultVariant{
                             coding_agent::tui::write_clipboard_text(payload.text)};
                     } else if constexpr (std::is_same_v<T, coding_agent::tui::SuspendProcessAction>) {
-#if !defined(_WIN32)
                         // pi `process.kill(0, "SIGTSTP")`: the host owns the
                         // process-group suspend.
                         (void)::kill(0, SIGTSTP);
-#endif
                         return coding_agent::tui::TuiActionResultVariant{
                             std::monostate{}};
                     } else if constexpr (std::is_same_v<T, coding_agent::tui::ReplaceSessionAction>) {

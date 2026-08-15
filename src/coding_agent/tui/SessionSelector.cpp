@@ -18,17 +18,12 @@
 #include <utility>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#elif defined(_WIN32)
-#include <cstdlib>
-#include <windows.h>
-#endif
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -85,7 +80,6 @@ struct DeleteSessionOutcome {
 
 [[nodiscard]] DeleteSessionOutcome delete_session_file(
     const std::filesystem::path& session_path) {
-#if defined(__unix__) || defined(__APPLE__)
     // Spawn `trash` synchronously with a stderr pipe (pi spawnSync).
     int stderr_pipe[2]{-1, -1};
     if (::pipe(stderr_pipe) != 0) {
@@ -161,17 +155,6 @@ struct DeleteSessionOutcome {
         .trashed = false,
         .error = unlink_ec ? unlink_ec.message() + hint : "could not delete session file" + hint,
     };
-#else
-    std::error_code unlink_ec;
-    if (std::filesystem::remove(session_path, unlink_ec) && !unlink_ec) {
-        return DeleteSessionOutcome{.ok = true, .trashed = false, .error = {}};
-    }
-    return {
-        .ok = false,
-        .trashed = false,
-        .error = unlink_ec ? unlink_ec.message() : "could not delete session file",
-    };
-#endif
 }
 
 /// pi `normalizeMessageText`: control characters become spaces, then trim.

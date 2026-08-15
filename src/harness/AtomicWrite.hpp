@@ -5,18 +5,14 @@
 #include "support/UniqueFd.hpp"
 
 #include <filesystem>
-#include <fstream>
-#include <memory>
 #include <string>
 #include <system_error>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 namespace cch::harness {
 
@@ -31,13 +27,11 @@ inline support::Error write_error(std::string message) {
 inline support::ExpectedVoid write_atomic_file(const std::filesystem::path& target, const std::string& content) {
     std::error_code ec;
     std::filesystem::path temp;
-#if defined(__unix__) || defined(__APPLE__)
     mode_t mode = S_IRUSR | S_IWUSR;
     struct stat existing_status {};
     if (::lstat(target.c_str(), &existing_status) == 0) {
         mode = existing_status.st_mode & 0777;
     }
-#endif
 
     for (int suffix = 0; suffix < 100; ++suffix) {
         auto candidate = atomic_temp_path(target, suffix);
@@ -58,7 +52,6 @@ inline support::ExpectedVoid write_atomic_file(const std::filesystem::path& targ
         return std::unexpected(write_error("could not allocate temporary file for atomic write"));
     }
 
-#if defined(__unix__) || defined(__APPLE__)
     auto parent = target.parent_path();
     if (parent.empty()) {
         parent = ".";
@@ -101,25 +94,6 @@ inline support::ExpectedVoid write_atomic_file(const std::filesystem::path& targ
         ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not replace target atomically: " + message));
     }
-#else
-    std::ofstream output(temp, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        return std::unexpected(write_error("could not open temporary file for writing"));
-    }
-    output << content;
-    output.flush();
-    output.close();
-    if (!output) {
-        std::filesystem::remove(temp, ec);
-        return std::unexpected(write_error("could not write temporary file"));
-    }
-
-    std::filesystem::rename(temp, target, ec);
-    if (ec) {
-        std::filesystem::remove(temp, ec);
-        return std::unexpected(write_error("could not replace target atomically: " + ec.message()));
-    }
-#endif
     return {};
 }
 

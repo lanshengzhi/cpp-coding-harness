@@ -7,13 +7,9 @@
 #include <string>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#elif defined(_WIN32)
-#include <process.h>
-#endif
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -25,14 +21,9 @@ struct ClipboardToolCommand {
     std::vector<std::string> args;
 };
 
-/// The first tool to try for the current platform/env (pi's order: darwin
-/// `pbcopy`, win32 `clip`, Linux Termux, then Wayland, then X11).
+/// The first tool to try for the current Linux environment (pi's order:
+/// Termux, then Wayland, then X11).
 [[nodiscard]] std::optional<ClipboardToolCommand> primary_clipboard_tool() {
-#if defined(__APPLE__)
-    return ClipboardToolCommand{.program = "pbcopy", .args = {}};
-#elif defined(_WIN32)
-    return ClipboardToolCommand{.program = "clip", .args = {}};
-#else
     if (const char* termux = std::getenv("TERMUX_VERSION");
         termux != nullptr && termux[0] != '\0') {
         return ClipboardToolCommand{.program = "termux-clipboard-set", .args = {}};
@@ -46,10 +37,7 @@ struct ClipboardToolCommand {
         return ClipboardToolCommand{.program = "xclip", .args = {"-selection", "clipboard"}};
     }
     return std::nullopt;
-#endif
 }
-
-#if defined(__unix__) || defined(__APPLE__)
 
 /// Run one tool with `text` on its stdin; true when the child exits 0.
 /// wl-copy keeps the clipboard only while it runs, so the parent waits for
@@ -125,47 +113,9 @@ struct ClipboardToolCommand {
     return true;
 }
 
-#elif defined(_WIN32)
-
-[[nodiscard]] bool run_clipboard_tool(
-    const ClipboardToolCommand& command,
-    std::string_view text) {
-    // Windows has no fork/pipe here; a bounded temp file feeds `clip`'s
-    // stdin through a shell-free redirect (`clip` reads stdin until EOF).
-    const auto temp = std::tmpfile();
-    if (temp == nullptr) return false;
-    const auto written =
-        std::fwrite(text.data(), 1, text.size(), temp);
-    (void)std::fflush(temp);
-    const auto descriptor = ::fileno(temp);
-    (void)::_lseeki64(descriptor, 0, SEEK_SET);
-    // `clip` does not accept a file argument; run it with stdin redirected.
-    std::vector<const char*> argv;
-    argv.reserve(command.args.size() + 2);
-    argv.push_back(command.program.c_str());
-    for (const auto& arg : command.args) argv.push_back(arg.c_str());
-    argv.push_back(nullptr);
-    const auto pid = ::_spawnvp(_P_NOWAIT, command.program.c_str(), argv.data());
-    (void)std::fclose(temp);
-    return pid != -1 && written == text.size();
-}
-
-#else
-
-[[nodiscard]] bool run_clipboard_tool(
-    const ClipboardToolCommand& command,
-    std::string_view text) {
-    (void)command;
-    (void)text;
-    return false;
-}
-
-#endif
-
 } // namespace
 
 bool write_clipboard_text(std::string_view text) {
-#if defined(__unix__) || defined(__APPLE__)
     const auto primary = primary_clipboard_tool();
     if (!primary) return false;
     if (primary->program == "wl-copy") {
@@ -183,14 +133,6 @@ bool write_clipboard_text(std::string_view text) {
         return copy_to_x11_clipboard(text);
     }
     return run_clipboard_tool(*primary, text);
-#elif defined(_WIN32)
-    const auto primary = primary_clipboard_tool();
-    if (!primary) return false;
-    return run_clipboard_tool(*primary, text);
-#else
-    (void)text;
-    return false;
-#endif
 }
 
 } // namespace cch::coding_agent::tui

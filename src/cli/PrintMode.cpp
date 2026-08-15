@@ -76,22 +76,15 @@ namespace {
     PrintModePlan plan) {
     const auto executor = co_await boost::asio::this_coro::executor;
 
-    // pi `registerSignalHandlers`: SIGTERM always, SIGHUP outside Windows.
+    // pi `registerSignalHandlers`: SIGTERM always, SIGHUP.
     // The handler runs on this executor (single-threaded with the prompts),
     // disposes the session like pi, and records the exit code.
     boost::asio::signal_set signals{executor, SIGTERM};
-#if !defined(_WIN32)
     signals.add(SIGHUP);
-#endif
     std::optional<int> signal_exit;
     signals.async_wait([&](const boost::system::error_code& error, int fired) {
         if (error) return;
-#if defined(_WIN32)
-        (void)fired;
-        signal_exit = 143;
-#else
         signal_exit = fired == SIGHUP ? 129 : 143;
-#endif
         // pi print-mode handler: dispose the session before exiting.
         session.abort();
         session.close();

@@ -46,7 +46,6 @@ TEST_CASE(
 
     coding_agent::tui::KeybindingsManagerRequest request;
     request.agent_config_directory = config.path();
-    request.platform = tui::KeybindingPlatform::Linux;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
 
     REQUIRE(manager);
@@ -68,7 +67,6 @@ TEST_CASE("Hotkey help and hints expose the exact registry used for dispatch", "
 
     coding_agent::tui::KeybindingsManagerRequest request;
     request.agent_config_directory = config.path();
-    request.platform = tui::KeybindingPlatform::MacOS;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
 
     REQUIRE(manager);
@@ -116,31 +114,20 @@ TEST_CASE(
     "Known application defaults are installed only for concretely assembled actions",
     "[coding_agent][keybindings][issue57]") {
     constexpr std::array<std::string_view, 1> kSuspend{"app.suspend"};
-    const auto linux_definitions = coding_agent::tui::app_keybinding_definitions(
-        kSuspend,
-        tui::KeybindingPlatform::Linux);
-    REQUIRE(linux_definitions);
-    REQUIRE(linux_definitions->size() == 1);
-    CHECK(linux_definitions->front().default_keys == std::vector<std::string>{"ctrl+z"});
-    CHECK(linux_definitions->front().available);
-
-    const auto windows_definitions = coding_agent::tui::app_keybinding_definitions(
-        kSuspend,
-        tui::KeybindingPlatform::Windows);
-    REQUIRE(windows_definitions);
-    REQUIRE(windows_definitions->size() == 1);
-    CHECK(windows_definitions->front().default_keys.empty());
-    CHECK_FALSE(windows_definitions->front().available);
+    const auto definitions = coding_agent::tui::app_keybinding_definitions(kSuspend);
+    REQUIRE(definitions);
+    REQUIRE(definitions->size() == 1);
+    CHECK(definitions->front().default_keys == std::vector<std::string>{"ctrl+z"});
+    CHECK(definitions->front().available);
 
     coding_agent::tui::KeybindingsManagerRequest request;
-    request.application_definitions = *windows_definitions;
-    request.platform = tui::KeybindingPlatform::Windows;
+    request.application_definitions = *definitions;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
     const auto* suspend = manager->registry->find("app.suspend");
     REQUIRE(suspend != nullptr);
-    CHECK_FALSE(suspend->available);
-    CHECK_FALSE(manager->registry->matches(
+    CHECK(suspend->available);
+    CHECK(manager->registry->matches(
         tui::KeyEvent{.key = "z", .ctrl = true},
         "app.suspend"));
     const auto entries = coding_agent::tui::hotkey_help_entries(*manager->registry);
@@ -148,7 +135,7 @@ TEST_CASE(
         return entry.id == "app.suspend";
     });
     REQUIRE(help != entries.end());
-    CHECK(help->keys == "Unavailable on native Windows");
+    CHECK(help->keys == "ctrl+z");
 }
 
 TEST_CASE(
@@ -159,8 +146,7 @@ TEST_CASE(
         "app.message.dequeue",
     };
     const auto definitions = coding_agent::tui::app_keybinding_definitions(
-        kQueueActions,
-        tui::KeybindingPlatform::Linux);
+        kQueueActions);
     REQUIRE(definitions);
     REQUIRE(definitions->size() == 2);
     CHECK((*definitions)[0].id == "app.message.followUp");
@@ -174,7 +160,6 @@ TEST_CASE(
     // both observe them through the exact registry used by the TUI.
     coding_agent::tui::KeybindingsManagerRequest request;
     request.application_definitions = *definitions;
-    request.platform = tui::KeybindingPlatform::Linux;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
     CHECK(manager->registry->matches(
@@ -226,7 +211,6 @@ TEST_CASE(
 
     coding_agent::tui::KeybindingsManagerRequest request;
     request.agent_config_directory = config.path();
-    request.platform = tui::KeybindingPlatform::Linux;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
 
     REQUIRE(manager);
@@ -317,7 +301,7 @@ TEST_CASE(
         "app.tree.filter.cycleBackward",
     };
     const auto definitions = coding_agent::tui::app_keybinding_definitions(
-        kAllActions, tui::KeybindingPlatform::Linux);
+        kAllActions);
     REQUIRE(definitions);
     REQUIRE(definitions->size() == 42);
 
@@ -338,7 +322,7 @@ TEST_CASE(
     // Unknown ids still fail rather than creating placeholders.
     constexpr std::array<std::string_view, 1> kUnknown{"app.does.not.exist"};
     CHECK_FALSE(coding_agent::tui::app_keybinding_definitions(
-        kUnknown, tui::KeybindingPlatform::Linux));
+        kUnknown));
 }
 
 TEST_CASE(
@@ -355,11 +339,10 @@ TEST_CASE(
         "app.session.resume",
     };
     auto definitions = coding_agent::tui::app_keybinding_definitions(
-        kAssembled, tui::KeybindingPlatform::Linux);
+        kAssembled);
     REQUIRE(definitions);
     coding_agent::tui::KeybindingsManagerRequest request;
     request.application_definitions = std::move(*definitions);
-    request.platform = tui::KeybindingPlatform::Linux;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
 

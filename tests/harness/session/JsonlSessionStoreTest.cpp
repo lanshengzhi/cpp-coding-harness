@@ -9,10 +9,8 @@
 #include <sstream>
 #include <variant>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 using namespace cch;
 
@@ -46,11 +44,7 @@ std::string text_from_message(const ai::MessageVariant& message) {
 }
 
 void make_private(const std::filesystem::path& path) {
-#if defined(__unix__) || defined(__APPLE__)
     chmod(path.c_str(), S_IRUSR | S_IWUSR);
-#else
-    (void)path;
-#endif
 }
 
 support::JsonValue complete_assistant_value() {
@@ -484,7 +478,6 @@ TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][
 }
 
 TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a symlink", "[harness][session][u7]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     const auto real_directory = workspace.path() / "real";
     const auto linked_directory = workspace.path() / "linked";
@@ -497,13 +490,9 @@ TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a syml
     REQUIRE_FALSE(store);
     CHECK((store.error().message + store.error().detail).find("symlink") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(real_directory / "nested"));
-#else
-    SUCCEED("symbolic-link parent assertion is not available on this platform");
-#endif
 }
 
 TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness][session][u7]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     const auto original_directory = workspace.path() / "sessions";
     const auto moved_directory = workspace.path() / "moved-sessions";
@@ -528,9 +517,6 @@ TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness
     REQUIRE_FALSE(appended);
     CHECK((appended.error().message + appended.error().detail).find("symlink") != std::string::npos);
     CHECK(read_all(outside_file) == "outside");
-#else
-    SUCCEED("symbolic-link append assertion is not available on this platform");
-#endif
 }
 
 TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[harness][session][u7]") {
@@ -539,7 +525,6 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
     auto store = harness::session::JsonlSessionStore::create_new(real, metadata_for(workspace));
     REQUIRE(store);
 
-#if defined(__unix__) || defined(__APPLE__)
     auto link = workspace.path() / "link.jsonl";
     ::symlink(real.c_str(), link.c_str());
     auto linked = harness::session::JsonlSessionStore::load(link);
@@ -550,7 +535,6 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
     auto public_load = harness::session::JsonlSessionStore::load(real);
     REQUIRE_FALSE(public_load);
     CHECK(public_load.error().message.find("readable") != std::string::npos);
-#endif
 }
 
 TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[harness][session][u7]") {
@@ -566,7 +550,6 @@ TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[ha
 }
 
 TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target", "[harness][session][u7]") {
-#if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     const auto outside = workspace.path() / "outside.jsonl";
     {
@@ -580,9 +563,6 @@ TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target",
 
     REQUIRE_FALSE(store);
     CHECK(store.error().message == "refusing to follow symlink session path");
-#else
-    SUCCEED("symbolic-link assertion is not available on this platform");
-#endif
 }
 
 // --- U5: v3 typed entry load/write tests ---

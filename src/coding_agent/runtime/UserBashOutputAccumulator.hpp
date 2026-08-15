@@ -104,17 +104,13 @@ public:
 private:
     [[nodiscard]] static support::Error spill_error(std::string message, std::string detail);
     [[nodiscard]] static std::string random_suffix();
-#if defined(__unix__) || defined(__APPLE__)
     [[nodiscard]] static support::ExpectedVoid write_all(int fd, std::string_view bytes);
     static void remove_candidate(
         support::UniqueFd& fd,
         const std::filesystem::path& candidate);
-#endif
     void remove_file();
 
-#if defined(__unix__) || defined(__APPLE__)
     support::UniqueFd fd_;
-#endif
     std::filesystem::path path_;
     bool active_{false};
 };

@@ -379,8 +379,8 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
 2. **Codex `accountId` is asserted via the `chatgpt_account_id` claim and request headers, not as a
    byte-for-byte frozen JWT.** No fixture pins the JWT itself; the claim value is the dummy
    `acc_test`.
-3. **POSIX permission assertions are platform-gated** (`AuthStorageTest` `SUCCEED`s on non-Unix);
-   the `0o700`/`0o600` surface is unverified on Windows, consistent with the current platform scope.
+3. **POSIX permission assertions always run on the supported Linux platform**; the
+   `0o700`/`0o600` surface is fully asserted (`AuthStorageTest`).
 4. **No live-network or real-credential validation** — all evidence is fake-provider/scripted
    transport per the repo validation policy. Live smoke (`CCH_LIVE_KIMI=1`) remains optional and
    manual.

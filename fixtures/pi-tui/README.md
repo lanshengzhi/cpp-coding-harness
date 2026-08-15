@@ -266,9 +266,9 @@ reintroduced unclassified/unknown target, root, or source fails configure/build 
   layout seams) — the seven ids are recognized-but-unassembled, never no-op bindings.
 - The `EditorComponent` extension interface and the TUI extension input-listener chain
   (`addInputListener` consume/rewrite).
-- Apple-Terminal Shift+Enter synthesis and darwin native-modifier polling (permitted subset; pi
-  itself fails closed without the prebuild); the Windows VT-input native helper (Windows is not a
-  supported TUI platform per ADR 0025).
+- The Apple-Terminal Shift+Enter synthesis, darwin native-modifier polling, and the Windows
+  VT-input native helper (all outside the supported Linux platform; pi itself fails closed
+  without its platform prebuilds).
 - Live `?2031` color-scheme notifications and the TUI-level background/scheme query APIs
   (startup OSC 11/`?997` detection stays Supported); the `Marked` re-export; `getOsc8LinkAtColumn`.
 - The diagnostic surface (`onDebug`, `fullRedraws`, `PI_TUI_WRITE_LOG`) and pi exports with no

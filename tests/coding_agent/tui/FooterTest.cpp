@@ -254,7 +254,6 @@ TEST_CASE("Status indicator messages match pi's wording", "[coding_agent][tui][f
     auto resolved = cch::tui::resolve_keybindings(
         cch::tui::KeybindingResolutionRequest{
             .definitions = {definition},
-            .platform = cch::tui::KeybindingPlatform::Linux,
         });
     REQUIRE(resolved);
     const auto& keybindings = *resolved->registry;

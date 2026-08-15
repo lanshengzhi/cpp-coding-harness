@@ -10,7 +10,7 @@ namespace cch::coding_agent {
 ///
 /// Resolution order:
 ///   1. `PI_CODING_AGENT_DIR` environment override,
-///   2. `$HOME/.pi/agent` (`%USERPROFILE%\.pi\agent` on Windows).
+///   2. `$HOME/.pi/agent`.
 ///
 /// Returns an empty path when no home directory can be determined; derived
 /// file paths are then empty as well, and loaders treat them as missing.

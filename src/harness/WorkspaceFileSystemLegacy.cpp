@@ -4,15 +4,11 @@
 
 #include <cerrno>
 #include <cstring>
-#include <fstream>
-#include <sstream>
 #include <utility>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 namespace cch::harness {
 
@@ -55,7 +51,6 @@ support::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std
         return std::unexpected(target.error());
     }
 
-#if defined(__unix__) || defined(__APPLE__)
     auto parent_guard = open_parent_directory(*target, false);
     if (!parent_guard) {
         return std::unexpected(parent_guard.error());
@@ -85,26 +80,6 @@ support::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std
         return std::unexpected(workspace_error("could not read file: " + requested));
     }
     return content;
-#else
-    std::error_code ec;
-    auto canonical = std::filesystem::canonical(*target, ec);
-    if (ec) {
-        return std::unexpected(workspace_error("path does not exist inside workspace: " + requested));
-    }
-    if (!inside(canonical)) {
-        return std::unexpected(workspace_error("path escapes workspace: " + requested));
-    }
-    if (!std::filesystem::is_regular_file(canonical, ec)) {
-        return std::unexpected(workspace_error("path is not a regular file: " + requested));
-    }
-    std::ifstream input(canonical, std::ios::binary);
-    if (!input) {
-        return std::unexpected(workspace_error("could not open file for reading: " + requested));
-    }
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    return buffer.str();
-#endif
 }
 
 support::Expected<std::size_t> WorkspaceFileSystem::write_file(
@@ -116,7 +91,6 @@ support::Expected<std::size_t> WorkspaceFileSystem::write_file(
         return std::unexpected(target.error());
     }
 
-#if defined(__unix__) || defined(__APPLE__)
     auto parent = target->parent_path();
     if (parent.empty()) {
         parent = root_;
@@ -145,13 +119,6 @@ support::Expected<std::size_t> WorkspaceFileSystem::write_file(
     if (std::filesystem::exists(target_status) && !std::filesystem::is_regular_file(target_status)) {
         return std::unexpected(workspace_error("target is not a regular file: " + requested));
     }
-#else
-    auto resolved = resolve_for_write(requested, create_parents);
-    if (!resolved) {
-        return std::unexpected(resolved.error());
-    }
-    target = *resolved;
-#endif
     auto written = write_atomic_file(*target, content);
     if (!written) {
         return std::unexpected(written.error());
@@ -200,79 +167,6 @@ bool WorkspaceFileSystem::inside_lexically(const std::filesystem::path& path) co
     }
     auto first = rel.begin();
     return first == rel.end() || *first != "..";
-}
-
-bool WorkspaceFileSystem::has_symlink_component(const std::filesystem::path& lexical_parent) const {
-    auto rel = lexical_parent.lexically_normal().lexically_relative(root_);
-    if (rel.empty() || rel == ".") {
-        return false;
-    }
-    std::error_code ec;
-    std::filesystem::path cursor = root_;
-    for (const auto& part : rel) {
-        if (part == "." || part.empty()) {
-            continue;
-        }
-        if (part == "..") {
-            return true;
-        }
-        cursor /= part;
-        auto status = std::filesystem::symlink_status(cursor, ec);
-        if (ec) {
-            return status.type() != std::filesystem::file_type::not_found;
-        }
-        if (!std::filesystem::exists(status)) {
-            return false;
-        }
-        if (std::filesystem::is_symlink(status)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_for_write(
-    const std::string& requested,
-    bool create_parents) const {
-    auto target = resolve_addressed_path(requested);
-    if (!target) {
-        return std::unexpected(target.error());
-    }
-    std::error_code ec;
-    auto parent = target->parent_path();
-    if (parent.empty()) {
-        parent = root_;
-    }
-    if (!std::filesystem::exists(parent, ec)) {
-        if (!create_parents) {
-            return std::unexpected(workspace_error("parent directory does not exist: " + requested));
-        }
-        if (has_symlink_component(parent)) {
-            return std::unexpected(workspace_error("parent path contains a symlink: " + requested));
-        }
-        std::filesystem::create_directories(parent, ec);
-        if (ec) {
-            return std::unexpected(workspace_error("could not create parent directory: " + ec.message()));
-        }
-    }
-    if (has_symlink_component(parent)) {
-        return std::unexpected(workspace_error("parent path contains a symlink: " + requested));
-    }
-    auto parent_canonical = std::filesystem::canonical(parent, ec);
-    if (ec || !inside(parent_canonical)) {
-        return std::unexpected(workspace_error("parent path escapes workspace: " + requested));
-    }
-    auto status = std::filesystem::symlink_status(*target, ec);
-    if (ec && status.type() != std::filesystem::file_type::not_found) {
-        return std::unexpected(workspace_error("could not inspect target: " + requested));
-    }
-    if (std::filesystem::is_symlink(status)) {
-        return std::unexpected(workspace_error("refusing to write through final symlink: " + requested));
-    }
-    if (std::filesystem::exists(status) && !std::filesystem::is_regular_file(status)) {
-        return std::unexpected(workspace_error("target is not a regular file: " + requested));
-    }
-    return *target;
 }
 
 std::filesystem::path WorkspaceFileSystem::canonicalized(std::filesystem::path workspace) {

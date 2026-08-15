@@ -3,12 +3,10 @@
 #include <chrono>
 #include <sstream>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <cstring>
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 namespace cch::harness {
 
@@ -129,7 +127,6 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
 
-#if defined(__unix__) || defined(__APPLE__)
     struct stat st {};
     if (::lstat(resolved->c_str(), &st) != 0) {
         if (errno == ENOENT) {
@@ -167,41 +164,6 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
         .size = static_cast<std::uint64_t>(st.st_size),
         .mtimeMs = mtimeMs,
     };
-#else
-    std::error_code ec;
-    auto status = std::filesystem::symlink_status(*resolved, ec);
-    if (ec) {
-        return std::unexpected(FileError{
-            FileErrorCode::NotFound,
-            "path not found: " + path,
-            std::string{path}});
-    }
-    if (!std::filesystem::exists(status)) {
-        return std::unexpected(FileError{
-            FileErrorCode::NotFound,
-            "path not found: " + path,
-            std::string{path}});
-    }
-
-    FileKind kind = FileKind::File;
-    if (std::filesystem::is_directory(status)) {
-        kind = FileKind::Directory;
-    } else if (std::filesystem::is_symlink(status)) {
-        kind = FileKind::Symlink;
-    }
-
-    auto name = resolved->filename().string();
-    auto mtime = std::filesystem::last_write_time(*resolved, ec);
-    auto mtimeMs = ec ? 0 : std::chrono::duration_cast<std::chrono::milliseconds>(
-        mtime.time_since_epoch()).count();
-    return FileInfo{
-        .name = name.empty() ? resolved->string() : name,
-        .path = resolved->string(),
-        .kind = kind,
-        .size = static_cast<std::uint64_t>(std::filesystem::file_size(*resolved, ec)),
-        .mtimeMs = static_cast<std::int64_t>(mtimeMs),
-    };
-#endif
 }
 
 std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(const std::string& path) const {
@@ -245,20 +207,12 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
         auto child_name = entry.path().filename().string();
         std::uint64_t size = 0;
         std::int64_t mtimeMs = 0;
-#if defined(__unix__) || defined(__APPLE__)
         struct stat st {};
         if (::lstat(entry.path().c_str(), &st) == 0) {
             size = static_cast<std::uint64_t>(st.st_size);
             mtimeMs = static_cast<std::int64_t>(st.st_mtim.tv_sec) * 1000 +
                       static_cast<std::int64_t>(st.st_mtim.tv_nsec) / 1'000'000;
         }
-#else
-        size = static_cast<std::uint64_t>(std::filesystem::file_size(entry.path(), ec));
-        auto mtime = std::filesystem::last_write_time(entry.path(), ec);
-        if (!ec) {
-            mtimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(mtime.time_since_epoch()).count();
-        }
-#endif
         results.push_back(FileInfo{
             .name = child_name,
             .path = entry.path().string(),
@@ -315,7 +269,6 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
-#if defined(__unix__) || defined(__APPLE__)
     if (recursive) {
         auto created = create_parent_directories(*resolved);
         if (!created) {
@@ -331,16 +284,6 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(
             "could not create directory: " + std::string(std::strerror(errno)),
             std::string{path}});
     }
-#else
-    std::error_code ec;
-    std::filesystem::create_directories(*resolved, ec);
-    if (ec) {
-        return std::unexpected(FileError{
-            FileErrorCode::Invalid,
-            "could not create directory: " + ec.message(),
-            std::string{path}});
-    }
-#endif
     return {};
 }
 

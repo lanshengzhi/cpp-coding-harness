@@ -100,11 +100,9 @@
 #include <variant>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <fcntl.h>
 #include <unistd.h>
-#endif
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -289,7 +287,6 @@ struct InteractiveStartupDiagnostics {
 [[nodiscard]] support::Expected<std::filesystem::path> write_clipboard_image(
     std::span<const std::uint8_t> bytes,
     std::string_view extension) {
-#if defined(__unix__) || defined(__APPLE__)
     std::error_code temp_error;
     const auto temp_directory = std::filesystem::temp_directory_path(temp_error);
     if (temp_error || temp_directory.empty()) {
@@ -359,13 +356,6 @@ struct InteractiveStartupDiagnostics {
     return std::unexpected(support::make_error(
         support::ErrorCode::Process,
         "could not allocate a unique clipboard image path"));
-#else
-    (void)bytes;
-    (void)extension;
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Process,
-        "clipboard image files are unavailable on this platform"));
-#endif
 }
 
 [[nodiscard]] std::optional<std::string> queued_editor_text(
@@ -676,7 +666,6 @@ command_autocomplete_commands(
 /// Resolve an executable on PATH (pi's `ensureTool`); nullopt when absent so
 /// `@`/`#` completion degrades gracefully to empty file suggestions.
 [[nodiscard]] std::optional<std::filesystem::path> find_executable_on_path(std::string_view name) {
-#if defined(__unix__) || defined(__APPLE__)
     const char* path_env = std::getenv("PATH");
     if (path_env == nullptr) return std::nullopt;
     std::string_view path_view{path_env};
@@ -692,7 +681,6 @@ command_autocomplete_commands(
         if (error || !std::filesystem::is_regular_file(status)) continue;
         if (::access(candidate.c_str(), X_OK) == 0) return candidate;
     }
-#endif
     return std::nullopt;
 }
 
@@ -2126,8 +2114,7 @@ private:
             "app.interrupt",
             "app.clear",
             "app.exit",
-            // pi's main-editor `app.suspend` (Ctrl+Z; unavailable on
-            // Windows/Other per the catalog's platform gate) and
+            // pi's main-editor `app.suspend` (Ctrl+Z) and
             // `app.editor.external` (Ctrl+G).
             "app.suspend",
             "app.editor.external",
@@ -2196,14 +2183,13 @@ private:
         for (const auto& action : actions) {
             action_views.push_back(action);
         }
-        if (auto definitions = app_keybinding_definitions(action_views, keybinding_platform_);
+        if (auto definitions = app_keybinding_definitions(action_views);
             !definitions) {
             return std::unexpected(definitions.error());
         } else {
             KeybindingsManagerRequest request;
             request.agent_config_directory = agent_config_directory_;
             request.application_definitions = std::move(*definitions);
-            request.platform = keybinding_platform_;
             if (auto manager = load_keybindings_manager(std::move(request)); !manager) {
                 return std::unexpected(manager.error());
             } else {
@@ -2222,7 +2208,6 @@ private:
     [[nodiscard]] support::Expected<InteractiveStartupDiagnostics> load_startup_resources(
         const InteractiveModeConfig& config) {
         InteractiveStartupDiagnostics diagnostics;
-        keybinding_platform_ = config.platform;
         agent_config_directory_ = config.agent_config_directory;
         const auto actions = assemble_keybinding_actions();
         std::vector<std::string_view> action_views;
@@ -2230,13 +2215,12 @@ private:
         for (const auto& action : actions) {
             action_views.push_back(action);
         }
-        if (auto definitions = app_keybinding_definitions(action_views, config.platform); !definitions) {
+        if (auto definitions = app_keybinding_definitions(action_views); !definitions) {
             return std::unexpected(definitions.error());
         } else {
             KeybindingsManagerRequest request;
             request.agent_config_directory = config.agent_config_directory;
             request.application_definitions = std::move(*definitions);
-            request.platform = config.platform;
             if (auto manager = load_keybindings_manager(std::move(request)); !manager) {
                 return std::unexpected(manager.error());
             } else {
@@ -3241,10 +3225,6 @@ private:
     }
 
     void handle_suspend() {
-#if defined(_WIN32)
-        show_status("Suspend to background is not supported on Windows");
-        return;
-#else
         if (suspend_signals_) return;
         // pi `handleCtrlZ`: stop the TUI first so the terminal is restored
         // before the process group stops; the exit-wait timer keeps the
@@ -3288,7 +3268,6 @@ private:
         (void)deliver_action(
             action_generation_,
             TuiActionVariant{SuspendProcessAction{}});
-#endif
     }
 
     /// pi's SIGCONT handler body: restore the TUI and request a full render.
@@ -3676,9 +3655,7 @@ private:
                     return TuiActionResultVariant{
                         write_clipboard_text(payload.text)};
                 } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
-#if !defined(_WIN32)
                     (void)::kill(0, SIGTSTP);
-#endif
                     return TuiActionResultVariant{std::monostate{}};
                 } else if constexpr (std::is_same_v<T, ReplaceSessionAction>) {
                     return TuiActionResultVariant{
@@ -5948,9 +5925,8 @@ private:
     /// replaces the current registry so all consumers see the new bindings
     /// live. Selectors take an ephemeral `get()` snapshot.
     std::shared_ptr<SharedKeybindings> keybindings_;
-    /// The platform and agent config directory the keybinding catalog was
-    /// assembled under, retained for the `/reload` re-catalog.
-    cch::tui::KeybindingPlatform keybinding_platform_{cch::tui::native_keybinding_platform()};
+    /// The agent config directory the keybinding catalog was assembled
+    /// under, retained for the `/reload` re-catalog.
     std::filesystem::path agent_config_directory_;
     /// Two-scope settings manager (global scope only; the project scope stays
     /// untrusted in the Native TUI). The theme committer and the

@@ -29,11 +29,7 @@ namespace {
 }
 
 [[nodiscard]] std::string click_hint() {
-#if defined(__APPLE__)
-    return "Cmd+click to open";
-#else
     return "Ctrl+click to open";
-#endif
 }
 
 } // namespace

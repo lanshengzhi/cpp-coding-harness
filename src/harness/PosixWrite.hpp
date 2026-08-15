@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(__unix__) || defined(__APPLE__)
-
 #include <cerrno>
 #include <cstddef>
 #include <expected>
@@ -59,5 +57,3 @@ struct PosixWriteError {
 }
 
 } // namespace cch::harness
-
-#endif

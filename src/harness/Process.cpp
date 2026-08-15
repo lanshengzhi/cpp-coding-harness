@@ -9,6 +9,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/process/v1.hpp>
+#include <boost/process/v1/posix.hpp>
 #include <boost/system/error_code.hpp>
 
 #include <array>
@@ -16,12 +17,9 @@
 #include <exception>
 #include <string>
 
-#if defined(__unix__) || defined(__APPLE__)
-#include <boost/process/v1/posix.hpp>
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
-#endif
 
 namespace cch::harness {
 namespace {
@@ -138,15 +136,9 @@ private:
 void request_supported_termination(
     boost::process::v1::child& child,
     boost::process::v1::group& process_group) {
-#if defined(__unix__) || defined(__APPLE__)
     if (process_group.valid()) {
         (void)::killpg(process_group.native_handle(), SIGTERM);
     }
-#else
-    boost::system::error_code ignored;
-    process_group.terminate(ignored);
-    child.terminate(ignored);
-#endif
     (void)child;
 }
 
@@ -183,19 +175,12 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
         }
 
         bp::group process_group;
-        // When stderr is merged on a supported platform, bind the stdout
-        // pipe's raw sink fd for the child's stderr so both streams share one
-        // kernel pipe and the reader observes emission order. Binding the
-        // same async_pipe twice would close its sink twice at spawn. On other
-        // platforms the merge is unavailable and stderr stays a separate
-        // drained stream.
-#if defined(__unix__) || defined(__APPLE__)
+        // The stderr merge binds the stdout pipe's raw sink fd for the
+        // child's stderr so both streams share one kernel pipe and the reader
+        // observes emission order. Binding the same async_pipe twice would
+        // close its sink twice at spawn.
         const bool stderr_merged = request.merge_stderr;
-#else
-        const bool stderr_merged = false;
-#endif
         bp::child child = [&]() {
-#if defined(__unix__) || defined(__APPLE__)
             if (stderr_merged) {
                 // Handler order matters: the stderr fd bind must dup the pipe
                 // sink before the std_out binding closes it in the child.
@@ -208,7 +193,6 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
                     child_environment,
                     process_group);
             }
-#endif
             return bp::child(
                 request.executable.string(),
                 bp::args(request.arguments),

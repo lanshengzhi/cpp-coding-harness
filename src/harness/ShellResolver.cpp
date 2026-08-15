@@ -3,16 +3,14 @@
 #include "ai/BoundedText.hpp"
 #include "harness/OutputLimiter.hpp"
 
+#include <pwd.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cstdlib>
 #include <string_view>
 #include <utility>
 #include <vector>
-
-#if defined(__unix__) || defined(__APPLE__)
-#include <pwd.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
 
 namespace cch::harness {
 namespace {
@@ -23,11 +21,7 @@ namespace {
     if (error || !std::filesystem::is_regular_file(status)) {
         return false;
     }
-#if defined(__unix__) || defined(__APPLE__)
     return ::access(path.c_str(), X_OK) == 0;
-#else
-    return true;
-#endif
 }
 
 [[nodiscard]] std::filesystem::path workspace_relative(
@@ -40,7 +34,6 @@ namespace {
 }
 
 [[nodiscard]] std::optional<std::filesystem::path> user_home_directory() {
-#if defined(__unix__) || defined(__APPLE__)
     if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
         return std::filesystem::path{home};
     }
@@ -56,7 +49,6 @@ namespace {
         result != nullptr && result->pw_dir != nullptr && result->pw_dir[0] != '\0') {
         return std::filesystem::path{result->pw_dir};
     }
-#endif
     return std::nullopt;
 }
 
@@ -118,7 +110,6 @@ std::expected<std::filesystem::path, ExecutionError> resolve_shell_executable(
     const std::filesystem::path& workspace,
     const std::map<std::string, std::string>& environment,
     const std::filesystem::path& system_bash_candidate) {
-#if defined(__unix__) || defined(__APPLE__)
     if (configured_path && !configured_path->empty()) {
         const auto expanded = expand_leading_home(*configured_path, workspace);
         if (!expanded) {
@@ -148,16 +139,6 @@ std::expected<std::filesystem::path, ExecutionError> resolve_shell_executable(
     }
     return std::unexpected(shell_unavailable(
         "no usable shell found: tried /bin/bash, PATH bash, and PATH sh"));
-#else
-    static_cast<void>(configured_path);
-    static_cast<void>(workspace);
-    static_cast<void>(environment);
-    static_cast<void>(system_bash_candidate);
-    return std::unexpected(ExecutionError{
-        .code = ExecutionErrorCode::NotSupported,
-        .message = "local Shell execution is not supported on this platform",
-    });
-#endif
 }
 
 } // namespace cch::harness

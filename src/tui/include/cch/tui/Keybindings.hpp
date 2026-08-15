@@ -12,13 +12,6 @@
 
 namespace cch::tui {
 
-enum class KeybindingPlatform {
-    Linux,
-    MacOS,
-    Windows,
-    Other,
-};
-
 struct KeybindingDefinition {
     std::string id{};
     std::vector<std::string> default_keys{};
@@ -51,7 +44,7 @@ struct EffectiveKeybinding {
 
 class KeybindingRegistry final {
 public:
-    KeybindingRegistry(std::vector<EffectiveKeybinding> entries, KeybindingPlatform platform);
+    explicit KeybindingRegistry(std::vector<EffectiveKeybinding> entries);
 
     [[nodiscard]] const EffectiveKeybinding* find(std::string_view id) const;
     [[nodiscard]] std::vector<std::string> keys(std::string_view id) const;
@@ -64,13 +57,11 @@ public:
 
 private:
     std::vector<EffectiveKeybinding> entries_;
-    KeybindingPlatform platform_{KeybindingPlatform::Other};
 };
 
 struct KeybindingResolutionRequest {
     std::vector<KeybindingDefinition> definitions{};
     std::vector<KeybindingOverride> overrides{};
-    KeybindingPlatform platform{KeybindingPlatform::Other};
 };
 
 struct KeybindingResolution {
@@ -95,6 +86,5 @@ struct KeybindingResolution {
 /// known-but-unbound.
 [[nodiscard]] bool is_known_unassembled_tui_keybinding(std::string_view id);
 [[nodiscard]] std::shared_ptr<const KeybindingRegistry> default_tui_keybindings();
-[[nodiscard]] KeybindingPlatform native_keybinding_platform();
 
 } // namespace cch::tui

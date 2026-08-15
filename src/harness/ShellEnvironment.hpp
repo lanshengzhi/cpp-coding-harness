@@ -6,9 +6,7 @@
 #include <string>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
 extern char** environ;
-#endif
 
 namespace cch::harness {
 
@@ -43,7 +41,6 @@ namespace cch::harness {
 [[nodiscard]] inline std::map<std::string, std::string> sanitized_environment(
     const std::vector<std::string>& explicit_secret_names = {}) {
     std::map<std::string, std::string> env;
-#if defined(__unix__) || defined(__APPLE__)
     for (char** current = environ; current != nullptr && *current != nullptr; ++current) {
         std::string entry(*current);
         auto split = entry.find('=');
@@ -55,9 +52,6 @@ namespace cch::harness {
             env[key] = entry.substr(split + 1);
         }
     }
-#else
-    (void)explicit_secret_names;
-#endif
     return env;
 }
 

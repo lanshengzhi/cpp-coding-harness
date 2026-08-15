@@ -32,22 +32,6 @@ namespace {
     return result;
 }
 
-[[nodiscard]] std::string display_key(std::string_view key, KeybindingPlatform platform) {
-    if (platform != KeybindingPlatform::MacOS) return std::string(key);
-    std::string result;
-    std::size_t start = 0;
-    while (start <= key.size()) {
-        const auto separator = key.find('+', start);
-        const auto end = separator == std::string_view::npos ? key.size() : separator;
-        if (!result.empty()) result.push_back('+');
-        const auto part = key.substr(start, end - start);
-        result += part == "alt" ? "option" : std::string(part);
-        if (separator == std::string_view::npos) break;
-        start = separator + 1;
-    }
-    return result;
-}
-
 [[nodiscard]] support::Error definition_error(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
 }
@@ -67,10 +51,8 @@ namespace {
 
 } // namespace
 
-KeybindingRegistry::KeybindingRegistry(
-    std::vector<EffectiveKeybinding> entries,
-    KeybindingPlatform platform)
-    : entries_(std::move(entries)), platform_(platform) {}
+KeybindingRegistry::KeybindingRegistry(std::vector<EffectiveKeybinding> entries)
+    : entries_(std::move(entries)) {}
 
 const EffectiveKeybinding* KeybindingRegistry::find(std::string_view id) const {
     const auto found = std::find_if(entries_.begin(), entries_.end(), [id](const auto& entry) {
@@ -108,7 +90,7 @@ std::string KeybindingRegistry::key_text(std::string_view id) const {
     std::string text;
     for (const auto& key : entry->keys) {
         if (!text.empty()) text.push_back('/');
-        text += display_key(key, platform_);
+        text += key;
     }
     return text;
 }
@@ -214,7 +196,7 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
     }
 
     return KeybindingResolution{
-        .registry = std::make_shared<const KeybindingRegistry>(std::move(entries), request.platform),
+        .registry = std::make_shared<const KeybindingRegistry>(std::move(entries)),
         .issues = std::move(issues),
     };
 }
@@ -297,23 +279,9 @@ std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {
                 .unavailable_reason = std::move(definition.unavailable_reason),
             });
         }
-        return std::make_shared<const KeybindingRegistry>(
-            std::move(entries),
-            native_keybinding_platform());
+        return std::make_shared<const KeybindingRegistry>(std::move(entries));
     }();
     return kRegistry;
-}
-
-KeybindingPlatform native_keybinding_platform() {
-#if defined(__APPLE__)
-    return KeybindingPlatform::MacOS;
-#elif defined(_WIN32)
-    return KeybindingPlatform::Windows;
-#elif defined(__linux__)
-    return KeybindingPlatform::Linux;
-#else
-    return KeybindingPlatform::Other;
-#endif
 }
 
 } // namespace cch::tui

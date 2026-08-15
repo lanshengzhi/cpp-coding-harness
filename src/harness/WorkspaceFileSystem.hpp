@@ -72,20 +72,14 @@ private:
     [[nodiscard]] static support::Error workspace_error(std::string message);
     [[nodiscard]] static FileError util_error_to_file_error(const support::Error& error, const std::string& path);
 
-#if defined(__unix__) || defined(__APPLE__)
     [[nodiscard]] support::Expected<support::UniqueFd> open_workspace_root() const;
     [[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
         const std::filesystem::path& target,
         bool create_missing) const;
     [[nodiscard]] support::Expected<void> create_parent_directories(const std::filesystem::path& target) const;
-#endif
 
     [[nodiscard]] bool inside(const std::filesystem::path& path) const;
     [[nodiscard]] bool inside_lexically(const std::filesystem::path& path) const;
-    [[nodiscard]] bool has_symlink_component(const std::filesystem::path& lexical_parent) const;
-    [[nodiscard]] support::Expected<std::filesystem::path> resolve_for_write(
-        const std::string& requested,
-        bool create_parents) const;
     [[nodiscard]] static std::filesystem::path canonicalized(std::filesystem::path workspace);
     [[nodiscard]] static std::filesystem::path default_root();
 

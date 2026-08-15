@@ -611,7 +611,6 @@ TEST_CASE("loadSkills loads explicit file paths and warns on non-markdown files"
     CHECK(warned);
 }
 
-#if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("loadSkills deduplicates the same real file reached via symlink", "[coding_agent][skill][u5][issue412]") {
     SkillTestFixture fix;
     fix.writeSkill("real/SKILL.md",
@@ -633,4 +632,3 @@ TEST_CASE("loadSkills deduplicates the same real file reached via symlink", "[co
     }
     CHECK_FALSE(collision);
 }
-#endif

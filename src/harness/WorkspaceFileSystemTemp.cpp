@@ -3,9 +3,7 @@
 #include <cerrno>
 #include <fstream>
 
-#if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
-#endif
 
 namespace cch::harness {
 
