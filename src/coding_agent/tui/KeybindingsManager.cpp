@@ -364,7 +364,7 @@ std::vector<HotkeyHelpEntry> hotkey_help_entries(
         const auto keys = registry.key_text(entry.id);
         result.push_back({
             .id = entry.id,
-            .keys = entry.available ? (keys.empty() ? "Unbound" : keys) : keys,
+            .keys = keys.empty() ? "Unbound" : keys,
             .description = entry.description,
             .category = entry.category,
         });

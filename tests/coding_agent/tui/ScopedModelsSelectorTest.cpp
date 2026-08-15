@@ -31,8 +31,6 @@ namespace {
             .default_keys = std::move(keys),
             .description = {},
             .category = {},
-            .available = true,
-            .unavailable_reason = std::nullopt,
         });
     };
     app_action("app.models.save", {"ctrl+s"});

@@ -29,8 +29,6 @@ namespace {
         .default_keys = {"ctrl+o"},
         .description = "Expand tool output",
         .category = "App",
-        .available = true,
-        .unavailable_reason = std::nullopt,
     });
     auto resolved = tui::resolve_keybindings(std::move(request));
     REQUIRE(resolved);

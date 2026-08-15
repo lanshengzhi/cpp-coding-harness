@@ -68,7 +68,7 @@ std::vector<std::string> KeybindingRegistry::keys(std::string_view id) const {
 
 bool KeybindingRegistry::matches(const KeyEvent& event, std::string_view id) const {
     const auto* entry = find(id);
-    if (entry == nullptr || !entry->available) return false;
+    if (entry == nullptr) return false;
     return std::any_of(entry->keys.begin(), entry->keys.end(), [&event](const auto& key) {
         return matches_key(event, key);
     });
@@ -86,7 +86,6 @@ std::optional<std::string> KeybindingRegistry::first_match(
 std::string KeybindingRegistry::key_text(std::string_view id) const {
     const auto* entry = find(id);
     if (entry == nullptr) return {};
-    if (!entry->available) return entry->unavailable_reason.value_or("Unavailable");
     std::string text;
     for (const auto& key : entry->keys) {
         if (!text.empty()) text.push_back('/');
@@ -120,8 +119,6 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
                 .keys = std::move(*defaults),
                 .description = std::move(definition.description),
                 .category = std::move(definition.category),
-                .available = definition.available,
-                .unavailable_reason = std::move(definition.unavailable_reason),
             });
         }
     }
@@ -150,14 +147,6 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
             continue;
         }
         auto& entry = entries[definition->second];
-        if (!entry.available) {
-            issues.push_back({
-                .code = "unavailable_action",
-                .message = std::format("keybinding action '{}' is unavailable", override.id),
-                .action_id = override.id,
-            });
-            continue;
-        }
         if (!overridden_actions.insert(override.id).second) {
             issues.push_back({
                 .code = "duplicate_override",
@@ -275,8 +264,6 @@ std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {
                 .keys = std::move(definition.default_keys),
                 .description = std::move(definition.description),
                 .category = std::move(definition.category),
-                .available = definition.available,
-                .unavailable_reason = std::move(definition.unavailable_reason),
             });
         }
         return std::make_shared<const KeybindingRegistry>(std::move(entries));

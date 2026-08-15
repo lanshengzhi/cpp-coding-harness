@@ -118,7 +118,6 @@ TEST_CASE(
     REQUIRE(definitions);
     REQUIRE(definitions->size() == 1);
     CHECK(definitions->front().default_keys == std::vector<std::string>{"ctrl+z"});
-    CHECK(definitions->front().available);
 
     coding_agent::tui::KeybindingsManagerRequest request;
     request.application_definitions = *definitions;
@@ -126,7 +125,6 @@ TEST_CASE(
     REQUIRE(manager);
     const auto* suspend = manager->registry->find("app.suspend");
     REQUIRE(suspend != nullptr);
-    CHECK(suspend->available);
     CHECK(manager->registry->matches(
         tui::KeyEvent{.key = "z", .ctrl = true},
         "app.suspend"));

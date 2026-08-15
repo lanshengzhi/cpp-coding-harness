@@ -17,8 +17,6 @@ struct KeybindingDefinition {
     std::vector<std::string> default_keys{};
     std::string description{};
     std::string category{};
-    bool available{true};
-    std::optional<std::string> unavailable_reason{std::nullopt};
 };
 
 struct KeybindingOverride {
@@ -38,8 +36,6 @@ struct EffectiveKeybinding {
     std::vector<std::string> keys{};
     std::string description{};
     std::string category{};
-    bool available{true};
-    std::optional<std::string> unavailable_reason{std::nullopt};
 };
 
 class KeybindingRegistry final {

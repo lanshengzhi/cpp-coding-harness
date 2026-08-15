@@ -132,7 +132,6 @@ TEST_CASE(
         CHECK(definitions[index].id == kFrozenTable[index].id);
         CHECK(definitions[index].default_keys == kFrozenTable[index].keys);
         CHECK(definitions[index].description == kFrozenTable[index].description);
-        CHECK(definitions[index].available);
     }
 
     std::size_t editor = 0;
