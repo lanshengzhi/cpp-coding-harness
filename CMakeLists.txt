@@ -378,6 +378,24 @@ cch_parity_add_build_gate(
 )
 cch_parity_attach_build_gate_post_build(cpp_harness)
 
+# Runtime-only install surface (ADR 0039; issue #472). `cmake --install`
+# installs only the cpp_harness Runtime under bin/ and the required
+# third-party license/notice texts under share/cpp_harness/licenses/ — no
+# Owner Interface headers, static libraries, CMake package metadata, exported
+# targets, or other development surface. The install path runs the fail-closed
+# install gate before any file rule: the build-phase Parity Architecture Gate,
+# the Gate-evidence freshness check, and the dependency-closure audit must all
+# pass, so installation cannot bypass architecture validation.
+include(cmake/RuntimeInstall.cmake)
+cch_runtime_collect_licenses(CCH_RUNTIME_LICENSE_FILES)
+cch_runtime_install_rules(
+    TARGET cpp_harness
+    MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
+    PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
+    LICENSE_FILES ${CCH_RUNTIME_LICENSE_FILES}
+    EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+)
+
 if(CCH_BUILD_TESTS)
     # Suite-wide default hard timeout (ADR 0039; issue #447). CTest kills any
     # test that exceeds it, so a hang in a cancellation, Close, deadlock, or
@@ -448,6 +466,28 @@ if(CCH_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/ParityGateTest.cmake
     )
     set_tests_properties(cch_parity_gate_fixture PROPERTIES LABELS "architecture;parity-gate;issue448;issue449;issue470")
+
+    # Runtime-only install (ADR 0039; issue #472). The unit case covers the
+    # dependency-closure audit and the Gate-evidence freshness check with
+    # synthetic fixtures; the fixture case drives a minimal project through
+    # the real install rules to prove the install path fails closed without
+    # fresh successful Gate evidence, stages only bin/ + licenses, and
+    # rejects a stale (edited-but-not-rebuilt) tree.
+    add_test(
+        NAME cch_install_tools_unit
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/install_tools_test.py
+    )
+    set_tests_properties(cch_install_tools_unit PROPERTIES LABELS "install;issue472")
+
+    add_test(
+        NAME cch_install_gate_fixture
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DCCH_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            "-DCCH_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/InstallGateTest.cmake
+    )
+    set_tests_properties(cch_install_gate_fixture PROPERTIES LABELS "install;issue472")
 
     # Production build-phase Gate self-check (ADR 0039; issue #470): run the
     # same fail-closed build-phase Gate against the production evidence
@@ -793,6 +833,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliSmokeTest.cpp
         tests/cli/FrontendSelectionTest.cpp
         tests/cli/InitialPromptTest.cpp
+        tests/cli/InstallRelocationTest.cpp
         tests/cli/ListModelsTest.cpp
         tests/cli/PrintModeTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
@@ -811,6 +852,9 @@ if(CCH_BUILD_TESTS)
     target_compile_definitions(cch_tests_cli_arch PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CCH_BUILD_DIR="${CMAKE_BINARY_DIR}"
+        CCH_CMAKE_COMMAND="${CMAKE_COMMAND}"
+        CCH_PYTHON3="${Python3_EXECUTABLE}"
 )
     target_compile_options(cch_tests_cli_arch PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cch_tests_cli_arch cpp_harness)

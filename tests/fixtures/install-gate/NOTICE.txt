@@ -1,0 +1,4 @@
+Install-gate fixture notice
+
+This placeholder stands in for a required third-party notice so the fixture
+can prove the Runtime-only install ships the declared license texts.

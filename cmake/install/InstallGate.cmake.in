@@ -1,0 +1,65 @@
+# Generated Runtime install gate (ADR 0039; issue #472) — regenerated on every
+# configure by cch_runtime_install_rules; do not edit the generated copy.
+#
+# Runs before any install file rule and fails closed: the build-phase Parity
+# Architecture Gate, the Gate-evidence freshness check, and the Runtime
+# dependency-closure audit must all pass, otherwise the install aborts with
+# nothing staged. There is no opt-out flag.
+
+execute_process(
+    COMMAND
+        "@CMAKE_COMMAND@"
+        "-DCCH_PARITY_GATE_SCRIPT=@CCH_PARITY_GATE_SCRIPT@"
+        "-DCCH_PARITY_MANIFEST=@CCH_IG_MANIFEST@"
+        "-DCCH_PARITY_INDEX=@CCH_IG_BUILD_DIR@/parity-ownership-index.json"
+        "-DCCH_PARITY_DIRECT_INCLUDES=@CCH_IG_BUILD_DIR@/parity-direct-includes.json"
+        "-DCCH_PARITY_COMPILE_COMMANDS=@CCH_IG_BUILD_DIR@/compile_commands.json"
+        "-DCCH_PARITY_PROJECT_ROOT=@CCH_IG_PROJECT_ROOT@"
+        "-DCCH_PARITY_DEPFILES=@CCH_IG_BUILD_DIR@/parity-build-gate-depfiles.json"
+        "-DCCH_PARITY_REPORT=@CCH_IG_BUILD_DIR@/parity-build-gate.json"
+        "-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=@CCH_IG_EXTERNAL_ROOTS@"
+        -P "@CCH_PARITY_DIR@/run-build-gate.cmake"
+    RESULT_VARIABLE gate_result
+    OUTPUT_VARIABLE gate_output
+    ERROR_VARIABLE gate_error
+)
+if(NOT gate_result EQUAL 0)
+    message(FATAL_ERROR
+        "cmake --install aborted: the Parity Architecture Gate did not pass:\n"
+        "${gate_output}${gate_error}")
+endif()
+
+execute_process(
+    COMMAND
+        "@Python3_EXECUTABLE@" "@CCH_RUNTIME_INSTALL_DIR@/check_install_freshness.py"
+        "--report" "@CCH_IG_BUILD_DIR@/parity-build-gate.json"
+        "--depfiles" "@CCH_IG_BUILD_DIR@/parity-build-gate-depfiles.json"
+        "--binary" "$<TARGET_FILE:@CCH_IG_TARGET@>"
+    RESULT_VARIABLE freshness_result
+    OUTPUT_VARIABLE freshness_output
+    ERROR_VARIABLE freshness_error
+)
+if(NOT freshness_result EQUAL 0)
+    message(FATAL_ERROR
+        "cmake --install aborted: Gate evidence freshness check failed:\n"
+        "${freshness_output}${freshness_error}")
+endif()
+
+execute_process(
+    COMMAND
+        "@Python3_EXECUTABLE@" "@CCH_RUNTIME_INSTALL_DIR@/audit_runtime_deps.py"
+        "--binary" "$<TARGET_FILE:@CCH_IG_TARGET@>"
+        "--allowlist" "@CCH_RUNTIME_INSTALL_DIR@/runtime-deps.json"@CCH_IG_FORBID_ROOT_ARGS@
+    RESULT_VARIABLE audit_result
+    OUTPUT_VARIABLE audit_output
+    ERROR_VARIABLE audit_error
+)
+if(NOT audit_result EQUAL 0)
+    message(FATAL_ERROR
+        "cmake --install aborted: Runtime dependency-closure audit failed:\n"
+        "${audit_output}${audit_error}")
+endif()
+
+message(STATUS
+    "Runtime install gate: PASS (Parity Architecture Gate, evidence freshness, "
+    "dependency closure)")

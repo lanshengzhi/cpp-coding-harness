@@ -37,9 +37,16 @@ Every supported configure runs the Parity Architecture Gate fail-closed (ADR 003
 
 ## Install
 
-A supported Runtime-only install is approved in [ADR 0039](docs/adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md) but is not implemented yet. The current CMake project has no install rules, so `cmake --install` installs no files. Issue [#472](https://github.com/lanshengzhi/cpp-coding-harness/issues/472) tracks the relocatable Runtime, required resources and notices, dependency audit, and clean-prefix smoke validation.
+`cmake --install` installs the Runtime-only surface approved in [ADR 0039](docs/adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): the `cpp_harness` executable under `bin/` and the required third-party license/notice texts under `share/cpp_harness/licenses/`. No Owner Interface headers, static libraries, CMake package metadata, exported targets, or other development surface are installed; the install tree is intentionally unsuitable for external C++ consumers.
 
-After #472 lands, the intended user location is `~/.local/bin/cpp_harness`. Until then, use the executable from the build tree rather than treating a manual copy as a supported installation.
+```bash
+cmake --install build/release --prefix ~/.local
+~/.local/bin/cpp_harness --version
+```
+
+The install path runs the fail-closed install gate before any file is staged: the build-phase Parity Architecture Gate, a Gate-evidence freshness check (a source or header edit without a rebuild fails the install), and a dependency-closure audit that rejects undeclared, build-tree, or unsupported runtime dependencies (cmake/install/). There is no opt-out.
+
+The release seam is validated from a clean staging prefix by the `cch_install_tools_unit` and `cch_install_gate_fixture` CTest cases and the `[cli][install]` relocation case (`tests/cli/InstallRelocationTest.cpp`), which covers the staged layout, dependency closure, `--help`, `--version`, and an offline fake-provider smoke run outside the build tree.
 
 ## Verify the build
 
