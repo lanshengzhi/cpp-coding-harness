@@ -400,6 +400,45 @@ public:
         outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
         return outcome;
     }
+    if (name == "scrollback-dirty-screen-boot") {
+        tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+        tui::Tui tui(terminal);
+        // Dirty-screen boot (issue #476, ADR 0041 anchored absolute flow):
+        // shell output occupies the top rows and the cursor sits below it.
+        // The first frame flows from the cursor row instead of overwriting
+        // from screen row 0; growth scrolls through the origin mapping; a
+        // resize full-redraw clears and re-anchors at row 0.
+        REQUIRE(terminal.seed_shell_content(
+            {"$ git status", "On branch main", "$ cch"},
+            {.column = 0, .row = 3}));
+        auto lines = std::make_unique<LinesComponent>(
+            std::vector<std::string>{"hello one", "hello two"});
+        auto* pointer = lines.get();
+        REQUIRE(tui.add_child(std::move(lines)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        std::vector<std::string> outcome{"boot"};
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        outcome.push_back("growth");
+        pointer->set_lines(std::vector<std::string>{
+            "hello one", "hello two", "hello three", "hello four", "hello five"});
+        REQUIRE(tui.render());
+        auto scrolled = terminal.scrollback();
+        outcome.insert(outcome.end(), scrolled.begin(), scrolled.end());
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        outcome.push_back("resize");
+        REQUIRE(terminal.inject_resize({.columns = columns, .rows = rows + 2}));
+        REQUIRE(tui.render());
+        outcome.push_back(
+            terminal.check_clear_screen_called() ? "clear-screen" : "no-clear-screen");
+        outcome.push_back(terminal.check_clear_scrollback_called()
+            ? "clear-scrollback"
+            : "no-clear-scrollback");
+        auto remaining = terminal.scrollback();
+        outcome.insert(outcome.end(), remaining.begin(), remaining.end());
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        return outcome;
+    }
     if (name == "scrollback-image-follows-content") {
         tui::VirtualTerminal terminal({
             .columns = columns,

@@ -215,6 +215,41 @@
         "image@row=2,rows=1",
         "viewport-top=4"
       ]
+    },
+    {
+      "name": "scrollback-dirty-screen-boot",
+      "columns": 20,
+      "rows": 6,
+      "pi": "issue #476 / ADR 0041 anchored absolute flow — dirty-screen boot: the shell's output and prompt occupy the top rows with the cursor mid-screen; the first frame flows from the cursor row (pi TuiMainScreen fullRender(false) writes from wherever the shell left the cursor), shell content above stays intact, rows below the short frame are never overwritten, growth scrolls the shell rows into the native scrollback through the origin mapping, and a resize full-redraw clears screen + scrollback and re-anchors at row 0.",
+      "expected": [
+        "boot",
+        "$ git status",
+        "On branch main",
+        "$ cch",
+        "hello one           ",
+        "hello two           ",
+        "",
+        "growth",
+        "$ git status",
+        "On branch main",
+        "$ cch",
+        "hello one           ",
+        "hello two           ",
+        "hello three         ",
+        "hello four          ",
+        "hello five          ",
+        "resize",
+        "clear-screen",
+        "clear-scrollback",
+        "hello one           ",
+        "hello two           ",
+        "hello three         ",
+        "hello four          ",
+        "hello five          ",
+        "",
+        "",
+        ""
+      ]
     }
   ]
 }

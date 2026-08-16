@@ -93,6 +93,14 @@ public:
     [[nodiscard]] support::ExpectedVoid inject_input(std::string input);
     [[nodiscard]] support::ExpectedVoid flush_input();
     [[nodiscard]] support::ExpectedVoid inject_resize(TerminalDimensions dimensions);
+    /// Test scaffolding for the dirty-screen boot scenario (issue #476, ADR
+    /// 0041): paints pre-existing shell lines into the visible cells starting
+    /// at row 0 and leaves the cursor mid-screen where the shell left it, so
+    /// start() anchors the buffer origin at that row. Must be called before
+    /// start().
+    [[nodiscard]] support::ExpectedVoid seed_shell_content(
+        std::vector<std::string> lines,
+        CursorPosition cursor);
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;
     /// The full written buffer as the terminal models it under the

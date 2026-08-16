@@ -28,13 +28,20 @@ struct VirtualTerminal::Impl {
     std::vector<std::string> scrollback;
     std::vector<std::vector<VirtualTerminalCell>> cells;
     std::vector<std::vector<VirtualTerminalCell>> scrollback_cells;
-    /// Number of scrolled-out buffer lines (== scrollback_cells.size()): the
-    /// first buffer line visible on screen. The renderer tracks the same
-    /// quantity as its viewport top.
+    /// Number of scrolled-out lines (== scrollback_cells.size()): the total
+    /// scrolls since start() anchored the buffer origin. Under the anchored
+    /// absolute flow (ADR 0041) the first buffer line visible on screen is
+    /// `max(0, viewport_top - scroll_origin)`. The renderer tracks its own
+    /// viewport top in buffer coordinates.
     std::size_t viewport_top{0};
     std::vector<VirtualTerminalImage> images;
     detail::AnsiStyleState style;
     CursorPosition cursor;
+    /// Screen row where buffer row 0 was first written: the double IS the
+    /// terminal, so it knows its cursor — start() anchors the origin at the
+    /// (possibly seeded) cursor row instead of querying it (ADR 0041). The
+    /// screen row of buffer row b is `scroll_origin + b - viewport_top`.
+    std::size_t scroll_origin{0};
     std::size_t sync_depth{0};
     std::uint64_t next_image_handle{1};
     std::string cell_size_pending;
@@ -189,6 +196,71 @@ void clear_grapheme(std::vector<VirtualTerminalCell>& row, std::size_t column) {
     for (auto index = owner; index < end; ++index) row[index] = {};
 }
 
+/// Apply tokenized output at the current cursor: ANSI tokens update the style
+/// state, graphemes paint cells and advance the cursor, and a newline (pi's
+/// raw line flow, e.g. TuiMainScreen beforeTerminalStop's "\r\n") returns to
+/// column 0 and advances one row, scrolling the viewport when the cursor sits
+/// on the bottom row.
+template <typename T>
+void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
+    for (const auto& token : tokens) {
+        if (token.kind == detail::TerminalTokenKind::Newline) {
+            impl.cursor.column = 0;
+            if (impl.cursor.row + 1 >= impl.dimensions.rows) {
+                scroll_up(impl, 1);
+                impl.cursor.row = impl.dimensions.rows - 1;
+            } else {
+                ++impl.cursor.row;
+            }
+            continue;
+        }
+        if (token.kind != detail::TerminalTokenKind::Grapheme) {
+            impl.style.process_ansi(token.text);
+            continue;
+        }
+        if (token.width > 0 && impl.cursor.column >= impl.dimensions.columns) {
+            // Deferred wrap (DECAWM): the cursor parked one past the last
+            // column wraps to the next row before this grapheme paints,
+            // scrolling when it sits on the bottom row.
+            impl.cursor.column = 0;
+            if (impl.cursor.row + 1 >= impl.dimensions.rows) {
+                scroll_up(impl, 1);
+                impl.cursor.row = impl.dimensions.rows - 1;
+            } else {
+                ++impl.cursor.row;
+            }
+        }
+        if (impl.cursor.row < impl.cells.size()) {
+            auto& row = impl.cells[impl.cursor.row];
+            if (token.width == 0) {
+                if (impl.cursor.column > 0) {
+                    auto owner = impl.cursor.column - 1;
+                    while (owner > 0 && row[owner].continuation) --owner;
+                    row[owner].grapheme += token.text;
+                }
+                continue;
+            }
+            for (std::size_t offset = 0; offset < token.width; ++offset) {
+                clear_grapheme(row, impl.cursor.column + offset);
+            }
+            const auto style = public_style(impl.style);
+            row[impl.cursor.column] = {
+                .grapheme = token.text,
+                .continuation = false,
+                .style = style,
+            };
+            for (std::size_t offset = 1; offset < token.width; ++offset) {
+                row[impl.cursor.column + offset] = {
+                    .grapheme = {},
+                    .continuation = true,
+                    .style = style,
+                };
+            }
+        }
+        impl.cursor.column += token.width;
+    }
+}
+
 template <typename T>
 support::ExpectedVoid require_started(const T& impl) {
     if (impl.modes.started) return {};
@@ -222,6 +294,10 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
     }
     impl_->input_sink = std::move(input_sink);
     impl_->resize_sink = std::move(resize_sink);
+    // Anchor the buffer origin at the current cursor row (ADR 0041): the
+    // double knows its cursor, so there is no probe; the default cursor{} keeps
+    // the origin at row 0 and every unseeded scenario byte-identical.
+    impl_->scroll_origin = impl_->cursor.row;
     impl_->modes = {
         .started = true,
         .raw_input = true,
@@ -276,6 +352,7 @@ support::ExpectedVoid VirtualTerminal::clear_screen() {
         std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
     impl_->scrollback_cells.clear();
     impl_->viewport_top = 0;
+    impl_->scroll_origin = 0;
     impl_->images.clear();
     impl_->cursor = {};
     refresh_screen(*impl_);
@@ -333,33 +410,50 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     auto tokens = detail::tokenize_terminal_output(output);
     if (!tokens) return std::unexpected(tokens.error());
 
-    std::size_t output_width = 0;
+    // Each physical line must fit its remaining row width; a newline (pi's raw
+    // "\r\n" line flow, e.g. TuiMainScreen beforeTerminalStop) starts a fresh
+    // full-width line below. A grapheme arriving with the cursor parked one
+    // past the last column wraps to the next row first (the deferred-wrap
+    // state a real terminal enters after writing a full-width line).
+    std::size_t line_width = 0;
+    std::size_t first_line_width = 0;
+    bool first_line = true;
+    auto available = impl_->dimensions.columns - impl_->cursor.column;
     for (const auto& token : *tokens) {
         if (token.kind == detail::TerminalTokenKind::Newline) {
+            if (first_line) {
+                first_line_width = line_width;
+                first_line = false;
+            }
+            line_width = 0;
+            available = impl_->dimensions.columns;
+            continue;
+        }
+        if (token.width > 0 && available == 0) {
+            available = impl_->dimensions.columns;
+        }
+        line_width += token.width;
+        if (line_width > available) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Validation,
-                "Virtual Terminal write must contain exactly one physical line"));
+                "TUI component rendered a line wider than its width bound",
+                std::format(
+                    "line width {} exceeds visible width {}",
+                    line_width,
+                    available)));
         }
-        output_width += token.width;
     }
-    const auto remaining = impl_->dimensions.columns - impl_->cursor.column;
-    if (output_width > remaining) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI component rendered a line wider than its width bound",
-            std::format(
-                "line width {} exceeds visible width {}",
-                output_width,
-                remaining)));
-    }
+    if (first_line) first_line_width = line_width;
 
-    if (output_width > 0) {
+    if (first_line_width > 0) {
         const CellRegion written{
             .column = impl_->cursor.column,
             // The cursor row is screen-relative; image regions are
-            // buffer-absolute under the main-screen scrollback flow.
-            .row = impl_->cursor.row + impl_->viewport_top,
-            .columns = output_width,
+            // buffer-absolute under the anchored main-screen scrollback flow
+            // (ADR 0041): buffer row = screen row + scrolls since the anchor.
+            .row = impl_->cursor.row + impl_->viewport_top -
+                std::min(impl_->cursor.row + impl_->viewport_top, impl_->scroll_origin),
+            .columns = first_line_width,
             .rows = 1,
         };
         std::erase_if(impl_->images, [&](const auto& image) {
@@ -371,40 +465,7 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     for (const auto& token : *tokens) normalized += token.text;
     impl_->output.push_back(std::move(normalized));
 
-    for (const auto& token : *tokens) {
-        if (token.kind != detail::TerminalTokenKind::Grapheme) {
-            impl_->style.process_ansi(token.text);
-            continue;
-        }
-        if (impl_->cursor.row < impl_->cells.size()) {
-            auto& row = impl_->cells[impl_->cursor.row];
-            if (token.width == 0) {
-                if (impl_->cursor.column > 0) {
-                    auto owner = impl_->cursor.column - 1;
-                    while (owner > 0 && row[owner].continuation) --owner;
-                    row[owner].grapheme += token.text;
-                }
-                continue;
-            }
-            for (std::size_t offset = 0; offset < token.width; ++offset) {
-                clear_grapheme(row, impl_->cursor.column + offset);
-            }
-            const auto style = public_style(impl_->style);
-            row[impl_->cursor.column] = {
-                .grapheme = token.text,
-                .continuation = false,
-                .style = style,
-            };
-            for (std::size_t offset = 1; offset < token.width; ++offset) {
-                row[impl_->cursor.column + offset] = {
-                    .grapheme = {},
-                    .continuation = true,
-                    .style = style,
-                };
-            }
-        }
-        impl_->cursor.column += token.width;
-    }
+    paint_tokens(*impl_, *tokens);
     refresh_screen(*impl_);
     return {};
 }
@@ -419,15 +480,24 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
     // `row` is a buffer row under the main-screen scrollback flow: rows at or
     // past the visible viewport bottom advance the terminal's scrollback so
     // the addressed line becomes the bottom visible line (pi writes the full
-    // buffer with line flow; the absolute-cursor seam scrolls instead).
-    if (position.row >= impl_->viewport_top + impl_->dimensions.rows) {
-        const auto scroll = position.row - (impl_->viewport_top + impl_->dimensions.rows - 1);
-        scroll_up(*impl_, scroll);
-        impl_->cursor.row = impl_->dimensions.rows - 1;
-    } else if (position.row < impl_->viewport_top) {
+    // buffer with line flow; the absolute-cursor seam scrolls instead). Under
+    // the anchored absolute flow (ADR 0041) the screen row of buffer row b is
+    // `scroll_origin + b - viewport_top`; buffer rows above the first visible
+    // row are in scrollback and clamp to screen row 0.
+    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
+        ? impl_->viewport_top - impl_->scroll_origin
+        : std::size_t{0};
+    if (position.row < first_visible_row) {
         impl_->cursor.row = 0;
     } else {
-        impl_->cursor.row = position.row - impl_->viewport_top;
+        const auto screen_row = impl_->scroll_origin + position.row - impl_->viewport_top;
+        if (screen_row >= impl_->dimensions.rows) {
+            const auto scroll = screen_row - (impl_->dimensions.rows - 1);
+            scroll_up(*impl_, scroll);
+            impl_->cursor.row = impl_->dimensions.rows - 1;
+        } else {
+            impl_->cursor.row = screen_row;
+        }
     }
     impl_->cursor.column = position.column;
     return {};
@@ -512,22 +582,70 @@ support::ExpectedVoid VirtualTerminal::remove_image(
     impl_->images.erase(found);
     // The region is buffer-absolute: only cells inside the visible viewport
     // can be cleared (rows scrolled into the terminal's scrollback keep their
-    // content, matching pi's keep-history semantics).
-    const auto viewport_start = impl_->viewport_top;
-    const auto viewport_end = impl_->viewport_top + impl_->dimensions.rows;
-    const auto start_row = std::max(owned_region.row, viewport_start);
-    const auto end_row = std::min(owned_region.row + owned_region.rows, viewport_end);
+    // content, matching pi's keep-history semantics). Rows convert to screen
+    // rows through the anchored mapping (ADR 0041).
+    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
+        ? impl_->viewport_top - impl_->scroll_origin
+        : std::size_t{0};
+    const auto start_row = std::max(owned_region.row, first_visible_row);
+    const auto end_row = owned_region.row + owned_region.rows;
     if (start_row < end_row) {
         const auto end_column = std::min(
             impl_->dimensions.columns,
             owned_region.column + owned_region.columns);
         for (auto row = start_row; row < end_row; ++row) {
-            const auto screen_row = row - viewport_start;
+            const auto screen_row = impl_->scroll_origin + row - impl_->viewport_top;
+            if (screen_row >= impl_->dimensions.rows) break;
             for (auto column = owned_region.column; column < end_column; ++column) {
                 clear_grapheme(impl_->cells[screen_row], column);
             }
         }
     }
+    refresh_screen(*impl_);
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::seed_shell_content(
+    std::vector<std::string> lines,
+    CursorPosition cursor) {
+    if (impl_->modes.started) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Virtual Terminal shell content must be seeded before start"));
+    }
+    if (lines.size() > impl_->dimensions.rows ||
+        cursor.row >= impl_->dimensions.rows ||
+        cursor.column > impl_->dimensions.columns) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Virtual Terminal seeded shell content is outside its dimensions"));
+    }
+    // Test scaffolding for the dirty-screen boot scenario (issue #476, ADR
+    // 0041): the shell's pre-existing output occupies the top rows and the
+    // cursor sits where the shell left it, so start() anchors the buffer
+    // origin there. Seeded content is not program output: it is painted into
+    // the cells without touching output() or the image placements.
+    for (std::size_t row = 0; row < lines.size(); ++row) {
+        auto tokens = detail::tokenize_terminal_output(lines[row]);
+        if (!tokens) return std::unexpected(tokens.error());
+        std::size_t width = 0;
+        for (const auto& token : *tokens) {
+            if (token.kind == detail::TerminalTokenKind::Newline) {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation,
+                    "Virtual Terminal seeded shell content must be single physical lines"));
+            }
+            width += token.width;
+        }
+        if (width > impl_->dimensions.columns) {
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
+                "Virtual Terminal seeded shell line is wider than its dimensions"));
+        }
+        impl_->cursor = {.column = 0, .row = row};
+        paint_tokens(*impl_, *tokens);
+    }
+    impl_->cursor = cursor;
     refresh_screen(*impl_);
     return {};
 }

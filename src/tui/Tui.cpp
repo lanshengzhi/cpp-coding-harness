@@ -275,6 +275,24 @@ support::ExpectedVoid Tui::stop() {
     overlay_focus_history_.clear();
 
     const auto image_result = remove_active_images();
+    // pi TuiMainScreen::beforeTerminalStop: move the cursor below the composed
+    // buffer's last line and end the line, so the shell prompt resumes under
+    // the transcript instead of overwriting its last line. Under the anchored
+    // absolute flow (ADR 0041) the relative movement is one absolute
+    // set_cursor one row past the buffer; rows past the visible bottom flow
+    // and scroll through the terminal mapping.
+    support::ExpectedVoid exit_result;
+    if (!previous_lines_.empty()) {
+        if (auto written = terminal_.write(" "); !written) {
+            exit_result = std::unexpected(written.error());
+        } else if (auto positioned = terminal_.set_cursor(
+                       CursorPosition{.column = 0, .row = previous_lines_.size()});
+                   !positioned) {
+            exit_result = std::unexpected(positioned.error());
+        } else if (auto newline = terminal_.write("\r\n"); !newline) {
+            exit_result = std::unexpected(newline.error());
+        }
+    }
     const auto cursor_result = terminal_.set_cursor_visible(true);
     active_images_.clear();
     input_decoder_->reset();
@@ -287,6 +305,7 @@ support::ExpectedVoid Tui::stop() {
     const auto stop_result = terminal_.stop();
 
     if (!image_result) return std::unexpected(image_result.error());
+    if (!exit_result) return std::unexpected(exit_result.error());
     if (!cursor_result) return std::unexpected(cursor_result.error());
     if (!stop_result) return std::unexpected(stop_result.error());
     return {};

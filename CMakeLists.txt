@@ -651,6 +651,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
         tests/tui/UtilsTest.cpp
+        tests/tui/VirtualTerminalTest.cpp
 )
     target_include_directories(cch_tests_tui PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_tui

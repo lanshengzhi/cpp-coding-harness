@@ -56,6 +56,10 @@ constexpr std::string_view kKeyboardProtocolQuery = "\x1b[?u\x1b[c";
 constexpr std::string_view kKeyboardProtocolPop = "\x1b[<u";
 constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
 constexpr std::string_view kBackgroundColorQuery = "\x1b]11;?\x07";
+// ADR 0041 anchored absolute flow: the startup DSR cursor-position query
+// (`\x1b[6n`) establishes the shell's cursor row as the buffer-to-screen
+// origin; the answer is a CPR (`ESC [ rows ; cols R`, 1-based).
+constexpr std::string_view kCursorPositionQuery = "\x1b[6n";
 constexpr std::string_view kModifyOtherKeysEnable = "\x1b[>4;2m";
 constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
@@ -66,6 +70,10 @@ constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
 /// delivery worker flushes it once this window passes (was 15 polls at 10 ms
 /// in the periodic-polling design; issue #462).
 constexpr auto kNegotiationTimeout = std::chrono::milliseconds(150);
+/// Startup cursor-position poll bound (ADR 0041): a terminal that does not
+/// answer the DSR query within this window falls back to clear-screen + home +
+/// scrollback with the origin at row 0.
+constexpr auto kCursorPositionTimeout = std::chrono::milliseconds(250);
 /// The delivery worker re-reads TIOCGWINSZ at least this often so resizes are
 /// detected even without SIGWINCH delivery (it also checks on every wakeup).
 /// This is a low-rate watchdog timer, not input polling.
@@ -445,6 +453,151 @@ struct AppearanceProbeResult {
     return result;
 }
 
+constexpr std::size_t kCursorPositionPendingMax{64};
+
+struct CursorPositionInputResult {
+    std::string pending;
+    std::string forwarded_input;
+    std::vector<CursorPosition> responses;
+};
+
+/// Parse a complete CPR response (`ESC [ rows ; cols R`, 1-based) into a
+/// 0-based cursor position.
+[[nodiscard]] std::optional<CursorPosition> parse_cursor_position_response(std::string_view response) {
+    if (!response.starts_with("\x1b[") || !response.ends_with("R")) return std::nullopt;
+    const auto body = response.substr(2, response.size() - 3);
+    const auto separator = body.find(';');
+    if (separator == std::string_view::npos) return std::nullopt;
+    std::size_t rows = 0;
+    std::size_t columns = 0;
+    const auto [rows_end, rows_error] = std::from_chars(body.data(), body.data() + separator, rows);
+    if (rows_error != std::errc{} || rows_end != body.data() + separator) return std::nullopt;
+    const auto [columns_end, columns_error] = std::from_chars(
+        body.data() + separator + 1,
+        body.data() + body.size(),
+        columns);
+    if (columns_error != std::errc{} || columns_end != body.data() + body.size()) {
+        return std::nullopt;
+    }
+    if (rows == 0 || columns == 0) return std::nullopt;
+    return CursorPosition{.column = columns - 1, .row = rows - 1};
+}
+
+/// Extract complete CPR responses (the answer to the startup DSR query) from
+/// `input`, buffering partial leading fragments in `pending` exactly as the
+/// cell-size and appearance consumers do. Bytes that cannot belong to a CPR
+/// are forwarded unchanged, so a late or duplicate response never leaks into
+/// the user key stream (ADR 0041). The grammar (`CSI` digits `;` digits `R`)
+/// shares its shape with the modifier-F3 sequence the input decoder already
+/// drops silently, so stripping it here is neutral for decoded keys.
+[[nodiscard]] CursorPositionInputResult consume_cursor_position_input(
+    std::string pending,
+    std::string_view input) {
+    CursorPositionInputResult result{
+        .pending = std::move(pending),
+        .forwarded_input = {},
+        .responses = {},
+    };
+    result.pending += input;
+    while (!result.pending.empty()) {
+        if (!result.pending.starts_with("\x1b")) {
+            const auto escape = result.pending.find('\x1b');
+            const auto count = escape == std::string::npos ? result.pending.size() : escape;
+            result.forwarded_input += result.pending.substr(0, count);
+            result.pending.erase(0, count);
+            continue;
+        }
+        // Walk the CPR grammar past ESC [: row digits, ';', column digits, 'R'.
+        std::size_t index = 1;
+        if (index < result.pending.size() && result.pending[index] == '[') ++index;
+        while (index < result.pending.size() &&
+               std::isdigit(static_cast<unsigned char>(result.pending[index]))) {
+            ++index;
+        }
+        if (index < result.pending.size() && result.pending[index] == ';') ++index;
+        while (index < result.pending.size() &&
+               std::isdigit(static_cast<unsigned char>(result.pending[index]))) {
+            ++index;
+        }
+        if (index == result.pending.size()) {
+            // The whole buffer is a grammar prefix: wait for more input.
+            if (result.pending.size() > kCursorPositionPendingMax) {
+                result.forwarded_input += result.pending;
+                result.pending.clear();
+            }
+            return result;
+        }
+        if (result.pending[index] == 'R') {
+            if (auto response = parse_cursor_position_response(
+                    result.pending.substr(0, index + 1))) {
+                result.responses.push_back(*response);
+                result.pending.erase(0, index + 1);
+                continue;
+            }
+        }
+        // Not a CPR: forward the ESC byte and keep scanning past it.
+        result.forwarded_input += result.pending.substr(0, 1);
+        result.pending.erase(0, 1);
+    }
+    return result;
+}
+
+struct CursorPositionProbeResult {
+    /// The reported cursor position (0-based) when a CPR arrived in time.
+    std::optional<CursorPosition> position{std::nullopt};
+    std::string forwarded_input;
+};
+
+/// Poll for the DSR cursor-position response with a deadline, mirroring the
+/// appearance probe's synchronous-poll pattern. Non-CPR bytes are routed
+/// through the appearance sidecar so late appearance replies still parse and
+/// no input byte is lost (ADR 0041).
+[[nodiscard]] CursorPositionProbeResult probe_cursor_position(
+    int descriptor,
+    AppearanceInputState& appearance) {
+    const auto deadline = std::chrono::steady_clock::now() + kCursorPositionTimeout;
+    CursorPositionProbeResult result;
+    std::string pending;
+    while (!result.position.has_value()) {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now());
+        if (remaining.count() <= 0) break;
+        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
+        const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (ready == 0) break;
+        if ((item.revents & POLLIN) == 0) break;
+        std::array<char, kAppearanceResponseMaxBytes> buffer{};
+        const auto count = ::read(descriptor, buffer.data(), buffer.size());
+        if (count < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (count == 0) break;
+        auto consumed = consume_cursor_position_input(
+            std::move(pending),
+            std::string_view(buffer.data(), static_cast<std::size_t>(count)));
+        pending = std::move(consumed.pending);
+        if (!consumed.forwarded_input.empty()) {
+            result.forwarded_input += consume_appearance_input(
+                appearance,
+                consumed.forwarded_input);
+        }
+        if (!consumed.responses.empty()) {
+            result.position = consumed.responses.back();
+        }
+    }
+    // A buffered fragment that never completed is not a CPR: route it through
+    // the appearance sidecar so it still reaches the user key stream.
+    if (!pending.empty()) {
+        result.forwarded_input += consume_appearance_input(appearance, pending);
+    }
+    return result;
+}
+
 } // namespace
 
 struct ProcessTerminal::Impl {
@@ -474,14 +627,21 @@ struct ProcessTerminal::Impl {
     bool draining{false};
     std::chrono::steady_clock::time_point drain_last_activity{};
     CursorPosition cursor{};
-    /// Scrolled-out buffer lines (== the first buffer line visible on screen),
-    /// mirroring VirtualTerminal's scroll emulation: the renderer writes the
-    /// full composed buffer with buffer-relative rows under the main-screen
-    /// scrollback flow, and rows at or past the visible viewport bottom advance
-    /// this viewport top while `set_cursor` emits pi's CRLF line flow so the
-    /// real terminal's native scrollback receives the overflow. `set_cursor`/
-    /// `place_image` convert buffer rows to screen rows using it before
-    /// emitting ANSI sequences.
+    /// Screen row where buffer row 0 was first written: the shell's cursor row
+    /// at startup (0-based), established once by the startup cursor-position
+    /// probe (ADR 0041 anchored absolute flow; the DSR timeout fallback clears
+    /// the screen and anchors at row 0).
+    std::size_t scroll_origin{0};
+    /// Total native scrolls since the anchor, mirroring VirtualTerminal's
+    /// scroll emulation: the renderer writes the full composed buffer with
+    /// buffer-relative rows under the main-screen scrollback flow, and rows at
+    /// or past the visible viewport bottom advance this count while
+    /// `set_cursor` emits pi's CRLF line flow so the real terminal's native
+    /// scrollback receives the overflow. The screen row of buffer row b is
+    /// `scroll_origin + b - viewport_top`; the first visible buffer row is
+    /// `max(0, viewport_top - scroll_origin)`. `set_cursor`/`place_image`
+    /// convert buffer rows to screen rows using this mapping before emitting
+    /// ANSI sequences.
     std::size_t viewport_top{0};
     termios original_termios{};
     bool has_original_termios{false};
@@ -846,6 +1006,9 @@ struct WorkerInputState {
     AppearanceInputState appearance;
     std::string keyboard_pending;
     std::string cell_size_pending;
+    /// Buffered partial CPR fragment (a late or duplicate startup-probe
+    /// response is consumed and ignored once complete; ADR 0041).
+    std::string cursor_position_pending;
     bool needs_input_flush{false};
     /// Readiness-driven deadlines: armed (now + kNegotiationTimeout) whenever
     /// input leaves partial protocol/appearance bytes or a decoder flush
@@ -1014,9 +1177,16 @@ void handle_forwarded_input(
     if (!cell_size.responses.empty()) {
         apply_cell_size_response(impl, cell_size.responses.back());
     }
+    // A CPR arriving on the worker is a late or duplicate answer to the
+    // startup DSR query: the anchor is established once at startup, so consume
+    // and ignore it (ADR 0041) instead of leaking it into the user key stream.
+    auto cursor_position = consume_cursor_position_input(
+        std::move(state.cursor_position_pending),
+        cell_size.forwarded_input);
+    state.cursor_position_pending = std::move(cursor_position.pending);
     auto parsed = detail::parse_keyboard_protocol_input(
         std::move(state.keyboard_pending),
-        cell_size.forwarded_input);
+        cursor_position.forwarded_input);
     state.keyboard_pending = std::move(parsed.pending);
     state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
     for (const auto& response : parsed.responses) apply_keyboard_response(impl, response);
@@ -1075,6 +1245,11 @@ template <typename T>
         if (!state.cell_size_pending.empty()) {
             invoke_input(impl, std::move(state.cell_size_pending));
             state.cell_size_pending.clear();
+            state.needs_input_flush = true;
+        }
+        if (!state.cursor_position_pending.empty()) {
+            invoke_input(impl, std::move(state.cursor_position_pending));
+            state.cursor_position_pending.clear();
             state.needs_input_flush = true;
         }
         if (state.needs_input_flush && state.keyboard_pending.empty()) {
@@ -1323,6 +1498,35 @@ support::ExpectedVoid ProcessTerminal::start(
     auto appearance = probe_terminal_appearance(impl_->options.input_fd);
     impl_->capabilities.appearance = appearance.state.color_scheme.value_or(
         appearance.state.background.value_or(environment_appearance));
+
+    // ADR 0041 anchored absolute flow (issue #476): query the cursor position
+    // once (DSR `\x1b[6n`) through the same blocking pre-worker write path and
+    // poll for the CPR response. The reported row anchors the buffer-to-screen
+    // origin (`scroll_origin`), so the first frame lands at the shell's cursor
+    // row instead of a hard-coded screen row 0, and the tracked cursor becomes
+    // the real hardware position for later relative math.
+    auto cursor_query = attempt_write_all(impl_->options.output_fd, kCursorPositionQuery);
+    if (!cursor_query.result) {
+        return fail_startup(cursor_query.result.error());
+    }
+    auto cursor_probe = probe_cursor_position(impl_->options.input_fd, appearance.state);
+    appearance.forwarded_input += cursor_probe.forwarded_input;
+    if (cursor_probe.position) {
+        impl_->scroll_origin = cursor_probe.position->row;
+        impl_->viewport_top = 0;
+        impl_->cursor = *cursor_probe.position;
+    } else {
+        // DSR timeout fallback (ADR 0041): clear screen, home, and clear
+        // scrollback, then anchor at row 0 — deterministic on terminals that
+        // do not answer DSR, at the cost of losing on-screen shell content.
+        auto cleared = attempt_write_all(impl_->options.output_fd, kClearScreen);
+        if (!cleared.result) {
+            return fail_startup(cleared.result.error());
+        }
+        impl_->scroll_origin = 0;
+        impl_->viewport_top = 0;
+        impl_->cursor = {};
+    }
     impl_->startup_appearance = std::move(appearance.state);
     impl_->startup_input = std::move(appearance.forwarded_input);
 
@@ -1511,8 +1715,10 @@ support::ExpectedVoid ProcessTerminal::clear_screen() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     // pi's resize full-redraw clears scrollback too (`\x1b[3J`): the native
-    // scroll history and the mirrored viewport top both reset.
+    // scroll history, the mirrored scroll count, and the anchor all reset
+    // (the screen is cleared and homed, so buffer row 0 lands on screen row 0).
     impl_->viewport_top = 0;
+    impl_->scroll_origin = 0;
     return enqueue_output(*impl_, kClearScreen);
 }
 
@@ -1537,12 +1743,27 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     // Absolute CUP beyond the bottom clamps without scrolling on real
     // terminals, so mirror pi's append (`"\r\n".repeat(scroll)`) by moving to
     // the bottom and emitting CRLF line flow: the real terminal scrolls its
-    // scroll history natively. The emulated viewport top stays in sync with
-    // the renderer's own tracked viewport.
-    std::string sequence;
-    if (position.row >= impl_->viewport_top + impl_->dimensions.rows) {
-        const auto scroll = position.row - (impl_->viewport_top + impl_->dimensions.rows - 1);
+    // scroll history natively. Under the anchored absolute flow (ADR 0041) the
+    // screen row of buffer row b is `scroll_origin + b - viewport_top`, and
+    // the emulated scroll count stays in sync with the renderer's own tracked
+    // viewport.
+    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
+        ? impl_->viewport_top - impl_->scroll_origin
+        : std::size_t{0};
+    if (position.row < first_visible_row) {
+        // Rows above the first visible buffer row are in the terminal's
+        // scrollback; as before the anchor, they clamp to screen row 0.
+        impl_->cursor.row = 0;
+        impl_->cursor.column = position.column;
+        return enqueue_output(
+            *impl_,
+            std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+    }
+    const auto screen_row = impl_->scroll_origin + position.row - impl_->viewport_top;
+    if (screen_row >= impl_->dimensions.rows) {
+        const auto scroll = screen_row - (impl_->dimensions.rows - 1);
         const auto bottom = impl_->dimensions.rows - 1;
+        std::string sequence;
         if (impl_->cursor.row < bottom) {
             sequence += std::format("\x1b[{}B", bottom - impl_->cursor.row);
         }
@@ -1553,14 +1774,11 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         impl_->cursor.column = position.column;
         return enqueue_output(*impl_, sequence);
     }
-    if (position.row < impl_->viewport_top) {
-        impl_->cursor.row = 0;
-    } else {
-        impl_->cursor.row = position.row - impl_->viewport_top;
-    }
+    impl_->cursor.row = screen_row;
     impl_->cursor.column = position.column;
-    sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1);
-    return enqueue_output(*impl_, sequence);
+    return enqueue_output(
+        *impl_,
+        std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
 }
 
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
@@ -1591,15 +1809,19 @@ support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const Termin
     }
     // Image regions are buffer-absolute under the main-screen scrollback flow.
     // A region whose buffer row has scrolled into the terminal's native
-    // scrollback (row < viewport top) cannot be addressed by the real terminal
-    // and is already held by its scroll history; skip the placement but keep
+    // scrollback (above the first visible buffer row under the anchored
+    // mapping, ADR 0041) cannot be addressed by the real terminal and is
+    // already held by its scroll history; skip the placement but keep
     // the handle allocation so the renderer's active-image tracking stays
     // consistent (fork-B image-follows-content, ADR 0037).
-    if (image.region.row < impl_->viewport_top) {
+    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
+        ? impl_->viewport_top - impl_->scroll_origin
+        : std::size_t{0};
+    if (image.region.row < first_visible_row) {
         if (!image.preferred_handle) ++impl_->next_image_handle;
         return handle;
     }
-    const auto screen_row = image.region.row - impl_->viewport_top;
+    const auto screen_row = impl_->scroll_origin + image.region.row - impl_->viewport_top;
     if (screen_row >= impl_->dimensions.rows ||
         image.region.rows > impl_->dimensions.rows - screen_row) {
         return std::unexpected(support::make_error(
@@ -1632,10 +1854,14 @@ support::ExpectedVoid ProcessTerminal::remove_image(
             "Inline image removal region is outside terminal dimensions"));
     }
     // Buffer-absolute removal region (fork-B): regions that scrolled into the
-    // native scrollback are already out of the visible screen, so there is
+    // native scrollback (above the first visible buffer row under the anchored
+    // mapping, ADR 0041) are already out of the visible screen, so there is
     // nothing to blank in place; skip them.
-    if (region.row >= impl_->viewport_top) {
-        const auto screen_row = region.row - impl_->viewport_top;
+    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
+        ? impl_->viewport_top - impl_->scroll_origin
+        : std::size_t{0};
+    if (region.row >= first_visible_row) {
+        const auto screen_row = impl_->scroll_origin + region.row - impl_->viewport_top;
         const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
         if (screen_row >= impl_->dimensions.rows) {
             return std::unexpected(support::make_error(

@@ -130,6 +130,30 @@ private:
     return false;
 }
 
+[[nodiscard]] bool answer_cursor_position_query(
+    int descriptor,
+    std::string_view response) {
+    constexpr std::string_view kCursorPositionQuery = "\x1b[6n";
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    std::string output;
+    std::array<char, 4096> buffer{};
+    while (std::chrono::steady_clock::now() < deadline) {
+        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
+        const auto ready = ::poll(&item, 1, 10);
+        if (ready < 0) return false;
+        if (ready == 0 || (item.revents & POLLIN) == 0) continue;
+        const auto count = ::read(descriptor, buffer.data(), buffer.size());
+        if (count <= 0) return false;
+        output.append(buffer.data(), static_cast<std::size_t>(count));
+        if (output.find(kCursorPositionQuery) == std::string::npos) {
+            continue;
+        }
+        return ::write(descriptor, response.data(), response.size()) ==
+            static_cast<ssize_t>(response.size());
+    }
+    return false;
+}
+
 } // namespace
 
 TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", "[tui][terminal][issue54]") {
@@ -1197,6 +1221,104 @@ TEST_CASE(
     output = cch::tests::read_available(pty->master.get());
     CHECK(output.find("\x1b[6;1H") != std::string::npos);
 
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal anchors the buffer origin at the probed cursor row",
+    "[tui][terminal][issue476]") {
+    auto pty = cch::tests::open_pseudo_terminal(40, 12);
+    REQUIRE(pty);
+    // Answer the startup DSR cursor-position query (`\x1b[6n`) with the
+    // shell's mid-screen cursor row 8 (1-based), mirroring
+    // answer_appearance_query (ADR 0041 anchored absolute flow).
+    std::atomic<bool> answered{false};
+    std::jthread responder([&] {
+        answered = answer_cursor_position_query(pty->master.get(), "\x1b[8;1R");
+    });
+    std::mutex events_mutex;
+    std::vector<std::string> inputs;
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [&](std::string input) {
+            std::lock_guard lock(events_mutex);
+            inputs.push_back(std::move(input));
+        },
+        [](cch::tui::TerminalDimensions) {}));
+    responder.join();
+    REQUIRE(answered.load());
+    const auto startup_output = cch::tests::read_available(pty->master.get());
+    // A successful probe never emits the DSR-timeout clear-screen fallback.
+    CHECK(startup_output.find("\x1b[2J") == std::string::npos);
+
+    // Buffer row 0 maps to the anchored screen row 7 (0-based): CUP row 8
+    // instead of the hard-coded `\x1b[1;1H` of the pre-anchor model.
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 0}));
+    auto output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[8;1H") != std::string::npos);
+    CHECK(output.find("\x1b[1;1H") == std::string::npos);
+
+    // Buffer row 11 maps to screen row 18 on a 12-row screen: the scroll-flow
+    // branch moves from the probed cursor row 7 to the bottom (`\x1b[4B`) and
+    // emits 7 CRLF line-flow steps instead of a clamping absolute CUP.
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 11}));
+    output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[4B") != std::string::npos);
+    CHECK(output.find("\x1b[19;1H") == std::string::npos);
+    CHECK(std::count(output.begin(), output.end(), '\n') >= 7);
+
+    // After 7 scrolls the viewport top is 7, so buffer row 10 maps to screen
+    // row 7 + 10 - 7 = 10 (CUP row 11).
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 10}));
+    output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[11;1H") != std::string::npos);
+
+    // A late or duplicate CPR arriving on the worker is consumed and ignored:
+    // it never leaks into the user key stream (ADR 0041).
+    constexpr std::string_view kLateResponse = "\x1b[10;5R";
+    REQUIRE(::write(pty->master.get(), kLateResponse.data(), kLateResponse.size()) ==
+        static_cast<ssize_t>(kLateResponse.size()));
+    REQUIRE(::write(pty->master.get(), "q", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return !inputs.empty();
+    }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    {
+        std::lock_guard lock(events_mutex);
+        CHECK(inputs.front() == "q");
+        for (const auto& input : inputs) {
+            CHECK(input.find('R') == std::string::npos);
+            CHECK(input.find("10;5") == std::string::npos);
+        }
+    }
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal clears the screen and anchors at row 0 when the cursor probe times out",
+    "[tui][terminal][issue476]") {
+    auto pty = cch::tests::open_pseudo_terminal(40, 12);
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    // Nothing answers the DSR query: after the ~250 ms deadline the adapter
+    // emits the clear-screen + home + scrollback fallback and anchors the
+    // origin at row 0 (ADR 0041). One startup pays the timeout once.
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    const auto startup_output = cch::tests::read_available(pty->master.get());
+    CHECK(startup_output.find("\x1b[6n") != std::string::npos);
+    CHECK(startup_output.find("\x1b[2J\x1b[H\x1b[3J") != std::string::npos);
+
+    // Origin 0: buffer row 0 is screen row 0, exactly the pre-anchor model.
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 0}));
+    const auto output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[1;1H") != std::string::npos);
     REQUIRE(terminal.stop());
 }
 

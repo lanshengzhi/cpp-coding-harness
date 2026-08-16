@@ -691,3 +691,58 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
 
     REQUIRE(tui.stop());
 }
+
+
+TEST_CASE(
+    "Tui stop flows the cursor below the composed buffer for the shell prompt",
+    "[tui][issue476]") {
+    // pi TuiMainScreen::beforeTerminalStop: write " ", move one row past the
+    // last buffer line, then CRLF, so the shell prompt resumes below the
+    // transcript instead of overwriting its last line. Under the anchored
+    // absolute flow (ADR 0041) the movement is one absolute set_cursor that
+    // flows and scrolls through the terminal mapping.
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one", 0, 0)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("two", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(tui.stop());
+
+    // The transcript is a two-line buffer: the set_cursor lands one row past
+    // it (row 2) and the CRLF completes that line, leaving the cursor at
+    // column 0 one row below the transcript.
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 3});
+    CHECK(terminal.modes().cursor_visible);
+    CHECK_FALSE(terminal.modes().started);
+}
+
+TEST_CASE(
+    "Tui stop scrolls the exit flow through the terminal scrollback on a full screen",
+    "[tui][issue476]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one", 0, 0)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("two", 0, 0)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("three", 0, 0)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("four", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    // The four-line buffer already scrolled once on a three-row screen.
+    REQUIRE(terminal.viewport_top() == 1);
+
+    REQUIRE(tui.stop());
+
+    // The exit flow (set_cursor one row past the buffer, then CRLF) scrolls
+    // twice more, so every transcript line but the last is in the terminal's
+    // native scrollback and the cursor stays on the bottom row.
+    const std::vector<std::string> expected_scrollback{
+        "one     ",
+        "two     ",
+        "three   ",
+    };
+    CHECK(terminal.scrollback() == expected_scrollback);
+    CHECK(terminal.screen()[0].find("our") != std::string::npos);
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 2});
+    CHECK(terminal.modes().cursor_visible);
+}
