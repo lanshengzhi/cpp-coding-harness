@@ -1,6 +1,6 @@
 # Architecture guardrails
 
-Read this for changes to architecture, public headers, dependency direction, provider/tool/session contracts, CMake visibility, physical capabilities, or security boundaries. Accepted ADRs record the rationale; `CODING_STANDARDS.md` records code-level consequences.
+Read this for changes to architecture, Owner Interface headers, dependency direction, provider/tool/session contracts, CMake visibility, physical capabilities, or security boundaries. Accepted ADRs record the rationale; `CODING_STANDARDS.md` records code-level consequences.
 
 ## Passive value contracts
 

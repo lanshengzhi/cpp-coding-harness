@@ -575,11 +575,14 @@ if(CCH_BUILD_TESTS)
     )
     set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469")
 
-    # Package-aligned test shards (build-performance-plan Stage 4). Each shard
-    # is its own executable registered with ctest, so a focused test edit
-    # builds and links only its owning package. `cpp_harness_tests` remains as
-    # the aggregate target that builds every shard. Grouping follows the
-    # package boundaries in CODING_STANDARDS.md section 12 and fixture
+    # Package-aligned test shard executables (issue #447; CODING_STANDARDS.md
+    # section 11.6). Shards are build grouping only: `catch_discover_tests`
+    # registers Catch2 cases as individual CTest tests, and CTest names/labels
+    # are the sole selection, scheduling, timeout, and reporting authority.
+    # Each shard is its own executable, so a focused test edit builds and links
+    # only its owning package. `cpp_harness_tests` remains as the aggregate
+    # target that builds every shard. Grouping follows the Capability Owner or
+    # support ownership in CODING_STANDARDS.md section 11.5 and fixture
     # ownership, not equal file counts; no test object is compiled twice.
     # Tests include Owner Interface headers through the owner-local interface
     # roots and private headers through the repository-private src root.
@@ -911,8 +914,8 @@ if(CCH_BUILD_TESTS)
     catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_cli_arch ${CCH_PARITY_BUILD_GATE_TARGET})
 
-    # Aggregate target that builds every shard (the Stage 4 entry point that
-    # replaces the old single executable's build target).
+    # Aggregate target that builds every shard; a build convenience, not a
+    # scheduling authority (issue #447; CODING_STANDARDS.md section 11.6).
     add_custom_target(cpp_harness_tests
         DEPENDS
             cch_tests_support

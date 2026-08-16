@@ -14,7 +14,7 @@ scripts/bootstrap.sh --test
 
 ## Architecture-sensitive changes
 
-Run architecture tests when public headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
+Run architecture tests when Owner Interface headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
 
 ## Documentation-only changes
 

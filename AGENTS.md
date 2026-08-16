@@ -15,7 +15,7 @@ Dependencies use the pinned vcpkg manifest; system packages are unsupported. Use
 ## Task-specific context
 
 - **Implementation or review:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) and [validation](docs/agents/validation.md).
-- **Architecture, public headers, dependency direction, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md) and the relevant accepted ADRs.
+- **Architecture, Owner Interface headers, dependency direction, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md) and the relevant accepted ADRs.
 - **pi parity:** read [pi parity](docs/agents/pi-parity.md), then inspect the relevant current pi source or documentation.
 - **Domain language:** read [domain docs](docs/agents/domain.md), `CONTEXT.md`, and relevant accepted ADRs.
 

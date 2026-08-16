@@ -94,6 +94,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 6.5. `AsyncResult` is move-only and consumed once by callback start or move-only `co_await`. Duplicate/moved-from/reused consumption, duplicate completion, and controlled completion-callback contract violations terminate in every build mode. The coroutine Owner establishes quiescence before frame destruction; concurrent resume/destroy is forbidden (ADR 0040).
 
+6.6. Agent, Models Runtime, and Agent Session state changes run only in the owning object's serialized execution domain. Cross-Owner events and worker results enter the target object's bounded FIFO mailbox; workers never mutate serialized Owner state directly, and event-loop submission never blocks or falls back to inline worker execution. Ordinary overload returns a typed `Busy` result; persistence, credential, terminal-completion, and Close control work use reserved admission. Queue capacities, batch sizes, worker counts, and timeouts are measured policy, not speculative knobs — the selected values and their regression tests are recorded in `docs/runtime-capacities.md` (ADR 0040).
+
 ## 7. Classes and ownership
 
 7.1. Interfaces are abstract classes with `virtual ~X() = default;`, pure-virtual methods, and no data members.

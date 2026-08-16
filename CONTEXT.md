@@ -48,6 +48,10 @@ _Avoid_: Facade target, named module, source directory
 The pi-neutral package for shared C++ mechanics that owns no Supported Capability and depends on no Capability Owner Package. Its existence never adds another product owner.
 _Avoid_: Product package, capability owner, general-purpose runtime
 
+**Owner Interface**:
+The repository-internal header contract of a Capability Owner Package, living under the Owner-local header root with one canonical `<cch/...>` spelling and containing only standard-library, support, and legal downstream Owner types. It is never installed, exported, or ABI-promised.
+_Avoid_: Public SDK header, installed consumer surface, umbrella header
+
 **Parity Architecture Manifest**:
 The baseline-pinned machine-readable authority for the Parity Package Graph, Capability Owner Packages, role classification rules, and capability-evidence references. It defines the policy grammar rather than duplicating the configured target inventory; build validation and Parity Drift analysis consume this one policy source.
 _Avoid_: CMake comment, target allowlist, duplicated policy
@@ -59,6 +63,18 @@ _Avoid_: Advisory architecture test, source-format style check, optional CI job
 **Parity Drift**:
 An observed difference between the Parity Baseline and another pi revision; it is advisory until an explicit baseline advance accepts or classifies it.
 _Avoid_: Contract failure, latest-pi obligation
+
+**AsyncResult**:
+The one lazy, move-only, single-consumption asynchronous operation contract (`cch::support::AsyncResult<T, E>`) returned by fallible asynchronous Owner operations: consumed exactly once by callback start or move-only `co_await`, with ordinary failure carried as `std::expected<T, E>` and cancellation supplied explicitly as `std::stop_token`.
+_Avoid_: Boost.Asio awaitable in an Owner Interface, exposed executor or scheduler, copyable operation
+
+**Runtime Root**:
+The one concrete coding-agent-owned Runtime object per CLI invocation. It owns the private event loop, the bounded worker pool, and the bounded FIFO mailboxes of the state-owning runtime objects, and it survives Agent Session replacement until final application Close.
+_Avoid_: Singleton scheduler, executor hierarchy, event bus, one thread or loop per Owner Package
+
+**Serialized Execution Domain**:
+The rule that a state-owning runtime object (Agent, Models Runtime, Agent Session) changes its state only on its own serialized path: cross-Owner events and worker results enter through the object's bounded FIFO mailbox, and workers never mutate that state directly.
+_Avoid_: Broad locking, direct cross-thread mutation, unbounded queue
 
 **Intentional Divergence**:
 A documented departure from Semantic Parity that demonstrably improves the C++ caller contract and cannot be hidden behind a private adapter without losing that benefit.
