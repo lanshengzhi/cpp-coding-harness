@@ -510,8 +510,10 @@ TEST_CASE(
     scripted->responses.push_back(std::move(transient));
     scripted->responses.push_back(ai::assistant_text_message("recovered"));
 
+    // Keep an owning copy: Close releases the Session's provider after
+    // quiescence, and the assertions below still observe the fake.
     auto created = coding_agent::create_agent_session(
-        fixture.options(std::move(provider)));
+        fixture.options(provider));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 

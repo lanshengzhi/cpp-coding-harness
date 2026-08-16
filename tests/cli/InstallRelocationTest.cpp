@@ -105,6 +105,12 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
 TEST_CASE(
     "staged install contains only the relocatable Runtime and behaves after relocation",
     "[cli][install][issue472]") {
+#ifdef CCH_SANITIZER_BUILD
+    // A sanitizer build links libasan/libubsan into every binary, so the
+    // dependency-closure audit correctly refuses it: sanitizers gate the
+    // test suite, they never produce a shippable install (issue #473).
+    SKIP("staged install is a shippable-configuration contract; sanitizer builds are not installable");
+#else
     cch::tests::TempWorkspace root;
     const auto stage = root.path() / "stage";
     const auto captures = root.path() / "captures";
@@ -213,4 +219,5 @@ TEST_CASE(
     REQUIRE(smoke.exit_code == 0);
     CHECK(smoke.stdout_text == "fake: hello\n");
     CHECK(smoke.stderr_text.empty());
+#endif
 }

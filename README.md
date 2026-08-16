@@ -33,6 +33,25 @@ ctest --preset vcpkg-release
 
 The Release executable is `build/release/cpp_harness`. Run the unfiltered CTest preset for final validation.
 
+## Sanitizer builds
+
+Two blocking CI jobs (issue #473) add sanitizer coverage on top of the default matrix:
+
+- `vcpkg-asan-ubsan` — Debug build with AddressSanitizer and UndefinedBehaviorSanitizer (`CCH_SANITIZER=address;undefined`), running the full supported test suite with symbolized, halting reports.
+- `vcpkg-tsan` — Debug build with ThreadSanitizer (`CCH_SANITIZER=thread`), running `scripts/ci/tsan-scenarios.sh`: focused repeated scenarios over the asynchronous ownership and shutdown seams (`AsyncResult`, mailboxes, subscriptions, process draining, persistence, cancellation, Session replacement, and Session Close) within bounded repetition and timeout budgets. Each run prints the scenario, label selection, budget, git revision, and sanitizer options needed to reproduce a finding.
+
+Both jobs use fake providers and isolated temporary resources with blanked credentials — no live-provider or network dependency, same as the default suite.
+
+```bash
+cmake --preset vcpkg-asan-ubsan && cmake --build --preset vcpkg-asan-ubsan
+ctest --preset vcpkg-asan-ubsan
+
+cmake --preset vcpkg-tsan && cmake --build --preset vcpkg-tsan
+scripts/ci/tsan-scenarios.sh
+```
+
+Point `ASAN_SYMBOLIZER_PATH` (and `external_symbolizer_path` in `TSAN_OPTIONS`) at an `llvm-symbolizer` binary for symbolized reports.
+
 Every supported configure runs the Parity Architecture Gate fail-closed (ADR 0039), including tests-disabled configurations; every normal build, direct production-target build, and CTest entry point additionally requires fresh successful build-phase Gate evidence (compile commands and compiler depfiles). The deterministic machine-readable report is written to `<binary-dir>/parity-build-gate.json` (for the default preset, `build/parity-build-gate.json`) on every run, pass or fail.
 
 ## Install

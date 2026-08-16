@@ -715,6 +715,15 @@ public:
     [[nodiscard]] int attempt() const { return attempt_; }
     [[nodiscard]] int max_attempts() const { return max_attempts_; }
 
+    /// Stop the countdown: cancel the pending tick and drop the tick sink so
+    /// neither keeps the countdown alive past its use (ASan, issue #473).
+    /// Executor-confined like start().
+    void cancel() {
+        on_tick_ = nullptr;
+        // Executor-confined; cancelling a live timer does not fail.
+        (void)timer_.cancel();
+    }
+
 private:
     void schedule_tick() {
         const auto self = shared_from_this();
@@ -3250,12 +3259,20 @@ private:
         auto arm = std::make_shared<std::move_only_function<void()>>();
         *arm = [weak, signals, arm] {
             signals->async_wait([weak, signals, arm](const boost::system::error_code& error, int fired) {
-                if (error) return;
+                // Terminal outcomes (cancellation on resume/teardown, or
+                // SIGCONT) clear the re-arm function to break its
+                // self-capture cycle; only the swallowed-SIGINT path re-arms
+                // (ASan, issue #473).
+                if (error) {
+                    *arm = nullptr;
+                    return;
+                }
                 if (fired != SIGCONT) {
                     // SIGINT while suspended: swallowed; keep waiting.
                     (*arm)();
                     return;
                 }
+                *arm = nullptr;
                 const auto self = weak.lock();
                 if (self) self->resume_after_suspend();
             });
@@ -5739,18 +5756,19 @@ private:
 
     /// pi `CountdownTimer` for the retry indicator: one-second ticks rewrite
     /// the `Retrying (n/m) in Ns...` message until the delay elapses. The
-    /// tick captures the countdown itself so a tick racing `cancel` (which
-    /// resets the state member) never dereferences a reset pointer.
+    /// tick captures the attempt values (never the countdown itself) so the
+    /// countdown's stored `on_tick_` cannot form a self-cycle that leaks the
+    /// state (ASan, issue #473).
     void start_retry_countdown(int attempt, int max_attempts, int seconds) {
         auto countdown = std::make_shared<RetryCountdown>(
             executor_, attempt, max_attempts);
         retry_countdown_ = countdown;
-        countdown->start(seconds, [weak = weak_from_this(), countdown](int remaining) {
+        countdown->start(seconds, [weak = weak_from_this(), attempt, max_attempts](int remaining) {
             if (const auto self = weak.lock(); self && self->running_ &&
                 self->view_ != nullptr) {
                 self->view_->set_status_retry_message(
-                    countdown->attempt(),
-                    countdown->max_attempts(),
+                    attempt,
+                    max_attempts,
                     remaining);
                 self->tui_.invalidate();
             }
@@ -5758,6 +5776,7 @@ private:
     }
 
     void cancel_retry_countdown() {
+        if (retry_countdown_) retry_countdown_->cancel();
         retry_countdown_.reset();
     }
 

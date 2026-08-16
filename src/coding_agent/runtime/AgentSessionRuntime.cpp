@@ -643,6 +643,14 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_prompt(
     prompt_active_ = false;
     if (prompt_settled_signal_) {
         (void)prompt_settled_signal_->cancel();
+        // Release the host-executor timer with the run. cancel() completes
+        // every queued waiter (wait_for_idle/compact); their posted
+        // completions do not touch the timer afterwards. Resetting here keeps
+        // the Asio object inside the live host loop's lifetime: the host
+        // io_context (e.g. prompt_blocking's per-call loop) may be destroyed
+        // before the session, and a timer destructed after its context reads
+        // a freed service registry (ASan, issue #473).
+        prompt_settled_signal_.reset();
     }
     if (lifecycle_ == Lifecycle::Closing) {
         // The prompt awaitable is the existing observation seam for active

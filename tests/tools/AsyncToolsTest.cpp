@@ -129,6 +129,11 @@ support::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
     while (!result) {
         loop.run_one();
     }
+    // Drain posted completion teardown (mailbox requeues, producer frame
+    // cleanup) before returning: work still queued here would linger in the
+    // shared static runtime past the test's end (ASan leak reports, #473).
+    while (loop.poll_one() != 0) {
+    }
     return std::move(*result);
 }
 

@@ -376,6 +376,10 @@ public:
             co_await gate_->async_wait(
                 boost::asio::redirect_error(boost::asio::use_awaitable, error));
         }
+        // The gate timer is bound to the run's executor; release it before
+        // that io_context dies so the provider can outlive the run (ASan,
+        // #473).
+        gate_.reset();
 
         if (stop_token.stop_requested()) {
             partial.stop_reason = ai::AssistantStopReason::Aborted;
@@ -688,6 +692,13 @@ struct GatedPartialReadToolHandle {
                 boost::system::error_code error;
                 co_await state->gate->async_wait(
                     boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                // The gate timer is bound to the run's executor; release it
+                // before that io_context dies so the state can outlive the
+                // run (ASan, #473).
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->gate.reset();
+                }
                 co_return gated_partial_final_result(invocation);
             }),
         state,
@@ -765,6 +776,13 @@ struct DelayedCancellationToolHandle {
                 boost::system::error_code error;
                 co_await state->gate->async_wait(
                     boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                // The gate timer is bound to the run's executor; release it
+                // before that io_context dies so the state can outlive the
+                // run (ASan, #473).
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->gate.reset();
+                }
 
                 if (stop_token.stop_requested()) {
                     co_return std::unexpected(support::make_error(
@@ -1971,9 +1989,11 @@ TEST_CASE(
         R"({"app.interrupt":"f7","app.exit":"f6"})");
     auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
+    // Keep an owning copy: shutdown closes the Session, which releases its
+    // provider; the assertions below still observe the fake.
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        std::move(client)));
+        client));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 12});

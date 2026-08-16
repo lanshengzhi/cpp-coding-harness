@@ -1277,16 +1277,29 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
 Editor::Editor(Editor&& other) noexcept : impl_(std::move(other.impl_)) {
     other.impl_.reset();
 }
+/// Break every Impl-lifetime cycle before the Editor releases its reference:
+/// the debounce timer and an in-flight request's result sink capture `self`,
+/// and an autocomplete provider owned by the Impl that retains the sink past
+/// Editor destruction would keep the Impl alive forever (ASan, issue #473).
+/// Cancelling rejects late deliveries as stale; releasing the provider
+/// destroys the held sinks.
+void Editor::release_autocomplete_cycles() noexcept {
+    if (!impl_) return;
+    impl_->cancel_autocomplete_request();
+    impl_->autocomplete_provider.reset();
+    impl_->self.reset();
+}
+
 Editor& Editor::operator=(Editor&& other) noexcept {
     if (this != &other) {
-        if (impl_) impl_->self.reset();
+        release_autocomplete_cycles();
         impl_ = std::move(other.impl_);
         other.impl_.reset();
     }
     return *this;
 }
 Editor::~Editor() {
-    if (impl_) impl_->self.reset();
+    release_autocomplete_cycles();
 }
 
 std::string Editor::text() const {

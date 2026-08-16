@@ -106,6 +106,9 @@ public:
 
 private:
     struct Impl;
+    /// Breaks every Impl-lifetime cycle before the Editor releases its
+    /// reference; see the definition for details (ASan, issue #473).
+    void release_autocomplete_cycles() noexcept;
     std::shared_ptr<Impl> impl_;
 };
 

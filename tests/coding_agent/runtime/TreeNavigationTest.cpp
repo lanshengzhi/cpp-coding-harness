@@ -249,6 +249,9 @@ public:
             co_await release_timer_->async_wait(
                 boost::asio::redirect_error(
                     boost::asio::use_awaitable, wait_error));
+            // Bound to the run's executor; release before that io_context
+            // dies so the provider can outlive the run (ASan, #473).
+            release_timer_.reset();
         }
         ai::AssistantMessage message = ai::assistant_text_message("held reply");
         message.api = model.api;

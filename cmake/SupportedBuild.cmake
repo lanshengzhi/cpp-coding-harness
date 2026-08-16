@@ -96,6 +96,38 @@ function(cch_validate_configuration_role role build_type)
     endif()
 endfunction()
 
+# Sanitizer coverage (issue #473): the supported selections are empty (no
+# sanitizer), 'address;undefined' (ASan+UBSan), and 'thread' (TSan). TSan
+# cannot be combined with any other sanitizer. Unknown or combined values fail
+# closed so a typo cannot silently configure an unsanitized "sanitizer" build.
+function(cch_validate_sanitizer_selection sanitizers)
+    if("${sanitizers}" STREQUAL "")
+        return()
+    endif()
+
+    set(seen "")
+    foreach(sanitizer IN LISTS sanitizers)
+        if(NOT sanitizer STREQUAL "address" AND
+           NOT sanitizer STREQUAL "undefined" AND
+           NOT sanitizer STREQUAL "thread")
+            message(FATAL_ERROR
+                "Unknown CCH_SANITIZER entry '${sanitizer}'. Supported selections are "
+                "'address;undefined' and 'thread'.")
+        endif()
+        if(sanitizer IN_LIST seen)
+            message(FATAL_ERROR
+                "Duplicate CCH_SANITIZER entry '${sanitizer}'. List each sanitizer at most once.")
+        endif()
+        list(APPEND seen "${sanitizer}")
+    endforeach()
+
+    if("thread" IN_LIST seen AND NOT "${sanitizers}" STREQUAL "thread")
+        message(FATAL_ERROR
+            "ThreadSanitizer cannot be combined with other sanitizers; configure CCH_SANITIZER=thread "
+            "in its own build tree.")
+    endif()
+endfunction()
+
 function(cch_validate_vcpkg_shape toolchain_file manifest_mode manifest_install target_triplet)
     if(toolchain_file STREQUAL "")
         message(FATAL_ERROR

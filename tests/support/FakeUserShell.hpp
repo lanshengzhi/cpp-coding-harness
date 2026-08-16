@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstddef>
 #include <exception>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -98,9 +99,37 @@ public:
             });
     }
 
-    std::vector<std::string> commands;
-    std::size_t started_count{0};
-    std::size_t cancellation_request_count{0};
+    // Observable state lives in shared storage: the Session uniquely owns the
+    // shell and releases it when Close finalizes, so a test that asserts
+    // post-close behavior holds a `counters()` copy instead of dereferencing
+    // the released fake (ASan, issue #473).
+    struct Counters {
+        std::vector<std::string> commands;
+        std::size_t started_count{0};
+        std::size_t cancellation_request_count{0};
+    };
+
+    FakeUserShell()
+        : counters_(std::make_shared<Counters>()),
+          commands(counters_->commands),
+          started_count(counters_->started_count),
+          cancellation_request_count(counters_->cancellation_request_count) {}
+
+    [[nodiscard]] std::shared_ptr<const Counters> counters() const { return counters_; }
+
+private:
+    // Declared before the reference members below so they bind to live
+    // storage (members initialize in declaration order).
+    std::shared_ptr<Counters> counters_;
+
+public:
+    // Non-owning references bound to `counters_` storage, which is shared and
+    // outlives the shell (CODING_STANDARDS.md §7.5); they keep the pre-#473
+    // field spelling source-compatible. Storing references deletes the move
+    // ctor/assignment — the fake is always held by unique_ptr.
+    std::vector<std::string>& commands;
+    std::size_t& started_count;
+    std::size_t& cancellation_request_count;
 
 private:
     std::vector<Execution> executions_;

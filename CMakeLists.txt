@@ -46,6 +46,20 @@ endif()
 
 set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
 
+# Sanitizer coverage (issue #473). The blocking sanitizer CI jobs configure
+# through the checked-in vcpkg-asan-ubsan / vcpkg-tsan presets, which set this
+# cache variable; validation is fail-closed so an unknown selection is a
+# configure error, never a silently unsanitized build. Flags apply to every
+# target declared below, production and test alike.
+set(CCH_SANITIZER "" CACHE STRING "Sanitizer selection: empty, 'address;undefined', or 'thread'")
+cch_validate_sanitizer_selection("${CCH_SANITIZER}")
+if(CCH_SANITIZER)
+    string(REPLACE ";" "," sanitizer_commas "${CCH_SANITIZER}")
+    add_compile_options("-fsanitize=${sanitizer_commas}" -fno-omit-frame-pointer)
+    add_link_options("-fsanitize=${sanitizer_commas}")
+    message(STATUS "Sanitizer coverage: ${sanitizer_commas}")
+endif()
+
 # Central Parity Architecture constructors (ADR 0039). Every production target
 # is declared through cch_parity_declare_target so its role, Owner, source
 # ownership, direct dependencies, interface visibility, and external-family
@@ -437,6 +451,11 @@ if(CCH_BUILD_TESTS)
     cch_add_supported_build_policy_test("reject-clang-version" FALSE "Clang 22.x")
     cch_add_supported_build_policy_test("reject-clang-build-role" FALSE "build role requires GCC 16.x")
     cch_add_supported_build_policy_test("reject-clang-release" FALSE "requires a Debug configuration")
+    cch_add_supported_build_policy_test("accept-sanitizer-address-undefined" TRUE "")
+    cch_add_supported_build_policy_test("accept-sanitizer-thread" TRUE "")
+    cch_add_supported_build_policy_test("reject-unknown-sanitizer" FALSE "Unknown CCH_SANITIZER entry")
+    cch_add_supported_build_policy_test("reject-sanitizer-combination" FALSE "cannot be combined")
+    cch_add_supported_build_policy_test("reject-duplicate-sanitizer" FALSE "Duplicate CCH_SANITIZER entry")
     cch_add_supported_build_policy_test("reject-dependency-fallback" FALSE "outside the pinned vcpkg prefix")
     cch_add_supported_build_policy_test("reject-missing-vcpkg-toolchain" FALSE "pinned vcpkg toolchain")
     cch_add_supported_build_policy_test("reject-vcpkg-manifest-install" FALSE "manifest installation is required")
@@ -858,6 +877,11 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_cli_arch PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cch_tests_cli_arch cpp_harness)
+    # Sanitizer builds link the sanitizer runtimes and are not installable:
+    # the relocation test skips itself under them (issue #473).
+    if(NOT CCH_SANITIZER STREQUAL "")
+        target_compile_definitions(cch_tests_cli_arch PRIVATE CCH_SANITIZER_BUILD=1)
+    endif()
     catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_cli_arch ${CCH_PARITY_BUILD_GATE_TARGET})
 

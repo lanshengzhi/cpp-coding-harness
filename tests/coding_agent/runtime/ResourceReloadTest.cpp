@@ -362,6 +362,9 @@ public:
             boost::system::error_code error;
             co_await gate_->async_wait(
                 boost::asio::redirect_error(boost::asio::use_awaitable, error));
+            // The timer is bound to the caller's io_context; release it before
+            // that context dies so the provider can outlive it (ASan, #473).
+            gate_.reset();
         }
         auto response = std::move(responses.front());
         responses.pop_front();

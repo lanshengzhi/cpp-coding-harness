@@ -195,6 +195,9 @@ ScriptedRuntimeProvider::stream(
         boost::system::error_code error;
         co_await owner_->gate_->async_wait(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        // The timer is bound to the run's executor; release it before that
+        // io_context dies so the fake can outlive the run (ASan, #473).
+        owner_->gate_.reset();
     }
 
     if (stop_token.stop_requested()) {

@@ -484,7 +484,10 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 }
 
 [[nodiscard]] std::optional<ai::ApiKeyAuth> compose_api_key_auth(
-    std::string_view provider_id,
+    // Owning: the check/resolve closures below are stored on the composed
+    // Provider and invoked asynchronously, after the caller's provider-id
+    // string (e.g. the recompose loop's id set) is gone (ASan, issue #473).
+    std::string provider_id,
     const std::shared_ptr<ai::Provider>& base,
     const std::optional<ModelsJsonProvider>& config,
     const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
@@ -668,7 +671,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     const std::optional<ModelsJsonProvider>& config,
     const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
     ai::ProviderAuth auth;
-    auto api_key = compose_api_key_auth(provider_id, base, config, runner);
+    auto api_key = compose_api_key_auth(std::string{provider_id}, base, config, runner);
     if (api_key) {
         auth.api_key = std::move(*api_key);
     }

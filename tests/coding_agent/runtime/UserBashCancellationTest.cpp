@@ -470,6 +470,9 @@ TEST_CASE(
         workspace.path(), std::move(client), std::move(shell), session_path);
     REQUIRE(created);
     auto& session = *created->session;
+    // Close releases the shell after quiescence; observe it through the
+    // shared counters rather than the released fake.
+    const auto shell_counters = shell_pointer->counters();
 
     boost::asio::io_context io;
     BashResult bash_result;
@@ -494,7 +497,7 @@ TEST_CASE(
     CHECK_FALSE(*rejected_prompt);
     REQUIRE(rejected_bash.has_value());
     CHECK_FALSE(*rejected_bash);
-    CHECK(shell_pointer->started_count == 1);
+    CHECK(shell_counters->started_count == 1);
 
     drain_ready(io);
     // The cancelled outcome still commits exactly once before teardown.

@@ -41,6 +41,26 @@
       }
     },
     {
+      "name": "vcpkg-asan-ubsan",
+      "displayName": "ASan+UBSan (vcpkg)",
+      "description": "Blocking GCC 16.x Debug build with AddressSanitizer and UndefinedBehaviorSanitizer coverage of the supported test suite (#473)",
+      "inherits": "vcpkg",
+      "binaryDir": "${sourceDir}/build/asan-ubsan",
+      "cacheVariables": {
+        "CCH_SANITIZER": "address;undefined"
+      }
+    },
+    {
+      "name": "vcpkg-tsan",
+      "displayName": "TSan (vcpkg)",
+      "description": "Blocking GCC 16.x Debug build with ThreadSanitizer for the focused asynchronous lifecycle scenarios (#473)",
+      "inherits": "vcpkg",
+      "binaryDir": "${sourceDir}/build/tsan",
+      "cacheVariables": {
+        "CCH_SANITIZER": "thread"
+      }
+    },
+    {
       "name": "dev-fast",
       "displayName": "Fast development (Ninja + ccache, Debug)",
       "description": "Optional local Debug preset: Ninja with ccache required. ADR 0039 defines supported build policy; docs/build-performance-plan.md preserves historical measurements only.",
@@ -83,6 +103,18 @@
       "jobs": 4
     },
     {
+      "name": "vcpkg-asan-ubsan",
+      "configurePreset": "vcpkg-asan-ubsan",
+      "configuration": "Debug",
+      "jobs": 4
+    },
+    {
+      "name": "vcpkg-tsan",
+      "configurePreset": "vcpkg-tsan",
+      "configuration": "Debug",
+      "jobs": 4
+    },
+    {
       "name": "dev-fast",
       "configurePreset": "dev-fast",
       "configuration": "Debug",
@@ -111,6 +143,18 @@
     {
       "name": "clang-conformance",
       "configurePreset": "clang-conformance",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "vcpkg-asan-ubsan",
+      "configurePreset": "vcpkg-asan-ubsan",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "vcpkg-tsan",
+      "configurePreset": "vcpkg-tsan",
       "configuration": "Debug",
       "output": { "outputOnFailure": true }
     },

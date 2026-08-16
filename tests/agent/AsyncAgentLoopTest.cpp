@@ -14,6 +14,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -316,7 +317,15 @@ struct CancellableFakeToolHandle {
                 state->observed_stop_token = stop_token;
                 boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
                 timer.expires_at(std::chrono::steady_clock::time_point::max());
-                std::stop_callback cancellation{stop_token, [&timer] { timer.cancel(); }};
+                // The stop callback runs on the requesting thread, but asio
+                // timers are single-threaded: post the cancel to the timer's
+                // executor so it can only land after async_wait is initiated
+                // (a direct cancel here races the wait registration — TSan,
+                // issue #473).
+                const auto timer_executor = timer.get_executor();
+                std::stop_callback cancellation{stop_token, [timer_executor, &timer] {
+                    boost::asio::post(timer_executor, [&timer] { (void)timer.cancel(); });
+                }};
                 state->suspended.store(true, std::memory_order_release);
                 state->suspended_signal.release();
                 boost::system::error_code error;

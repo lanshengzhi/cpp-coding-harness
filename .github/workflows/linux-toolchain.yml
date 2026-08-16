@@ -23,16 +23,31 @@ jobs:
             cc: gcc-16
             cxx: g++-16
             compiler: gcc
+            sanitizer: ""
           - name: GCC 16 Release
             preset: vcpkg-release
             cc: gcc-16
             cxx: g++-16
             compiler: gcc
+            sanitizer: ""
           - name: Clang 22 conformance
             preset: clang-conformance
             cc: clang-22
             cxx: clang++-22
             compiler: clang
+            sanitizer: ""
+          - name: GCC 16 ASan+UBSan
+            preset: vcpkg-asan-ubsan
+            cc: gcc-16
+            cxx: g++-16
+            compiler: gcc
+            sanitizer: asan-ubsan
+          - name: GCC 16 TSan scenarios
+            preset: vcpkg-tsan
+            cc: gcc-16
+            cxx: g++-16
+            compiler: gcc
+            sanitizer: tsan
     env:
       CCH_LIVE_KIMI: "0"
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
@@ -81,6 +96,22 @@ jobs:
           test "$(clang++-22 --version | awk 'NR == 1 { print $4 }')" = "22.1.8"
           clang++-22 -print-file-name=libstdc++.so | grep -F '/16/'
 
+      - name: Install LLVM symbolizer
+        # Sanitizer reports must be symbolized to be actionable (#473). The
+        # symbolizer is a reporting tool, not a build input; its presence is
+        # asserted so a missing symbolizer fails the job instead of silently
+        # degrading reports to raw addresses.
+        if: matrix.sanitizer != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes llvm
+          symbolizer="$(command -v llvm-symbolizer || true)"
+          if [[ -z "$symbolizer" ]]; then
+            symbolizer="$(ls /usr/lib/llvm-*/bin/llvm-symbolizer 2>/dev/null | head -1 || true)"
+          fi
+          test -n "$symbolizer" && test -x "$symbolizer"
+          echo "CCH_SYMBOLIZER=$symbolizer" >> "$GITHUB_ENV"
+
       - name: Bootstrap pinned vcpkg
         run: |
           test "$(git -C "$VCPKG_ROOT" rev-parse HEAD)" = "2f1d605400c8727cc00c15797aba796c88ccd523"
@@ -96,8 +127,33 @@ jobs:
         run: cmake --build --preset "${{ matrix.preset }}"
 
       - name: Run offline tests
+        if: matrix.sanitizer == ''
         env:
           KIMI_API_KEY: ""
           OPENAI_API_KEY: ""
           ANTHROPIC_API_KEY: ""
         run: ctest --preset "${{ matrix.preset }}" --no-tests=error
+
+      # Blocking sanitizer coverage (#473): the ASan+UBSan job exercises the
+      # full supported test suite with symbolized, halting reports; the TSan
+      # job runs the focused repeated asynchronous lifecycle scenarios. Both
+      # use fake providers with blanked credentials and no network dependency.
+      - name: Run ASan+UBSan suite
+        if: matrix.sanitizer == 'asan-ubsan'
+        env:
+          KIMI_API_KEY: ""
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          ASAN_SYMBOLIZER_PATH: ${{ env.CCH_SYMBOLIZER }}
+          ASAN_OPTIONS: "symbolize=1:detect_leaks=1:halt_on_error=1:print_stacktrace=1"
+          UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+        run: ctest --preset "${{ matrix.preset }}" --no-tests=error
+
+      - name: Run focused TSan scenarios
+        if: matrix.sanitizer == 'tsan'
+        env:
+          KIMI_API_KEY: ""
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          TSAN_OPTIONS: "halt_on_error=1:external_symbolizer_path=${{ env.CCH_SYMBOLIZER }}"
+        run: scripts/ci/tsan-scenarios.sh "${{ github.workspace }}/build/tsan"
