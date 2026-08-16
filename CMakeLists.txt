@@ -9,6 +9,20 @@ cch_validate_supported_build_before_project()
 project(cpp_coding_harness VERSION 0.1.0 LANGUAGES CXX)
 cch_validate_supported_build_after_project()
 
+# Release-artifact IPO/LTO (ADR 0039; issue #474): the vcpkg-release-artifact
+# preset opts in through CMAKE_INTERPROCEDURAL_OPTIMIZATION. Validate IPO at
+# configure time so an unsupported toolchain fails closed instead of silently
+# producing a non-LTO "release artifact".
+if(CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT cch_ipo_supported OUTPUT cch_ipo_error LANGUAGES CXX)
+    if(NOT cch_ipo_supported)
+        message(FATAL_ERROR
+            "IPO/LTO was requested but this toolchain does not support it: ${cch_ipo_error}")
+    endif()
+    message(STATUS "IPO/LTO enabled and validated for this configuration")
+endif()
+
 # CMake 3.30+ removed the legacy FindBoost module; use Boost's own config-mode package.
 cmake_policy(SET CMP0167 NEW)
 
@@ -507,6 +521,18 @@ if(CCH_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/InstallGateTest.cmake
     )
     set_tests_properties(cch_install_gate_fixture PROPERTIES LABELS "install;issue472")
+
+    # Release qualification evidence (ADR 0039; issue #474). The fail-closed
+    # verifier checks the artifact lane's evidence directory: presence,
+    # closed vocabularies, freshness against the run window, toolchain
+    # contradiction rules, required PASS markers, and the artifact digest
+    # binding; missing, stale, contradictory, or incomplete evidence fails
+    # qualification rather than degrading to a warning.
+    add_test(
+        NAME cch_release_evidence_unit
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/release_evidence_test.py
+    )
+    set_tests_properties(cch_release_evidence_unit PROPERTIES LABELS "install;release;issue474")
 
     # Production build-phase Gate self-check (ADR 0039; issue #470): run the
     # same fail-closed build-phase Gate against the production evidence

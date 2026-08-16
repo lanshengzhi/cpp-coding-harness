@@ -30,6 +30,17 @@
       }
     },
     {
+      "name": "vcpkg-release-artifact",
+      "displayName": "Release artifact (vcpkg, IPO/LTO)",
+      "description": "Supported GCC 16.x Release IPO/LTO artifact build (issue #474): the release-qualification lane; tests are off because the supported test matrix covers them",
+      "inherits": "vcpkg-release",
+      "binaryDir": "${sourceDir}/build/release-artifact",
+      "cacheVariables": {
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": true,
+        "CCH_BUILD_TESTS": false
+      }
+    },
+    {
       "name": "clang-conformance",
       "displayName": "Clang 22.x conformance (vcpkg)",
       "description": "Blocking Clang 22.x Debug conformance build; never a release-artifact build",
@@ -93,6 +104,12 @@
     {
       "name": "vcpkg-release",
       "configurePreset": "vcpkg-release",
+      "configuration": "Release",
+      "jobs": 4
+    },
+    {
+      "name": "vcpkg-release-artifact",
+      "configurePreset": "vcpkg-release-artifact",
       "configuration": "Release",
       "jobs": 4
     },

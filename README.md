@@ -67,6 +67,17 @@ The install path runs the fail-closed install gate before any file is staged: th
 
 The release seam is validated from a clean staging prefix by the `cch_install_tools_unit` and `cch_install_gate_fixture` CTest cases and the `[cli][install]` relocation case (`tests/cli/InstallRelocationTest.cpp`), which covers the staged layout, dependency closure, `--help`, `--version`, and an offline fake-provider smoke run outside the build tree.
 
+## Release qualification (CI)
+
+Issue #474 establishes the blocking release matrix in `.github/workflows/linux-toolchain.yml`:
+
+- **GCC 16.x Debug and Release** jobs build and test the complete supported product on Ubuntu 24.04; **Clang 22.x** is a blocking Debug conformance verifier over the same graph and suite and never produces release artifacts.
+- **GCC 16 Release artifact (IPO/LTO)** — the `vcpkg-release-artifact` preset builds the release Runtime with validated IPO/LTO (configure fails closed if the toolchain cannot do IPO). The job stages it into a clean prefix through the fail-closed install gate, audits the staged dependency closure, runs `scripts/ci/release-artifact-smoke.sh` (relocation, scrubbed-environment `--version`/`--help`, deterministic offline failure), binds the evidence to the artifact digest, and verifies the complete evidence directory with `scripts/ci/verify_release_evidence.py`. Missing, stale, contradictory, or incomplete evidence fails qualification with stable `REL-*` rule identifiers; nothing degrades to a warning. The qualified staged tree and its evidence upload as the `cpp_harness-runtime-linux-x86_64` run artifact.
+- **Arch pinned (blocking)** — a digest-pinned `archlinux:base-devel` snapshot with pacman pinned to the matching Arch Linux Archive date runs the same declared dependency (pinned vcpkg) and Gate contracts. Toolchain drift (e.g. GCC leaving 16.x) fails the lane closed and forces a deliberate re-pin.
+- **Arch latest drift (advisory)** — `.github/workflows/arch-drift.yml` runs current Arch latest on a weekly schedule. It never triggers on pull requests or pushes, so it cannot gate qualification or substitute for the pinned blocking lane; a failure is the drift signal to re-pin.
+
+The evidence verifier is covered by the `cch_release_evidence_unit` CTest case (`tests/install/release_evidence_test.py`).
+
 ## Verify the build
 
 ```bash
