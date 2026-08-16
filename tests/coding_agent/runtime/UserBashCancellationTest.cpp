@@ -26,6 +26,7 @@ using namespace cch;
 namespace {
 
 using tests::drain_ready;
+using tests::require_completed;
 using tests::bash_message_count;
 using tests::BashResult;
 using tests::PromptResult;
@@ -118,7 +119,7 @@ TEST_CASE(
         });
     io.run();
 
-    REQUIRE(result.has_value());
+    require_completed(io, result);
     REQUIRE(*result);
     REQUIRE(shell_pointer->commands.size() == 1);
     CHECK(shell_pointer->commands.front() == command);
@@ -158,7 +159,7 @@ TEST_CASE(
     tests::spawn_bash(io, *created->session, "large output", result);
     io.run();
 
-    REQUIRE(result.has_value());
+    require_completed(io, result);
     REQUIRE(*result);
     REQUIRE((*result)->message.full_output_path.has_value());
     const std::filesystem::path full_output_path{*(*result)->message.full_output_path};
@@ -197,7 +198,7 @@ TEST_CASE(
     tests::spawn_bash(io, *created->session, "cannot spawn", result);
     io.run();
 
-    REQUIRE(result.has_value());
+    require_completed(io, result);
     REQUIRE_FALSE(*result);
     CHECK(result->error().message == message);
     CHECK(result->error().detail == detail);
@@ -238,7 +239,7 @@ TEST_CASE(
 
     // The cancelled terminal outcome retains the already delivered sanitized
     // output, carries no exit code, and commits exactly once.
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.cancelled);
     CHECK_FALSE((*bash_result)->message.exit_code.has_value());
@@ -268,14 +269,14 @@ TEST_CASE(
     BashResult recovery_bash;
     spawn_bash(io, session, "echo recovered", recovery_bash);
     drain_ready(io);
-    REQUIRE(recovery_bash.has_value());
+    require_completed(io, recovery_bash);
     REQUIRE(*recovery_bash);
     CHECK((*recovery_bash)->message.exit_code == 0);
 
     PromptResult prompt_result;
     spawn_prompt(io, session, "ordinary prompt", prompt_result);
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
     CHECK(client_pointer->requests.size() == 1);
     session.close();
@@ -316,7 +317,7 @@ TEST_CASE(
     drain_ready(io);
     // Repeated cancellation reaches the Shell stop source exactly once.
     CHECK(shell_pointer->cancellation_request_count == 1);
-    REQUIRE(first.has_value());
+    require_completed(io, first);
     REQUIRE(*first);
     CHECK((*first)->message.cancelled);
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
@@ -334,7 +335,7 @@ TEST_CASE(
     REQUIRE(shell_pointer->started_count == 2);
     shell_pointer->release();
     drain_ready(io);
-    REQUIRE(second.has_value());
+    require_completed(io, second);
     REQUIRE(*second);
     CHECK_FALSE((*second)->message.cancelled);
     CHECK((*second)->message.exit_code == 42);
@@ -374,7 +375,7 @@ TEST_CASE(
     spawn_bash(io, session, "cannot spawn", failed);
     drain_ready(io);
     // Infrastructure failure is an explicit error, not a fake Bash outcome.
-    REQUIRE(failed.has_value());
+    require_completed(io, failed);
     CHECK_FALSE(*failed);
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
     CHECK(session.is_open());
@@ -383,7 +384,7 @@ TEST_CASE(
     BashResult recovered;
     spawn_bash(io, session, "works again", recovered);
     drain_ready(io);
-    REQUIRE(recovered.has_value());
+    require_completed(io, recovered);
     REQUIRE(*recovered);
     CHECK((*recovered)->message.output == "after failure");
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
@@ -391,7 +392,7 @@ TEST_CASE(
     PromptResult prompt_result;
     spawn_prompt(io, session, "prompt after failure", prompt_result);
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
     CHECK(client_pointer->requests.size() == 1);
     session.close();
@@ -436,9 +437,9 @@ TEST_CASE(
 
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.cancelled);
     CHECK_FALSE((*bash_result)->message.exit_code.has_value());
@@ -493,15 +494,15 @@ TEST_CASE(
     BashResult rejected_bash;
     spawn_bash(io, session, "also too late", rejected_bash);
     drain_ready(io);
-    REQUIRE(rejected_prompt.has_value());
+    require_completed(io, rejected_prompt);
     CHECK_FALSE(*rejected_prompt);
-    REQUIRE(rejected_bash.has_value());
+    require_completed(io, rejected_bash);
     CHECK_FALSE(*rejected_bash);
     CHECK(shell_counters->started_count == 1);
 
     drain_ready(io);
     // The cancelled outcome still commits exactly once before teardown.
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.cancelled);
     CHECK((*bash_result)->message.output == "close partial");

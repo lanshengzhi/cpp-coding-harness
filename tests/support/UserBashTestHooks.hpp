@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
+#include "support/PumpUntil.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -31,6 +32,16 @@ namespace cch::tests {
 using PromptResult = std::optional<support::ExpectedVoid>;
 using BashResult =
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>>;
+
+/// Assert a spawned prompt/bash completes, pumping the loop until its
+/// completion handler posts back. Completions cross Runtime worker and
+/// mailbox hops, so plain drain_ready can go idle while a completion is
+/// still in flight (PumpUntil.hpp); a fixed drain-then-assert sequence is a
+/// load-sensitive race (the issue-87/88 flake class).
+template <typename Slot>
+inline void require_completed(boost::asio::io_context& io, const Slot& slot) {
+    REQUIRE(pump_until(io, [&slot] { return slot.has_value(); }));
+}
 
 inline void spawn_prompt(
     boost::asio::io_context& io,

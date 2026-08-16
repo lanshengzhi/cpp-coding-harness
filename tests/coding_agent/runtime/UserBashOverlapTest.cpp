@@ -6,6 +6,7 @@
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
+#include "support/ReleaseGate.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -34,6 +35,7 @@ using namespace cch;
 namespace {
 
 using tests::drain_ready;
+using tests::require_completed;
 using tests::bash_message_count;
 using tests::BashResult;
 using tests::PromptResult;
@@ -83,13 +85,7 @@ public:
         }
 
         if (requests.size() == 2) {
-            const auto executor = co_await boost::asio::this_coro::executor;
-            gate_.emplace(executor);
-            gate_->expires_at(std::chrono::steady_clock::time_point::max());
-            boost::system::error_code error;
-            co_await gate_->async_wait(
-                boost::asio::redirect_error(boost::asio::use_awaitable, error));
-            gate_.reset();
+            co_await gate_.wait();
         }
         co_return response;
                 });
@@ -97,14 +93,14 @@ public:
 
 
     void release() {
-        if (gate_) (void)gate_->cancel();
+        gate_.release();
     }
 
     std::vector<tests::RecordedProviderRequest> requests;
 
 private:
     std::string read_path_;
-    std::optional<boost::asio::steady_timer> gate_;
+    tests::ReleaseGate gate_;
 };
 
 [[nodiscard]] bool context_has_bash_command(
@@ -173,9 +169,9 @@ TEST_CASE(
 
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.command == "during run");
     CHECK((*bash_result)->message.output == "overlap output");
@@ -231,7 +227,7 @@ TEST_CASE(
 
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
     // The run settled while Bash was still active: nothing committed yet.
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
@@ -239,7 +235,7 @@ TEST_CASE(
 
     shell_pointer->release();
     drain_ready(io);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.exit_code == 3);
 
@@ -291,7 +287,7 @@ TEST_CASE(
     BashResult second_result;
     spawn_bash(io, session, "second bash", second_result);
     drain_ready(io);
-    REQUIRE(second_result.has_value());
+    require_completed(io, second_result);
     REQUIRE_FALSE(*second_result);
     CHECK(second_result->error().message.find("User Bash") != std::string::npos);
     // Rejected before mutation: the shell never saw the second command and
@@ -301,7 +297,7 @@ TEST_CASE(
 
     shell_pointer->release();
     drain_ready(io);
-    REQUIRE(first_result.has_value());
+    require_completed(io, first_result);
     REQUIRE(*first_result);
 
     PromptResult prompt_result;
@@ -309,7 +305,7 @@ TEST_CASE(
     drain_ready(io);
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
     CHECK(client_pointer->requests.size() == 1);
 }
@@ -351,9 +347,9 @@ TEST_CASE(
     REQUIRE_FALSE(bash_result.has_value());
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     session.close();
 
@@ -419,9 +415,9 @@ TEST_CASE(
 
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(first_prompt.has_value());
+    require_completed(io, first_prompt);
     CHECK(*first_prompt);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
 
     const auto& messages = session.snapshot().agent_state.messages;
@@ -438,7 +434,7 @@ TEST_CASE(
     PromptResult second_prompt;
     spawn_prompt(io, session, "after overlap", second_prompt);
     drain_ready(io);
-    REQUIRE(second_prompt.has_value());
+    require_completed(io, second_prompt);
     CHECK(*second_prompt);
     REQUIRE(client_pointer->requests.size() == 3);
     // The idle Prompt's context carries the flushed Bash after the completed
@@ -494,9 +490,9 @@ TEST_CASE(
     harness::session::testing::fail_nth_append_for_test(session_path, 2);
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     // Live Session State advanced; only persistence failed, reported explicitly.
     REQUIRE((*bash_result)->diagnostic.has_value());
@@ -508,7 +504,7 @@ TEST_CASE(
     drain_ready(io);
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(second_prompt.has_value());
+    require_completed(io, second_prompt);
     CHECK(*second_prompt);
     CHECK(client_pointer->requests.size() == 2);
     session.close();
@@ -560,9 +556,9 @@ TEST_CASE(
     CHECK(session.is_busy());
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.command == "pending at close");
     CHECK_FALSE(session.is_open());
@@ -622,9 +618,9 @@ TEST_CASE(
 
     client_pointer->release();
     drain_ready(io);
-    REQUIRE(prompt_result.has_value());
+    require_completed(io, prompt_result);
     CHECK(*prompt_result);
-    REQUIRE(bash_result.has_value());
+    require_completed(io, bash_result);
     REQUIRE(*bash_result);
     // The cancelled terminal outcome is committed exactly once, timestamped at
     // the observed cancellation rather than the deferred commitment.

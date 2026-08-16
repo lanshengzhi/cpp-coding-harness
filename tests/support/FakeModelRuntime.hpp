@@ -7,6 +7,7 @@
 #include "ai/ModelStreamBridge.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/ExpectedMacros.hpp"
+#include "support/ReleaseGate.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -119,7 +120,7 @@ public:
 
 private:
     std::shared_ptr<ai::Models> models_;
-    std::optional<boost::asio::steady_timer> gate_;
+    ReleaseGate gate_;
     friend class ScriptedRuntimeProvider;
 };
 
@@ -187,17 +188,13 @@ ScriptedRuntimeProvider::stream(
     }
 
     if (call_index == owner_->gate_at) {
-        // Hold the gated call; release on the run's stop token.
-        auto executor = co_await boost::asio::this_coro::executor;
-        owner_->gate_.emplace(executor);
-        owner_->gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        std::stop_callback release_on_stop{stop_token, [this] { owner_->release(); }};
-        boost::system::error_code error;
-        co_await owner_->gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        // The timer is bound to the run's executor; release it before that
-        // io_context dies so the fake can outlive the run (ASan, #473).
-        owner_->gate_.reset();
+        // Hold the gated call; interrupt also wakes on the run's stop token.
+        // The stop check must precede wait(): an interrupt delivered before
+        // the gate is armed does not linger (ReleaseGate contract).
+        std::stop_callback release_on_stop{stop_token, [this] { owner_->gate_.interrupt(); }};
+        if (!stop_token.stop_requested()) {
+            co_await owner_->gate_.wait();
+        }
     }
 
     if (stop_token.stop_requested()) {
@@ -297,9 +294,7 @@ inline std::vector<std::string> FakeModelRuntime::configured_api_key_env_names()
 }
 
 inline void FakeModelRuntime::release() {
-    if (gate_) {
-        (void)gate_->cancel();
-    }
+    gate_.release();
 }
 
 } // namespace cch::tests

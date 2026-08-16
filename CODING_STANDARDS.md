@@ -172,6 +172,8 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.7. Fake Providers and deterministic local resources are the default. No live API keys or provider network access appears in the default CTest suite (`docs/agents/validation.md` §Provider tests). Each test owns unique temporary directories, ports, files, and environment state.
 
+11.8. Hold-and-release test doubles gate on the counted, latched `tests::ReleaseGate` (`tests/support/ReleaseGate.hpp`) — never a hand-rolled max-expiry `steady_timer` cancel. A `release()` that arrives before the double arms the gate is stored and consumed by the next wait, so release/arm ordering races cannot hang a test; one permit releases one waiter, preserving per-operation re-arming. Cancellation wake-ups use `interrupt()`, which records no permit, and the wait is guarded by a `stop_requested()` check.
+
 ## 12. CMake
 
 12.1. The authoritative Owner libraries are `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library. The only direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai, cch_tui}`. `cch_ai` and `cch_tui` have no Owner dependencies. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets (ADR 0039).

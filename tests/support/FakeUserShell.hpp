@@ -2,6 +2,7 @@
 
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "ai/AsyncResultBridge.hpp"
+#include "support/ReleaseGate.hpp"
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -34,9 +35,7 @@ public:
     }
 
     void release() {
-        if (gate_) {
-            gate_->expires_at(std::chrono::steady_clock::time_point::min());
-        }
+        gate_.release();
     }
 
     [[nodiscard]] support::AsyncResult<coding_agent::runtime::UserShellResult> execute(
@@ -66,24 +65,16 @@ public:
                 ++started_count;
 
                 if (execution.gated) {
-                    const auto executor = co_await boost::asio::this_coro::executor;
-                    gate_.emplace(executor);
-                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
                     std::stop_callback cancellation{stop_token, [this] {
                         ++cancellation_request_count;
-                        if (gate_) {
-                            try {
-                                (void)gate_->cancel();
-                            } catch (...) {
-                            }
-                        }
+                        gate_.interrupt();
                     }};
-                    boost::system::error_code error;
+                    // The stop check must precede wait(): an interrupt
+                    // delivered before the gate is armed does not linger
+                    // (ReleaseGate contract).
                     if (!stop_token.stop_requested()) {
-                        co_await gate_->async_wait(
-                            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        co_await gate_.wait();
                     }
-                    gate_.reset();
                     if (stop_token.stop_requested()) {
                         auto cancelled = execution.result;
                         cancelled.exit_code.reset();
@@ -134,7 +125,7 @@ public:
 private:
     std::vector<Execution> executions_;
     std::size_t next_execution_{0};
-    std::optional<boost::asio::steady_timer> gate_;
+    ReleaseGate gate_;
 };
 
 } // namespace cch::tests

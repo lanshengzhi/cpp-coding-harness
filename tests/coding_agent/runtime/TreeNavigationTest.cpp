@@ -13,6 +13,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
@@ -384,10 +385,10 @@ TEST_CASE(
         [&](std::exception_ptr, support::ExpectedVoid result) {
             prompt_result.emplace(std::move(result));
         });
-    // Drive the io until the stream is in flight.
-    while (!provider_ptr->started.load() && io.poll() != 0) {
-    }
-    REQUIRE(provider_ptr->started.load());
+    // Drive the io until the stream is in flight; the request reaches the
+    // provider through Runtime hops, so pump until the flag is observable
+    // rather than draining a fixed number of ready handlers (PumpUntil.hpp).
+    REQUIRE(tests::pump_until(io, [&] { return provider_ptr->started.load(); }));
 
     // The streaming guard rejects navigation without moving the leaf.
     auto result = session->navigate_tree("some-entry");
@@ -396,11 +397,10 @@ TEST_CASE(
         result.error().message ==
         "Wait for the current response to finish before navigating the session tree.");
 
-    // Release the held response and drain.
+    // Release the held response; the completion posts back through Runtime
+    // hops, so pump until it is observable.
     provider_ptr->release_timer_->cancel();
-    while (io.poll() != 0) {
-    }
-    REQUIRE(prompt_result.has_value());
+    REQUIRE(tests::pump_until(io, [&] { return prompt_result.has_value(); }));
     REQUIRE(prompt_result->has_value());
 }
 

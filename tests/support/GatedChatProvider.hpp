@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support/ModelsFixture.hpp"
+#include "support/ReleaseGate.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 
@@ -44,13 +45,7 @@ public:
                 requests.push_back(RecordedProviderRequest{model, context, options});
                 const auto turn = requests.size();
 
-                const auto executor = co_await boost::asio::this_coro::executor;
-                gate_.emplace(executor);
-                gate_->expires_at(std::chrono::steady_clock::time_point::max());
-                boost::system::error_code error;
-                co_await gate_->async_wait(
-                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
-                gate_.reset();
+                co_await gate_.wait();
 
                 auto response = ai::assistant_text_message(std::format("turn {}", turn));
                 response.provider = "gated-fake";
@@ -63,13 +58,13 @@ public:
     }
 
     void release() {
-        if (gate_) (void)gate_->cancel();
+        gate_.release();
     }
 
     std::vector<RecordedProviderRequest> requests;
 
 private:
-    std::optional<boost::asio::steady_timer> gate_;
+    ReleaseGate gate_;
 };
 
 } // namespace cch::tests
