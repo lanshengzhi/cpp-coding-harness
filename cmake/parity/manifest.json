@@ -47,7 +47,6 @@
   "external_families": {
     "boost": { "description": "Boost libraries" },
     "openssl": { "description": "OpenSSL crypto and TLS" },
-    "cli11": { "description": "CLI11 command-line parsing" },
     "glaze": { "description": "Glaze JSON serialization" },
     "md4c": { "description": "md4c Markdown parsing" },
     "webp": { "description": "libwebp image decoding" },

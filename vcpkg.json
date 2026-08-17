@@ -10,7 +10,6 @@
     "boost-asio",
     "boost-multiprecision",
     "openssl",
-    "cli11",
     "catch2",
     "utf8proc",
     {

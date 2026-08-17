@@ -51,7 +51,6 @@ endif()
 find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 find_package(md4c CONFIG REQUIRED)
 find_package(WebP CONFIG REQUIRED)
@@ -61,7 +60,6 @@ cch_require_vcpkg_dependency("Boost" "${Boost_DIR}")
 cch_require_vcpkg_dependency("OpenSSL headers" "${OPENSSL_INCLUDE_DIR}")
 cch_require_vcpkg_dependency("OpenSSL SSL library" "${OPENSSL_SSL_LIBRARY}")
 cch_require_vcpkg_dependency("OpenSSL crypto library" "${OPENSSL_CRYPTO_LIBRARY}")
-cch_require_vcpkg_dependency("CLI11" "${CLI11_DIR}")
 cch_require_vcpkg_dependency("glaze" "${glaze_DIR}")
 cch_require_vcpkg_dependency("md4c" "${md4c_DIR}")
 cch_require_vcpkg_dependency("WebP" "${WebP_DIR}")
@@ -356,7 +354,6 @@ cch_parity_declare_target(
         Threads::Threads@threads
         glaze::glaze@glaze
         WebP::webpdecoder@webp
-        CLI11::CLI11@cli11
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai
@@ -951,7 +948,6 @@ if(CCH_BUILD_TESTS)
         PRIVATE
             cch_coding_agent
             Boost::headers
-            CLI11::CLI11
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_cli_arch PRIVATE

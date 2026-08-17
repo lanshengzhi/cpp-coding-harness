@@ -630,6 +630,25 @@ TEST_CASE("parse_args records the pi prompt/theme/skill flags", "[cli][parse]") 
     CHECK(parsed->messages[0] == "hello");
 }
 
+TEST_CASE("parse_args honors explicit boolean values for trust flags", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--approve=false", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->project_trust_override.has_value());
+        CHECK_FALSE(*parsed->project_trust_override);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--no-approve=false", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->project_trust_override.has_value());
+        CHECK(*parsed->project_trust_override);
+    }
+}
+
 TEST_CASE("parse_args accepts pi's multi-character shorts for the no-* flags", "[cli][parse]") {
     {
         std::vector<std::string> args{"cpp-harness", "-ns", "hello"};
@@ -726,6 +745,77 @@ TEST_CASE("parse_args treats tokens after -- as positionals verbatim", "[cli][pa
     REQUIRE(parsed->messages.size() == 2);
     CHECK(parsed->messages[0] == "-p");
     CHECK(parsed->messages[1] == "--print");
+}
+
+TEST_CASE("parse_args accepts equals-separated values", "[cli][parse]") {
+    std::vector<std::string> args{
+        "cpp-harness",
+        "--provider=deepseek",
+        "--model=deepseek-v4-flash",
+        "--mode=text",
+        "hello",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->provider.has_value());
+    REQUIRE(parsed->model.has_value());
+    CHECK(*parsed->provider == "deepseek");
+    CHECK(*parsed->model == "deepseek-v4-flash");
+    REQUIRE(parsed->messages.size() == 1);
+    CHECK(parsed->messages[0] == "hello");
+}
+
+TEST_CASE("parse_args preserves explicit empty option values", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--session=", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK_FALSE(parsed->session_value.has_value());
+        REQUIRE(parsed->messages.size() == 1);
+        CHECK(parsed->messages[0] == "hello");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--model=", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->model.has_value());
+        CHECK(parsed->model->empty());
+        REQUIRE(parsed->messages.size() == 1);
+        CHECK(parsed->messages[0] == "hello");
+    }
+}
+
+TEST_CASE("parse_args consumes option-looking values for value options", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--model", "--print", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->model.has_value());
+    CHECK(*parsed->model == "--print");
+    CHECK_FALSE(parsed->print);
+    REQUIRE(parsed->messages.size() == 1);
+    CHECK(parsed->messages[0] == "hello");
+}
+
+TEST_CASE("parse_args gives help precedence over unknown options", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--unknown", "--help"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(parsed->help);
+    CHECK_FALSE(parsed->help_text.empty());
+}
+
+TEST_CASE("parse_args reports missing option values with help detail", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--model"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message == "--model: 1 required TEXT missing");
+    CHECK(parsed.error().detail.find("Usage:") != std::string::npos);
 }
 
 TEST_CASE("parse_args exposes the CMake project version", "[cli][parse]") {

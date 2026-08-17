@@ -70,7 +70,6 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
     return {
         "bin/cpp_harness",
         "share/cpp_harness/licenses/boost.txt",
-        "share/cpp_harness/licenses/cli11.txt",
         "share/cpp_harness/licenses/glaze.txt",
         "share/cpp_harness/licenses/libwebp.txt",
         "share/cpp_harness/licenses/md4c.txt",

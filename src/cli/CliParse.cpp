@@ -1,11 +1,15 @@
 #include "CliParse.hpp"
 
-#include <CLI/CLI.hpp>
-
+#include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <format>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace cch::cli {
 namespace {
@@ -16,37 +20,14 @@ namespace {
 
 constexpr std::string_view kProjectVersion = CCH_PROJECT_VERSION;
 
-cch::support::Error cli_error(std::string message) {
+[[nodiscard]] cch::support::Error cli_error(std::string message) {
     return cch::support::make_error(cch::support::ErrorCode::Validation, message, message);
-}
-
-std::string normalize_parse_error(const CLI::ParseError& error) {
-    const std::string name = error.get_name();
-    const std::string message = error.what();
-
-    if (name == "ExcludesError") {
-        return "use either --session or --resume, not both";
-    }
-
-    const std::string singular = "The following argument was not expected: ";
-    const std::string plural = "The following arguments were not expected: ";
-    const std::size_t prefix_size = message.starts_with(singular) ? singular.size()
-        : (message.starts_with(plural) ? plural.size() : std::string::npos);
-    if (prefix_size != std::string::npos) {
-        const auto unexpected = message.substr(prefix_size);
-        if (!unexpected.empty() && unexpected.front() == '-') {
-            return "unknown option: " + unexpected;
-        }
-    }
-
-    return message;
 }
 
 /// pi's short spellings, matched exactly against whole argv tokens (pi args.ts
 /// hand parser matches the full token before any short-flag bundling). The
-/// multi-character shorts (-na/-ns/-np/-nc) cannot coexist with the
-/// single-character -n/-a/-p shorts in a CLI11 table, so every pi short is
-/// normalized to its long spelling before CLI11 parses.
+/// multi-character shorts (-na/-ns/-np/-nc) are normalized to their long
+/// spellings before the manual parser handles the option table.
 [[nodiscard]] std::string expand_pi_short(std::string_view token) {
     if (token == "-p") return "--print";
     if (token == "-a") return "--approve";
@@ -64,9 +45,8 @@ std::string normalize_parse_error(const CLI::ParseError& error) {
 
 /// pi `--list-models [search]`: the token after the flag is the fuzzy search
 /// pattern only when it is not a flag and not an `@file` argument (pi args.ts
-/// exact-match semantics). The intent is extracted here so CLI11 never sees the
-/// flag (its optional-value handling would consume a following `@file`); a bare
-/// flag records an empty search.
+/// exact-match semantics). The intent is extracted before the option parser;
+/// a bare flag records an empty search.
 struct NormalizedArgv {
     std::vector<std::string> tokens;
     /// has_value() when --list-models appeared; empty string is the bare flag.
@@ -82,7 +62,7 @@ struct NormalizedArgv {
         const auto& token = raw[index];
         if (options_ended) {
             // Tokens after `--` are positionals verbatim (no short expansion,
-            // no flag extraction).
+            // no list-models extraction).
             normalized.tokens.push_back(token);
             continue;
         }
@@ -189,6 +169,120 @@ struct NormalizedArgv {
         "secret-looking text is redacted.\n"};
 }
 
+[[nodiscard]] cch::support::Error parse_error(std::string message) {
+    return cch::support::make_error(
+        cch::support::ErrorCode::Validation,
+        message,
+        message + "\n\n" + help_text());
+}
+
+struct OptionToken {
+    std::string_view name;
+    std::string_view inline_value;
+    bool has_inline_value{false};
+};
+
+[[nodiscard]] OptionToken split_option(std::string_view token) {
+    const auto equals = token.find('=');
+    if (equals == std::string_view::npos) {
+        return OptionToken{
+            .name = token.substr(2),
+            .inline_value = {},
+            .has_inline_value = false,
+        };
+    }
+    return OptionToken{
+        .name = token.substr(2, equals - 2),
+        .inline_value = token.substr(equals + 1),
+        .has_inline_value = true,
+    };
+}
+
+[[nodiscard]] bool is_negative_number(std::string_view token) {
+    if (token.size() < 2 || token.front() != '-') {
+        return false;
+    }
+    if (std::isdigit(static_cast<unsigned char>(token[1])) != 0) {
+        return true;
+    }
+    return token[1] == '.' && token.size() > 2 &&
+        std::isdigit(static_cast<unsigned char>(token[2])) != 0;
+}
+
+/// Match the former option classifier for the retained argv surface. A lone `-`,
+/// negative number, or token beginning with three dashes is a positional;
+/// other short/long-looking tokens are options and are diagnosed if unknown.
+[[nodiscard]] bool is_option_token(std::string_view token) {
+    if (token.size() > 2 && token.starts_with("--") && token[2] != '-') {
+        return static_cast<unsigned char>(token[2]) > 33;
+    }
+    if (token.size() > 1 && token.front() == '-' && token[1] != '-') {
+        return !is_negative_number(token) &&
+            static_cast<unsigned char>(token[1]) > 33;
+    }
+    return false;
+}
+
+[[nodiscard]] cch::support::Expected<std::string> consume_option_value(
+    std::string_view option_name,
+    const OptionToken& option,
+    const std::vector<std::string>& tokens,
+    std::size_t& index) {
+    if (option.has_inline_value) {
+        return std::string{option.inline_value};
+    }
+    if (index + 1 >= tokens.size()) {
+        return std::unexpected(parse_error(
+            std::format("--{}: 1 required TEXT missing", option_name)));
+    }
+    ++index;
+    return tokens[index];
+}
+
+[[nodiscard]] cch::support::Expected<bool> parse_flag_value(
+    std::string_view original_token,
+    const OptionToken& option) {
+    if (!option.has_inline_value || option.inline_value.empty()) {
+        return true;
+    }
+    if (option.inline_value == "true" || option.inline_value == "1") {
+        return true;
+    }
+    if (option.inline_value == "false" || option.inline_value == "0") {
+        return false;
+    }
+    return std::unexpected(parse_error(std::format(
+        "Could not convert: {} = {}",
+        original_token.substr(0, original_token.find('=')),
+        option.inline_value)));
+}
+
+[[nodiscard]] std::vector<std::string> split_model_patterns(
+    std::string_view models_text) {
+    std::vector<std::string> patterns;
+    std::size_t start = 0;
+    while (start <= models_text.size()) {
+        const auto comma = models_text.find(',', start);
+        const auto end = comma == std::string_view::npos ? models_text.size() : comma;
+        std::string pattern{models_text.substr(start, end - start)};
+        const auto not_space = [](unsigned char character) {
+            return !std::isspace(character);
+        };
+        pattern.erase(pattern.begin(), std::find_if(pattern.begin(), pattern.end(), not_space));
+        pattern.erase(
+            std::find_if(pattern.rbegin(), pattern.rend(), not_space).base(),
+            pattern.end());
+        if (!pattern.empty()) {
+            patterns.push_back(std::move(pattern));
+        }
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+    return patterns;
+}
+
 } // namespace
 
 std::string_view project_version() {
@@ -208,8 +302,8 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
 
     std::vector<std::string> raw_args;
     raw_args.reserve(static_cast<std::size_t>(argc > 0 ? argc : 0));
-    // argv[0] is the program name (CLI11's parse_char_t reads it as the app
-    // name); only the remaining tokens are normalized.
+    // argv[0] remains in the normalized vector for the conventional argv
+    // shape; the manual parser starts with the user-supplied tokens at index 1.
     if (argc > 0) {
         raw_args.emplace_back(argv[0]);
     }
@@ -217,18 +311,10 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
         raw_args.emplace_back(argv[index]);
     }
     auto normalized = normalize_argv(raw_args);
-    std::vector<char*> normalized_argv;
-    normalized_argv.reserve(normalized.tokens.size());
-    for (auto& argument : normalized.tokens) {
-        normalized_argv.push_back(argument.data());
-    }
-    const int normalized_argc = static_cast<int>(normalized_argv.size());
 
     std::string session_text;
     std::string session_dir_text;
     std::vector<std::string> prompt_parts;
-    bool approve_project = false;
-    bool no_approve_project = false;
     std::string provider_text;
     std::string model_text;
     std::string models_text;
@@ -239,135 +325,346 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string name_text;
     std::string system_prompt_text;
     std::string mode_text{"text"};
+    bool session_seen = false;
+    bool session_dir_seen = false;
+    bool provider_seen = false;
+    bool model_seen = false;
+    bool models_seen = false;
+    bool api_key_seen = false;
+    bool thinking_seen = false;
+    bool session_id_seen = false;
+    bool fork_seen = false;
+    bool name_seen = false;
+    bool system_prompt_seen = false;
+    bool mode_seen = false;
+    bool approve_seen = false;
+    bool approve_value = true;
+    bool no_approve_seen = false;
+    bool no_approve_value = true;
+    std::vector<std::string> unknown_options;
+    bool options_ended = false;
 
-    CLI::App app{"C++ coding-agent harness", "cpp-harness"};
-    app.set_help_flag("--help", "Print this help message and exit");
-
-    app.add_flag("--version", config.version, "Print the version and exit");
-    app.add_flag("--print", config.print, "Process one prompt and exit without the Native TUI");
-    auto* approve_option = app.add_flag("--approve", approve_project, "Trust project resources for this run");
-    auto* no_approve_option = app.add_flag("--no-approve", no_approve_project, "Do not trust project resources for this run");
-    approve_option->excludes(no_approve_option);
-    no_approve_option->excludes(approve_option);
-    app.add_flag("--no-skills", config.no_skills, "Disable skills discovery and loading");
-    app.add_flag("--no-prompt-templates", config.no_prompt_templates, "Disable prompt template discovery and loading");
-    app.add_flag("--no-context-files", config.no_context_files, "Disable AGENTS.md and CLAUDE.md discovery and loading");
-    app.add_flag("--no-themes", config.no_themes, "Disable theme discovery and loading");
-    app.add_option("--prompt-template", config.prompt_template_paths, "Load a prompt template file or directory (repeatable)")
-        ->expected(1, -1)
-        ->allow_extra_args(false);
-    app.add_option("--skill", config.skills, "Load a skill file or directory (repeatable)")
-        ->expected(1, -1)
-        ->allow_extra_args(false);
-    app.add_option("--theme", config.themes, "Load a theme file or directory (repeatable)")
-        ->expected(1, -1)
-        ->allow_extra_args(false);
-    auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at an explicit path");
-    // pi: `--resume, -r` is a pure boolean flag that opens the startup-TUI
-    // session picker; a following token is a positional message, never a
-    // path (pi args.ts).
-    app.add_flag("--resume", config.resume, "Select a session to resume");
-    app.add_flag("--no-session", config.no_session_flag, "Run the session in memory without persisting a transcript");
-    auto* session_dir_option = app.add_option("--session-dir", session_dir_text,
-        "Directory for automatic session storage (overrides PI_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
-    auto* continue_option = app.add_flag("--continue", config.continue_session, "Continue the most recent session");
-    auto* session_id_option = app.add_option("--session-id", session_id_text, "Use exact project session ID, creating it if missing");
-    auto* fork_option = app.add_option("--fork", fork_text, "Fork a session file or partial UUID into a new session");
-    auto* name_option = app.add_option("--name", name_text, "Set session display name");
-    auto* provider_option = app.add_option("--provider", provider_text, "Provider name");
-    auto* model_option = app.add_option("--model", model_text, "Model pattern or ID");
-    auto* models_option = app.add_option("--models", models_text, "Comma-separated model patterns for cycling");
-    auto* api_key_option = app.add_option("--api-key", api_key_text, "API key (in-memory runtime override, never persisted)");
-    auto* thinking_option = app.add_option("--thinking", thinking_text, "Set thinking level: off, minimal, low, medium, high, xhigh, max");
-    auto* system_prompt_option = app.add_option("--system-prompt", system_prompt_text, "System prompt (default: coding assistant prompt)");
-    auto* append_system_prompt_option = app.add_option("--append-system-prompt", config.append_system_prompt,
-        "Append text or file contents to the system prompt (repeatable)")
-        ->expected(1, -1)
-        ->allow_extra_args(false);
-    auto* mode_option = app.add_option(
-        "--mode",
-        mode_text,
-        "Output mode: text (default)")
-        ->default_str("text");
-    app.add_option("prompt", prompt_parts, "Prompt")->expected(0, -1);
-
-    try {
-        app.parse(normalized_argc, normalized_argv.data());
-    } catch (const CLI::CallForHelp&) {
-        config.help = true;
-        config.help_text = help_text();
-        return config;
-    } catch (const CLI::ParseError& error) {
-        const auto message = normalize_parse_error(error);
-        return std::unexpected(cch::support::make_error(
-            cch::support::ErrorCode::Validation,
-            message,
-            message + "\n\n" + help_text()));
-    }
-
-    if (session_option->count() > 0 && !session_text.empty()) {
-        config.session_value = session_text;
-    }
-    if (session_dir_option->count() > 0) {
-        config.session_dir = session_dir_text;
-    }
-    if (model_option->count() > 0) {
-        config.model = model_text;
-    }
-    if (provider_option->count() > 0) {
-        config.provider = provider_text;
-    }
-    if (models_option->count() > 0) {
-        std::vector<std::string> patterns;
-        std::size_t start = 0;
-        while (start <= models_text.size()) {
-            const auto comma = models_text.find(',', start);
-            const auto end = comma == std::string::npos ? models_text.size() : comma;
-            auto pattern = models_text.substr(start, end - start);
-            // Trim whitespace.
-            const auto not_space = [](unsigned char character) {
-                return !std::isspace(character);
-            };
-            pattern.erase(pattern.begin(), std::find_if(pattern.begin(), pattern.end(), not_space));
-            pattern.erase(std::find_if(pattern.rbegin(), pattern.rend(), not_space).base(), pattern.end());
-            if (!pattern.empty()) {
-                patterns.push_back(std::move(pattern));
-            }
-            if (comma == std::string::npos) {
-                break;
-            }
-            start = comma + 1;
+    for (std::size_t index = 1; index < normalized.tokens.size(); ++index) {
+        const auto& token = normalized.tokens[index];
+        if (options_ended) {
+            prompt_parts.push_back(token);
+            continue;
         }
-        config.models = std::move(patterns);
+        if (token == "--") {
+            options_ended = true;
+            continue;
+        }
+        if (!is_option_token(token)) {
+            prompt_parts.push_back(token);
+            continue;
+        }
+        if (!token.starts_with("--")) {
+            unknown_options.push_back(token);
+            continue;
+        }
+
+        const auto option = split_option(token);
+        if (option.name == "help") {
+            config.help = true;
+            config.help_text = help_text();
+            return config;
+        }
+        if (option.name == "version") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.version = *value;
+            }
+            continue;
+        }
+        if (option.name == "print") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.print = *value;
+            }
+            continue;
+        }
+        if (option.name == "approve") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                approve_value = *value;
+            }
+            approve_seen = true;
+            continue;
+        }
+        if (option.name == "no-approve") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                no_approve_value = *value;
+            }
+            no_approve_seen = true;
+            continue;
+        }
+        if (option.name == "no-skills") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.no_skills = *value;
+            }
+            continue;
+        }
+        if (option.name == "no-prompt-templates") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.no_prompt_templates = *value;
+            }
+            continue;
+        }
+        if (option.name == "no-context-files") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.no_context_files = *value;
+            }
+            continue;
+        }
+        if (option.name == "no-themes") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.no_themes = *value;
+            }
+            continue;
+        }
+
+        if (option.name == "prompt-template") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.prompt_template_paths.push_back(std::move(*value));
+            }
+            continue;
+        }
+        if (option.name == "skill") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.skills.push_back(std::move(*value));
+            }
+            continue;
+        }
+        if (option.name == "theme") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.themes.push_back(std::move(*value));
+            }
+            continue;
+        }
+        if (option.name == "session") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                session_text = std::move(*value);
+                session_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "resume") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.resume = *value;
+            }
+            continue;
+        }
+        if (option.name == "no-session") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.no_session_flag = *value;
+            }
+            continue;
+        }
+        if (option.name == "session-dir") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                session_dir_text = std::move(*value);
+                session_dir_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "continue") {
+            if (auto value = parse_flag_value(token, option); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.continue_session = *value;
+            }
+            continue;
+        }
+        if (option.name == "session-id") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                session_id_text = std::move(*value);
+                session_id_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "fork") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                fork_text = std::move(*value);
+                fork_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "name") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                name_text = std::move(*value);
+                name_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "provider") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                provider_text = std::move(*value);
+                provider_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "model") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                model_text = std::move(*value);
+                model_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "models") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                models_text = std::move(*value);
+                models_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "api-key") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                api_key_text = std::move(*value);
+                api_key_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "thinking") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                thinking_text = std::move(*value);
+                thinking_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "system-prompt") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                system_prompt_text = std::move(*value);
+                system_prompt_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "append-system-prompt") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                config.append_system_prompt.push_back(std::move(*value));
+            }
+            continue;
+        }
+        if (option.name == "mode") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                mode_text = std::move(*value);
+                mode_seen = true;
+            }
+            continue;
+        }
+
+        unknown_options.push_back(token);
     }
-    if (api_key_option->count() > 0) {
-        config.api_key = api_key_text;
+
+    if (!unknown_options.empty()) {
+        std::string message{"unknown option: "};
+        for (std::size_t index = 0; index < unknown_options.size(); ++index) {
+            if (index > 0) {
+                message += ' ';
+            }
+            message += unknown_options[index];
+        }
+        return std::unexpected(parse_error(std::move(message)));
     }
-    if (thinking_option->count() > 0) {
-        config.thinking = thinking_text;
+
+    if (approve_seen && no_approve_seen) {
+        // Preserve the established normalized diagnostic for the mutually
+        // exclusive project-trust flags.
+        return std::unexpected(parse_error(
+            "use either --session or --resume, not both"));
     }
-    if (session_id_option->count() > 0) {
-        config.session_id = session_id_text;
+
+    if (session_seen && !session_text.empty()) {
+        config.session_value = std::move(session_text);
     }
-    if (fork_option->count() > 0 && !fork_text.empty()) {
-        config.fork = fork_text;
+    if (session_dir_seen) {
+        config.session_dir = std::move(session_dir_text);
     }
-    if (name_option->count() > 0) {
-        config.name = name_text;
+    if (model_seen) {
+        config.model = std::move(model_text);
+    }
+    if (provider_seen) {
+        config.provider = std::move(provider_text);
+    }
+    if (models_seen) {
+        config.models = split_model_patterns(models_text);
+    }
+    if (api_key_seen) {
+        config.api_key = std::move(api_key_text);
+    }
+    if (thinking_seen) {
+        config.thinking = std::move(thinking_text);
+    }
+    if (session_id_seen) {
+        config.session_id = std::move(session_id_text);
+    }
+    if (fork_seen && !fork_text.empty()) {
+        config.fork = std::move(fork_text);
+    }
+    if (name_seen) {
+        config.name = std::move(name_text);
     }
     if (normalized.list_models) {
         config.list_models = std::move(*normalized.list_models);
     }
-    if (system_prompt_option->count() > 0) {
-        config.system_prompt = system_prompt_text;
+    if (system_prompt_seen) {
+        config.system_prompt = std::move(system_prompt_text);
     }
-    if (approve_option->count() > 0) {
-        config.project_trust_override = true;
-    } else if (no_approve_option->count() > 0) {
-        config.project_trust_override = false;
+    if (approve_seen) {
+        config.project_trust_override = approve_value;
+    } else if (no_approve_seen) {
+        config.project_trust_override = !no_approve_value;
     }
 
-    if (mode_option->count() > 0) {
+    if (mode_seen) {
         if (auto parsed_mode = validate_output_mode(mode_text); !parsed_mode) {
             return std::unexpected(std::move(parsed_mode.error()));
         }
@@ -375,10 +672,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
 
     // `--api-key` requires an explicit model (pi): it cannot name a provider
     // without a model, and never applies to a resume/default selection.
-    if (api_key_option->count() > 0 &&
-        model_option->count() == 0 &&
-        provider_option->count() == 0 &&
-        models_option->count() == 0) {
+    if (api_key_seen && !model_seen && !provider_seen && !models_seen) {
         return std::unexpected(cli_error(
             "--api-key requires a model to be specified via --model, --provider/--model, or --models"));
     }

@@ -33,7 +33,6 @@ function(cch_runtime_collect_licenses out_var)
     # headers port's copyright is the representative Boost notice.
     set(port_by_family
         "boost=boost-headers"
-        "cli11=cli11"
         "glaze=glaze"
         "libwebp=libwebp"
         "md4c=md4c"
