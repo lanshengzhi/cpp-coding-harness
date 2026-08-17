@@ -349,13 +349,17 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
     std::string full_stderr;
     bool received_stdout = false;
     bool received_stderr = false;
-    exec_options.onStdout = [&](std::string_view chunk) {
+    // The environment owns these callbacks only until the awaited exec
+    // completes; the references point into this coroutine frame.
+    exec_options.onStdout = [&](std::string_view chunk) -> support::ExpectedVoid {
         received_stdout = true;
         full_stdout.append(chunk);
+        return {};
     };
-    exec_options.onStderr = [&](std::string_view chunk) {
+    exec_options.onStderr = [&](std::string_view chunk) -> support::ExpectedVoid {
         received_stderr = true;
         full_stderr.append(chunk);
+        return {};
     };
     auto shell = co_await ai::detail::await_async_result(
         env->exec(parsed->command, std::move(exec_options)));

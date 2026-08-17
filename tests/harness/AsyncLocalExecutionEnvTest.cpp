@@ -23,6 +23,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <type_traits>
@@ -53,6 +54,17 @@ public:
     std::string error;
     std::vector<harness::ProcessRequest> requests;
 };
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+class ThrowingAsyncProcessRunner final : public harness::AsyncProcessRunner {
+public:
+    boost::asio::awaitable<support::Expected<harness::ProcessResult>> run(
+        harness::ProcessRequest) override {
+        throw std::runtime_error{"output callback failed"};
+        co_return harness::ProcessResult{};
+    }
+};
+#endif
 
 template <typename T, typename Start>
 support::Expected<T> run_awaitable(Start start) {
@@ -422,6 +434,38 @@ TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[ha
     CHECK_FALSE(path_exists(workspace.path() / "should-not-exist"));
 }
 
+TEST_CASE("pi-shaped exec classifies an explicit output callback failure", "[harness][async][process][issue484]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
+    harness::ExecOptions options;
+    options.onStdout = [](std::string_view) -> support::ExpectedVoid {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
+            "output sink failed"));
+    };
+
+    auto result = run_awaitable_pi(env.exec(
+        "printf stdout; printf stderr >&2", std::move(options)));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::ExecutionErrorCode::CallbackError);
+    CHECK(result.error().message == "output sink failed");
+}
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE("sync shell adapter classifies an exceptional process completion", "[harness][shell][process][issue484]") {
+    tests::TempWorkspace workspace;
+    auto runner = std::make_shared<ThrowingAsyncProcessRunner>();
+    harness::SyncLocalExecutionEnv env(workspace.path(), true, {}, {}, runner);
+
+    auto result = env.exec("printf output");
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::ExecutionErrorCode::CallbackError);
+    CHECK(result.error().message == "output callback failed");
+}
+#endif
+
 TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[harness][async][process][issue40]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
@@ -630,8 +674,10 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     request.timeout = std::chrono::milliseconds(5000);
     request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
     std::string streamed_output;
-    request.on_stdout = [&](std::string_view chunk) {
+    // The capture remains alive until run_awaitable_pi drives the process to quiescence.
+    request.on_stdout = [&](std::string_view chunk) -> support::ExpectedVoid {
         streamed_output.append(chunk);
+        return {};
     };
 
     auto result = run_awaitable<harness::ProcessResult>([&]() {

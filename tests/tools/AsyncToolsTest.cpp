@@ -67,8 +67,24 @@ public:
         last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
         last_stop_token = options.stop_token;
         last_env = options.env;
-        if (options.onStdout && !streamed_stdout.empty()) (*options.onStdout)(streamed_stdout);
-        if (options.onStderr && !streamed_stderr.empty()) (*options.onStderr)(streamed_stderr);
+        if (options.onStdout && !streamed_stdout.empty()) {
+            if (auto delivered = (*options.onStdout)(streamed_stdout); !delivered) {
+                return support::AsyncResult<harness::ShellExecResult, harness::ExecutionError>{
+                    std::unexpected(harness::ExecutionError{
+                        .code = harness::ExecutionErrorCode::CallbackError,
+                        .message = delivered.error().message,
+                    })};
+            }
+        }
+        if (options.onStderr && !streamed_stderr.empty()) {
+            if (auto delivered = (*options.onStderr)(streamed_stderr); !delivered) {
+                return support::AsyncResult<harness::ShellExecResult, harness::ExecutionError>{
+                    std::unexpected(harness::ExecutionError{
+                        .code = harness::ExecutionErrorCode::CallbackError,
+                        .message = delivered.error().message,
+                    })};
+            }
+        }
         return support::AsyncResult<harness::ShellExecResult, harness::ExecutionError>{
             std::expected<harness::ShellExecResult, harness::ExecutionError>{next_shell_result}};
     }

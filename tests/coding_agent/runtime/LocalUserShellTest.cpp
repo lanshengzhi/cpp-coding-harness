@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -29,6 +30,7 @@ namespace {
 struct ShellRun {
     support::Expected<runtime::UserShellResult> result;
     std::string updates;
+    std::chrono::milliseconds elapsed{0};
 };
 
 /// Drives one User Shell execution on a private io_context, collecting every
@@ -38,7 +40,8 @@ struct ShellRun {
     runtime::AsyncUserShell& shell,
     std::string command,
     std::optional<std::chrono::milliseconds> stop_after = std::nullopt,
-    bool fail_updates = false) {
+    bool fail_updates = false,
+    bool throw_updates = false) {
     boost::asio::io_context io;
     std::stop_source stop_source;
     ShellRun run;
@@ -54,9 +57,18 @@ struct ShellRun {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
+            // Captures remain alive until io.run() drains this operation to completion.
             run.result = co_await ai::detail::await_async_result(shell.execute(
                 std::move(command),
+                // The capture targets remain alive until io.run() drains this operation.
                 [&](std::string_view update) -> support::ExpectedVoid {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                    if (throw_updates) {
+                        throw std::runtime_error{"update sink threw"};
+                    }
+#else
+                    (void)throw_updates;
+#endif
                     if (fail_updates) {
                         return std::unexpected(support::make_error(
                             support::ErrorCode::Unknown,
@@ -69,7 +81,10 @@ struct ShellRun {
             co_return;
         },
         boost::asio::detached);
+    const auto started = std::chrono::steady_clock::now();
     io.run();
+    run.elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started);
     return run;
 }
 
@@ -222,4 +237,24 @@ TEST_CASE(
     const auto run = run_user_shell(shell, "printf 'rejected\\n'", std::nullopt, true);
     REQUIRE_FALSE(run.result);
 }
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE(
+    "Local User Shell contains a throwing update sink and stops the process",
+    "[coding_agent][runtime][shell][issue484]") {
+    tests::TempWorkspace workspace;
+    runtime::LocalUserShell shell{workspace.path(), {}, {}};
+
+    const auto run = run_user_shell(
+        shell,
+        "printf 'rejected\\n'; sleep 30",
+        std::nullopt,
+        false,
+        true);
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().message == "user shell update sink threw");
+    CHECK(run.elapsed < std::chrono::seconds{3});
+}
+#endif
 

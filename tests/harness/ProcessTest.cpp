@@ -18,9 +18,9 @@
 #include <filesystem>
 #include <format>
 #include <optional>
-#include <stdexcept>
 #include <stop_token>
 #include <string>
+#include <system_error>
 
 #include <cerrno>
 #include <csignal>
@@ -70,8 +70,15 @@ wait)"};
 
     std::size_t stdout_bytes = 0;
     std::size_t stderr_bytes = 0;
-    request.on_stdout = [&](std::string_view chunk) { stdout_bytes += chunk.size(); };
-    request.on_stderr = [&](std::string_view chunk) { stderr_bytes += chunk.size(); };
+    // The captures remain alive until run_awaitable drives the process to quiescence.
+    request.on_stdout = [&](std::string_view chunk) -> support::ExpectedVoid {
+        stdout_bytes += chunk.size();
+        return {};
+    };
+    request.on_stderr = [&](std::string_view chunk) -> support::ExpectedVoid {
+        stderr_bytes += chunk.size();
+        return {};
+    };
 
     auto result = run_awaitable<harness::ProcessResult>([&]() {
         return runner.run(std::move(request));
@@ -90,7 +97,7 @@ wait)"};
     CHECK(result->output.find("[output truncated]") != std::string::npos);
 }
 
-TEST_CASE("process runner contains a throwing callback and keeps both pipes draining", "[harness][process][issue458]") {
+TEST_CASE("process runner contains a failing callback and keeps both pipes draining", "[harness][process][issue458]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -103,11 +110,17 @@ wait)"};
 
     int stdout_calls = 0;
     std::size_t stderr_bytes = 0;
-    request.on_stdout = [&](std::string_view) {
+    // The captures remain alive until run_awaitable drives the process to quiescence.
+    request.on_stdout = [&](std::string_view) -> support::ExpectedVoid {
         ++stdout_calls;
-        throw std::runtime_error("consumer failed");
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Process,
+            "consumer failed"));
     };
-    request.on_stderr = [&](std::string_view chunk) { stderr_bytes += chunk.size(); };
+    request.on_stderr = [&](std::string_view chunk) -> support::ExpectedVoid {
+        stderr_bytes += chunk.size();
+        return {};
+    };
 
     const auto started = std::chrono::steady_clock::now();
     auto result = run_awaitable<harness::ProcessResult>([&]() {
@@ -117,11 +130,76 @@ wait)"};
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == support::ErrorCode::Process);
-    // The throwing callback is deactivated after its first exception, and the
+    // The failing callback is deactivated after its first error, and the
     // unaffected stderr stream still drains to EOF without a timeout.
     CHECK(stdout_calls == 1);
     CHECK(stderr_bytes == 65536);
     CHECK(elapsed < std::chrono::seconds{3});
+}
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE("process runner contains a throwing callback and keeps both pipes draining", "[harness][process][issue484]") {
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
+    request.executable = "/bin/bash";
+    request.arguments = {"-c", R"((head -c 262144 /dev/zero | tr '\0' 'A') &
+(head -c 65536 /dev/zero | tr '\0' 'B' >&2) &
+wait)"};
+    std::error_code current_path_error;
+    request.working_directory = std::filesystem::current_path(current_path_error);
+    REQUIRE_FALSE(current_path_error);
+    request.timeout = std::chrono::milliseconds{5000};
+    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 1000000};
+
+    std::size_t stderr_bytes = 0;
+    request.on_stdout = [](std::string_view) -> support::ExpectedVoid {
+        throw 1;
+    };
+    // The capture remains alive until run_awaitable drives the process to quiescence.
+    request.on_stderr = [&](std::string_view chunk) -> support::ExpectedVoid {
+        stderr_bytes += chunk.size();
+        return {};
+    };
+
+    const auto started = std::chrono::steady_clock::now();
+    auto result = run_awaitable<harness::ProcessResult>([&]() {
+        return runner.run(std::move(request));
+    });
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == support::ErrorCode::Process);
+    CHECK(result.error().message.find("callback") != std::string::npos);
+    CHECK(stderr_bytes == 65536);
+    CHECK(elapsed < std::chrono::seconds{3});
+}
+#endif
+
+TEST_CASE("process runner timeout includes inherited output pipes after child exit", "[harness][process][issue484]") {
+    tests::TempWorkspace workspace;
+    const auto descendant_file = (workspace.path() / "descendant.pid").string();
+
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
+    request.executable = "/bin/bash";
+    request.arguments = {"-c", std::format(
+        "sleep 30 & echo $! > '{}'; printf done; exit 0",
+        descendant_file)};
+    std::error_code current_path_error;
+    request.working_directory = std::filesystem::current_path(current_path_error);
+    REQUIRE_FALSE(current_path_error);
+    request.timeout = std::chrono::milliseconds{500};
+
+    const auto started = std::chrono::steady_clock::now();
+    auto result = run_awaitable<harness::ProcessResult>([&]() {
+        return runner.run(std::move(request));
+    });
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(result);
+    CHECK(result->timed_out);
+    CHECK(elapsed < std::chrono::seconds{5});
+    CHECK(process_gone(workspace.read("descendant.pid")));
 }
 
 TEST_CASE("process runner caps newline-free stderr output without stopping the drain", "[harness][process][issue458]") {
@@ -134,7 +212,11 @@ TEST_CASE("process runner caps newline-free stderr output without stopping the d
     request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
 
     std::size_t stderr_bytes = 0;
-    request.on_stderr = [&](std::string_view chunk) { stderr_bytes += chunk.size(); };
+    // The capture remains alive until run_awaitable drives the process to quiescence.
+    request.on_stderr = [&](std::string_view chunk) -> support::ExpectedVoid {
+        stderr_bytes += chunk.size();
+        return {};
+    };
 
     auto result = run_awaitable<harness::ProcessResult>([&]() {
         return runner.run(std::move(request));
@@ -158,7 +240,11 @@ TEST_CASE("process runner truncates at the line limit and keeps draining to EOF"
     request.output_limit = harness::OutputLimit{.max_bytes = 1024 * 1024, .max_lines = 100};
 
     std::string streamed;
-    request.on_stdout = [&](std::string_view chunk) { streamed.append(chunk); };
+    // The capture remains alive until run_awaitable drives the process to quiescence.
+    request.on_stdout = [&](std::string_view chunk) -> support::ExpectedVoid {
+        streamed.append(chunk);
+        return {};
+    };
 
     auto result = run_awaitable<harness::ProcessResult>([&]() {
         return runner.run(std::move(request));
@@ -195,6 +281,28 @@ TEST_CASE("process runner timeout terminates and reaps the child", "[harness][pr
     CHECK(result->timed_out);
     CHECK(elapsed < std::chrono::seconds{5});
     CHECK(process_gone(workspace.read("shell.pid")));
+}
+
+TEST_CASE("process runner reports the terminating signal as exit code", "[harness][process][issue484]") {
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
+    request.executable = "/bin/bash";
+    // The child terminates itself with SIGTERM; the exit code must report the
+    // terminating signal (not 128 + signal), preserving the prior Boost.Process
+    // `child::exit_code()` mapping.
+    request.arguments = {"-c", "kill -TERM $$"};
+    std::error_code current_path_error;
+    request.working_directory = std::filesystem::current_path(current_path_error);
+    REQUIRE_FALSE(current_path_error);
+    request.timeout = std::chrono::milliseconds{2000};
+
+    auto result = run_awaitable<harness::ProcessResult>([&]() {
+        return runner.run(std::move(request));
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->timed_out);
+    CHECK(result->exit_code == SIGTERM);
 }
 
 TEST_CASE("process runner cancellation terminates and reaps the process group", "[harness][process][issue458]") {
@@ -245,6 +353,55 @@ TEST_CASE("process runner cancellation terminates and reaps the process group", 
     CHECK(process_gone(workspace.read("descendant.pid")));
 }
 
+TEST_CASE("process runner cancellation terminates descendants holding output pipes", "[harness][process][issue484]") {
+    tests::TempWorkspace workspace;
+    const auto descendant_file = (workspace.path() / "descendant.pid").string();
+
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
+    request.executable = "/bin/bash";
+    request.arguments = {"-c", std::format(
+        "sleep 30 & echo $! > '{}'; printf done; exit 0",
+        descendant_file)};
+    std::error_code current_path_error;
+    request.working_directory = std::filesystem::current_path(current_path_error);
+    REQUIRE_FALSE(current_path_error);
+    request.timeout = std::chrono::seconds{30};
+    std::stop_source stop_source;
+    request.stop_token = stop_source.get_token();
+
+    boost::asio::io_context io;
+    std::optional<support::Expected<harness::ProcessResult>> result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await runner.run(std::move(request));
+            co_return;
+        },
+        boost::asio::detached);
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            boost::asio::steady_timer timer(
+                co_await boost::asio::this_coro::executor,
+                std::chrono::milliseconds{250});
+            co_await timer.async_wait(boost::asio::use_awaitable);
+            stop_source.request_stop();
+            co_return;
+        },
+        boost::asio::detached);
+
+    const auto started = std::chrono::steady_clock::now();
+    io.run();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(*result);
+    CHECK((*result).error().code == support::ErrorCode::Cancelled);
+    CHECK(elapsed < std::chrono::seconds{3});
+    CHECK(process_gone(workspace.read("descendant.pid")));
+}
+
 TEST_CASE("process runner keeps stdout and stderr independent for mixed traffic", "[harness][process][issue458]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
@@ -256,8 +413,15 @@ TEST_CASE("process runner keeps stdout and stderr independent for mixed traffic"
 
     std::string streamed_stdout;
     std::string streamed_stderr;
-    request.on_stdout = [&](std::string_view chunk) { streamed_stdout.append(chunk); };
-    request.on_stderr = [&](std::string_view chunk) { streamed_stderr.append(chunk); };
+    // The captures remain alive until run_awaitable drives the process to quiescence.
+    request.on_stdout = [&](std::string_view chunk) -> support::ExpectedVoid {
+        streamed_stdout.append(chunk);
+        return {};
+    };
+    request.on_stderr = [&](std::string_view chunk) -> support::ExpectedVoid {
+        streamed_stderr.append(chunk);
+        return {};
+    };
 
     auto result = run_awaitable<harness::ProcessResult>([&]() {
         return runner.run(std::move(request));

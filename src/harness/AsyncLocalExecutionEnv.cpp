@@ -7,6 +7,7 @@
 #include "harness/Process.hpp"
 
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 
 #include <cstddef>
 #include <exception>
@@ -43,6 +44,14 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
     };
 }
 
+[[nodiscard]] FileError unknown_file_error(std::optional<std::string> path = std::nullopt) {
+    return FileError{
+        .code = FileErrorCode::Unknown,
+        .message = "filesystem operation could not be scheduled",
+        .path = std::move(path),
+    };
+}
+
 [[nodiscard]] ExecutionError busy_execution_error() {
     return ExecutionError{
         .code = ExecutionErrorCode::Busy,
@@ -67,14 +76,21 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
 
 template <typename T>
 struct FileOperationState {
-    RuntimeTarget::Admission admission;
+    std::optional<RuntimeTarget::Admission> admission;
     support::AsyncCompletion<T, FileError> completion;
     std::optional<std::expected<T, FileError>> outcome;
 
-    FileOperationState(
+    /// Install the move-only admission and completion only after the shared
+    /// allocation succeeds, so a setup failure can still deliver the typed
+    /// failure through the ordered mailbox at this admission's sequence
+    /// instead of losing the completion and wedging the FIFO head (§5.4 /
+    /// ADR 0040). Must not be called twice.
+    void install(
         RuntimeTarget::Admission admission,
-        support::AsyncCompletion<T, FileError> completion)
-        : admission(std::move(admission)), completion(std::move(completion)) {}
+        support::AsyncCompletion<T, FileError> completion) noexcept {
+        this->admission = std::move(admission);
+        this->completion = std::move(completion);
+    }
 };
 
 template <typename T, typename Operation>
@@ -99,7 +115,15 @@ template <typename T, typename Operation>
              path = std::move(path),
              operation = std::move(operation)](
                 support::AsyncCompletion<T, FileError> completion) mutable noexcept {
+                std::shared_ptr<FileOperationState<T>> state;
+                // Kept out-of-line across the state allocation so a setup
+                // failure can release the admission through the ordered
+                // mailbox at its sequence (FIFO) instead of out of band.
+                std::optional<RuntimeTarget::Admission> admission;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                bool terminal_posted = false;
                 try {
+#endif
                     if (stop_token.stop_requested()) {
                         completion(std::unexpected(aborted_file_error(std::move(path))));
                         return;
@@ -108,23 +132,30 @@ template <typename T, typename Operation>
                         completion(std::unexpected(busy_file_error(std::move(path))));
                         return;
                     }
-                    auto admission =
+                    admission =
                         runtime_target->try_admit(byte_charge + kAdmittedOperationOverheadBytes);
                     if (!admission) {
                         completion(std::unexpected(busy_file_error(std::move(path))));
                         return;
                     }
-                    auto state = std::make_shared<FileOperationState<T>>(
-                        std::move(*admission), std::move(completion));
-                    const bool queued = state->admission.post_worker(
+                    // Allocate the shared state before the move-only admission
+                    // and completion are installed, so a setup failure can
+                    // still deliver the typed failure through the ordered
+                    // mailbox at this admission's sequence (FIFO, §5.4).
+                    state = std::make_shared<FileOperationState<T>>();
+                    state->install(std::move(*admission), std::move(completion));
+                    const bool queued = state->admission->post_worker(
                         [state,
                          sync = std::move(sync),
                          stop_token,
                          path = std::move(path),
                          operation = std::move(operation)]() mutable noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                             try {
+#endif
                                 if (stop_token.stop_requested()) {
-                                    state->outcome = std::unexpected(aborted_file_error(std::move(path)));
+                                    state->outcome = std::unexpected(
+                                        aborted_file_error(std::move(path)));
                                 } else {
                                     state->outcome = operation(*sync);
                                     if (stop_token.stop_requested()) {
@@ -132,6 +163,7 @@ template <typename T, typename Operation>
                                             std::move(path), true));
                                     }
                                 }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                             } catch (const std::exception& error) {
                                 state->outcome = std::unexpected(FileError{
                                     .code = FileErrorCode::Unknown,
@@ -145,7 +177,8 @@ template <typename T, typename Operation>
                                     .path = std::move(path),
                                 });
                             }
-                            std::move(state->admission).complete(
+#endif
+                            std::move(*state->admission).complete(
                                 [state]() mutable noexcept {
                                     state->completion(std::move(*state->outcome));
                                 });
@@ -154,53 +187,132 @@ template <typename T, typename Operation>
                         // Admission succeeded but the worker queue is already
                         // stopping: deliver a typed Busy through the ordered
                         // mailbox so the admission is released in sequence.
-                        std::move(state->admission).complete(
+                        std::move(*state->admission).complete(
                             [state, path = std::move(path)]() mutable noexcept {
                                 state->completion(std::unexpected(
                                     busy_file_error(std::move(path))));
                             });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                        terminal_posted = true;
+#endif
                     }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (const std::exception& error) {
-                    completion(std::unexpected(FileError{
+                    const FileError failure{
                         .code = FileErrorCode::Unknown,
                         .message = error.what(),
-                        .path = std::move(path),
-                    }));
+                        .path = std::nullopt,
+                    };
+                    if (state && !terminal_posted) {
+                        std::move(*state->admission).complete(
+                            [state, failure = failure]() mutable noexcept {
+                                state->completion(std::unexpected(std::move(failure)));
+                            });
+                    } else if (admission) {
+                        // Allocation failed after admission: release the byte
+                        // charge and deliver the typed failure through the
+                        // ordered mailbox at this admission's sequence so the
+                        // FIFO head advances (ADR 0040 mailbox ordering).
+                        std::move(*admission).complete(
+                            [completion = std::move(completion),
+                             failure = failure]() mutable noexcept {
+                                completion(std::unexpected(std::move(failure)));
+                            });
+                    } else {
+                        completion(std::unexpected(failure));
+                    }
                 } catch (...) {
-                    completion(std::unexpected(FileError{
-                        .code = FileErrorCode::Unknown,
-                        .message = "filesystem operation could not be scheduled",
-                        .path = std::move(path),
-                    }));
+                    const auto failure = unknown_file_error();
+                    if (state && !terminal_posted) {
+                        std::move(*state->admission).complete(
+                            [state, failure = failure]() mutable noexcept {
+                                state->completion(std::unexpected(std::move(failure)));
+                            });
+                    } else if (admission) {
+                        std::move(*admission).complete(
+                            [completion = std::move(completion),
+                             failure = failure]() mutable noexcept {
+                                completion(std::unexpected(std::move(failure)));
+                            });
+                    } else {
+                        completion(std::unexpected(failure));
+                    }
                 }
+#endif
             }} };
 }
 
 struct ShellOperationState final : std::enable_shared_from_this<ShellOperationState> {
-    RuntimeTarget::Admission admission;
+    std::optional<RuntimeTarget::Admission> admission;
     support::AsyncCompletion<ShellExecResult, ExecutionError> completion;
     std::shared_ptr<RuntimeTarget> runtime_target;
     std::shared_ptr<SyncLocalExecutionEnv> sync;
     std::optional<std::expected<harness::ProcessRequest, ExecutionError>> request;
 
-    ShellOperationState(
+    /// Install the move-only admission/completion and owned references only
+    /// after the shared allocation succeeds, so a setup failure can still
+    /// deliver the typed failure through the ordered mailbox at this
+    /// admission's sequence instead of losing the completion and wedging the
+    /// FIFO head (§5.4 / ADR 0040). Must not be called twice.
+    void install(
         RuntimeTarget::Admission admission,
         support::AsyncCompletion<ShellExecResult, ExecutionError> completion,
         std::shared_ptr<RuntimeTarget> runtime_target,
-        std::shared_ptr<SyncLocalExecutionEnv> sync)
-        : admission(std::move(admission)),
-          completion(std::move(completion)),
-          runtime_target(std::move(runtime_target)),
-          sync(std::move(sync)) {}
+        std::shared_ptr<SyncLocalExecutionEnv> sync) noexcept {
+        this->admission = std::move(admission);
+        this->completion = std::move(completion);
+        this->runtime_target = std::move(runtime_target);
+        this->sync = std::move(sync);
+    }
 
     void complete(std::expected<ShellExecResult, ExecutionError> outcome) noexcept {
-        std::move(admission).complete(
+        std::move(*admission).complete(
             [self = shared_from_this(), outcome = std::move(outcome)]() mutable noexcept {
                 self->completion(std::move(outcome));
             });
     }
-
 };
+
+struct ShellProcessOperation final {
+    std::shared_ptr<AsyncProcessRunner> runner;
+    harness::ProcessRequest request;
+
+    [[nodiscard]] boost::asio::awaitable<support::Expected<harness::ProcessResult>> operator()() {
+        return runner->run(std::move(request));
+    }
+};
+
+[[nodiscard]] boost::asio::awaitable<void> run_shell_process(
+    std::shared_ptr<ShellOperationState> state,
+    std::shared_ptr<AsyncProcessRunner> runner) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        auto operation = std::make_shared<ShellProcessOperation>(ShellProcessOperation{
+            .runner = std::move(runner),
+            .request = std::move(**state->request),
+        });
+        auto process = co_await ai::detail::invoke_awaitable<
+            ShellProcessOperation,
+            support::Expected<harness::ProcessResult>>(std::move(operation));
+        if (!process) {
+            state->complete(std::unexpected(
+                classify_terminal_process_error(process.error())));
+        } else if (process->timed_out) {
+            state->complete(std::unexpected(ExecutionError{
+                .code = ExecutionErrorCode::Timeout,
+                .message = "shell command timed out",
+            }));
+        } else {
+            state->complete(state->sync->exec_result_from_process(*process));
+        }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (...) {
+        state->complete(std::unexpected(unknown_execution_error()));
+    }
+#endif
+    co_return;
+}
 
 } // namespace
 
@@ -413,7 +525,10 @@ support::AsyncResult<ShellExecResult, ExecutionError> AsyncLocalExecutionEnv::ex
     ExecOptions options) {
     if (options.stop_token.stop_requested()) {
         return support::AsyncResult<ShellExecResult, ExecutionError>{
-            std::unexpected(ExecutionError{ExecutionErrorCode::Aborted, "Operation aborted"})};
+            std::unexpected(ExecutionError{
+                .code = ExecutionErrorCode::Aborted,
+                .message = "Operation aborted",
+            })};
     }
 
     const auto byte_charge = command.size();
@@ -424,38 +539,61 @@ support::AsyncResult<ShellExecResult, ExecutionError> AsyncLocalExecutionEnv::ex
              command = std::move(command),
              options = std::move(options),
              byte_charge](support::AsyncCompletion<ShellExecResult, ExecutionError> completion) mutable noexcept {
+                std::shared_ptr<ShellOperationState> state;
+                // Kept out-of-line across the state allocation so a setup
+                // failure can release the admission through the ordered
+                // mailbox at its sequence (FIFO) instead of out of band.
+                std::optional<RuntimeTarget::Admission> admission;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                bool terminal_posted = false;
                 try {
+#endif
                     if (options.stop_token.stop_requested()) {
                         completion(std::unexpected(ExecutionError{
-                            ExecutionErrorCode::Aborted, "Operation aborted"}));
+                            .code = ExecutionErrorCode::Aborted,
+                            .message = "Operation aborted",
+                        }));
                         return;
                     }
                     if (!impl->runtime_target) {
                         completion(std::unexpected(busy_execution_error()));
                         return;
                     }
-                    auto admission = impl->runtime_target->try_admit(
+                    admission = impl->runtime_target->try_admit(
                         byte_charge + kAdmittedOperationOverheadBytes);
                     if (!admission) {
                         completion(std::unexpected(busy_execution_error()));
                         return;
                     }
-                    auto state = std::make_shared<ShellOperationState>(
+                    // Allocate the shared state before the move-only admission
+                    // and completion are installed, so a setup failure can
+                    // still deliver the typed failure through the ordered
+                    // mailbox at this admission's sequence (FIFO, §5.4).
+                    state = std::make_shared<ShellOperationState>();
+                    state->install(
                         std::move(*admission),
                         std::move(completion),
                         impl->runtime_target,
                         impl->sync);
-                    const bool queued = state->admission.post_worker(
+                    const bool queued = state->admission->post_worker(
                         [state,
                          command = std::move(command),
                          options = std::move(options)]() mutable noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                             try {
+#endif
                                 state->request = state->sync->make_exec_request(
                                     std::move(command), std::move(options));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                             } catch (...) {
-                                state->request = std::unexpected(unknown_execution_error());
+                                state->complete(std::unexpected(unknown_execution_error()));
+                                return;
                             }
-                            if (!state->admission.post_loop([state]() noexcept {
+#endif
+                            if (!state->admission->post_loop([state]() noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                try {
+#endif
                                     if (!state->request || !*state->request) {
                                         state->complete(std::unexpected(
                                             state->request
@@ -463,31 +601,21 @@ support::AsyncResult<ShellExecResult, ExecutionError> AsyncLocalExecutionEnv::ex
                                                 : unknown_execution_error()));
                                         return;
                                     }
-                                    try {
-                                        auto runner = state->sync->process_runner();
-                                        boost::asio::co_spawn(
-                                            state->runtime_target->executor(),
-                                            runner->run(std::move(**state->request)),
-                                            [state](
-                                                std::exception_ptr exception,
-                                                support::Expected<harness::ProcessResult> process) mutable noexcept {
-                                                if (exception) {
-                                                    state->complete(std::unexpected(unknown_execution_error()));
-                                                } else if (!process) {
-                                                    state->complete(std::unexpected(
-                                                        classify_terminal_process_error(process.error())));
-                                                } else if (process->timed_out) {
-                                                    state->complete(std::unexpected(ExecutionError{
-                                                        ExecutionErrorCode::Timeout,
-                                                        "shell command timed out"}));
-                                                } else {
-                                                    state->complete(state->sync->exec_result_from_process(*process));
-                                                }
-                                            });
-                                    } catch (...) {
+                                    auto runner = state->sync->process_runner();
+                                    if (!runner) {
                                         state->complete(std::unexpected(unknown_execution_error()));
+                                        return;
                                     }
-                                })) {
+                                    boost::asio::co_spawn(
+                                        state->runtime_target->executor(),
+                                        run_shell_process(state, std::move(runner)),
+                                        boost::asio::detached);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                } catch (...) {
+                                    state->complete(std::unexpected(unknown_execution_error()));
+                                }
+#endif
+                            })) {
                                 state->complete(std::unexpected(busy_execution_error()));
                             }
                         });
@@ -495,14 +623,34 @@ support::AsyncResult<ShellExecResult, ExecutionError> AsyncLocalExecutionEnv::ex
                         // Same shutdown-race contract as the filesystem path:
                         // the admitted shell operation becomes typed Busy via
                         // the ordered mailbox, never an inline generic failure.
-                        std::move(state->admission).complete(
+                        std::move(*state->admission).complete(
                             [state]() mutable noexcept {
                                 state->completion(std::unexpected(busy_execution_error()));
                             });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                        terminal_posted = true;
+#endif
                     }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (...) {
-                    completion(std::unexpected(unknown_execution_error()));
+                    const auto failure = unknown_execution_error();
+                    if (state && !terminal_posted) {
+                        state->complete(std::unexpected(failure));
+                    } else if (admission) {
+                        // Allocation failed after admission: release the byte
+                        // charge and deliver the typed failure through the
+                        // ordered mailbox at this admission's sequence so the
+                        // FIFO head advances (ADR 0040 mailbox ordering).
+                        std::move(*admission).complete(
+                            [completion = std::move(completion),
+                             failure = failure]() mutable noexcept {
+                                completion(std::unexpected(failure));
+                            });
+                    } else {
+                        completion(std::unexpected(failure));
+                    }
                 }
+#endif
             }} };
 }
 

@@ -104,10 +104,12 @@ struct ExecOptions {
     std::optional<std::chrono::milliseconds> timeout;
     /// Active prompt cancellation token.
     std::stop_token stop_token{};
-    /// Called with stdout chunks as they are produced.
-    std::optional<std::move_only_function<void(std::string_view)>> onStdout;
-    /// Called with stderr chunks as they are produced.
-    std::optional<std::move_only_function<void(std::string_view)>> onStderr;
+    /// Called with stdout chunks as they are produced. Returning an error
+    /// deactivates the callback while the process output continues draining.
+    std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> onStdout;
+    /// Called with stderr chunks as they are produced. Failure handling is the
+    /// same as onStdout.
+    std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> onStderr;
 };
 
 /// Result of a pi-shaped shell execution with split streams.

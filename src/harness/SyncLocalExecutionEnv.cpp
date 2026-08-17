@@ -1,6 +1,7 @@
 #include "SyncLocalExecutionEnv.hpp"
 
 #include "ExecutionErrorClassification.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "ShellEnvironment.hpp"
 #include "ShellResolver.hpp"
 
@@ -8,10 +9,33 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <exception>
+#include <memory>
 #include <optional>
 #include <utility>
 
 namespace cch::harness {
+namespace {
+
+struct SyncProcessOperation final {
+    std::shared_ptr<harness::AsyncProcessRunner> runner;
+    harness::ProcessRequest request;
+    std::optional<support::Expected<harness::ProcessResult>> outcome{std::nullopt};
+
+    [[nodiscard]] boost::asio::awaitable<support::Expected<harness::ProcessResult>> operator()() {
+        return runner->run(std::move(request));
+    }
+};
+
+[[nodiscard]] boost::asio::awaitable<void> run_sync_process(std::shared_ptr<SyncProcessOperation> operation) {
+    auto process = co_await ai::detail::invoke_awaitable<
+        SyncProcessOperation,
+        support::Expected<harness::ProcessResult>>(operation);
+    operation->outcome = std::move(process);
+    co_return;
+}
+
+} // namespace
 
 SyncLocalExecutionEnv::SyncLocalExecutionEnv(
     std::filesystem::path workspace,
@@ -201,26 +225,49 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     }
 
     boost::asio::io_context io;
-    std::optional<support::Expected<harness::ProcessResult>> process;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            process = co_await runner_->run(std::move(*request));
-            co_return;
-        },
-        boost::asio::detached);
-    io.run();
+    std::shared_ptr<SyncProcessOperation> operation;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        operation = std::make_shared<SyncProcessOperation>(SyncProcessOperation{
+            .runner = runner_,
+            .request = std::move(*request),
+        });
+        boost::asio::co_spawn(
+            io,
+            run_sync_process(operation),
+            boost::asio::detached);
+        io.run();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        return std::unexpected(ExecutionError{
+            .code = ExecutionErrorCode::SpawnError,
+            .message = "process execution could not start: " + std::string{error.what()},
+        });
+    } catch (...) {
+        return std::unexpected(ExecutionError{
+            .code = ExecutionErrorCode::SpawnError,
+            .message = "process execution could not start",
+        });
+    }
+#endif
 
-    if (!process) {
-        return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, "process execution did not complete"});
+    if (!operation || !operation->outcome) {
+        return std::unexpected(ExecutionError{
+            .code = ExecutionErrorCode::SpawnError,
+            .message = "process execution did not complete",
+        });
     }
-    if (!*process) {
-        return std::unexpected(classify_process_execution_error((*process).error()));
+    if (!*operation->outcome) {
+        return std::unexpected(classify_process_execution_error(operation->outcome->error()));
     }
-    if ((*process)->timed_out) {
-        return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});
+    if ((*operation->outcome)->timed_out) {
+        return std::unexpected(ExecutionError{
+            .code = ExecutionErrorCode::Timeout,
+            .message = "shell command timed out",
+        });
     }
-    return exec_result_from_process(**process);
+    return exec_result_from_process(**operation->outcome);
 }
 
 } // namespace cch::harness

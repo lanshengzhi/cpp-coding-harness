@@ -12,12 +12,13 @@ namespace cch::harness {
         code = ExecutionErrorCode::Aborted;
     } else if (error.code == support::ErrorCode::Timeout) {
         code = ExecutionErrorCode::Timeout;
-    } else if (error.detail.find("callback") != std::string::npos) {
+    } else if (error.message.find("callback") != std::string::npos ||
+               error.detail.find("callback") != std::string::npos) {
         code = ExecutionErrorCode::CallbackError;
     }
     return ExecutionError{
         .code = code,
-        .message = error.detail,
+        .message = error.detail.empty() ? error.message : error.detail,
     };
 }
 

@@ -6,7 +6,6 @@
 #include "harness/Process.hpp"
 
 #include <chrono>
-#include <exception>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -56,21 +55,31 @@ namespace {
     request.merge_stderr = true;
     if (update_sink) {
         request.on_stdout.emplace(
-            [&update_sink, &sink_error, &cancel_source](std::string_view chunk) {
-                if (sink_error) {
-                    return;
-                }
+            // The process runner owns this callback only until the awaited run
+            // completes; these references point into this coroutine frame.
+            [&update_sink, &sink_error, &cancel_source](std::string_view chunk)
+                -> support::ExpectedVoid {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 try {
+#endif
+                    if (sink_error) {
+                        return {};
+                    }
                     if (auto delivered = update_sink(chunk); !delivered) {
                         sink_error = delivered.error();
                         cancel_source.request_stop();
+                        return std::unexpected(std::move(delivered.error()));
                     }
+                    return {};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (...) {
                     sink_error = support::make_error(
                         support::ErrorCode::Unknown,
-                        "User Shell update sink failed");
+                        "user shell update sink threw");
                     cancel_source.request_stop();
+                    return std::unexpected(*sink_error);
                 }
+#endif
             });
     }
 
