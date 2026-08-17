@@ -1,6 +1,16 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "baseline_commit": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+  "exception_policy": {
+    "schema_version": 1,
+    "required_compile_flags": ["-fno-exceptions"],
+    "forbidden_compile_flags": ["-fexceptions"],
+    "allowed_exception_ptr_sources": [
+      "src/ai/AsyncResultBridge.hpp",
+      "src/ai/ModelStreamBridge.hpp"
+    ],
+    "forbidden_exception_calls": ["std::rethrow_exception"]
+  },
   "owners": {
     "cch_ai": {
       "role": "owner",

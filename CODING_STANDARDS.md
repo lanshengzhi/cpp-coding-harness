@@ -82,6 +82,10 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 5.6. The standard error check is if-init: `if (auto result = f(...); !result) { ... }`.
 
+5.7. Project-owned production and test targets are designed for the strict no-exception configuration. The strict build uses `-fno-exceptions`; `throw`, `try`/`catch`, and exception propagation are not ordinary failure paths. Expected failures use `Expected`/`std::error_code`, while invariant violations terminate.
+
+5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. The only allowed exception pointer is in the private AI completion bridge, where it is converted once to an `Expected` error and is never rethrown or forwarded across an Owner boundary. The Parity Architecture Gate's versioned exception allowlist is authoritative for this private detail.
+
 ## 6. Async and connections
 
 6.1. Fallible asynchronous Owner operations return `[[nodiscard]] cch::support::AsyncResult<T, E>` (default `E = cch::support::Error`). Ready values complete inline without support allocation or suspension; pending operations own their post-initiation inputs. Boost.Asio awaitables, executors, schedulers, and cancellation types stay private to implementations. Bounded in-memory value work remains synchronous; do not create an asynchronous facade for it (ADR 0040).

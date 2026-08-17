@@ -355,7 +355,7 @@ endfunction()
 # tests/architecture/ParityGateTest.cmake and cmake/parity/run-build-gate.cmake).
 function(cch_parity_run_gate manifest_path)
     set(options "")
-    set(one_value_keywords PROJECT_ROOT)
+    set(one_value_keywords PROJECT_ROOT STRICT_NO_EXCEPTIONS)
     set(multi_value_keywords EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
@@ -403,6 +403,9 @@ function(cch_parity_run_gate manifest_path)
             list(APPEND gate_command --external-include-root "${external_root}")
         endforeach()
     endif()
+    if(gate_STRICT_NO_EXCEPTIONS)
+        list(APPEND gate_command --strict-no-exceptions)
+    endif()
     execute_process(
         COMMAND ${gate_command}
         RESULT_VARIABLE gate_result
@@ -431,7 +434,7 @@ endfunction()
 # CCH_PARITY_BUILD_GATE_TARGET.
 function(cch_parity_add_build_gate manifest_path)
     set(options "")
-    set(one_value_keywords PROJECT_ROOT BUILD_DIR)
+    set(one_value_keywords PROJECT_ROOT BUILD_DIR STRICT_NO_EXCEPTIONS)
     set(multi_value_keywords EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
@@ -458,7 +461,8 @@ function(cch_parity_add_build_gate manifest_path)
         "Project root used by the build-phase Gate")
     set(CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS "${gate_EXTERNAL_INCLUDE_ROOTS}" CACHE INTERNAL
         "External dependency include roots used by the build-phase Gate")
-
+    set(CCH_PARITY_BUILD_GATE_STRICT_NO_EXCEPTIONS "${gate_STRICT_NO_EXCEPTIONS}" CACHE INTERNAL
+        "Whether the build-phase Gate enforces the strict no-exception policy")
     add_custom_target(${build_gate_target} ALL
         COMMAND
             "${CMAKE_COMMAND}"
@@ -471,6 +475,7 @@ function(cch_parity_add_build_gate manifest_path)
             -DCCH_PARITY_DEPFILES=${gate_BUILD_DIR}/parity-build-gate-depfiles.json
             -DCCH_PARITY_REPORT=${gate_BUILD_DIR}/parity-build-gate.json
             $<$<BOOL:${gate_EXTERNAL_INCLUDE_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${gate_EXTERNAL_INCLUDE_ROOTS}>
+            -DCCH_PARITY_STRICT_NO_EXCEPTIONS=${gate_STRICT_NO_EXCEPTIONS}
             -P ${CCH_PARITY_DIR}/run-build-gate.cmake
         DEPENDS ${production_targets}
         COMMENT "Parity Architecture Gate (build phase)"
@@ -513,6 +518,7 @@ function(cch_parity_attach_build_gate_post_build target_name)
             -DCCH_PARITY_DEPFILES=${CMAKE_BINARY_DIR}/parity-build-gate-depfiles.json
             -DCCH_PARITY_REPORT=${CCH_PARITY_BUILD_GATE_REPORT}
             $<$<BOOL:${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>
+            -DCCH_PARITY_STRICT_NO_EXCEPTIONS=${CCH_PARITY_BUILD_GATE_STRICT_NO_EXCEPTIONS}
             -P ${CCH_PARITY_BUILD_GATE_SCRIPT}
         VERBATIM
     )

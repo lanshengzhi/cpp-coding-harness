@@ -31,6 +31,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
+option(CCH_STRICT_NO_EXCEPTIONS
+    "Require -fno-exceptions and the strict exception allowlist (experimental)"
+    OFF)
+if(CCH_STRICT_NO_EXCEPTIONS)
+    # The default build remains exception-enabled until the migration tickets
+    # have removed ordinary exception paths. This opt-in makes the eventual
+    # policy testable now and applies to every project-owned C++ target,
+    # including test shards.
+    add_compile_options(-fno-exceptions)
+    message(STATUS "Strict no-exception policy enabled")
+endif()
 
 find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
@@ -386,6 +397,7 @@ cch_parity_run_gate(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
     EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+    STRICT_NO_EXCEPTIONS ${CCH_STRICT_NO_EXCEPTIONS}
 )
 
 # Mandatory build-phase Parity Architecture Gate (ADR 0039; issue #470). The
@@ -404,6 +416,7 @@ cch_parity_add_build_gate(
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
     BUILD_DIR "${CMAKE_BINARY_DIR}"
     EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+    STRICT_NO_EXCEPTIONS ${CCH_STRICT_NO_EXCEPTIONS}
 )
 cch_parity_attach_build_gate_post_build(cpp_harness)
 
@@ -490,7 +503,8 @@ if(CCH_BUILD_TESTS)
         NAME cch_parity_gate_unit
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/parity_gate_test.py
     )
-    set_tests_properties(cch_parity_gate_unit PROPERTIES LABELS "architecture;parity-gate;issue448;issue449;issue470")
+    set_tests_properties(cch_parity_gate_unit PROPERTIES
+        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480")
 
     add_test(
         NAME cch_parity_gate_fixture
@@ -499,7 +513,8 @@ if(CCH_BUILD_TESTS)
             -DCCH_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/ParityGateTest.cmake
     )
-    set_tests_properties(cch_parity_gate_fixture PROPERTIES LABELS "architecture;parity-gate;issue448;issue449;issue470")
+    set_tests_properties(cch_parity_gate_fixture PROPERTIES
+        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480")
 
     # Runtime-only install (ADR 0039; issue #472). The unit case covers the
     # dependency-closure audit and the Gate-evidence freshness check with
@@ -558,7 +573,8 @@ if(CCH_BUILD_TESTS)
             -DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/run-build-gate.cmake
     )
-    set_tests_properties(cch_parity_gate_production_build PROPERTIES LABELS "architecture;parity-gate;issue470")
+    set_tests_properties(cch_parity_gate_production_build PROPERTIES
+        LABELS "architecture;parity-gate;issue470;issue480")
 
     # Owner Interface standalone compile (ADR 0039; #469): every Owner
     # Interface header compiles alone with the include path restricted to its

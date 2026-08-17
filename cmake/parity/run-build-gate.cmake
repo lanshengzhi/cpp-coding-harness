@@ -22,6 +22,7 @@
 #                                      roots (for example the vcpkg installed
 #                                      include directory); paths under them are
 #                                      never project paths.
+#   CCH_PARITY_STRICT_NO_EXCEPTIONS   TRUE to enforce the exception policy.
 
 if(NOT DEFINED CCH_PARITY_GATE_SCRIPT OR
    NOT DEFINED CCH_PARITY_MANIFEST OR
@@ -75,6 +76,9 @@ if(DEFINED CCH_PARITY_EXTERNAL_INCLUDE_ROOTS AND NOT "${CCH_PARITY_EXTERNAL_INCL
     foreach(external_root IN LISTS CCH_PARITY_EXTERNAL_INCLUDE_ROOTS)
         list(APPEND gate_command --external-include-root "${external_root}")
     endforeach()
+endif()
+if(CCH_PARITY_STRICT_NO_EXCEPTIONS)
+    list(APPEND gate_command --strict-no-exceptions)
 endif()
 execute_process(
     COMMAND ${gate_command}

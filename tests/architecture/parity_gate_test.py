@@ -29,8 +29,18 @@ sys.path.insert(0, str(REPO_ROOT / "cmake" / "parity"))
 import parity_gate as pg  # noqa: E402
 
 VALID_MANIFEST = {
-    "schema_version": 1,
+    "schema_version": 2,
     "baseline_commit": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+    "exception_policy": {
+        "schema_version": 1,
+        "required_compile_flags": ["-fno-exceptions"],
+        "forbidden_compile_flags": ["-fexceptions"],
+        "allowed_exception_ptr_sources": [
+            "src/ai/AsyncResultBridge.hpp",
+            "src/ai/ModelStreamBridge.hpp",
+        ],
+        "forbidden_exception_calls": ["std::rethrow_exception"],
+    },
     "owners": {
         "cch_ai": {
             "role": "owner",
@@ -175,7 +185,7 @@ class ManifestSchemaTest(unittest.TestCase):
 
     def test_valid_manifest_parses(self):
         manifest = valid_manifest()
-        self.assertEqual(manifest.schema_version, 1)
+        self.assertEqual(manifest.schema_version, 2)
         self.assertEqual(manifest.owners["cch_agent_core"].legal_owner_dependencies, ("cch_ai",))
 
     def test_unknown_schema_version_fails_closed(self):
@@ -835,6 +845,70 @@ class CompileContextTest(unittest.TestCase):
             valid_manifest(), index, "d" * 64, compile_commands=make_compile_commands([])
         )
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_MISSING_COMPILE_COMMAND])
+
+    def test_explicit_exception_enable_flag_is_rejected(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        commands = make_compile_commands(
+            [
+                {
+                    "file": "/tmp/fake/model.cpp",
+                    "directory": "/tmp/fake",
+                    "command": "g++ -fexceptions -c /tmp/fake/model.cpp",
+                }
+            ]
+        )
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64, compile_commands=commands)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_FORBIDDEN_EXCEPTION_FLAG])
+
+    def test_strict_no_exception_policy_rejects_missing_flag(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        commands = make_compile_commands(
+            [
+                {
+                    "file": "/tmp/fake/model.cpp",
+                    "directory": "/tmp/fake",
+                    "command": "g++ -c /tmp/fake/model.cpp",
+                }
+            ]
+        )
+        diagnostics = pg.check(
+            valid_manifest(),
+            index,
+            "d" * 64,
+            compile_commands=commands,
+            strict_no_exceptions=True,
+        )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_EXCEPTION_ENABLED_TARGET])
+
+    def test_strict_no_exception_policy_rejects_exception_pointer_outside_bridge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp) / "src"
+            source_root.mkdir()
+            (source_root / "not_a_bridge.cpp").write_text(
+                "#include <exception>\nstd::exception_ptr value;\n"
+            )
+            diagnostics = pg.check(
+                valid_manifest(),
+                make_index([]),
+                "d" * 64,
+                project_root=tmp,
+                strict_no_exceptions=True,
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_EXCEPTION_POINTER_NOT_ALLOWLISTED])
+
+    def test_strict_no_exception_policy_rejects_exception_rethrow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp) / "src"
+            source_root.mkdir()
+            (source_root / "bridge.cpp").write_text("std::rethrow_exception(exception);\n")
+            diagnostics = pg.check(
+                valid_manifest(),
+                make_index([]),
+                "d" * 64,
+                project_root=tmp,
+                strict_no_exceptions=True,
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_EXCEPTION_RETHROW_FORBIDDEN])
 
     def test_unsupported_compile_flag_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

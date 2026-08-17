@@ -43,7 +43,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
-MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_SCHEMA_VERSION = 2
 
 # The closed role vocabulary. The manifest's ``roles`` list must be exactly
 # this set; a target may declare only one of these roles.
@@ -66,7 +66,7 @@ COMPILED_SOURCE_EXTS = (".c", ".cc", ".cpp", ".cxx", ".c++", ".C", ".m", ".mm")
 # Stable diagnostic rule IDs. Categories: 1xxx manifest fail-closed schema,
 # 2xxx target/dependency policy, 3xxx evidence freshness and integrity,
 # 4xxx direct-include spelling and canonical resolution, 5xxx compile context,
-# 6xxx active dependency (depfile) evidence.
+# 6xxx active dependency (depfile) evidence; 7xxx no-exception policy.
 RULE_UNKNOWN_MANIFEST_VERSION = "PARITY-1001"
 RULE_UNKNOWN_MANIFEST_FIELD = "PARITY-1002"
 RULE_MISSING_MANIFEST_FIELD = "PARITY-1003"
@@ -107,6 +107,10 @@ RULE_PROJECT_TARGET_MASQUERADING_AS_EXTERNAL = "PARITY-5008"
 RULE_MISSING_DEPFILE_EVIDENCE = "PARITY-6001"
 RULE_STALE_DEPFILE_EVIDENCE = "PARITY-6002"
 RULE_CONTRADICTORY_DEPFILE_EVIDENCE = "PARITY-6003"
+RULE_FORBIDDEN_EXCEPTION_FLAG = "PARITY-7001"
+RULE_EXCEPTION_ENABLED_TARGET = "PARITY-7002"
+RULE_EXCEPTION_POINTER_NOT_ALLOWLISTED = "PARITY-7003"
+RULE_EXCEPTION_RETHROW_FORBIDDEN = "PARITY-7004"
 
 
 class SchemaViolation(Exception):
@@ -146,6 +150,15 @@ class Owner:
 
 
 @dataclass(frozen=True)
+class ExceptionPolicy:
+    schema_version: int
+    required_compile_flags: tuple[str, ...]
+    forbidden_compile_flags: tuple[str, ...]
+    allowed_exception_ptr_sources: tuple[str, ...]
+    forbidden_exception_calls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Manifest:
     schema_version: int
     baseline_commit: str
@@ -153,6 +166,7 @@ class Manifest:
     roles: frozenset[str]
     external_families: frozenset[str]
     evidence: tuple[dict[str, Any], ...]
+    exception_policy: ExceptionPolicy
 
 
 @dataclass(frozen=True)
@@ -288,7 +302,7 @@ def parse_manifest(data: Any) -> Manifest:
     _check_unknown_keys(
         data,
         frozenset(
-            {"schema_version", "baseline_commit", "owners", "roles", "external_families", "evidence"}
+            {"schema_version", "baseline_commit", "owners", "roles", "external_families", "evidence", "exception_policy"}
         ),
         "manifest",
         RULE_UNKNOWN_MANIFEST_FIELD,
@@ -313,6 +327,77 @@ def parse_manifest(data: Any) -> Manifest:
         "manifest",
         RULE_INVALID_MANIFEST_VALUE,
     )
+
+    exception_policy_raw = _require_member(
+        data, "exception_policy", "manifest", RULE_MISSING_MANIFEST_FIELD
+    )
+    _require_object(exception_policy_raw, "manifest.exception_policy", RULE_INVALID_MANIFEST_VALUE)
+    exception_policy_context = "manifest.exception_policy"
+    _check_unknown_keys(
+        exception_policy_raw,
+        frozenset(
+            {
+                "schema_version",
+                "required_compile_flags",
+                "forbidden_compile_flags",
+                "allowed_exception_ptr_sources",
+                "forbidden_exception_calls",
+            }
+        ),
+        exception_policy_context,
+        RULE_UNKNOWN_MANIFEST_FIELD,
+    )
+    exception_policy_schema = _require_int(
+        _require_member(
+            exception_policy_raw,
+            "schema_version",
+            exception_policy_context,
+            RULE_MISSING_MANIFEST_FIELD,
+        ),
+        "schema_version",
+        exception_policy_context,
+        RULE_INVALID_MANIFEST_VALUE,
+    )
+    if exception_policy_schema != 1:
+        _fail(
+            RULE_INVALID_MANIFEST_VALUE,
+            f"unknown exception policy schema_version {exception_policy_schema}; supported version is 1",
+        )
+
+    def _policy_strings(field: str) -> tuple[str, ...]:
+        values = _require_member(
+            exception_policy_raw, field, exception_policy_context, RULE_MISSING_MANIFEST_FIELD
+        )
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field '{field}' at {exception_policy_context} must be a list of "
+                "non-empty strings",
+            )
+        if len(values) != len(set(values)):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field '{field}' at {exception_policy_context} contains duplicate entries",
+            )
+        return tuple(values)
+
+    exception_policy = ExceptionPolicy(
+        exception_policy_schema,
+        _policy_strings("required_compile_flags"),
+        _policy_strings("forbidden_compile_flags"),
+        _policy_strings("allowed_exception_ptr_sources"),
+        _policy_strings("forbidden_exception_calls"),
+    )
+    for source in exception_policy.allowed_exception_ptr_sources:
+        source_parts = source.replace("\\", "/").split("/")
+        if os.path.isabs(source) or ".." in source_parts:
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"exception allowlist path '{source}' must be repository-relative and "
+                "must not escape the project root",
+            )
 
     owners_raw = _require_member(data, "owners", "manifest", RULE_MISSING_MANIFEST_FIELD)
     _require_object(owners_raw, "manifest.owners", RULE_INVALID_MANIFEST_VALUE)
@@ -543,7 +628,15 @@ def parse_manifest(data: Any) -> Manifest:
             }
         )
 
-    return Manifest(schema_version, baseline_commit, owners, roles, frozenset(families), tuple(evidence))
+    return Manifest(
+        schema_version,
+        baseline_commit,
+        owners,
+        roles,
+        frozenset(families),
+        tuple(evidence),
+        exception_policy,
+    )
 
 
 def parse_index(data: Any) -> Index:
@@ -1456,6 +1549,83 @@ def _check_includes(
                 diagnostics.append(edge)
 
 
+def _check_exception_sources(
+    manifest: Manifest,
+    project_root: Optional[str],
+    diagnostics: list[Diagnostic],
+) -> None:
+    if project_root is None:
+        return
+
+    source_root = os.path.join(project_root, "src")
+    if not os.path.isdir(source_root):
+        return
+    allowed = {
+        os.path.normpath(os.path.join(project_root, source))
+        for source in manifest.exception_policy.allowed_exception_ptr_sources
+    }
+    for root, directories, files in os.walk(source_root):
+        directories.sort()
+        for filename in sorted(files):
+            if not filename.endswith((".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx")):
+                continue
+            path = os.path.join(root, filename)
+            text = _read_bytes(path).decode("utf-8", errors="replace")
+            relative = os.path.relpath(path, project_root)
+            if "std::exception_ptr" in text and os.path.normpath(path) not in allowed:
+                diagnostics.append(
+                    Diagnostic(
+                        RULE_EXCEPTION_POINTER_NOT_ALLOWLISTED,
+                        f"std::exception_ptr is allowed only in a private completion bridge; "
+                        f"'{relative}' is not in the exception allowlist",
+                        path=relative,
+                    )
+                )
+            for forbidden_call in manifest.exception_policy.forbidden_exception_calls:
+                if forbidden_call in text:
+                    diagnostics.append(
+                        Diagnostic(
+                            RULE_EXCEPTION_RETHROW_FORBIDDEN,
+                            f"forbidden exception bridge call '{forbidden_call}' appears in '{relative}'",
+                            path=relative,
+                        )
+                    )
+
+
+def _check_exception_compile_flags(
+    manifest: Manifest,
+    command: CompileCommand,
+    target: Optional[Target],
+    tokens: Sequence[str],
+    strict_no_exceptions: bool,
+    diagnostics: list[Diagnostic],
+) -> None:
+    flags = set(tokens)
+    for forbidden in manifest.exception_policy.forbidden_compile_flags:
+        if forbidden in flags:
+            diagnostics.append(
+                Diagnostic(
+                    RULE_FORBIDDEN_EXCEPTION_FLAG,
+                    f"compile command for '{command.file}' contains forbidden exception flag "
+                    f"'{forbidden}'",
+                    target=target.name if target is not None else None,
+                    path=command.file,
+                )
+            )
+    if strict_no_exceptions:
+        for required in manifest.exception_policy.required_compile_flags:
+            if required not in flags:
+                diagnostics.append(
+                    Diagnostic(
+                        RULE_EXCEPTION_ENABLED_TARGET,
+                        f"project compile command for '{command.file}' does not contain required "
+                        f"no-exception flag '{required}'",
+                        target=target.name if target is not None else None,
+                        path=command.file,
+                    )
+                )
+
+
 def _check_compile_commands(
     manifest: Manifest,
     index: Index,
@@ -1463,6 +1633,7 @@ def _check_compile_commands(
     project_root: Optional[str],
     diagnostics: list[Diagnostic],
     external_include_roots: Sequence[str] = (),
+    strict_no_exceptions: bool = False,
 ) -> None:
     if compile_commands is None:
         return
@@ -1518,6 +1689,9 @@ def _check_compile_commands(
         _scan_compile_tokens(
             tokens, target, source, command.directory, project_root, diagnostics,
             external_include_roots,
+        )
+        _check_exception_compile_flags(
+            manifest, command, target, tokens, strict_no_exceptions, diagnostics
         )
 
 
@@ -1602,6 +1776,7 @@ def check(
     phase: str = "configure",
     config_digest: Optional[str] = None,
     external_include_roots: Sequence[str] = (),
+    strict_no_exceptions: bool = False,
 ) -> list[Diagnostic]:
     """Compare the resolved evidence against the strict manifest and return all findings."""
     diagnostics: list[Diagnostic] = []
@@ -1764,8 +1939,16 @@ def check(
 
     _check_includes(manifest, index, direct_includes, project_root, diagnostics)
     _check_compile_commands(
-        manifest, index, compile_commands, project_root, diagnostics, external_include_roots
+        manifest,
+        index,
+        compile_commands,
+        project_root,
+        diagnostics,
+        external_include_roots,
+        strict_no_exceptions,
     )
+    if strict_no_exceptions:
+        _check_exception_sources(manifest, project_root, diagnostics)
     _check_depfiles(index, depfiles, config_digest, phase, diagnostics)
 
     diagnostics.sort(
@@ -2044,6 +2227,11 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
         default="human",
         help="Diagnostic output format (default: human)",
     )
+    parser.add_argument(
+        "--strict-no-exceptions",
+        action="store_true",
+        help="Require the manifest no-exception compile policy and audit exception bridges",
+    )
     parser.add_argument("--sources", nargs="*", help="Source files to scan (with --out)")
     parser.add_argument("--out", help="Write direct-include evidence JSON and exit (scan mode)")
     parser.add_argument(
@@ -2155,6 +2343,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             phase=args.phase,
             config_digest=config_digest,
             external_include_roots=tuple(args.external_include_root),
+            strict_no_exceptions=args.strict_no_exceptions,
         )
     except SchemaViolation as exc:
         diagnostics = [Diagnostic(exc.rule_id, exc.message)]
