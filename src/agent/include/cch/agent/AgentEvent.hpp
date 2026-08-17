@@ -71,8 +71,8 @@ using AgentLifecycleEvent = std::variant<
     ToolExecutionUpdateEvent,
     ToolExecutionEndEvent>;
 
-/// Weak lifecycle observer used by Agent subscriptions. Reported failures and
-/// exceptions are diagnostic observations and cannot veto Agent progress.
+/// Weak lifecycle observer used by Agent subscriptions. Reported failures are
+/// diagnostic observations and cannot veto Agent progress.
 using AgentEventSink = std::move_only_function<support::ExpectedVoid(const AgentLifecycleEvent&)>;
 
 /// Strong per-run lifecycle participant. Unlike an AgentEventSink subscription,

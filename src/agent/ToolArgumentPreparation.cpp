@@ -621,13 +621,17 @@ struct ValidationFailure {
                 child_path(schema_path, "pattern") +
                     " uses Unicode regular-expression syntax that cannot be enforced"));
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             compiled.pattern.emplace(utf8_to_wide(*pattern), std::regex::ECMAScript);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::regex_error&) {
             return std::unexpected(schema_compile_error(
                 "unsupported Tool Argument Contract",
                 child_path(schema_path, "pattern") + " cannot be enforced as a regular expression"));
         }
+#endif
     }
     if (const auto it = object->find("format"); it != object->end()) {
         const auto* format = it->second.get_if<std::string>();
@@ -1775,12 +1779,17 @@ template <typename T>
         return is_json_pointer(value);
     case FormatKind::Regex:
         if (value.empty()) return false;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
             (void)std::regex(std::string(value), std::regex::ECMAScript);
             return true;
         } catch (const std::regex_error&) {
             return false;
         }
+#else
+        (void)std::regex(std::string(value), std::regex::ECMAScript);
+        return true;
+#endif
     case FormatKind::RelativeJsonPointer:
         return is_relative_json_pointer(value);
     case FormatKind::Time:

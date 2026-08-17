@@ -8,7 +8,6 @@
 
 #include <boost/asio/awaitable.hpp>
 
-#include <exception>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -18,7 +17,7 @@
 
 namespace cch::agent {
 
-/// Invoke one weak agent event sink with exception containment (ADR 0017).
+/// Invoke one Agent event sink and return its explicit failure outcome.
 /// The single event-emit path shared by the agent loop and the tool-call
 /// executor.
 [[nodiscard]] inline support::ExpectedVoid emit_agent_event(
@@ -27,19 +26,7 @@ namespace cch::agent {
     if (!sink) {
         return {};
     }
-    try {
-        return sink(event);
-    } catch (const std::exception& e) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            "agent event sink failed",
-            e.what()));
-    } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            "agent event sink failed",
-            "unknown exception"));
-    }
+    return sink(event);
 }
 
 /// Emit the message lifecycle pair for one tool result message.
@@ -64,30 +51,6 @@ namespace cch::agent {
     return calls;
 }
 
-/// Queue-drain callbacks remain synchronous until #44 replaces them with
-/// private Agent-owned queues. Keep their legacy exception boundary separate
-/// from the awaitable policy-hook contract.
-template <typename Hook, typename... Args>
-[[nodiscard]] std::invoke_result_t<Hook&, Args&&...> invoke_sync_agent_hook(
-    std::string_view hook_name,
-    Hook& hook,
-    Args&&... args) {
-    using Result = std::invoke_result_t<Hook&, Args&&...>;
-    try {
-        return hook(std::forward<Args>(args)...);
-    } catch (const std::exception& e) {
-        return Result(std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            std::string(hook_name) + " hook failed",
-            e.what())));
-    } catch (...) {
-        return Result(std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            std::string(hook_name) + " hook failed",
-            "unknown exception")));
-    }
-}
-
 template <typename T>
 struct AsyncResultTerminal;
 
@@ -96,9 +59,9 @@ struct AsyncResultTerminal<support::AsyncResult<T, E>> {
     using type = std::expected<T, E>;
 };
 
-/// Invoke one asynchronous Agent policy hook with exception containment. The
-/// consuming loop owns the private Asio bridge; Owner Interfaces expose only
-/// `AsyncResult` operations.
+/// Invoke one asynchronous Agent policy hook and preserve its explicit
+/// failure outcome. The consuming loop owns the private Asio bridge; Owner
+/// Interfaces expose only `AsyncResult` operations.
 template <typename Hook, typename... Args>
 [[nodiscard]] boost::asio::awaitable<
     typename AsyncResultTerminal<std::invoke_result_t<Hook&, Args...>>::type>
@@ -107,27 +70,15 @@ invoke_agent_hook(
     Hook& hook,
     Args&&... args) {
     using Result = typename AsyncResultTerminal<std::invoke_result_t<Hook&, Args...>>::type;
-    try {
-        auto result = co_await ai::detail::await_async_result(
-            hook(std::forward<Args>(args)...));
-        if (!result && result.error().message == "async operation failed") {
-            co_return Result(std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                std::string(hook_name) + " hook failed",
-                result.error().detail)));
-        }
-        co_return result;
-    } catch (const std::exception& e) {
+    auto result = co_await ai::detail::await_async_result(
+        hook(std::forward<Args>(args)...));
+    if (!result && result.error().message == "async operation failed") {
         co_return Result(std::unexpected(support::make_error(
             support::ErrorCode::Tool,
             std::string(hook_name) + " hook failed",
-            e.what())));
-    } catch (...) {
-        co_return Result(std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            std::string(hook_name) + " hook failed",
-            "unknown exception")));
+            result.error().detail)));
     }
+    co_return result;
 }
 
 } // namespace cch::agent

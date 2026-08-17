@@ -21,7 +21,6 @@
 #include <deque>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <variant>
@@ -351,7 +350,7 @@ ai::AssistantMessage read_tool_call_response() {
     return response;
 }
 
-class ThrowingThenRecoveringRuntime final : public std::enable_shared_from_this<ThrowingThenRecoveringRuntime> {
+class FailingThenRecoveringRuntime final : public std::enable_shared_from_this<FailingThenRecoveringRuntime> {
 public:
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
@@ -370,7 +369,10 @@ public:
         ai::AssistantEventSink sink) {
         ++calls;
         if (calls == 1) {
-            throw std::runtime_error("host provider threw");
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Stream,
+                "host provider failed",
+                "explicit stream failure"));
         }
         auto response = ai::assistant_text_message("recovered");
         if (sink) {
@@ -748,7 +750,9 @@ TEST_CASE(
     CHECK(subject.state().messages.size() == 3);
 }
 
-TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[agent][stateful][issue35]") {
+TEST_CASE(
+    "stateful Agent keeps reported weak observer failure from vetoing a prompt",
+    "[agent][stateful][issue35][issue483]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -767,14 +771,17 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
     REQUIRE(failing_result);
     auto failing = std::move(*failing_result);
 
-    int throwing_calls = 0;
-    auto throwing_result = subject.subscribe(
-        [&throwing_calls](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-            ++throwing_calls;
-            throw std::runtime_error("observer threw");
+    int detailed_failure_calls = 0;
+    auto detailed_failure_result = subject.subscribe(
+        [&detailed_failure_calls](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+            ++detailed_failure_calls;
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
+                "observer failed",
+                "explicit observer failure"));
         });
-    REQUIRE(throwing_result);
-    auto throwing = std::move(*throwing_result);
+    REQUIRE(detailed_failure_result);
+    auto detailed_failure = std::move(*detailed_failure_result);
 
     int healthy_calls = 0;
     auto healthy_result = subject.subscribe(
@@ -788,9 +795,9 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
     REQUIRE(run_prompt(subject, "hello"));
 
     CHECK(failing_calls == 1);
-    CHECK(throwing_calls == 1);
+    CHECK(detailed_failure_calls == 1);
     CHECK_FALSE(failing);
-    CHECK_FALSE(throwing);
+    CHECK_FALSE(detailed_failure);
     CHECK(healthy);
     CHECK(healthy_calls == 11);
     const auto snapshot = subject.state();
@@ -799,7 +806,7 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
     CHECK(snapshot.diagnostics[0].message == "agent event observer failed");
     CHECK(snapshot.diagnostics[0].detail.find("observer failed") != std::string::npos);
     CHECK(snapshot.diagnostics[1].message == "agent event observer failed");
-    CHECK(snapshot.diagnostics[1].detail.find("observer threw") != std::string::npos);
+    CHECK(snapshot.diagnostics[1].detail.find("explicit observer failure") != std::string::npos);
 }
 
 TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent][stateful][issue35]") {
@@ -1072,8 +1079,10 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
     REQUIRE(moved.state().messages.size() == 2);
 }
 
-TEST_CASE("stateful Agent releases its active run after an unexpected provider exception", "[agent][stateful][issue35]") {
-    auto client = std::make_shared<ThrowingThenRecoveringRuntime>();
+TEST_CASE(
+    "stateful Agent releases its active run after an explicit provider failure",
+    "[agent][stateful][issue35][issue483]") {
+    auto client = std::make_shared<FailingThenRecoveringRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -1082,9 +1091,9 @@ TEST_CASE("stateful Agent releases its active run after an unexpected provider e
 
     const auto failed = run_prompt(subject, "first");
     REQUIRE_FALSE(failed);
-    // A throwing provider is caught at the ModelStream boundary (matching
-    // `Models::streamSimple`'s provider-exception handling) and reported as a
-    // Stream failure rather than escaping as an Unknown run exception.
+    // A provider failure is returned through the ModelStream boundary and
+    // reported as a Stream failure rather than escaping as an Unknown run
+    // exception.
     CHECK(failed.error().code == support::ErrorCode::Stream);
     CHECK_FALSE(subject.state().is_running);
 

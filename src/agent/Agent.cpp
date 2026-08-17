@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 #include <exception>
+#endif
 #include <functional>
 #include <memory>
 #include <optional>
@@ -25,6 +27,26 @@ namespace {
 struct AgentSubscriptionAnchor {
     Agent::Impl* agent{nullptr};
 };
+
+[[nodiscard]] support::ExpectedVoid invoke_weak_observer(
+    AgentEventSink& sink,
+    const AgentLifecycleEvent& event) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        return sink(event);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& exception) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            exception.what()));
+    } catch (...) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "unknown exception"));
+    }
+#endif
+}
 
 std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
     std::vector<std::string> names;
@@ -253,22 +275,8 @@ struct Agent::Impl {
             if (!subscriber->delivery_enabled || !subscriber->sink) {
                 continue;
             }
-            try {
-                if (auto observed = subscriber->sink(event); !observed) {
-                    record_observer_diagnostic(observed.error());
-                    subscriber->registered = false;
-                    subscriber->delivery_enabled = false;
-                }
-            } catch (const std::exception& exception) {
-                record_observer_diagnostic(support::make_error(
-                    support::ErrorCode::Unknown,
-                    exception.what()));
-                subscriber->registered = false;
-                subscriber->delivery_enabled = false;
-            } catch (...) {
-                record_observer_diagnostic(support::make_error(
-                    support::ErrorCode::Unknown,
-                    "unknown exception"));
+            if (auto observed = invoke_weak_observer(subscriber->sink, event); !observed) {
+                record_observer_diagnostic(observed.error());
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
             }
@@ -354,33 +362,18 @@ struct Agent::Impl {
         };
 
         std::optional<support::Error> commitment_failure;
-        std::optional<support::Expected<AsyncAgentRunResult>> result;
-        try {
-            result = co_await run_loop_call(
-                [impl, &commitment, &commitment_failure](
-                    const AgentLifecycleEvent& event) {
-                    return impl->process_event(
-                        event, commitment, commitment_failure);
-                },
-                impl->active_stop_source->get_token());
-        } catch (const std::exception& exception) {
-            finish_run();
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "agent run failed",
-                exception.what()));
-        } catch (...) {
-            finish_run();
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "agent run failed",
-                "unknown exception"));
-        }
+        auto result = co_await run_loop_call(
+            [impl, &commitment, &commitment_failure](
+                const AgentLifecycleEvent& event) {
+                return impl->process_event(
+                    event, commitment, commitment_failure);
+            },
+            impl->active_stop_source->get_token());
 
-        if (*result) {
-            impl->state.model = (*result)->state.model;
-            if (!(*result)->state.thinking_level.empty()) {
-                impl->state.thinking_level = (*result)->state.thinking_level;
+        if (result) {
+            impl->state.model = result->state.model;
+            if (!result->state.thinking_level.empty()) {
+                impl->state.thinking_level = result->state.thinking_level;
             }
         }
         finish_run();
@@ -388,8 +381,8 @@ struct Agent::Impl {
         if (commitment_failure) {
             co_return std::unexpected(std::move(*commitment_failure));
         }
-        if (!*result) {
-            co_return std::unexpected(result->error());
+        if (!result) {
+            co_return std::unexpected(result.error());
         }
         co_return support::ExpectedVoid{};
     }

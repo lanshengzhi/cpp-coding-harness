@@ -2,8 +2,6 @@
 
 #include <cch/ai/StreamEvent.hpp>
 
-#include <exception>
-
 namespace cch::ai::providers {
 
 /// Emits one assistant stream event through the consumer-owned sink; an empty
@@ -14,18 +12,7 @@ namespace cch::ai::providers {
     if (!sink) {
         return {};
     }
-    try {
-        return sink(event);
-    } catch (const std::exception& error) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "Assistant event sink failed",
-            error.what()));
-    } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "Assistant event sink failed"));
-    }
+    return sink(event);
 }
 
 } // namespace cch::ai::providers

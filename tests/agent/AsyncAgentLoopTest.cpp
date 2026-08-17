@@ -935,7 +935,7 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async]
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("beforeToolCall hook exception becomes a per-call tool error", "[agent][async][u7]") {
+TEST_CASE("beforeToolCall hook failure diagnostic becomes a per-call tool error", "[agent][async][u7][issue483]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
@@ -948,7 +948,10 @@ TEST_CASE("beforeToolCall hook exception becomes a per-call tool error", "[agent
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
-        throw std::runtime_error("boom");
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
+            "beforeToolCall hook failed",
+            "boom"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -1369,7 +1372,7 @@ TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[ag
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("afterToolCall hook exception becomes a per-call tool error", "[agent][async][u7]") {
+TEST_CASE("afterToolCall hook failure diagnostic becomes a per-call tool error", "[agent][async][u7][issue483]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
@@ -1382,7 +1385,10 @@ TEST_CASE("afterToolCall hook exception becomes a per-call tool error", "[agent]
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        throw std::runtime_error("after boom");
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Tool,
+            "afterToolCall hook failed",
+            "after boom"));
     });
 
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -1708,8 +1714,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "awaitable policy exceptions after suspension stay in the existing error channel",
-    "[agent][async][issue82]") {
+    "awaitable policy failures after suspension stay in the existing error channel",
+    "[agent][async][issue82][issue483]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("unused"));
     agent::AsyncAgentOptions options;
@@ -1723,8 +1729,10 @@ TEST_CASE(
                     co_await boost::asio::this_coro::executor);
                 timer.expires_after(std::chrono::milliseconds{0});
                 co_await timer.async_wait(boost::asio::use_awaitable);
-                throw std::runtime_error("suspended transform boom");
-                co_return messages;
+                co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Tool,
+                    "transformContext hook failed",
+                    "suspended transform boom"));
             });
     };
 
@@ -1865,7 +1873,7 @@ TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
     CHECK(run.result.error().message == "conversion failed");
 }
 
-TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent][async][u8]") {
+TEST_CASE("transformContext and convertToLlm failure diagnostics abort cleanly", "[agent][async][u8][issue483]") {
     {
         auto client = std::make_shared<FakeStreamingClient>();
         client->responses.push_back(ai::assistant_text_message("ok"));
@@ -1878,7 +1886,10 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
             agent::adapt_sync_transform_context(
                 [](const std::vector<ai::MessageVariant>&)
             -> support::Expected<std::vector<ai::MessageVariant>> {
-            throw std::runtime_error("transform boom");
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                "transformContext hook failed",
+                "transform boom"));
         });
 
         agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -1902,7 +1913,10 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
             agent::adapt_sync_convert_to_llm(
                 [](const std::vector<ai::MessageVariant>&)
             -> support::Expected<std::vector<ai::MessageVariant>> {
-            throw std::runtime_error("convert boom");
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                "convertToLlm hook failed",
+                "convert boom"));
         });
 
         agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -2245,7 +2259,7 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     CHECK(run.result.error().message == "unknown model");
 }
 
-TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly", "[agent][async][u8]") {
+TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "[agent][async][u8][issue483]") {
     {
         auto client = std::make_shared<FakeStreamingClient>();
         client->responses.push_back(ai::assistant_text_message("first"));
@@ -2258,7 +2272,10 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
             agent::adapt_sync_prepare_next_turn(
                 [](const agent::PrepareNextTurnContext&)
             -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-            throw std::runtime_error("prepare boom");
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                "prepareNextTurn hook failed",
+                "prepare boom"));
         });
 
         agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -2286,7 +2303,10 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
         options.validate_turn_update =
             agent::adapt_sync_validate_turn_update(
                 [](const agent::AgentLoopTurnUpdate&) -> support::ExpectedVoid {
-            throw std::runtime_error("validator boom");
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                "validateTurnUpdate hook failed",
+                "validator boom"));
         });
 
         agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -2678,7 +2698,7 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8]") {
+TEST_CASE("bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8][issue483]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
 
@@ -2714,7 +2734,10 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
                         events.push_back(event);
                     }
                     if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
-                        throw std::runtime_error("sink boom");
+                        return std::unexpected(support::make_error(
+                            support::ErrorCode::Tool,
+                            "agent event sink failed",
+                            "sink boom"));
                     }
                     if (std::holds_alternative<agent::AgentEndEvent>(event)) {
                         ++agent_end_events;

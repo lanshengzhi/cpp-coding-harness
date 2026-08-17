@@ -125,16 +125,21 @@ struct RecordingToolHandle {
     };
 }
 
-[[nodiscard]] agent::Tool make_failing_tool(ai::Tool definition) {
+[[nodiscard]] agent::Tool make_failing_tool(
+    ai::Tool definition,
+    std::string detail = "boom") {
     return tests::make_fake_tool(
         std::move(definition),
         agent::ToolConcurrency::Exclusive,
-        [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+        [detail = std::move(detail)](
+            agent::ToolInvocation,
+            std::stop_token,
+            agent::ToolUpdateSink)
             -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
             co_return std::unexpected(support::make_error(
                 support::ErrorCode::Tool,
                 "tool failed",
-                "boom"));
+                detail));
         });
 }
 
@@ -198,20 +203,28 @@ ExecuteResult run_executor(
     agent::ToolCallExecutor& executor,
     const ai::AssistantMessage& assistant_message,
     const ai::AiContext& context = {},
-    bool* tool_execution_started = nullptr) {
+    bool* tool_execution_started = nullptr,
+    bool fail_updates = false) {
     boost::asio::thread_pool pool{4};
     std::optional<support::Expected<agent::ToolCallBatchResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
     std::mutex events_mutex;
 
     agent::AgentEventSink sink{
-        [&](const agent::AgentLifecycleEvent& event) {
+        [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             std::lock_guard lock(events_mutex);
             if (tool_execution_started != nullptr &&
                 std::holds_alternative<agent::ToolExecutionStartEvent>(event)) {
                 *tool_execution_started = true;
             }
             events.push_back(event);
+            if (fail_updates &&
+                std::holds_alternative<agent::ToolExecutionUpdateEvent>(event)) {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Tool,
+                    "tool update sink failed",
+                    "explicit update failure"));
+            }
             return support::ExpectedVoid{};
         }};
 
@@ -1907,6 +1920,89 @@ TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor]") {
     CHECK_FALSE(run.result->terminate_batch);
     REQUIRE(run.result->results.size() == 1);
     CHECK(run.result->results[0].is_error);
+}
+
+TEST_CASE("tool failure diagnostics redact before truncation", "[agent][tool-executor][issue483]") {
+    const std::string secret = "sk-FAKETOOLFAILURECREDENTIAL123456789";
+    const std::string detail = secret + " " + std::string(5000, 'x');
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_failing_tool(
+        ai::Tool{
+            .name = "read_file",
+            .description = "Read",
+            .parameters = test::empty_object_tool_argument_contract(),
+        },
+        detail)));
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    const auto diagnostic = ai::text_from_content(run.result->results[0].content);
+    CHECK(diagnostic.size() <= 4096);
+    CHECK(diagnostic.find("[REDACTED]") != std::string::npos);
+    CHECK(diagnostic.find(secret) == std::string::npos);
+    CHECK(diagnostic.find("sk-") == std::string::npos);
+}
+
+TEST_CASE("Tool update failure becomes an isolated Tool Call Outcome", "[agent][tool-executor][issue483]") {
+    agent::ToolRegistry registry;
+    auto update_tool = tests::make_fake_tool(
+        ai::Tool{
+            .name = "read_file",
+            .description = "Read",
+            .parameters = test::empty_object_tool_argument_contract(),
+        },
+        agent::ToolConcurrency::ParallelSafe,
+        [](agent::ToolInvocation,
+           std::stop_token,
+           agent::ToolUpdateSink update_sink)
+            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+            auto updated = update_sink(agent::AsyncToolExecutionResult{
+                .content = std::vector<ai::Content>{ai::text_content("partial")},
+                .details = std::nullopt,
+                .is_error = false,
+                .terminate = false});
+            if (!updated) {
+                co_return std::unexpected(updated.error());
+            }
+            co_return agent::AsyncToolExecutionResult{
+                .content = std::vector<ai::Content>{ai::text_content("done")},
+                .details = std::nullopt,
+                .is_error = false,
+                .terminate = false};
+        });
+    REQUIRE(registry.add(std::move(update_tool)));
+    auto peer_tool = make_recording_tool(
+        ai::Tool{
+            .name = "write_file",
+            .description = "Write",
+            .parameters = test::empty_object_tool_argument_contract(),
+        },
+        agent::ToolConcurrency::ParallelSafe,
+        "peer result");
+    REQUIRE(registry.add(std::move(peer_tool.tool)));
+
+    agent::ToolCallExecutorOptions options;
+    options.execution = agent::BoundedParallelToolExecution{.max_in_flight = 2};
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "read_file"),
+        make_call("call-2", "write_file"),
+    });
+    auto run = run_executor(executor, assistant, {}, nullptr, true);
+
+    REQUIRE(run.result);
+    CHECK_FALSE(run.result->terminate_batch);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(run.result->results[0].is_error);
+    CHECK(ai::text_from_content(run.result->results[0].content) == "explicit update failure");
+    CHECK_FALSE(run.result->results[1].is_error);
+    CHECK(ai::text_from_content(run.result->results[1].content) == "peer result");
+    CHECK(count_events<agent::ToolExecutionUpdateEvent>(run.events) == 1);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 2);
 }
 
 // ---------------------------------------------------------------------------

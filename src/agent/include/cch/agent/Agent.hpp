@@ -141,8 +141,8 @@ public:
     [[nodiscard]] AgentState state() const;
 
     /// Subscribe a move-only weak observer. State is reduced before delivery.
-    /// Observer failures and exceptions deactivate that observer without
-    /// vetoing Agent progress.
+    /// Reported observer failures deactivate that observer without vetoing
+    /// Agent progress.
     [[nodiscard]] support::Expected<AgentEventSubscription> subscribe(
         AgentEventSink sink);
 

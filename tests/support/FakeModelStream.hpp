@@ -15,7 +15,6 @@
 
 #include <cstddef>
 #include <deque>
-#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
@@ -60,19 +59,13 @@ public:
                     [self](
                         ai::AssistantEventSink sink,
                         ai::ModelStreamCompletion completion) mutable noexcept {
-                        try {
-                            boost::asio::post(
-                                cch::ai::detail::t_initiating_executor,
-                                [self,
-                                 sink = std::move(sink),
-                                 completion = std::move(completion)]() mutable {
-                                    self->script(std::move(sink), std::move(completion));
-                                });
-                        } catch (...) {
-                            completion(std::unexpected(support::make_error(
-                                support::ErrorCode::Stream,
-                                "scripted stream initiation failed")));
-                        }
+                        boost::asio::post(
+                            cch::ai::detail::t_initiating_executor,
+                            [self,
+                             sink = std::move(sink),
+                             completion = std::move(completion)]() mutable {
+                                self->script(std::move(sink), std::move(completion));
+                            });
                     }}};
             }};
     }

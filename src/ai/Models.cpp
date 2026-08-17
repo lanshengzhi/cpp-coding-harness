@@ -14,7 +14,9 @@
 
 #include <algorithm>
 #include <chrono>
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 #include <exception>
+#endif
 #include <map>
 #include <memory>
 #include <optional>
@@ -68,16 +70,6 @@ constexpr std::size_t kMaxPublicErrorBytes = 1024;
     return error;
 }
 
-[[nodiscard]] support::Error callback_exception_error(
-    support::ErrorCode code,
-    std::string message,
-    std::string detail = "unknown exception") {
-    return safe_error(support::make_error(
-        code,
-        std::move(message),
-        std::move(detail)));
-}
-
 template <typename T>
 struct AsyncResultValue;
 
@@ -86,30 +78,16 @@ struct AsyncResultValue<cch::support::AsyncResult<T, E>> {
     using type = std::expected<T, E>;
 };
 
-/// Await one `AsyncResult`-returning operation from within an asio coroutine,
-/// normalizing a throwing operation (or a coroutine that escaped as an
-/// exception) into the shared error channel.
+/// Await one `AsyncResult`-returning operation from within an asio coroutine.
+/// Callback and producer failures already use the operation's explicit
+/// `Expected` terminal value; this helper only carries that value across the
+/// private Asio bridge.
 template <typename Operation>
 [[nodiscard]] boost::asio::awaitable<
     typename AsyncResultValue<std::invoke_result_t<Operation&>>::type>
-invoke_async_operation(
-    support::ErrorCode code,
-    std::string message,
-    Operation operation) {
-    using Result = typename AsyncResultValue<std::invoke_result_t<Operation&>>::type;
-    try {
-        auto result = operation();
-        co_return co_await detail::await_async_result(std::move(result));
-    } catch (const std::exception& error) {
-        co_return Result{std::unexpected(callback_exception_error(
-            code,
-            std::move(message),
-            error.what()))};
-    } catch (...) {
-        co_return Result{std::unexpected(callback_exception_error(
-            code,
-            std::move(message)))};
-    }
+invoke_async_operation(Operation operation) {
+    auto result = operation();
+    co_return co_await detail::await_async_result(std::move(result));
 }
 
 [[nodiscard]] support::ExpectedVoid emit_assistant_event(
@@ -118,18 +96,7 @@ invoke_async_operation(
     if (!sink) {
         return {};
     }
-    try {
-        return sink(event);
-    } catch (const std::exception& error) {
-        return std::unexpected(callback_exception_error(
-            support::ErrorCode::Unknown,
-            "Assistant event sink failed",
-            error.what()));
-    } catch (...) {
-        return std::unexpected(callback_exception_error(
-            support::ErrorCode::Unknown,
-            "Assistant event sink failed"));
-    }
+    return sink(event);
 }
 
 [[nodiscard]] std::string public_error_diagnostic(const support::Error& error) {
@@ -159,11 +126,15 @@ invoke_async_operation(
 /// Frozen pi treats each Provider catalog as best-effort: a throwing callback
 /// contributes no models so other Providers remain discoverable.
 [[nodiscard]] std::vector<Model> safe_provider_models(const Provider& provider_value) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
         return provider_value.models();
     } catch (...) {
         return {};
     }
+#else
+    return provider_value.models();
+#endif
 }
 
 [[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
@@ -271,18 +242,7 @@ void set_request_header(RequestHeaders& target, std::string name, std::string va
     if (!transform) {
         return headers;
     }
-    try {
-        return transform(std::move(headers));
-    } catch (const std::exception& error) {
-        return std::unexpected(callback_exception_error(
-            support::ErrorCode::Stream,
-            "Header transform failed",
-            error.what()));
-    } catch (...) {
-        return std::unexpected(callback_exception_error(
-            support::ErrorCode::Stream,
-            "Header transform failed"));
-    }
+    return transform(std::move(headers));
 }
 
 [[nodiscard]] ModelThinkingLevel to_model_thinking_level(ThinkingLevel level) {
@@ -440,8 +400,6 @@ struct Models::Impl {
         ApiKeyAuth& auth,
         std::optional<ApiKeyCredential> credential) {
         auto resolved = co_await invoke_async_operation(
-            support::ErrorCode::Auth,
-            "API key auth callback failed for provider " + std::string{provider.id()},
             [&]() {
                 return auth.resolve(*auth_context, std::move(credential));
             });
@@ -461,8 +419,6 @@ struct Models::Impl {
         const std::string provider_id{provider.id()};
         if (expires_soon(credential)) {
             auto modified = co_await invoke_async_operation(
-                support::ErrorCode::Auth,
-                "Credential store modify callback failed for " + provider_id,
                 [&]() -> cch::support::AsyncResult<std::optional<Credential>> {
                     return credentials->modify(
                         provider_id,
@@ -478,8 +434,6 @@ struct Models::Impl {
                                         co_return std::optional<Credential>{};
                                     }
                                     auto refreshed = co_await invoke_async_operation(
-                                        support::ErrorCode::OAuth,
-                                        "OAuth refresh callback failed for " + provider_id,
                                         [&]() {
                                             return auth.refresh(*current_oauth);
                                         });
@@ -513,8 +467,6 @@ struct Models::Impl {
         }
 
         auto request_auth = co_await invoke_async_operation(
-            support::ErrorCode::OAuth,
-            "OAuth auth derivation callback failed for " + provider_id,
             [&]() {
                 return auth.to_auth(credential);
             });
@@ -629,8 +581,6 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
             }
 
             auto stored = co_await invoke_async_operation(
-                support::ErrorCode::Auth,
-                "Credential store read callback failed for " + provider_id,
                 [&]() { return impl_->credentials->read(provider_id); });
             if (!stored) {
                 co_return std::unexpected(categorized_error(
@@ -653,8 +603,6 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
                 const auto credential = std::get<ApiKeyCredential>(**stored);
                 if (auth.api_key->check) {
                     auto checked = co_await invoke_async_operation(
-                        support::ErrorCode::Auth,
-                        "API key auth check callback failed for provider " + provider_id,
                         [&]() {
                             return auth.api_key->check(*impl_->auth_context, credential);
                         });
@@ -682,8 +630,6 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
             }
             if (auth.api_key->check) {
                 auto checked = co_await invoke_async_operation(
-                    support::ErrorCode::Auth,
-                    "API key auth check callback failed for provider " + provider_id,
                     [&]() {
                         return auth.api_key->check(*impl_->auth_context, std::nullopt);
                     });
@@ -728,8 +674,6 @@ cch::support::AsyncResult<std::optional<AuthResult>> Models::get_auth(
             }
 
             auto stored = co_await invoke_async_operation(
-                support::ErrorCode::Auth,
-                "Credential store read callback failed for " + provider_id,
                 [&]() { return impl_->credentials->read(provider_id); });
             if (!stored) {
                 co_return std::unexpected(categorized_error(
@@ -797,8 +741,6 @@ cch::support::AsyncResult<void> Models::logout(
         [this, provider_id = std::move(provider_id)]()
             -> boost::asio::awaitable<support::ExpectedVoid> {
             auto removed = co_await invoke_async_operation(
-                support::ErrorCode::Auth,
-                "Credential store delete callback failed for " + provider_id,
                 [&]() { return impl_->credentials->remove(provider_id); });
             if (!removed) {
                 co_return std::unexpected(categorized_error(
@@ -835,8 +777,6 @@ cch::support::AsyncResult<Credential> Models::login(
                             type_name + " login"));
                 }
                 auto credential = co_await invoke_async_operation(
-                    support::ErrorCode::OAuth,
-                    "OAuth login callback failed for " + provider_id,
                     [&]() {
                         return auth.oauth->login(std::move(interaction));
                     });
@@ -853,8 +793,6 @@ cch::support::AsyncResult<Credential> Models::login(
                             type_name + " login"));
                 }
                 auto credential = co_await invoke_async_operation(
-                    support::ErrorCode::Auth,
-                    "API key login callback failed for " + provider_id,
                     [&]() {
                         return auth.api_key->login(std::move(interaction));
                     });
@@ -868,8 +806,6 @@ cch::support::AsyncResult<Credential> Models::login(
             // path. Only CredentialStore failures wrap as the `auth` category.
             support::Expected<Credential> login_credential = std::move(flow_result);
             auto stored = co_await invoke_async_operation(
-                support::ErrorCode::Auth,
-                "Credential store modify callback failed for " + provider_id,
                 [&]() -> cch::support::AsyncResult<std::optional<Credential>> {
                     return impl_->credentials->modify(
                         provider_id,
@@ -916,8 +852,6 @@ namespace {
     }
 
     auto auth = co_await invoke_async_operation(
-        support::ErrorCode::Auth,
-        "Authentication resolution failed for provider " + model_value.provider,
         [&]() {
             return self->get_auth(model_value, std::move(options.api_key));
         });

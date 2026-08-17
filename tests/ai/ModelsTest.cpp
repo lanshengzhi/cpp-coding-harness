@@ -20,7 +20,6 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
@@ -56,8 +55,14 @@ public:
     [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string provider_id) override {
         ++read_count;
-        if (throw_read) {
-            throw std::runtime_error{"credential store callback threw"};
+        if (read_failure) {
+            return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                    std::unexpect,
+                    support::make_error(
+                        support::ErrorCode::Auth,
+                        "credential store callback failed",
+                        "explicit callback failure")});
         }
         std::optional<ai::Credential> value;
         if (const auto found = records.find(provider_id); found != records.end()) {
@@ -119,7 +124,7 @@ public:
     int read_count{0};
     int modify_count{0};
     int remove_count{0};
-    bool throw_read{false};
+    bool read_failure{false};
     bool fail_modify{false};
 };
 
@@ -173,7 +178,9 @@ public:
     [[nodiscard]] std::string_view id() const noexcept override { return id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return id_; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return catalog; }
+    [[nodiscard]] std::vector<ai::Model> models() const override {
+        return catalog_available ? catalog : std::vector<ai::Model>{};
+    }
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -189,9 +196,6 @@ public:
                     co_return std::unexpected(support::make_error(
                         support::ErrorCode::Cancelled,
                         "provider cancelled"));
-                }
-                if (throw_stream) {
-                    throw std::runtime_error{"provider callback threw"};
                 }
                 if (stream_failure) {
                     co_return std::unexpected(*stream_failure);
@@ -209,38 +213,14 @@ public:
     }
 
     std::vector<ai::Model> catalog;
+    bool catalog_available{true};
     std::vector<ai::Model> seen_models;
     std::vector<ai::ProviderStreamOptions> seen_options;
     std::optional<support::Error> stream_failure;
-    bool throw_stream{false};
 
 private:
     std::string id_;
     ai::ProviderAuth auth_;
-};
-
-class ThrowingCatalogProvider final : public ai::Provider {
-public:
-    [[nodiscard]] std::string_view id() const noexcept override { return "throwing-catalog"; }
-    [[nodiscard]] std::string_view name() const noexcept override { return "throwing-catalog"; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override {
-        throw std::runtime_error{"catalog callback threw"};
-    }
-
-    [[nodiscard]] ai::ModelStream stream(
-        ai::Model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
-        return ai::detail::make_model_stream(
-            [](ai::AssistantEventSink)
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                co_return ai::assistant_text_message("unused");
-            });
-    }
-
-private:
-    ai::ProviderAuth auth_{keyless_auth()};
 };
 
 class UnsafeTerminalProvider final : public ai::Provider {
@@ -414,21 +394,23 @@ TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[a
     CHECK(second->seen_models.front().api == "private-api");
 }
 
-TEST_CASE("Models suppresses throwing Provider catalogs per provider", "[ai][models][issue338]") {
+TEST_CASE("Models isolates unavailable Provider catalogs per provider", "[ai][models][issue338]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
     auto available = std::make_shared<RecordingProvider>("available");
     available->catalog.push_back(tests::make_model("available-model", "available", "api"));
     REQUIRE(models->set_provider(available));
-    REQUIRE(models->set_provider(std::make_shared<ThrowingCatalogProvider>()));
+    auto unavailable = std::make_shared<RecordingProvider>("unavailable-catalog");
+    unavailable->catalog_available = false;
+    REQUIRE(models->set_provider(unavailable));
 
     const auto all = models->models();
 
     REQUIRE(all.size() == 1);
     CHECK(all.front().id == "available-model");
-    CHECK(models->models("throwing-catalog").empty());
-    CHECK_FALSE(models->model("throwing-catalog", "missing"));
+    CHECK(models->models("unavailable-catalog").empty());
+    CHECK_FALSE(models->model("unavailable-catalog", "missing"));
 }
 
 TEST_CASE("Models normalizes provider lookup and model validation failures", "[ai][models][issue338]") {
@@ -880,22 +862,30 @@ TEST_CASE("Env-chain API key auth labels explicit credentials as stored credenti
     CHECK((**resolved).source == "stored credential");
 }
 
-TEST_CASE("Models converts throwing callbacks into its single error channel", "[ai][models][issue338]") {
+TEST_CASE(
+    "Models converts explicit callback failures into its single error channel",
+    "[ai][models][issue338][issue483]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
 
-    ai::ApiKeyAuth throwing_auth;
-    throwing_auth.name = "throwing auth";
-    throwing_auth.resolve = [](
+    ai::ApiKeyAuth failing_auth;
+    failing_auth.name = "failing auth";
+    failing_auth.resolve = [](
         const ai::AuthContext&,
         std::optional<ai::ApiKeyCredential>)
         -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        throw std::runtime_error{"auth callback threw"};
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                std::unexpect,
+                support::make_error(
+                    support::ErrorCode::Auth,
+                    "auth callback failed",
+                    "explicit callback failure")});
     };
     auto auth_models = make_models(credentials, auth_context);
     REQUIRE(auth_models->set_provider(std::make_shared<RecordingProvider>(
         "auth-provider",
-        ai::ProviderAuth{.api_key = std::move(throwing_auth)})));
+        ai::ProviderAuth{.api_key = std::move(failing_auth)})));
     ai::Model auth_request = tests::make_model("model", "auth-provider", "api");
 
     auto auth_run = run_models(auth_models, std::move(auth_request));
@@ -906,9 +896,12 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     CHECK(auth_terminal.failure->code == support::ErrorCode::Auth);
 
     auto provider_models = make_models(credentials, auth_context);
-    auto throwing_provider = std::make_shared<RecordingProvider>("provider");
-    throwing_provider->throw_stream = true;
-    REQUIRE(provider_models->set_provider(throwing_provider));
+    auto failing_provider = std::make_shared<RecordingProvider>("provider");
+    failing_provider->stream_failure = support::make_error(
+        support::ErrorCode::Stream,
+        "provider stream failed",
+        "explicit stream failure");
+    REQUIRE(provider_models->set_provider(failing_provider));
     ai::Model provider_request = tests::make_model("model", "provider", "api");
 
     auto provider_run = run_models(provider_models, std::move(provider_request));
@@ -917,6 +910,26 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     const auto& provider_terminal = require_terminal_error(provider_run);
     REQUIRE(provider_terminal.failure);
     CHECK(provider_terminal.failure->code == support::ErrorCode::Stream);
+
+    auto header_models = make_models(credentials, auth_context);
+    REQUIRE(header_models->set_provider(std::make_shared<RecordingProvider>("header-provider")));
+    ai::SimpleStreamOptions header_options;
+    header_options.transform_headers = [](ai::RequestHeaders)
+        -> support::Expected<ai::RequestHeaders> {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Stream,
+            "Header transform failed",
+            "explicit header transform failure"));
+    };
+    auto header_run = run_models(
+        header_models,
+        tests::make_model("model", "header-provider", "api"),
+        {},
+        std::move(header_options));
+    REQUIRE(header_run.result);
+    const auto& header_terminal = require_terminal_error(header_run);
+    REQUIRE(header_terminal.failure);
+    CHECK(header_terminal.failure->code == support::ErrorCode::Stream);
 
     auto sink_models = make_models(credentials, auth_context);
     REQUIRE(sink_models->set_provider(std::make_shared<RecordingProvider>("sink-provider")));
@@ -927,7 +940,10 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
             {},
             {}).run(
         [](const ai::AssistantStreamEvent&) -> support::ExpectedVoid {
-            throw std::runtime_error{"sink callback threw"};
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
+                "Assistant event sink failed",
+                "explicit sink failure"));
         }));
 
     REQUIRE_FALSE(sink_result);
@@ -935,12 +951,12 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     CHECK(sink_result.error().message == "Assistant event sink failed");
 }
 
-TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[ai][models][issue338]") {
+TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[ai][models][issue338][issue483]") {
     auto auth_context = std::make_shared<FakeAuthContext>();
 
-    auto throwing_store = std::make_shared<MemoryCredentialStore>();
-    throwing_store->throw_read = true;
-    auto store_models = make_models(throwing_store, auth_context);
+    auto failing_store = std::make_shared<MemoryCredentialStore>();
+    failing_store->read_failure = true;
+    auto store_models = make_models(failing_store, auth_context);
     REQUIRE(store_models->set_provider(std::make_shared<RecordingProvider>("store-provider")));
     ai::Model store_request = tests::make_model("model", "store-provider", "api");
 
@@ -956,11 +972,16 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
         "refresh-provider",
         ai::OAuthCredential{.expires = 0});
     ai::OAuthAuth refresh_auth;
-    refresh_auth.name = "throwing refresh";
+    refresh_auth.name = "failing refresh";
     refresh_auth.refresh = [](ai::OAuthCredential)
         -> cch::support::AsyncResult<ai::OAuthCredential> {
-        throw std::runtime_error{"OAuth refresh callback threw"};
-        return cch::support::AsyncResult<ai::OAuthCredential>(std::expected<ai::OAuthCredential, cch::support::Error>{ai::OAuthCredential{}});
+        return cch::support::AsyncResult<ai::OAuthCredential>(
+            std::expected<ai::OAuthCredential, cch::support::Error>{
+                std::unexpect,
+                support::make_error(
+                    support::ErrorCode::OAuth,
+                    "OAuth refresh callback failed",
+                    "explicit callback failure")});
     };
     refresh_auth.to_auth = [](const ai::OAuthCredential&)
         -> cch::support::AsyncResult<ai::ModelAuth> {
@@ -984,11 +1005,16 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
         "derivation-provider",
         ai::OAuthCredential{.expires = std::numeric_limits<std::int64_t>::max()});
     ai::OAuthAuth derivation_auth;
-    derivation_auth.name = "throwing derivation";
+    derivation_auth.name = "failing derivation";
     derivation_auth.to_auth = [](const ai::OAuthCredential&)
         -> cch::support::AsyncResult<ai::ModelAuth> {
-        throw std::runtime_error{"OAuth derivation callback threw"};
-        return cch::support::AsyncResult<ai::ModelAuth>(std::expected<ai::ModelAuth, cch::support::Error>{ai::ModelAuth{}});
+        return cch::support::AsyncResult<ai::ModelAuth>(
+            std::expected<ai::ModelAuth, cch::support::Error>{
+                std::unexpect,
+                support::make_error(
+                    support::ErrorCode::OAuth,
+                    "OAuth derivation callback failed",
+                    "explicit callback failure")});
     };
     auto derivation_models = make_models(derivation_credentials, auth_context);
     REQUIRE(derivation_models->set_provider(std::make_shared<RecordingProvider>(

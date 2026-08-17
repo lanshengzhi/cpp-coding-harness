@@ -56,32 +56,27 @@ template <typename Body>
                         support::ErrorCode::Tool, "tool execution has no initiating executor")));
                     return;
                 }
-                try {
-                    boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> coro;
-                    {
-                        std::lock_guard lock(*body_mutex);
-                        coro = (*shared_body)(
-                            std::move(invocation),
-                            std::move(stop_token),
-                            std::move(update_sink));
-                    }
-                    boost::asio::co_spawn(
-                        executor,
-                        std::move(coro),
-                        [completion = std::move(completion)](
-                            std::exception_ptr eptr,
-                            support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
-                            if (eptr) {
-                                completion(std::unexpected(support::make_error(
-                                    support::ErrorCode::Tool, "tool execution failed")));
-                            } else {
-                                completion(std::move(result));
-                            }
-                        });
-                } catch (...) {
-                    completion(std::unexpected(support::make_error(
-                        support::ErrorCode::Tool, "tool execution failed")));
+                boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> coro;
+                {
+                    std::lock_guard lock(*body_mutex);
+                    coro = (*shared_body)(
+                        std::move(invocation),
+                        std::move(stop_token),
+                        std::move(update_sink));
                 }
+                boost::asio::co_spawn(
+                    executor,
+                    std::move(coro),
+                    [completion = std::move(completion)](
+                        auto eptr,
+                        support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
+                        if (eptr) {
+                            completion(std::unexpected(support::make_error(
+                                support::ErrorCode::Tool, "tool execution failed")));
+                        } else {
+                            completion(std::move(result));
+                        }
+                    });
             }};
     };
     return tool;

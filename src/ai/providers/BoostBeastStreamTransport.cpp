@@ -86,6 +86,21 @@ struct ParsedUrl {
     return support::make_error(code, std::move(message), std::move(detail));
 }
 
+/// Maps a setup-phase failure to the same error the exception-enabled catch
+/// produces: the header timer turning a failure into Timeout, and cancellation
+/// into Cancelled, otherwise Network.
+[[nodiscard]] support::Error stream_setup_error(
+    bool response_header_timed_out,
+    boost::system::error_code ec) {
+    if (response_header_timed_out) {
+        return support::make_error(
+            support::ErrorCode::Timeout,
+            "response header timeout",
+            ec.message());
+    }
+    return network_error("stream transport failure", ec);
+}
+
 [[nodiscard]] support::Error cancelled_error() {
     return support::make_error(
         support::ErrorCode::Cancelled,
@@ -93,6 +108,7 @@ struct ParsedUrl {
         "transport operation was cancelled");
 }
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 [[nodiscard]] support::Error exception_error(const std::exception& error) {
     std::string detail = error.what();
     auto code = detail.find("timeout") != std::string::npos || detail.find("timed out") != std::string::npos
@@ -100,6 +116,7 @@ struct ParsedUrl {
         : support::ErrorCode::Network;
     return support::make_error(code, "stream transport failure", std::move(detail));
 }
+#endif
 
 } // namespace
 
@@ -118,7 +135,9 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
     }
 
     auto response_header_timed_out = std::make_shared<bool>(false);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         http::verb verb = http::string_to_verb(request_method(request));
         if (verb == http::verb::unknown) {
             co_return std::unexpected(support::make_error(
@@ -173,16 +192,30 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
         stream.set_verify_mode(ssl::verify_peer);
         stream.set_verify_callback(ssl::host_name_verification(parsed->host));
 
+        // Setup awaits report failures through an explicit error code so the
+        // strict no-exception build returns Expected instead of reaching the
+        // Boost terminate hook. Timeout/cancellation mapping mirrors the
+        // exception-enabled catch and the body-read path.
+        boost::system::error_code setup_ec;
         auto results = co_await resolver.async_resolve(
             parsed->host,
             parsed->port,
-            cancellable(asio::use_awaitable));
+            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+        if (setup_ec) {
+            co_return std::unexpected(stream_setup_error(*response_header_timed_out, setup_ec));
+        }
         co_await beast::get_lowest_layer(stream).async_connect(
             results,
-            cancellable(asio::use_awaitable));
+            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+        if (setup_ec) {
+            co_return std::unexpected(stream_setup_error(*response_header_timed_out, setup_ec));
+        }
         co_await stream.async_handshake(
             ssl::stream_base::client,
-            cancellable(asio::use_awaitable));
+            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+        if (setup_ec) {
+            co_return std::unexpected(stream_setup_error(*response_header_timed_out, setup_ec));
+        }
 
         http::request<http::string_body> http_request{verb, parsed->target, 11};
         http_request.set(http::field::host, parsed->host);
@@ -196,7 +229,10 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
         co_await http::async_write(
             stream,
             http_request,
-            cancellable(asio::use_awaitable));
+            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+        if (setup_ec) {
+            co_return std::unexpected(stream_setup_error(*response_header_timed_out, setup_ec));
+        }
 
         beast::flat_buffer buffer;
         http::response_parser<http::buffer_body> parser;
@@ -205,7 +241,10 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
             stream,
             buffer,
             parser,
-            cancellable(asio::use_awaitable));
+            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+        if (setup_ec) {
+            co_return std::unexpected(stream_setup_error(*response_header_timed_out, setup_ec));
+        }
         // timeoutMs bounds setup through response headers. Streaming body
         // lifetime is governed by caller cancellation, matching pi's SSE path.
         response_header_timer.cancel();
@@ -302,6 +341,7 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
         }
 
         co_return response;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const boost::system::system_error& error) {
         if (*response_header_timed_out) {
             co_return std::unexpected(support::make_error(
@@ -315,6 +355,7 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
     } catch (const std::exception& error) {
         co_return std::unexpected(exception_error(error));
     }
+#endif
 }
 
 } // namespace cch::ai::providers
