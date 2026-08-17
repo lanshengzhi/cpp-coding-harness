@@ -29,6 +29,27 @@ struct AwaitableTerminal<boost::asio::awaitable<T, Executor>> {
     using type = T;
 };
 
+template <typename AwaitableFactory, typename Terminal>
+[[nodiscard]] boost::asio::awaitable<Terminal> invoke_awaitable(
+    std::shared_ptr<AwaitableFactory> shared) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+        co_return co_await (*shared)();
+    } catch (const std::exception& error) {
+        co_return std::unexpected(cch::support::make_error(
+            cch::support::ErrorCode::Unknown,
+            "async operation failed",
+            error.what()));
+    } catch (...) {
+        co_return std::unexpected(cch::support::make_error(
+            cch::support::ErrorCode::Unknown,
+            "async operation failed"));
+    }
+#else
+    co_return co_await (*shared)();
+#endif
+}
+
 /// The executor of the coroutine currently consuming an `AsyncResult`. Set
 /// during producer initiation so implementation producers that must run
 /// coroutine work can co_spawn it onto the consuming serialized domain
@@ -88,38 +109,52 @@ template <typename AwaitableFactory>
     return cch::support::AsyncResult<Value, cch::support::Error>{
         cch::support::AsyncProducer<Value, cch::support::Error>{
             [shared](cch::support::AsyncCompletion<Value, cch::support::Error> completion) mutable noexcept {
-            const auto executor = t_initiating_executor;
-            try {
-                boost::asio::co_spawn(
-                    executor,
-                    (*shared)(),
-                    boost::asio::bind_executor(
+                using Completion = cch::support::AsyncCompletion<Value, cch::support::Error>;
+                const auto executor = t_initiating_executor;
+                std::shared_ptr<Completion> completion_owner;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                // The staged build still permits setup exceptions; convert them before
+                // the producer's no-exception completion contract takes over.
+                try {
+#endif
+                    completion_owner = std::make_shared<Completion>(std::move(completion));
+                    boost::asio::co_spawn(
                         executor,
-                        [shared, completion = std::move(completion)](
-                            std::exception_ptr exception, Terminal result) mutable noexcept {
-                            if (exception) {
-                                try {
-                                    std::rethrow_exception(exception);
-                                } catch (const std::exception& error) {
-                                    completion(std::unexpected(cch::support::make_error(
-                                        cch::support::ErrorCode::Unknown,
-                                        "async operation failed",
-                                        error.what())));
-                                } catch (...) {
-                                    completion(std::unexpected(cch::support::make_error(
+                        invoke_awaitable<AwaitableFactory, Terminal>(shared),
+                        boost::asio::bind_executor(
+                            executor,
+                            [shared, completion_owner](
+                                std::exception_ptr exception, Terminal result) mutable noexcept {
+                                if (exception) {
+#if defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                    // Asio cannot produce an exception pointer in this mode. A
+                                    // non-null value is a Runtime invariant violation.
+                                    std::terminate();
+#else
+                                    // The staged exception-enabled build retains the same
+                                    // explicit error channel without rethrowing across the bridge.
+                                    std::move(*completion_owner)(std::unexpected(cch::support::make_error(
                                         cch::support::ErrorCode::Unknown,
                                         "async operation failed")));
+#endif
+                                    return;
                                 }
-                            } else {
-                                completion(std::move(result));
-                            }
-                        }));
-            } catch (...) {
-                completion(std::unexpected(cch::support::make_error(
-                    cch::support::ErrorCode::Unknown,
-                    "async operation initiation failed")));
+                                std::move(*completion_owner)(std::move(result));
+                            }));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                } catch (...) {
+                    auto failure = std::unexpected(cch::support::make_error(
+                        cch::support::ErrorCode::Unknown,
+                        "async operation initiation failed"));
+                    if (completion_owner) {
+                        std::move(*completion_owner)(std::move(failure));
+                    } else {
+                        completion(std::move(failure));
+                    }
+                }
+#endif
             }
-        }}};
+        }};
 }
 
 } // namespace cch::ai::detail

@@ -84,7 +84,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 5.7. Project-owned production and test targets are designed for the strict no-exception configuration. The strict build uses `-fno-exceptions`; `throw`, `try`/`catch`, and exception propagation are not ordinary failure paths. Expected failures use `Expected`/`std::error_code`, while invariant violations terminate.
 
-5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. The only allowed exception pointer is in the private AI completion bridge, where it is converted once to an `Expected` error and is never rethrown or forwarded across an Owner boundary. The Parity Architecture Gate's versioned exception allowlist is authoritative for this private detail.
+5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. The only allowed exception pointer is in the private AI completion bridge, where staged exception-enabled builds map it once to an `Expected` error, while `BOOST_ASIO_NO_EXCEPTIONS` treats a non-null pointer as a fatal Runtime invariant; it is never rethrown or forwarded across an Owner boundary. The Parity Architecture Gate's versioned exception allowlist is authoritative for this private detail.
 
 ## 6. Async and connections
 

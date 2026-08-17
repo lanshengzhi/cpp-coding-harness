@@ -40,6 +40,11 @@ if(CCH_STRICT_NO_EXCEPTIONS)
     # policy testable now and applies to every project-owned C++ target,
     # including test shards.
     add_compile_options(-fno-exceptions)
+    # Boost.Asio's completion machinery must take the same no-exception path
+    # as the project-owned code. The compiler flag also makes Boost.Config set
+    # BOOST_NO_EXCEPTIONS, but this explicit definition keeps the Asio policy
+    # visible in every strict compile command.
+    add_compile_definitions(BOOST_ASIO_NO_EXCEPTIONS)
     message(STATUS "Strict no-exception policy enabled")
 endif()
 
@@ -166,6 +171,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_ai
     SOURCES
+        src/ai/BoostExceptionHandler.cpp
         src/ai/ContentUtil.cpp
         src/ai/Model.cpp
         src/ai/Models.cpp
@@ -205,6 +211,13 @@ cch_parity_declare_target(
         cch_support
 )
 cch_owner_include_roots(cch_ai src/ai/include)
+# Boost's no-exception configuration leaves the application-owned
+# boost::throw_exception termination hook to the consuming target. Compile the
+# private hook without exceptions even while the wider migration is staged.
+set_source_files_properties(src/ai/BoostExceptionHandler.cpp PROPERTIES
+    COMPILE_OPTIONS -fno-exceptions
+    COMPILE_DEFINITIONS BOOST_ASIO_NO_EXCEPTIONS
+)
 
 cch_parity_declare_target(
     TARGET cch_agent_core
@@ -724,6 +737,31 @@ if(CCH_BUILD_TESTS)
     catch_discover_tests(cch_tests_ai ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_ai ${CCH_PARITY_BUILD_GATE_TARGET})
 
+    # Private Boost.Asio bridges are validated in their own no-exception test
+    # target while the wider migration remains staged behind
+    # CCH_STRICT_NO_EXCEPTIONS (#482).
+    add_executable(cch_tests_ai_async_bridge
+        tests/Catch2Main.cpp
+        tests/ai/AsyncBridgeTest.cpp
+    )
+    target_include_directories(cch_tests_ai_async_bridge PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_ai_async_bridge
+        PRIVATE
+            cch_ai
+            Boost::headers
+            Catch2::Catch2
+    )
+    target_compile_definitions(cch_tests_ai_async_bridge PRIVATE
+        BOOST_ASIO_NO_EXCEPTIONS
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    target_compile_options(cch_tests_ai_async_bridge PRIVATE
+        ${CCH_WARNING_OPTIONS}
+        -fno-exceptions
+    )
+    catch_discover_tests(cch_tests_ai_async_bridge ADD_TAGS_AS_LABELS)
+    add_dependencies(cch_tests_ai_async_bridge ${CCH_PARITY_BUILD_GATE_TARGET})
+
     # agent
     add_executable(cch_tests_agent
         tests/Catch2Main.cpp
@@ -940,6 +978,7 @@ if(CCH_BUILD_TESTS)
             cch_tests_support
             cch_tests_tui
             cch_tests_ai
+            cch_tests_ai_async_bridge
             cch_tests_agent
             cch_tests_harness_tools
             cch_tests_coding_agent
