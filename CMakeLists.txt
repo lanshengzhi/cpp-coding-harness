@@ -294,6 +294,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/Footer.cpp
         src/coding_agent/tui/FooterDataProvider.cpp
         src/coding_agent/tui/InteractiveMode.cpp
+        src/coding_agent/tui/InteractiveView.cpp
         src/coding_agent/tui/KeybindingHints.cpp
         src/coding_agent/tui/KeybindingsManager.cpp
         src/coding_agent/tui/LoadedResources.cpp
@@ -837,6 +838,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
+        tests/coding_agent/tui/InteractiveViewActionTest.cpp
         tests/coding_agent/tui/KeybindingsManagerTest.cpp
         tests/coding_agent/tui/LoadedResourcesTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp

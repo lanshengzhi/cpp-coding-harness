@@ -40,6 +40,8 @@
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/StatusIndicator.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
+#include "coding_agent/tui/InteractiveView.hpp"
+#include "coding_agent/tui/InteractiveViewActions.hpp"
 #include "coding_agent/tui/LoadedResources.hpp"
 #include "coding_agent/tui/ReloadBox.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
@@ -109,20 +111,6 @@ namespace {
 
 using ActionSink = std::move_only_function<void()>;
 
-struct EditorSubmissionRequest {
-    std::string text;
-    std::size_t editor_revision{0};
-};
-
-struct EditorInterruptRequest {
-    std::string pending_bash_text;
-    std::size_t editor_revision{0};
-    bool pending_bash{false};
-};
-
-using InterruptSink = std::move_only_function<void(EditorInterruptRequest)>;
-using SubmitSink = std::move_only_function<void(EditorSubmissionRequest)>;
-
 // ── Focused-editor User Bash syntax (ADR 0026) ────────────────────────────
 // Folded from the deleted UserBashSyntax module: only a direct focused
 // Native TUI editor submission interprets the `!`/`!!` prefixes.
@@ -132,17 +120,14 @@ struct UserBashInvocation {
     bool exclude_from_context{false};
 };
 
-/// Trims ASCII whitespace from both ends of one editor submission.
-[[nodiscard]] std::string trim_editor_submission(std::string text) {
-    const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
-        return std::isspace(value) != 0;
-    });
-    const auto last = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char value) {
-        return std::isspace(value) != 0;
-    }).base();
-    if (first >= last) return {};
-    return {first, last};
-}
+// The main-screen action types and payload structs live in
+// InteractiveViewActions.hpp; the shared pure helpers used by the state
+// live in InteractiveView.hpp's detail namespace.
+using interactive_view_detail::trim_editor_submission;
+using interactive_view_detail::user_bash_editor_mode;
+using interactive_view_detail::editor_text_after_interrupt;
+using interactive_view_detail::thinking_border_token_for;
+using interactive_view_detail::queued_editor_text;
 
 /// The argument after an exact slash prefix (pi `text.slice(N).trim()` for
 /// the space-delimited `startsWith("/x ")` branch): `"/name  foo"` with
@@ -189,16 +174,9 @@ struct UserBashInvocation {
 
 /// Bash mode is the unsubmitted editor state whose trimmed text begins with
 /// `!`; it exists only where User Bash dispatch is available.
-[[nodiscard]] bool user_bash_editor_mode(
-    std::string text,
-    bool user_bash_available) {
-    return user_bash_available &&
-        trim_editor_submission(std::move(text)).starts_with('!');
-}
 
 // ── Submission kinds (folded from the deleted InteractionPolicy) ──────────
 
-enum class InputSubmission { Ordinary, FollowUp };
 enum class SubmissionOrigin { FocusedEditor, InitialPrompt };
 
 enum class InterruptRoute {
@@ -226,27 +204,6 @@ struct InteractiveStartupDiagnostics {
     return text;
 }
 
-[[nodiscard]] std::string editor_text_after_interrupt(
-    std::string_view sampled_text,
-    std::string_view current_text) {
-    std::size_t prefix = 0;
-    while (prefix < sampled_text.size() && prefix < current_text.size() &&
-        sampled_text[prefix] == current_text[prefix]) {
-        ++prefix;
-    }
-
-    std::size_t suffix = 0;
-    while (suffix < sampled_text.size() - prefix &&
-        suffix < current_text.size() - prefix &&
-        sampled_text[sampled_text.size() - suffix - 1] ==
-            current_text[current_text.size() - suffix - 1]) {
-        ++suffix;
-    }
-    return std::string{current_text.substr(
-        prefix,
-        current_text.size() - prefix - suffix)};
-}
-
 [[nodiscard]] support::Error presentation_error(
     const support::Error& error,
     std::string message) {
@@ -259,15 +216,6 @@ struct InteractiveStartupDiagnostics {
 /// pi `theme.ts` `getThinkingBorderColor`: the editor border token for a
 /// thinking-level wire name ("off".."max"); unknown levels fall back to
 /// `thinkingOff` like pi's default branch.
-[[nodiscard]] ThemeToken thinking_border_token_for(std::string_view level) {
-    if (level == "minimal") return ThemeToken::ThinkingMinimal;
-    if (level == "low") return ThemeToken::ThinkingLow;
-    if (level == "medium") return ThemeToken::ThinkingMedium;
-    if (level == "high") return ThemeToken::ThinkingHigh;
-    if (level == "xhigh") return ThemeToken::ThinkingXhigh;
-    if (level == "max") return ThemeToken::ThinkingMax;
-    return ThemeToken::ThinkingOff;
-}
 
 [[nodiscard]] std::string clipboard_uuid() {
     std::random_device random;
@@ -356,31 +304,6 @@ struct InteractiveStartupDiagnostics {
     return std::unexpected(support::make_error(
         support::ErrorCode::Process,
         "could not allocate a unique clipboard image path"));
-}
-
-[[nodiscard]] std::optional<std::string> queued_editor_text(
-    const ai::MessageVariant& message) {
-    const auto* user = std::get_if<ai::UserMessage>(&message);
-    if (user == nullptr) {
-        return std::nullopt;
-    }
-    std::string text;
-    if (const auto* value = std::get_if<std::string>(&user->content)) {
-        text = *value;
-    } else {
-        const auto& blocks = std::get<std::vector<ai::Content>>(user->content);
-        if (std::any_of(
-                blocks.begin(),
-                blocks.end(),
-                [](const auto& block) {
-                    return !std::holds_alternative<ai::TextContent>(block);
-                })) {
-            return std::nullopt;
-        }
-        text = ai::text_from_content(blocks);
-    }
-    if (text.empty()) return std::nullopt;
-    return text;
 }
 
 [[nodiscard]] support::Expected<std::vector<std::string>> queued_editor_texts(
@@ -843,953 +766,6 @@ private:
 };
 
 /// The pi main-screen composition: header (keybinding hints only, no logo),
-/// chat, pending-messages, status, editor, and footer containers, stacked in
-/// pi's order with the chat absorbing the flexible space. The status and
-/// footer containers are placeholders whose content lands with the
-/// footer/status ticket (P15); the editor, chat, pending display, header
-/// hints, and the interrupt binding follow pi's interactive-mode routing.
-class InteractiveView final
-    : public cch::tui::Component,
-      public cch::tui::InputHandler,
-      public cch::tui::Focusable,
-      public cch::tui::ViewportAware {
-public:
-    InteractiveView(
-        std::shared_ptr<SharedKeybindings> keybindings,
-        ActionSink on_invalidate,
-        SubmitSink on_submit,
-        SubmitSink on_follow_up,
-        ActionSink on_clipboard_paste,
-        ActionSink on_dequeue,
-        InterruptSink on_interrupt,
-        ActionSink on_exit,
-        ActionSink on_cycle_model_forward,
-        ActionSink on_cycle_model_backward,
-        ActionSink on_select_model,
-        ActionSink on_cycle_thinking,
-        ActionSink on_toggle_thinking,
-        ActionSink on_resume_session,
-        ActionSink on_fork_session,
-        ActionSink on_new_session,
-        ActionSink on_copy_last_message,
-        ActionSink on_open_tree_selector,
-        ActionSink on_suspend,
-        ActionSink on_external_editor,
-        std::move_only_function<FooterData()> footer_data_source,
-        bool hide_thinking_block,
-        std::size_t output_pad,
-        bool user_bash_available,
-        std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider,
-        std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer,
-        cch::tui::EditorRenderRequestSink autocomplete_render_request,
-        const LiveTheme& theme)
-        : keybindings_(std::move(keybindings)),
-          on_invalidate_(std::move(on_invalidate)),
-          on_submit_(std::move(on_submit)),
-          on_follow_up_(std::move(on_follow_up)),
-          on_clipboard_paste_(std::move(on_clipboard_paste)),
-          on_dequeue_(std::move(on_dequeue)),
-          on_interrupt_(std::move(on_interrupt)),
-          on_exit_(std::move(on_exit)),
-          on_cycle_model_forward_(std::move(on_cycle_model_forward)),
-          on_cycle_model_backward_(std::move(on_cycle_model_backward)),
-          on_select_model_(std::move(on_select_model)),
-          on_cycle_thinking_(std::move(on_cycle_thinking)),
-          on_toggle_thinking_(std::move(on_toggle_thinking)),
-          on_resume_session_(std::move(on_resume_session)),
-          on_fork_session_(std::move(on_fork_session)),
-          on_new_session_(std::move(on_new_session)),
-          on_copy_last_message_(std::move(on_copy_last_message)),
-          on_open_tree_selector_(std::move(on_open_tree_selector)),
-          on_suspend_(std::move(on_suspend)),
-          on_external_editor_(std::move(on_external_editor)),
-          footer_data_source_(std::move(footer_data_source)),
-          user_bash_available_(user_bash_available),
-          header_(theme, keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
-          resources_(theme),
-          chat_(theme, keybindings_),
-          footer_(theme),
-          theme_(&theme),
-          editor_(
-              cch::tui::EditorOptions{
-                  .keybindings = keybindings_->get(),
-                  .autocomplete_debounce_timer = std::move(autocomplete_debounce_timer),
-                  .autocomplete_render_request = std::move(autocomplete_render_request),
-              },
-              [this](std::string text) {
-                  // Editor submission clears before invoking its submit sink;
-                  // keep that notification on the sampled text's revision.
-                  if (!text.empty()) ++editor_revision_;
-                  invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
-              },
-              [this](std::string text) {
-                  invoke_submit(EditorSubmissionRequest{
-                      .text = std::move(text),
-                      .editor_revision = editor_revision_,
-                  });
-              }) {
-        chat_.set_hide_thinking_block(hide_thinking_block);
-        chat_.set_output_pad(output_pad);
-        editor_.set_autocomplete_provider(std::move(autocomplete_provider));
-    }
-    InteractiveView(InteractiveView&&) = delete;
-    InteractiveView& operator=(InteractiveView&&) = delete;
-    ~InteractiveView() override = default;
-    InteractiveView(const InteractiveView&) = delete;
-    InteractiveView& operator=(const InteractiveView&) = delete;
-
-    void initialize(const AgentSessionSnapshot& snapshot) {
-        std::lock_guard lock(mutex_);
-        chat_.initialize(snapshot);
-    }
-
-    void apply_render_settings(bool hide_thinking_block, std::size_t output_pad) {
-        std::lock_guard lock(mutex_);
-        chat_.set_hide_thinking_block(hide_thinking_block);
-        chat_.set_output_pad(output_pad);
-    }
-
-    /// Replace the editor's autocomplete provider (pi
-    /// `setupAutocompleteProvider` after a settings change).
-    void set_autocomplete_provider(
-        std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
-        std::lock_guard lock(mutex_);
-        editor_.set_autocomplete_provider(std::move(provider));
-    }
-
-    /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()` →
-    /// shared-manager mutation, ADR 0035): swap the shared slot every durable
-    /// component observes and rebind the editor's snapshot. Serialized under
-    /// the view mutex so concurrent render/input on the terminal thread never
-    /// observes a torn registry.
-    void set_keybindings(
-        std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
-        std::lock_guard lock(mutex_);
-        keybindings_->replace(registry);
-        editor_.set_keybindings(std::move(registry));
-    }
-
-    void apply_event(const agent::AgentLifecycleEvent& event) {
-        std::lock_guard lock(mutex_);
-        chat_.apply_event(event);
-    }
-
-    void append_committed_message(ai::MessageVariant message) {
-        std::lock_guard lock(mutex_);
-        chat_.append_committed_message(std::move(message));
-    }
-
-    void clear_transcript() {
-        std::lock_guard lock(mutex_);
-        chat_.clear();
-    }
-
-    void append_frontend_message(std::string text) {
-        std::lock_guard lock(mutex_);
-        chat_.append_frontend_message(std::move(text));
-    }
-
-    void append_diagnostic(std::string text) {
-        std::lock_guard lock(mutex_);
-        chat_.append_diagnostic(std::move(text));
-    }
-
-    void append_warning(std::string text) {
-        std::lock_guard lock(mutex_);
-        chat_.append_warning(std::move(text));
-    }
-
-    void append_trust_warning(std::string text) {
-        std::lock_guard lock(mutex_);
-        chat_.append_trust_warning(std::move(text));
-    }
-
-    void append_status_message(std::string text) {
-        std::lock_guard lock(mutex_);
-        chat_.append_status_message(std::move(text));
-    }
-
-    /// pi `showStatusIndicator` surface over the status container: the
-    /// active indicator replaces the previous one (Working/Compaction on
-    /// accent, Retry on warning) and animates through the TUI Loader.
-    void show_status_working(std::string message = "Working...") {
-        std::lock_guard lock(mutex_);
-        // pi `setWorkingVisible`: an already-active Working indicator is
-        // kept (per-message re-shows must not restart the loader).
-        if (status_indicator_ != nullptr &&
-            status_indicator_->kind() == StatusIndicator::Kind::Working) {
-            return;
-        }
-        replace_status_indicator(
-            StatusIndicator::Kind::Working,
-            working_status_message(std::move(message)));
-    }
-
-    void show_status_compaction(std::string_view reason) {
-        std::lock_guard lock(mutex_);
-        replace_status_indicator(
-            StatusIndicator::Kind::Compaction,
-            compaction_status_message(keybindings_->registry(), reason));
-    }
-
-    void show_status_retry(int attempt, int max_attempts, int seconds) {
-        std::lock_guard lock(mutex_);
-        replace_status_indicator(
-            StatusIndicator::Kind::Retry,
-            retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
-    }
-
-    /// pi `RetryStatusIndicator` countdown tick: rewrite the retry message
-    /// without replacing the loader.
-    void set_status_retry_message(int attempt, int max_attempts, int seconds) {
-        std::lock_guard lock(mutex_);
-        if (status_indicator_ == nullptr ||
-            status_indicator_->kind() != StatusIndicator::Kind::Retry) {
-            return;
-        }
-        status_indicator_->set_message(
-            retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
-    }
-
-    /// pi `showLoadedResources`: replace the loaded-resources block (the
-    /// startup container between the header and the chat). A no-resources
-    /// data renders zero lines.
-    void set_loaded_resources_data(LoadedResources::Data data) {
-        std::lock_guard lock(mutex_);
-        resources_.set_data(std::move(data));
-    }
-
-    /// pi `clearStatusIndicator`: back to the two-row idle status.
-    void clear_status_indicator() {
-        std::lock_guard lock(mutex_);
-        status_indicator_.reset();
-    }
-
-    /// Replace the active status indicator (pi `showStatusIndicator`
-    /// disposes the previous one first); the loader's render requests flow
-    /// through the view's invalidate sink.
-    void replace_status_indicator(StatusIndicator::Kind kind, std::string message) {
-        status_indicator_ = std::make_unique<StatusIndicator>(
-            kind,
-            *theme_,
-            [this] {
-                if (!on_invalidate_) return;
-                try {
-                    on_invalidate_();
-                } catch (...) {
-                    record_callback_error(
-                        "Native TUI status indicator render request failed");
-                }
-            },
-            std::move(message));
-    }
-
-    /// The login presentation's editor slot (pi's `editorContainer` swap):
-    /// while a replacement is set it renders and receives input in place of
-    /// the editor, exactly like pi's focused dialog/selector.
-    void set_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
-        std::lock_guard lock(mutex_);
-        editor_replacement_ = std::move(component);
-        if (editor_replacement_) {
-            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
-                focusable->set_focused(editor_.focused());
-            }
-        }
-    }
-
-    void restore_editor() {
-        std::lock_guard lock(mutex_);
-        editor_replacement_.reset();
-    }
-
-    void append_user_bash_diagnostic(std::string text) {
-        std::lock_guard lock(mutex_);
-        chat_.append_user_bash_diagnostic(std::move(text));
-    }
-
-    void restore_submitted_text(const std::string& text) {
-        std::lock_guard lock(mutex_);
-        restore_editor_text({text});
-    }
-
-    void clear_pending_bash(const EditorInterruptRequest& request) {
-        std::lock_guard lock(mutex_);
-        if (editor_revision_ == request.editor_revision) {
-            editor_.set_text({});
-            return;
-        }
-        editor_.set_text(editor_text_after_interrupt(
-            request.pending_bash_text,
-            editor_.expanded_text()));
-    }
-
-    void insert_editor_text(std::string text) {
-        std::lock_guard lock(mutex_);
-        editor_.insert_text_at_cursor(std::move(text));
-    }
-
-    /// The raw editor text (pi `editor.getText()` — the tree navigation
-    /// pre-fill and fork flows check emptiness before replacing it).
-    [[nodiscard]] std::string editor_text() const {
-        std::lock_guard lock(mutex_);
-        return editor_.text();
-    }
-
-    /// The expanded editor text (pi `editor.getExpandedText()` — the
-    /// external-editor flow sends the expanded content like pi).
-    [[nodiscard]] std::string editor_expanded_text() const {
-        std::lock_guard lock(mutex_);
-        return editor_.expanded_text();
-    }
-
-    /// Replace the whole editor content (pi `editor.setText` — the fork
-    /// flow's `selectedText` pre-fill).
-    void set_editor_text(std::string text) {
-        std::lock_guard lock(mutex_);
-        editor_.set_text(std::move(text));
-    }
-
-    void restore_queued_text(const std::vector<std::string>& messages) {
-        std::lock_guard lock(mutex_);
-        restore_editor_text(messages);
-    }
-
-    void set_pending_input(const agent::AgentInputQueues& queues) {
-        std::lock_guard lock(mutex_);
-        pending_steering_.clear();
-        pending_follow_up_.clear();
-        for (const auto& message : queues.steering.messages) {
-            pending_steering_.push_back(
-                queued_editor_text(message).value_or("[unsupported queued input]"));
-        }
-        for (const auto& message : queues.follow_up.messages) {
-            pending_follow_up_.push_back(
-                queued_editor_text(message).value_or("[unsupported queued input]"));
-        }
-    }
-
-    void set_user_bash_progress(runtime::UserBashProgress progress) {
-        std::lock_guard lock(mutex_);
-        if (!pending_bash_) {
-            pending_bash_ = std::make_unique<BashExecutionComponent>(
-                *theme_,
-                keybindings_,
-                progress.command,
-                progress.exclude_from_context);
-            pending_bash_->start_loader([this] {
-                if (!on_invalidate_) return;
-                try {
-                    on_invalidate_();
-                } catch (...) {
-                }
-            });
-            last_bash_output_size_ = 0;
-            bash_outcome_set_ = false;
-        }
-        if (progress.output.size() > last_bash_output_size_) {
-            pending_bash_->append_output(progress.output.substr(last_bash_output_size_));
-        }
-        last_bash_output_size_ = progress.output.size();
-        if (progress.awaiting_commitment && !bash_outcome_set_) {
-            bash_outcome_set_ = true;
-            pending_bash_->set_complete(
-                progress.exit_code,
-                progress.cancelled,
-                progress.truncated,
-                progress.full_output_path);
-        }
-        pending_bash_->set_expanded(chat_.tools_expanded());
-    }
-
-    void clear_user_bash_progress() {
-        std::lock_guard lock(mutex_);
-        pending_bash_.reset();
-        last_bash_output_size_ = 0;
-        bash_outcome_set_ = false;
-    }
-
-    /// Replaces the pending block with its committed transcript entry in one
-    /// step, so the clear-pending-before-append ordering cannot drift apart
-    /// at call sites.
-    void commit_user_bash(ai::MessageVariant message) {
-        std::lock_guard lock(mutex_);
-        pending_bash_.reset();
-        last_bash_output_size_ = 0;
-        bash_outcome_set_ = false;
-        chat_.append_committed_message(std::move(message));
-    }
-
-    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
-        std::lock_guard lock(mutex_);
-        if (callback_error_) return std::unexpected(*callback_error_);
-
-        // Header (keybinding hints), the loaded-resources block, pending-
-        // messages, status, and footer render first so the editor and
-        // autocomplete capacities account for their fixed rows (pi's dock
-        // below the chat).
-        std::vector<std::string> header_lines;
-        if (auto header = header_.render(width); !header) {
-            return std::unexpected(header.error());
-        } else {
-            header_lines = std::move(header->lines);
-        }
-        std::vector<std::string> resources_lines;
-        if (auto resources = resources_.render(width); !resources) {
-            return std::unexpected(resources.error());
-        } else {
-            resources_lines = std::move(resources->lines);
-        }
-        // Status and footer containers are part of the composition: the
-        // status container holds the active Working/Compaction/Retry
-        // indicator (two rows: one spacer + the loader line, pi's Loader) or
-        // the two-row IdleStatus; the footer renders pi's two-line layout
-        // from the live footer data source.
-        std::vector<std::string> status_lines;
-        std::vector<std::string> footer_lines;
-        if (footer_data_source_) {
-            current_footer_data_ = footer_data_source_();
-        }
-        if (status_indicator_) {
-            if (auto rendered = status_indicator_->render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else {
-                status_lines = std::move(rendered->lines);
-            }
-        } else {
-            // pi's IdleStatus: the two-row empty status container.
-            auto idle = idle_status_.render(width);
-            if (!idle) return std::unexpected(idle.error());
-            status_lines = std::move(idle->lines);
-        }
-        footer_.set_data(current_footer_data_);
-        if (auto rendered = footer_.render(width); !rendered) {
-            return std::unexpected(rendered.error());
-        } else {
-            footer_lines = std::move(rendered->lines);
-        }
-
-        std::vector<std::string> pending_lines;
-        pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
-        if (pending_bash_) {
-            // One Bash block while pending; it becomes an ordinary chat entry
-            // through the same component after commitment.
-            pending_bash_->set_expanded(chat_.tools_expanded());
-            auto block = pending_bash_->render(width);
-            if (!block) return std::unexpected(block.error());
-            pending_lines.insert(
-                pending_lines.end(),
-                std::make_move_iterator(block->lines.begin()),
-                std::make_move_iterator(block->lines.end()));
-        }
-        for (const auto& message : pending_steering_) {
-            cch::tui::TruncatedText item{"Steering: " + message};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-        for (const auto& message : pending_follow_up_) {
-            cch::tui::TruncatedText item{"Follow-up: " + message};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-        if (!pending_lines.empty()) {
-            const auto hint = keybindings_->registry().key_text("app.message.dequeue");
-            cch::tui::TruncatedText item{std::format(
-                "↳ {} to edit all queued messages",
-                hint.empty() ? "Unbound" : format_key_text(hint, true))};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-        // The dock (pending + status + editor + footer) and a minimum chat
-        // slice stay visible on every terminal; the loaded-resources block
-        // yields the space it needs. pi's transcript scroll keeps the dock
-        // fixed while the loaded-resources content scrolls above the chat, so
-        // a huge startup diagnostic (e.g. an invalid `--theme` document's
-        // full missing-color-token list, #425) must not push the footer and
-        // editor off a small screen and freeze the boot view.
-        constexpr std::size_t kMinDockEditorRows = 3;
-        constexpr std::size_t kMinChatRows = 3;
-        const auto dock_budget = pending_lines.size() + status_lines.size() +
-            kMinDockEditorRows + footer_lines.size();
-        const auto top_budget = available_rows_ > dock_budget + kMinChatRows
-            ? available_rows_ - dock_budget - kMinChatRows
-            : 0;
-        const auto resources_budget =
-            top_budget > header_lines.size() ? top_budget - header_lines.size() : 0;
-        if (resources_lines.size() > resources_budget) {
-            resources_lines.resize(resources_budget);
-        }
-        const auto fixed_rows =
-            header_lines.size() + resources_lines.size() + pending_lines.size() +
-            status_lines.size() + footer_lines.size();
-
-        std::vector<std::string> editor_lines;
-        std::vector<std::string> autocomplete_lines;
-        if (editor_replacement_) {
-            // pi's editorContainer swap: the login dialog/selector renders in
-            // the editor slot with no autocomplete rows.
-            if (auto replaced = editor_replacement_->render(width); !replaced) {
-                return std::unexpected(replaced.error());
-            } else {
-                editor_lines = std::move(replaced->lines);
-            }
-        } else {
-        editor_.set_available_height(available_rows_ > fixed_rows
-            ? available_rows_ - fixed_rows
-            : 1);
-        // The editor enters Bash mode as soon as the trimmed input begins
-        // with `!` (where User Bash dispatch is available). The border color
-        // follows the same transition: bash mode uses the bashMode token,
-        // otherwise the thinking-level token (pi `updateEditorBorderColor`
-        // `getBashModeBorderColor` / `getThinkingBorderColor`).
-        const auto thinking_border_token = thinking_border_token_for(
-            current_footer_data_.thinking_level);
-        cch::tui::EditorTheme editor_theme;
-        if (unsubmitted_bash_mode()) {
-            editor_theme.text = theme_->foreground_hook(ThemeToken::BashMode);
-            editor_theme.border = theme_->foreground_hook(ThemeToken::BashMode);
-        } else {
-            editor_theme.text = theme_->editor_theme().text;
-            editor_theme.border = theme_->foreground_hook(thinking_border_token);
-        }
-        editor_.set_theme(std::move(editor_theme));
-        if (auto editor = editor_.render(width); !editor) {
-            return std::unexpected(editor.error());
-        } else {
-            editor_lines = std::move(editor->lines);
-        }
-
-        const auto autocomplete = editor_.autocomplete_items();
-        const auto selected = editor_.autocomplete_selected_index();
-        constexpr std::size_t kMaxAutocompleteRows = 5;
-        const auto autocomplete_capacity = available_rows_ > fixed_rows + editor_lines.size()
-            ? std::min(kMaxAutocompleteRows, available_rows_ - fixed_rows - editor_lines.size())
-            : 0;
-        const auto first_autocomplete = selected < autocomplete_capacity || autocomplete_capacity == 0
-            ? 0
-            : selected - autocomplete_capacity + 1;
-        const auto autocomplete_count = std::min(
-            autocomplete_capacity,
-            autocomplete.size() - std::min(first_autocomplete, autocomplete.size()));
-        autocomplete_lines.reserve(autocomplete_count);
-        for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
-            const auto index = first_autocomplete + offset;
-            std::string text = index == selected ? "> /" : "  /";
-            text += autocomplete[index].label;
-            if (!autocomplete[index].description.empty()) {
-                text += " — " + autocomplete[index].description;
-            }
-            cch::tui::TruncatedText item{std::move(text)};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                autocomplete_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-        }
-        // The full conversation passes through to the terminal's native
-        // scrollback (pi TuiMainScreen): only the dock (pending/status/
-        // editor/autocomplete/footer) stays fixed on screen, and earlier chat
-        // lines scroll away into the terminal's scroll history as the
-        // conversation grows past one screen. Inline images keep their
-        // absolute buffer rows so they scroll with the content that produced
-        // them (fork-B image-follows-content).
-        cch::tui::RenderResult chat_result;
-        if (auto rendered = chat_.render(width); !rendered) {
-            return std::unexpected(rendered.error());
-        } else {
-            chat_result = std::move(*rendered);
-        }
-
-        cch::tui::RenderResult transcript_result;
-        transcript_result.lines = std::move(header_lines);
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(resources_lines.begin()),
-            std::make_move_iterator(resources_lines.end()));
-        for (auto& image : chat_result.images) {
-            image.region.row += transcript_result.lines.size();
-            transcript_result.images.push_back(std::move(image));
-        }
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(chat_result.lines.begin()),
-            std::make_move_iterator(chat_result.lines.end()));
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(pending_lines.begin()),
-            std::make_move_iterator(pending_lines.end()));
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(status_lines.begin()),
-            std::make_move_iterator(status_lines.end()));
-        editor_row_offset_ = transcript_result.lines.size();
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(editor_lines.begin()),
-            std::make_move_iterator(editor_lines.end()));
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(autocomplete_lines.begin()),
-            std::make_move_iterator(autocomplete_lines.end()));
-        transcript_result.lines.insert(
-            transcript_result.lines.end(),
-            std::make_move_iterator(footer_lines.begin()),
-            std::make_move_iterator(footer_lines.end()));
-        return transcript_result;
-    }
-
-    void invalidate() override {
-        std::lock_guard lock(mutex_);
-        editor_.invalidate();
-        if (editor_replacement_) editor_replacement_->invalidate();
-    }
-
-    void handle_input(const cch::tui::InputEventVariant& input) override {
-        std::lock_guard lock(mutex_);
-        if (editor_replacement_) {
-            // pi routes every key to the focused dialog/selector; app-level
-            // bindings resume when the editor is restored. pi's TUI
-            // re-renders after each input event, so the view invalidates.
-            if (auto* handler = dynamic_cast<cch::tui::InputHandler*>(editor_replacement_.get())) {
-                handler->handle_input(input);
-                invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
-            }
-            return;
-        }
-        const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-        if (key != nullptr && key->type != cch::tui::KeyEventType::Release) {
-            // One registry reference for the whole dispatch cascade (the
-            // shared slot, ADR 0035); `replace` is serialized under this
-            // view mutex.
-            const auto& keys = keybindings_->registry();
-            if (keys.matches(*key, "app.exit") && editor_.expanded_text().empty()) {
-                invoke_action(on_exit_, "Native TUI exit callback failed");
-                return;
-            }
-            const auto editor_cancels_interrupt =
-                editor_.autocomplete_open() &&
-                keys.matches(*key, "tui.select.cancel");
-            if (keys.matches(*key, "app.interrupt") &&
-                !editor_cancels_interrupt) {
-                // Autocomplete cancellation stays in the view. Interrupt
-                // precedence is pi's onEscape chain and owns every later
-                // decision; it receives Bash mode as it existed at key-press
-                // time.
-                invoke_interrupt(EditorInterruptRequest{
-                    .pending_bash_text = editor_.expanded_text(),
-                    .editor_revision = editor_revision_,
-                    .pending_bash = unsubmitted_bash_mode(),
-                });
-                return;
-            }
-            if (keys.matches(*key, "app.message.followUp")) {
-                invoke_follow_up();
-                return;
-            }
-            if (keys.matches(*key, "app.clipboard.pasteImage")) {
-                invoke_action(
-                    on_clipboard_paste_,
-                    "Native TUI clipboard callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.message.dequeue")) {
-                invoke_action(on_dequeue_, "Native TUI dequeue callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.clear")) {
-                editor_.set_text({});
-                return;
-            }
-            if (keys.matches(*key, "app.suspend")) {
-                invoke_action(
-                    on_suspend_,
-                    "Native TUI suspend callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.editor.external")) {
-                invoke_action(
-                    on_external_editor_,
-                    "Native TUI external editor callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.tools.expand")) {
-                chat_.toggle_tool_output();
-                header_.set_expanded(chat_.tools_expanded());
-                resources_.set_expanded(chat_.tools_expanded());
-                invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.thinking.toggle")) {
-                invoke_action(
-                    on_toggle_thinking_,
-                    "Native TUI thinking toggle callback failed");
-                return;
-            }
-            // pi's main-editor `app.model.*` / `app.thinking.cycle` bindings:
-            // the cycle actions and the model selector post to the executor
-            // like every session-touching action.
-            if (keys.matches(*key, "app.model.cycleForward")) {
-                invoke_action(on_cycle_model_forward_, "Native TUI model cycle callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.model.cycleBackward")) {
-                invoke_action(on_cycle_model_backward_, "Native TUI model cycle callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.model.select")) {
-                invoke_action(on_select_model_, "Native TUI model selector callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.thinking.cycle")) {
-                invoke_action(on_cycle_thinking_, "Native TUI thinking cycle callback failed");
-                return;
-            }
-            // pi `app.session.*`: recognized-but-unbound actions (defaultKeys
-            // []) — a user-assigned keybinding triggers the flow; the
-            // selector-scoped `app.session.*` bindings are matched inside the
-            // SessionSelectorComponent itself.
-            if (keys.matches(*key, "app.session.resume")) {
-                invoke_action(on_resume_session_, "Native TUI session resume callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.session.fork")) {
-                invoke_action(on_fork_session_, "Native TUI session fork callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.session.new")) {
-                invoke_action(on_new_session_, "Native TUI new-session callback failed");
-                return;
-            }
-            if (keys.matches(*key, "app.session.tree")) {
-                invoke_action(on_open_tree_selector_, "Native TUI tree selector callback failed");
-                return;
-            }
-            // pi's main-editor `app.message.copy` binding (P14: the tree
-            // selector matches the same action through the shared registry).
-            if (keys.matches(*key, "app.message.copy")) {
-                invoke_action(on_copy_last_message_, "Native TUI copy callback failed");
-                return;
-            }
-        }
-        const auto autocomplete_was_open = editor_.autocomplete_open();
-        const auto previous_selection = editor_.autocomplete_selected_index();
-        editor_.handle_input(input);
-        if (autocomplete_was_open != editor_.autocomplete_open() ||
-            previous_selection != editor_.autocomplete_selected_index()) {
-            invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
-        }
-    }
-
-    [[nodiscard]] bool accepts_key_releases() const override {
-        return false;
-    }
-
-    void set_focused(bool focused) override {
-        std::lock_guard lock(mutex_);
-        if (editor_replacement_) {
-            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
-                focusable->set_focused(focused);
-                return;
-            }
-        }
-        editor_.set_focused(focused);
-    }
-
-    [[nodiscard]] bool focused() const override {
-        std::lock_guard lock(mutex_);
-        if (editor_replacement_) {
-            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
-                return focusable->focused();
-            }
-        }
-        return editor_.focused();
-    }
-
-    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
-        std::lock_guard lock(mutex_);
-        std::optional<cch::tui::CursorPosition> cursor;
-        if (editor_replacement_) {
-            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
-                cursor = focusable->cursor_location();
-            }
-        } else {
-            cursor = editor_.cursor_location();
-        }
-        if (cursor) {
-            // Return the true buffer-relative row; Tui::render() clamps it to
-            // the visible viewport when positioning the hardware cursor (pi
-            // positionHardwareCursor tracks the scroll rather than scrolling
-            // the terminal).
-            cursor->row += editor_row_offset_;
-        }
-        return cursor;
-    }
-
-    void set_available_height(std::size_t rows) override {
-        std::lock_guard lock(mutex_);
-        available_rows_ = std::max<std::size_t>(1, rows);
-    }
-
-private:
-    void record_callback_error(
-        std::string message,
-        std::string detail = {}) {
-        callback_error_ = support::make_error(
-            support::ErrorCode::Unknown,
-            std::move(message),
-            std::move(detail));
-    }
-
-    void invoke_action(ActionSink& action, std::string_view failure_message) {
-        if (!action) return;
-        try {
-            action();
-        } catch (const std::exception& error) {
-            record_callback_error(std::string(failure_message), error.what());
-        } catch (...) {
-            record_callback_error(std::string(failure_message));
-        }
-    }
-
-    void invoke_submit(EditorSubmissionRequest request) {
-        invoke_submission(
-            on_submit_,
-            std::move(request),
-            "Native TUI submit callback failed");
-    }
-
-    void invoke_follow_up() {
-        auto text = trim_editor_submission(editor_.expanded_text());
-        if (text.empty()) return;
-        // pi handleFollowUp: the accepted text enters editor history before
-        // the editor clears and the follow-up admission is posted, matching
-        // the Enter path where the editor records the submission itself.
-        editor_.add_to_history(text);
-        editor_.set_text({});
-        invoke_submission(
-            on_follow_up_,
-            EditorSubmissionRequest{
-                .text = std::move(text),
-                .editor_revision = editor_revision_,
-            },
-            "Native TUI follow-up callback failed");
-    }
-
-    void invoke_submission(
-        SubmitSink& sink,
-        EditorSubmissionRequest request,
-        std::string_view failure_message) {
-        if (!sink) return;
-        try {
-            sink(std::move(request));
-        } catch (const std::exception& error) {
-            record_callback_error(std::string(failure_message), error.what());
-        } catch (...) {
-            record_callback_error(std::string(failure_message));
-        }
-    }
-
-    void invoke_interrupt(EditorInterruptRequest request) {
-        if (!on_interrupt_) return;
-        try {
-            on_interrupt_(std::move(request));
-        } catch (const std::exception& error) {
-            record_callback_error(
-                "Native TUI interrupt callback failed",
-                error.what());
-        } catch (...) {
-            record_callback_error("Native TUI interrupt callback failed");
-        }
-    }
-
-    void restore_editor_text(const std::vector<std::string>& messages) {
-        std::string restored;
-        for (const auto& message : messages) {
-            if (message.empty()) continue;
-            if (!restored.empty()) restored += "\n\n";
-            restored += message;
-        }
-        auto current = editor_.expanded_text();
-        if (!current.empty()) {
-            if (!restored.empty()) restored += "\n\n";
-            restored += current;
-        }
-        editor_.set_text(std::move(restored));
-    }
-
-    [[nodiscard]] bool unsubmitted_bash_mode() const {
-        return user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
-    }
-
-    /// The shared keybinding slot (ADR 0035, #418): `set_keybindings`
-    /// replaces it under the view mutex so the header/chat/execution
-    /// components and the editor all observe the new registry live.
-    std::shared_ptr<SharedKeybindings> keybindings_;
-    ActionSink on_invalidate_;
-    SubmitSink on_submit_;
-    SubmitSink on_follow_up_;
-    ActionSink on_clipboard_paste_;
-    ActionSink on_dequeue_;
-    InterruptSink on_interrupt_;
-    ActionSink on_exit_;
-    ActionSink on_cycle_model_forward_;
-    ActionSink on_cycle_model_backward_;
-    ActionSink on_select_model_;
-    ActionSink on_cycle_thinking_;
-    ActionSink on_toggle_thinking_;
-    ActionSink on_resume_session_;
-    ActionSink on_fork_session_;
-    ActionSink on_new_session_;
-    ActionSink on_copy_last_message_;
-    ActionSink on_open_tree_selector_;
-    ActionSink on_suspend_;
-    ActionSink on_external_editor_;
-    /// Footer data source (pi footer.ts render inputs); polled on every
-    /// render by the view's footer container. Installed by the state; the
-    /// source must not re-enter the view.
-    std::move_only_function<FooterData()> footer_data_source_;
-    bool user_bash_available_{false};
-    std::optional<support::Error> callback_error_;
-    mutable std::mutex mutex_;
-    // pi's main-screen containers.
-    KeybindingHints header_;
-    /// The loaded-resources startup block (pi's `loadedResourcesContainer`,
-    /// between the header and the chat; #418).
-    LoadedResources resources_;
-    ChatContainer chat_;
-    Footer footer_;
-    const LiveTheme* theme_; // must outlive the view: controller-owned live theme.
-    cch::tui::Editor editor_;
-    std::size_t editor_revision_{0};
-    // The status container's active indicator (pi's statusContainer child);
-    // null renders the two-row IdleStatus.
-    std::unique_ptr<StatusIndicator> status_indicator_;
-    IdleStatus idle_status_;
-    // The latest footer data (polled from the data source during render);
-    // also feeds the editor border thinking token.
-    FooterData current_footer_data_;
-    std::vector<std::string> pending_steering_;
-    std::vector<std::string> pending_follow_up_;
-    // The live pending User Bash block (pi's pendingMessagesContainer).
-    std::unique_ptr<BashExecutionComponent> pending_bash_;
-    // The login presentation's editor-slot occupant (pi's editorContainer
-    // swap); null renders the ordinary editor.
-    std::shared_ptr<cch::tui::Component> editor_replacement_;
-    std::size_t last_bash_output_size_{0};
-    bool bash_outcome_set_{false};
-    std::size_t available_rows_{24};
-    std::size_t editor_row_offset_{0};
-};
-
 class InteractiveState final : public std::enable_shared_from_this<InteractiveState> {
 public:
     InteractiveState(
@@ -2314,90 +1290,45 @@ private:
 
     [[nodiscard]] std::unique_ptr<InteractiveView> make_interactive_view(
         std::weak_ptr<InteractiveState> weak) {
-        return std::make_unique<InteractiveView>(
-            keybindings_,
-            [weak] {
-                if (const auto self = weak.lock()) self->post_invalidate();
-            },
-            [weak](EditorSubmissionRequest request) {
-                if (const auto self = weak.lock()) {
-                    self->post_submit(
-                        std::move(request),
-                        InputSubmission::Ordinary);
-                }
-            },
-            [weak](EditorSubmissionRequest request) {
-                if (const auto self = weak.lock()) {
-                    self->post_submit(
-                        std::move(request),
-                        InputSubmission::FollowUp);
-                }
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_clipboard_paste();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_dequeue();
-            },
-            [weak](EditorInterruptRequest request) {
-                if (const auto self = weak.lock()) {
-                    self->post_interrupt(std::move(request));
-                }
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_exit();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_cycle_model("forward");
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_cycle_model("backward");
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_open_model_selector();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_cycle_thinking();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_toggle_thinking();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_resume_session();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_fork_session();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_new_session();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_copy_last_message();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_open_tree_selector();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_suspend();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_external_editor();
-            },
-            [weak] {
-                if (const auto self = weak.lock(); self && self->running_) {
-                    return self->compute_footer_data();
-                }
-                return FooterData{};
-            },
-            hide_thinking_block_,
-            output_pad_,
-            view_user_shell_available(),
-            build_autocomplete_provider(),
-            std::make_unique<AsioAutocompleteDebounceTimer>(executor_),
-            [weak] {
-                if (const auto self = weak.lock()) self->post_invalidate();
-            },
-            theme_controller_->live_theme());
+        InteractiveViewOptions options;
+        options.keybindings = keybindings_;
+        // Preserve the existing production hint: the application supplies
+        // the clipboard action path even when the clipboard reader is
+        // unavailable, so the hint remains part of the assembled Native TUI.
+        options.clipboard_paste_available = true;
+        // Render invalidation stays a separate coalescible request (not part
+        // of the action seam).
+        options.on_invalidate = [weak] {
+            if (const auto self = weak.lock()) self->post_invalidate();
+        };
+        // One closed action seam (ADR 0040 shape): every main-screen action
+        // is admitted through post_view_action, which captures the interrupt
+        // prompt generation at admission and posts exactly once to the
+        // serialized executor path.
+        options.action_sink =
+            [weak](ViewAction action) noexcept -> support::ExpectedVoid {
+            if (const auto self = weak.lock()) {
+                self->post_view_action(std::move(action));
+            }
+            return support::ExpectedVoid{};
+        };
+        options.footer_data_source = [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                return self->compute_footer_data();
+            }
+            return FooterData{};
+        };
+        options.hide_thinking_block = hide_thinking_block_;
+        options.output_pad = output_pad_;
+        options.user_bash_available = view_user_shell_available();
+        options.autocomplete_provider = build_autocomplete_provider();
+        options.autocomplete_debounce_timer =
+            std::make_unique<AsioAutocompleteDebounceTimer>(executor_);
+        options.autocomplete_render_request = [weak] {
+            if (const auto self = weak.lock()) self->post_invalidate();
+        };
+        options.theme = &theme_controller_->live_theme();
+        return std::make_unique<InteractiveView>(std::move(options));
     }
 
     /// The view's user-shell hint: the interactive host always provides a
@@ -2603,59 +1534,160 @@ private:
         });
     }
 
-    void post_submit(EditorSubmissionRequest request, InputSubmission submission) {
+    /// Admit one closed main-screen action to the serialized executor path
+    /// (ADR 0040 shape). The interrupt's prompt generation is captured at
+    /// admission — matching the pre-seam `post_interrupt` timing — so a fast
+    /// session switch cannot retarget it; every other action carries no
+    /// generation. Exactly one executor hop, then `dispatch_view_action`.
+    void post_view_action(ViewAction action) {
         const auto weak = weak_from_this();
+        const auto prompt_generation = generation();
         boost::asio::post(
             executor_,
-            [weak, request = std::move(request), submission]() mutable {
+            [weak, prompt_generation, action = std::move(action)]() mutable {
                 if (const auto self = weak.lock()) {
-                    self->submit(
-                        std::move(request.text),
-                        submission,
-                        {},
-                        SubmissionOrigin::FocusedEditor,
-                        request.editor_revision);
+                    self->dispatch_view_action(std::move(action), prompt_generation);
                 }
             });
     }
 
-    void post_clipboard_paste() {
+    /// Route one admitted view action to its domain behavior on the
+    /// serialized path. Dispatch performs the domain call directly (no second
+    /// hop), preserving admission order.
+    void dispatch_view_action(ViewAction action, std::size_t prompt_generation) {
+        std::visit(
+            [this, prompt_generation](auto&& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, InterruptAction>) {
+                    request_interrupt(prompt_generation, value.request);
+                } else {
+                    dispatch(std::move(value));
+                }
+            },
+            std::move(action));
+    }
+
+    void dispatch(SubmitAction action) {
+        submit(
+            std::move(action.request.text),
+            action.submission,
+            {},
+            SubmissionOrigin::FocusedEditor,
+            action.request.editor_revision);
+    }
+
+    void dispatch(ClipboardPasteAction) {
+        if (clipboard_reader_ == nullptr || clipboard_read_active_) return;
+        clipboard_read_active_ = true;
         const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            const auto self = weak.lock();
-            if (!self || !self->running_ || self->clipboard_reader_ == nullptr ||
-                self->clipboard_read_active_) {
-                return;
-            }
-            self->clipboard_read_active_ = true;
-            boost::asio::co_spawn(
-                self->executor_,
-                self->paste_from_clipboard(),
-                [weak](std::exception_ptr exception, support::ExpectedVoid result) {
-                    const auto state = weak.lock();
-                    if (!state) return;
-                    state->clipboard_read_active_ = false;
-                    std::optional<support::Error> ignored_failure;
-                    if (exception) {
-                        try {
-                            std::rethrow_exception(exception);
-                        } catch (const std::exception& error) {
-                            ignored_failure = support::make_error(
-                                support::ErrorCode::Unknown,
-                                "clipboard paste failed",
-                                error.what());
-                        } catch (...) {
-                            ignored_failure = support::make_error(
-                                support::ErrorCode::Unknown,
-                                "clipboard paste failed");
-                        }
-                    } else if (!result) {
-                        ignored_failure = std::move(result.error());
+        boost::asio::co_spawn(
+            executor_,
+            paste_from_clipboard(),
+            [weak](std::exception_ptr exception, support::ExpectedVoid result) {
+                const auto state = weak.lock();
+                if (!state) return;
+                state->clipboard_read_active_ = false;
+                std::optional<support::Error> ignored_failure;
+                if (exception) {
+                    try {
+                        std::rethrow_exception(exception);
+                    } catch (const std::exception& error) {
+                        ignored_failure = support::make_error(
+                            support::ErrorCode::Unknown,
+                            "clipboard paste failed",
+                            error.what());
+                    } catch (...) {
+                        ignored_failure = support::make_error(
+                            support::ErrorCode::Unknown,
+                            "clipboard paste failed");
                     }
-                    // Baseline clipboard failures are intentionally silent.
-                    (void)ignored_failure;
-                });
-        });
+                } else if (!result) {
+                    ignored_failure = std::move(result.error());
+                }
+                // Baseline clipboard failures are intentionally silent.
+                (void)ignored_failure;
+            });
+    }
+
+    void dispatch(DequeueAction) {
+        dequeue_pending_input(true);
+    }
+
+    void dispatch(ExitAction) {
+        request_exit();
+    }
+
+    void dispatch(CycleModelAction action) {
+        const auto direction = action.direction == ModelCycleDirection::Forward
+            ? "forward"
+            : "backward";
+        const auto self = shared_from_this();
+        spawn_flow(
+            [self, direction]() mutable -> boost::asio::awaitable<void> {
+                co_await self->cycle_model(std::move(direction));
+            },
+            "Native TUI model cycle failed");
+    }
+
+    void dispatch(CycleThinkingAction) {
+        cycle_thinking_level();
+    }
+
+    void dispatch(ToggleThinkingAction) {
+        toggle_thinking_block_visibility();
+    }
+
+    void dispatch(SelectModelAction) {
+        show_model_selector(std::nullopt);
+    }
+
+    void dispatch(ResumeSessionAction) {
+        show_session_selector();
+    }
+
+    void dispatch(ForkSessionAction) {
+        show_user_message_selector();
+    }
+
+    void dispatch(NewSessionAction) {
+        const auto self = shared_from_this();
+        spawn_flow(
+            [self]() -> boost::asio::awaitable<void> {
+                co_await self->handle_new_session();
+            },
+            "Native TUI new-session flow failed");
+    }
+
+    void dispatch(CopyLastMessageAction) {
+        handle_copy_last_message();
+    }
+
+    void dispatch(OpenTreeSelectorAction) {
+        show_tree_selector();
+    }
+
+    void dispatch(SuspendAction) {
+        handle_suspend();
+    }
+
+    void dispatch(ExternalEditorAction) {
+        const auto self = shared_from_this();
+        boost::asio::co_spawn(
+            executor_,
+            self->handle_open_external_editor(),
+            [self](std::exception_ptr exception) {
+                if (exception) {
+                    std::string detail = "unknown exception";
+                    try {
+                        std::rethrow_exception(exception);
+                    } catch (const std::exception& error) {
+                        detail = error.what();
+                    } catch (...) {
+                    }
+                    self->show_error(std::format(
+                        "External editor failed: {}", detail));
+                }
+            });
     }
 
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> paste_from_clipboard() {
@@ -2709,25 +1741,6 @@ private:
             (void)ignored;
         }
         co_return support::ExpectedVoid{};
-    }
-
-    void post_dequeue() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock()) self->dequeue_pending_input(true);
-        });
-    }
-
-    void post_interrupt(EditorInterruptRequest request) {
-        const auto weak = weak_from_this();
-        const auto prompt_generation = generation();
-        boost::asio::post(
-            executor_,
-            [weak, prompt_generation, request = std::move(request)] {
-                if (const auto self = weak.lock()) {
-                    self->request_interrupt(prompt_generation, request);
-                }
-            });
     }
 
     void post_exit() {
@@ -3105,47 +2118,6 @@ private:
     }
 
     /// Post one model/thinking action to the executor from the input thread.
-    void post_cycle_model(std::string direction) {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak, direction = std::move(direction)]() mutable {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->spawn_flow(
-                    [self, direction = std::move(direction)]() mutable
-                    -> boost::asio::awaitable<void> {
-                        co_await self->cycle_model(std::move(direction));
-                    },
-                    "Native TUI model cycle failed");
-            }
-        });
-    }
-
-    void post_cycle_thinking() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->cycle_thinking_level();
-            }
-        });
-    }
-
-    void post_toggle_thinking() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->toggle_thinking_block_visibility();
-            }
-        });
-    }
-
-    void post_open_model_selector() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->show_model_selector(std::nullopt);
-            }
-        });
-    }
-
     void post_open_model_selector(std::string search_term) {
         const auto weak = weak_from_this();
         boost::asio::post(executor_, [weak, search_term = std::move(search_term)]() mutable {
@@ -3224,14 +2196,6 @@ private:
     /// while suspended, keep the process alive, and stop the process group
     /// with SIGTSTP; the SIGCONT handler restarts the TUI and forces a
     /// re-render (pi's `ui.start()` + `requestRender(true)`).
-    void post_suspend() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->handle_suspend();
-            }
-        });
-    }
 
     void handle_suspend() {
         if (suspend_signals_) return;
@@ -3309,31 +2273,6 @@ private:
     /// over the expanded editor content, restore the TUI, and replace the
     /// editor content on a clean exit. Cleanup of the temp prompt file is
     /// best effort (pi `external-editor.ts`).
-    void post_external_editor() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                boost::asio::co_spawn(
-                    self->executor_,
-                    self->handle_open_external_editor(),
-                    [weak](std::exception_ptr exception) {
-                        const auto self = weak.lock();
-                        if (!self) return;
-                        if (exception) {
-                            std::string detail = "unknown exception";
-                            try {
-                                std::rethrow_exception(exception);
-                            } catch (const std::exception& error) {
-                                detail = error.what();
-                            } catch (...) {
-                            }
-                            self->show_error(std::format(
-                                "External editor failed: {}", detail));
-                        }
-                    });
-            }
-        });
-    }
 
     [[nodiscard]] boost::asio::awaitable<void> handle_open_external_editor() {
         if (view_ == nullptr) co_return;
