@@ -93,14 +93,16 @@ template <typename T, typename E>
 }
 
 /// Wrap a one-shot `boost::asio::awaitable` producer into a move-only
-/// `AsyncResult` (ADR 0040). `make_awaitable` is invoked exactly once at
-/// consumption and must return a fresh awaitable whose terminal value is
-/// `std::expected<T, cch::support::Error>` (or `std::expected<void, ...>`).
-/// The producer reads the initiating executor captured by `await_async_result`
-/// (or the ModelStream `consume` bridge) so the wrapped coroutine runs in the
-/// consuming serialized domain; the terminal outcome is delivered exactly once.
+/// `AsyncResult` (ADR 0040), running the wrapped coroutine on an explicit
+/// executor (for example a private worker `io_context`). `make_awaitable` is
+/// invoked exactly once at consumption and must return a fresh awaitable
+/// whose terminal value is `std::expected<T, cch::support::Error>` (or
+/// `std::expected<void, ...>`). The terminal outcome is delivered exactly
+/// once through the move-only completion contract.
 template <typename AwaitableFactory>
-[[nodiscard]] auto make_async_result(AwaitableFactory make_awaitable) {
+[[nodiscard]] auto make_async_result_on(
+    boost::asio::any_io_executor executor,
+    AwaitableFactory make_awaitable) {
     using Awaitable = std::invoke_result_t<AwaitableFactory&>;
     using Terminal = typename AwaitableTerminal<Awaitable>::type;
     using Value = typename Terminal::value_type;
@@ -108,9 +110,8 @@ template <typename AwaitableFactory>
     auto shared = std::make_shared<AwaitableFactory>(std::move(make_awaitable));
     return cch::support::AsyncResult<Value, cch::support::Error>{
         cch::support::AsyncProducer<Value, cch::support::Error>{
-            [shared](cch::support::AsyncCompletion<Value, cch::support::Error> completion) mutable noexcept {
+            [executor, shared](cch::support::AsyncCompletion<Value, cch::support::Error> completion) mutable noexcept {
                 using Completion = cch::support::AsyncCompletion<Value, cch::support::Error>;
-                const auto executor = t_initiating_executor;
                 std::shared_ptr<Completion> completion_owner;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 // The staged build still permits setup exceptions; convert them before
@@ -153,6 +154,34 @@ template <typename AwaitableFactory>
                     }
                 }
 #endif
+            }
+        }};
+}
+
+/// Wrap a one-shot `boost::asio::awaitable` producer into a move-only
+/// `AsyncResult` (ADR 0040). `make_awaitable` is invoked exactly once at
+/// consumption and must return a fresh awaitable whose terminal value is
+/// `std::expected<T, cch::support::Error>` (or `std::expected<void, ...>`).
+/// The producer reads the initiating executor captured by `await_async_result`
+/// (or the ModelStream `consume` bridge) so the wrapped coroutine runs in the
+/// consuming serialized domain; the terminal outcome is delivered exactly once.
+template <typename AwaitableFactory>
+[[nodiscard]] auto make_async_result(AwaitableFactory make_awaitable) {
+    using Awaitable = std::invoke_result_t<AwaitableFactory&>;
+    using Terminal = typename AwaitableTerminal<Awaitable>::type;
+    using Value = typename Terminal::value_type;
+
+    // Read the initiating executor inside the producer (at initiation, not at
+    // construction): `await_async_result` / the ModelStream `consume` bridge
+    // publish it right before the producer runs, so the wrapped coroutine runs
+    // on the consuming serialized domain (ADR 0040).
+    return cch::support::AsyncResult<Value, cch::support::Error>{
+        cch::support::AsyncProducer<Value, cch::support::Error>{
+            [make_awaitable = std::move(make_awaitable)](
+                cch::support::AsyncCompletion<Value, cch::support::Error> completion) mutable noexcept {
+                auto executor = t_initiating_executor;
+                auto bridged = make_async_result_on(executor, std::move(make_awaitable));
+                std::move(bridged).start(std::move(completion));
             }
         }};
 }

@@ -265,7 +265,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     return result;
 }
 
-[[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> resolve_config_value_or_throw(
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> resolve_config_value_required(
     std::string_view config,
     std::string description,
     const ai::ProviderEnv& env,
@@ -336,7 +336,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 // Composition (pi `provider-composer.ts` subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-[[nodiscard]] ai::Model model_from_json(
+[[nodiscard]] support::Expected<ai::Model> model_from_json(
     std::string_view provider_id,
     const ModelsJsonModel& definition,
     const ModelsJsonProvider& provider_config,
@@ -344,26 +344,30 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     const std::string api = definition.api.value_or(
         provider_config.api.value_or(defaults ? defaults->api : std::string{}));
     if (api.empty()) {
-        throw std::runtime_error(
+        return std::unexpected(support::make_error(
+            support::ErrorCode::ModelValidation,
             "Provider " + std::string{provider_id} + ", model " + definition.id +
-            ": no \"api\" specified. Set at provider or model level.");
+                ": no \"api\" specified. Set at provider or model level."));
     }
     const std::string base_url = definition.base_url.value_or(
         provider_config.base_url.value_or(defaults ? defaults->base_url : std::string{}));
     if (base_url.empty()) {
-        throw std::runtime_error(
+        return std::unexpected(support::make_error(
+            support::ErrorCode::ModelValidation,
             "Provider " + std::string{provider_id} +
-            ": \"baseUrl\" is required when defining custom models.");
+                ": \"baseUrl\" is required when defining custom models."));
     }
     if (definition.context_window && *definition.context_window == 0) {
-        throw std::runtime_error(
+        return std::unexpected(support::make_error(
+            support::ErrorCode::ModelValidation,
             "Provider " + std::string{provider_id} + ", model " + definition.id +
-            ": invalid contextWindow");
+                ": invalid contextWindow"));
     }
     if (definition.max_tokens && *definition.max_tokens == 0) {
-        throw std::runtime_error(
+        return std::unexpected(support::make_error(
+            support::ErrorCode::ModelValidation,
             "Provider " + std::string{provider_id} + ", model " + definition.id +
-            ": invalid maxTokens");
+                ": invalid maxTokens"));
     }
     ai::Model model;
     model.id = definition.id;
@@ -383,7 +387,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     return model;
 }
 
-[[nodiscard]] std::vector<ai::Model> apply_models_json(
+[[nodiscard]] support::Expected<std::vector<ai::Model>> apply_models_json(
     std::string_view provider_id,
     const std::vector<ai::Model>& base_models,
     const std::optional<ModelsJsonProvider>& config) {
@@ -394,9 +398,10 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     const bool has_models = config->models && !config->models->empty();
     if (!has_models && !config->base_url && !config->headers && !has_overrides &&
         !config->api_key) {
-        throw std::runtime_error(
+        return std::unexpected(support::make_error(
+            support::ErrorCode::ModelValidation,
             "Provider " + std::string{provider_id} +
-            ": must specify \"baseUrl\", \"headers\", \"modelOverrides\", or \"models\".");
+                ": must specify \"baseUrl\", \"headers\", \"modelOverrides\", or \"models\"."));
     }
 
     std::vector<ai::Model> models;
@@ -416,11 +421,14 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
             existing != models.end() ? &*existing
             : models.empty()          ? nullptr
                                       : &models.front();
-        auto model = model_from_json(provider_id, definition, *config, defaults);
+        auto model_result = model_from_json(provider_id, definition, *config, defaults);
+        if (!model_result) {
+            return std::unexpected(model_result.error());
+        }
         if (existing != models.end()) {
-            *existing = std::move(model);
+            *existing = std::move(*model_result);
         } else {
-            models.push_back(std::move(model));
+            models.push_back(std::move(*model_result));
         }
     }
     return models;
@@ -622,7 +630,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                     }
                 } else if (raw_key) {
                     CCH_TRY(env, co_await config_context_env(raw_key_env_names, context, {}));
-                    CCH_TRY(key, co_await config_value::resolve_config_value_or_throw(
+                    CCH_TRY(key, co_await config_value::resolve_config_value_required(
                         *raw_key,
                         "API key for provider \"" + std::string{provider_id} + "\"",
                         env,
@@ -665,7 +673,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     return result;
 }
 
-[[nodiscard]] ai::ProviderAuth compose_auth(
+[[nodiscard]] support::Expected<ai::ProviderAuth> compose_auth(
     std::string_view provider_id,
     const std::shared_ptr<ai::Provider>& base,
     const std::optional<ModelsJsonProvider>& config,
@@ -679,9 +687,10 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
         auth.oauth = std::move(*base->auth().oauth);
     }
     if (!auth.api_key && !auth.oauth) {
-        throw std::runtime_error(
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Auth,
             "Provider " + std::string{provider_id} +
-            ": no authentication method configured.");
+                ": no authentication method configured."));
     }
     return auth;
 }
@@ -812,40 +821,41 @@ std::shared_ptr<ai::Provider> compose_provider(
         error.reset();
         return base;
     }
-    try {
-        std::vector<ai::Model> models = apply_models_json(
-            provider_id,
-            base ? base->models() : std::vector<ai::Model>{},
-            config_entry);
-        if (config_entry->model_overrides) {
-            for (ai::Model& model : models) {
-                if (const auto found = config_entry->model_overrides->find(model.id);
-                    found != config_entry->model_overrides->end()) {
-                    model = apply_model_override(model, found->second);
-                }
-            }
-        }
-        std::string name = config_entry->name.value_or(
-            base ? std::string{base->name()} : std::string{provider_id});
-        ai::ProviderAuth auth = compose_auth(
-            provider_id, base, config_entry, options.process_runner);
-        auto provider = std::make_shared<ComposedProvider>(
-            std::string{provider_id},
-            std::move(name),
-            std::move(models),
-            std::move(auth),
-            options.http_transport,
-            options.ws_transport,
-            options.codex_cache_config);
-        error.reset();
-        return provider;
-    } catch (const std::exception& exception) {
-        error = exception.what();
-        return base;
-    } catch (...) {
-        error = "unknown provider composition error";
+    auto models_result = apply_models_json(
+        provider_id,
+        base ? base->models() : std::vector<ai::Model>{},
+        config_entry);
+    if (!models_result) {
+        error = models_result.error().message;
         return base;
     }
+    std::vector<ai::Model> models = std::move(*models_result);
+    if (config_entry->model_overrides) {
+        for (ai::Model& model : models) {
+            if (const auto found = config_entry->model_overrides->find(model.id);
+                found != config_entry->model_overrides->end()) {
+                model = apply_model_override(model, found->second);
+            }
+        }
+    }
+    std::string name = config_entry->name.value_or(
+        base ? std::string{base->name()} : std::string{provider_id});
+    auto auth_result = compose_auth(
+        provider_id, base, config_entry, options.process_runner);
+    if (!auth_result) {
+        error = auth_result.error().message;
+        return base;
+    }
+    auto provider = std::make_shared<ComposedProvider>(
+        std::string{provider_id},
+        std::move(name),
+        std::move(models),
+        std::move(*auth_result),
+        options.http_transport,
+        options.ws_transport,
+        options.codex_cache_config);
+    error.reset();
+    return provider;
 }
 
 std::vector<std::string> configured_api_key_env_names(const ModelConfig& config) {

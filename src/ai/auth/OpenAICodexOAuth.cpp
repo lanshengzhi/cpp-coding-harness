@@ -427,15 +427,22 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
         .state = state,
     }));
 
+    // Best-effort display: notify never vetoes login. The hook is
+    // contractually non-throwing (AuthNotifyHook); the guarded conversion
+    // only preserves the staged exception-enabled build.
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         interaction.notify(ai::AuthEvent{ai::AuthUrl{
             .url = authorize_url,
             .instructions =
                 "A browser window should open. Complete login to finish.",
         }});
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         // Best-effort display: notify never vetoes login.
     }
+#endif
 
     struct ManualState {
         std::mutex mutex;
@@ -465,9 +472,12 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
             };
             manual_prompt.stop_token = manual_state->manual_stop.get_token();
             support::Expected<std::string> result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 result = co_await cch::ai::detail::await_async_result(
                     interaction_shared->prompt(std::move(manual_prompt)));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (const std::exception& error) {
                 result = std::unexpected(support::make_error(
                     support::ErrorCode::OAuth,
@@ -478,6 +488,7 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
                     support::ErrorCode::OAuth,
                     "login prompt failed"));
             }
+#endif
             {
                 std::scoped_lock lock(manual_state->mutex);
                 if (result) {
@@ -534,9 +545,10 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
     if (!code) {
         // Still-pending prompt (degraded server or early wait settlement):
         // await its outcome, then re-read the parsed input.
-        try {
-            co_await prompt_done->async_receive(boost::asio::use_awaitable);
-        } catch (const boost::system::system_error&) {
+        {
+            boost::system::error_code receive_error;
+            co_await prompt_done->async_receive(
+                boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
             // Channel closed: treat as no manual outcome.
         }
         std::scoped_lock lock(manual_state->mutex);
@@ -578,16 +590,20 @@ OpenAICodexOAuth::login_device_code(ai::AuthInteraction interaction) {
         interaction.stop_token));
     CCH_TRY(device, parse_device_auth_response(response));
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         interaction.notify(ai::AuthEvent{ai::AuthDeviceCode{
             .user_code = device.user_code,
             .verification_uri = std::string{kDeviceVerificationUri},
             .interval_seconds = device.interval_seconds,
             .expires_in_seconds = kDeviceCodeTimeoutSeconds,
         }});
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         // Best-effort display.
     }
+#endif
 
     CCH_TRY(success, co_await poll_device_flow<DeviceTokenSuccess>(
         DevicePollOptions<DeviceTokenSuccess>{

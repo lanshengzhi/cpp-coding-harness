@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
-#include <exception>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -124,7 +123,9 @@ template <typename Args>
 /// awaitable) on the consuming coroutine's executor (the Agent loop's
 /// serialized domain) and bridges its terminal outcome. The executor is read
 /// from the initiating-executor thread-local the `await_async_result` bridge
-/// publishes during producer initiation (ADR 0040).
+/// publishes during producer initiation (ADR 0040); the coroutine runs on the
+/// private completion bridge so its setup and body outcomes stay on the
+/// typed `Expected` channel without an exception path.
 template <typename Body>
 [[nodiscard]] agent::ToolExecuteResult make_tool_result(Body body) {
     return agent::ToolExecuteResult{
@@ -136,24 +137,14 @@ template <typename Body>
                     support::ErrorCode::Tool, "tool execution has no initiating executor")));
                 return;
             }
-            try {
-                boost::asio::co_spawn(
-                    executor,
-                    body(),
-                    [completion = std::move(completion)](
-                        std::exception_ptr eptr,
-                        support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
-                        if (eptr) {
-                            completion(std::unexpected(support::make_error(
-                                support::ErrorCode::Tool, "tool execution failed")));
-                        } else {
-                            completion(std::move(result));
-                        }
-                    });
-            } catch (...) {
-                completion(std::unexpected(support::make_error(
-                    support::ErrorCode::Tool, "tool execution failed")));
-            }
+            auto bridged = ai::detail::make_async_result_on(
+                executor,
+                [body = std::move(body)]()
+                    -> boost::asio::awaitable<
+                           support::Expected<agent::AsyncToolExecutionResult>> {
+                    co_return co_await body();
+                });
+            std::move(bridged).start(std::move(completion));
         }};
 }
 

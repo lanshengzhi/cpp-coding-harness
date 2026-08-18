@@ -2,9 +2,11 @@
 
 #include "support/Json.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 namespace cch::coding_agent {
@@ -310,7 +312,8 @@ private:
     std::string& content) {
     std::ifstream input(path, std::ios::binary);
     if (!input.is_open()) {
-        if (std::filesystem::exists(path)) {
+        std::error_code exists_error;
+        if (std::filesystem::exists(path, exists_error) && !exists_error) {
             error = "Failed to load models.json\n\nFile: " + path.string();
         }
         return false;

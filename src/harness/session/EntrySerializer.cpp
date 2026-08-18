@@ -178,13 +178,27 @@ template <typename Dto>
 }
 
 [[nodiscard]] support::Expected<std::string> entry_type(const glz::generic& parsed, std::size_t line_number) {
-    try {
-        return parsed.get<glz::generic::object_t>().at("type").get<std::string>();
-    } catch (const std::exception&) {
+    // `get_if` (not the throwing `get`) so a scalar/array root reports the
+    // same missing-type outcome as a root without a "type" member.
+    const auto* object = parsed.get_if<glz::generic::object_t>();
+    if (object == nullptr) {
         return std::unexpected(session_error(
             "session entry missing type",
             "session entry missing type at line " + std::to_string(line_number)));
     }
+    const auto found = object->find("type");
+    if (found == object->end()) {
+        return std::unexpected(session_error(
+            "session entry missing type",
+            "session entry missing type at line " + std::to_string(line_number)));
+    }
+    const auto* type = found->second.get_if<std::string>();
+    if (type == nullptr) {
+        return std::unexpected(session_error(
+            "session entry missing type",
+            "session entry missing type at line " + std::to_string(line_number)));
+    }
+    return *type;
 }
 
 template <typename T>
@@ -199,7 +213,8 @@ template <typename T>
             "failed to parse session entry at line " + std::to_string(line_number) + ": " +
                 glz::format_error(parsed.error(), line)));
     }
-    return std::move(parsed).value();
+    // The engaged check above makes this a non-throwing move.
+    return std::move(*parsed);
 }
 
 [[nodiscard]] std::string generate_entry_id() {

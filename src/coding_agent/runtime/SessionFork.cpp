@@ -12,11 +12,13 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <algorithm>
+#include <charconv>
 #include <filesystem>
 #include <map>
 #include <random>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -416,8 +418,13 @@ struct InMemoryBranchResult {
                 return std::isdigit(character) != 0;
             });
         if (numeric) {
-            index = std::stoull(index_text);
-            if (index < context.messages.size()) {
+            // Explicit non-throwing conversion: the digit check above already
+            // rejects every malformed spelling, and from_chars can never throw.
+            const auto parsed = std::from_chars(
+                index_text.data(),
+                index_text.data() + index_text.size(),
+                index);
+            if (parsed.ec == std::errc{} && index < context.messages.size()) {
                 target_index = index;
             }
         }

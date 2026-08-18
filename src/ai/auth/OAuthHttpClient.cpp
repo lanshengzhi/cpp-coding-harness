@@ -91,100 +91,122 @@ BoostBeastOAuthHttpClient::post(
         co_return std::unexpected(parsed.error());
     }
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    // The staged build still permits setup exceptions (e.g. the throwing
+    // `set_verify_mode` surface); convert them before the no-exception
+    // completion contract takes over.
     try {
-        auto executor = co_await asio::this_coro::executor;
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "OAuth HTTP request cancelled"));
-        }
+#endif
+    auto executor = co_await asio::this_coro::executor;
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
+            "OAuth HTTP request cancelled"));
+    }
 
-        auto cancellation_signal = std::make_shared<asio::cancellation_signal>();
-        std::stop_callback cancellation{stop_token, [executor, cancellation_signal] {
-            asio::post(executor, [cancellation_signal] {
-                cancellation_signal->emit(asio::cancellation_type::all);
-            });
-        }};
-        const auto cancellable = [&cancellation_signal](auto completion_token) {
-            return asio::bind_cancellation_slot(
-                cancellation_signal->slot(),
-                std::move(completion_token));
-        };
+    auto cancellation_signal = std::make_shared<asio::cancellation_signal>();
+    std::stop_callback cancellation{stop_token, [executor, cancellation_signal] {
+        asio::post(executor, [cancellation_signal] {
+            cancellation_signal->emit(asio::cancellation_type::all);
+        });
+    }};
+    const auto cancellable = [&cancellation_signal](auto completion_token) {
+        return asio::bind_cancellation_slot(
+            cancellation_signal->slot(),
+            std::move(completion_token));
+    };
 
-        ssl::context ctx(ssl::context::tls_client);
-        boost::system::error_code ec;
-        ctx.set_default_verify_paths(ec);
-        if (ec) {
-            co_return std::unexpected(network_error("CA loading failure", ec));
-        }
+    ssl::context ctx(ssl::context::tls_client);
+    boost::system::error_code ec;
+    ctx.set_default_verify_paths(ec);
+    if (ec) {
+        co_return std::unexpected(network_error("CA loading failure", ec));
+    }
 
-        tcp::resolver resolver(executor);
-        beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds{30});
+    tcp::resolver resolver(executor);
+    beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
+    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds{30});
 
-        if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Network,
-                "TLS SNI setup failed",
-                "OpenSSL rejected the host name"));
-        }
-        stream.set_verify_mode(ssl::verify_peer);
-        stream.set_verify_callback(ssl::host_name_verification(parsed->host));
+    if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Network,
+            "TLS SNI setup failed",
+            "OpenSSL rejected the host name"));
+    }
+    stream.set_verify_mode(ssl::verify_peer);
+    stream.set_verify_callback(ssl::host_name_verification(parsed->host));
 
-        auto results = co_await resolver.async_resolve(
-            parsed->host,
-            parsed->port,
-            cancellable(asio::use_awaitable));
-        co_await beast::get_lowest_layer(stream).async_connect(
-            results,
-            cancellable(asio::use_awaitable));
-        co_await stream.async_handshake(
-            ssl::stream_base::client,
-            cancellable(asio::use_awaitable));
+    boost::system::error_code setup_ec;
+    auto results = co_await resolver.async_resolve(
+        parsed->host,
+        parsed->port,
+        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+    if (setup_ec) {
+        co_return std::unexpected(network_error("OAuth HTTP request failure", setup_ec));
+    }
+    co_await beast::get_lowest_layer(stream).async_connect(
+        results,
+        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+    if (setup_ec) {
+        co_return std::unexpected(network_error("OAuth HTTP request failure", setup_ec));
+    }
+    co_await stream.async_handshake(
+        ssl::stream_base::client,
+        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+    if (setup_ec) {
+        co_return std::unexpected(network_error("OAuth HTTP request failure", setup_ec));
+    }
 
-        http::request<http::string_body> http_request{http::verb::post, parsed->target, 11};
-        http_request.set(http::field::host, parsed->host);
-        http_request.set(http::field::user_agent, "cpp-coding-harness/0.1");
-        for (const auto& [key, value] : headers) {
-            http_request.set(key, value);
-        }
-        http_request.body() = std::move(body);
-        http_request.prepare_payload();
+    http::request<http::string_body> http_request{http::verb::post, parsed->target, 11};
+    http_request.set(http::field::host, parsed->host);
+    http_request.set(http::field::user_agent, "cpp-coding-harness/0.1");
+    for (const auto& [key, value] : headers) {
+        http_request.set(key, value);
+    }
+    http_request.body() = std::move(body);
+    http_request.prepare_payload();
 
-        co_await http::async_write(
-            stream,
-            http_request,
-            cancellable(asio::use_awaitable));
+    co_await http::async_write(
+        stream,
+        http_request,
+        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+    if (setup_ec) {
+        co_return std::unexpected(network_error("OAuth HTTP request failure", setup_ec));
+    }
 
-        beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        co_await http::async_read(
-            stream,
-            buffer,
-            response,
-            cancellable(asio::use_awaitable));
-        beast::get_lowest_layer(stream).expires_never();
+    beast::flat_buffer buffer;
+    http::response<http::string_body> response;
+    co_await http::async_read(
+        stream,
+        buffer,
+        response,
+        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+    if (setup_ec) {
+        co_return std::unexpected(network_error("OAuth HTTP request failure", setup_ec));
+    }
+    beast::get_lowest_layer(stream).expires_never();
 
-        boost::system::error_code shutdown_ec;
-        co_await stream.async_shutdown(
-            asio::redirect_error(cancellable(asio::use_awaitable), shutdown_ec));
-        if (shutdown_ec == asio::error::eof ||
-            shutdown_ec == ssl::error::stream_truncated) {
-            shutdown_ec = {};
-        }
-        if (shutdown_ec) {
-            co_return std::unexpected(network_error("TLS shutdown failure", shutdown_ec));
-        }
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "OAuth HTTP request cancelled"));
-        }
+    boost::system::error_code shutdown_ec;
+    co_await stream.async_shutdown(
+        asio::redirect_error(cancellable(asio::use_awaitable), shutdown_ec));
+    if (shutdown_ec == asio::error::eof ||
+        shutdown_ec == ssl::error::stream_truncated) {
+        shutdown_ec = {};
+    }
+    if (shutdown_ec) {
+        co_return std::unexpected(network_error("TLS shutdown failure", shutdown_ec));
+    }
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Cancelled,
+            "OAuth HTTP request cancelled"));
+    }
 
-        co_return OAuthHttpResponse{
-            .status_code = static_cast<int>(response.result_int()),
-            .body = std::move(response.body()),
-        };
+    co_return OAuthHttpResponse{
+        .status_code = static_cast<int>(response.result_int()),
+        .body = std::move(response.body()),
+    };
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const boost::system::system_error& error) {
         co_return std::unexpected(network_error(
             "OAuth HTTP request failure",
@@ -195,6 +217,7 @@ BoostBeastOAuthHttpClient::post(
             "OAuth HTTP request failure",
             error.what()));
     }
+#endif
 }
 
 } // namespace cch::ai::auth

@@ -605,7 +605,13 @@ struct AuthStorage::Impl {
     }
 
     void reload() noexcept {
+        // A reload is best-effort by contract: retain the last valid view.
+        // The guarded conversion only preserves the staged exception-enabled
+        // build; the strict build's file operations are already error-code
+        // based and cannot throw ordinary failures.
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             if (auto ensured = ensure_storage_path(auth_path_); !ensured) {
                 return;
             }
@@ -618,9 +624,11 @@ struct AuthStorage::Impl {
                 return;
             }
             set_snapshot(std::move(*parsed));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // A reload is best-effort by contract: retain the last valid view.
         }
+#endif
     }
 
     [[nodiscard]] std::optional<ai::Credential> read(std::string_view provider_id) const {
@@ -657,8 +665,11 @@ struct AuthStorage::Impl {
             : credential_from_json(current_it->second);
 
         support::Expected<std::optional<ai::Credential>> next_result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             next_result = co_await cch::ai::detail::await_async_result(modifier(current));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const boost::system::system_error& exception) {
             if (exception.code() == boost::asio::error::operation_aborted) {
                 co_return std::unexpected(support::make_error(
@@ -677,6 +688,7 @@ struct AuthStorage::Impl {
         } catch (...) {
             co_return std::unexpected(storage_error("credential modifier failed", auth_path_));
         }
+#endif
         CCH_TRY(next, std::move(next_result));
         if (!next) {
             set_snapshot(std::move(current_data));
@@ -761,47 +773,28 @@ cch::support::AsyncResult<std::optional<ai::Credential>> AuthStorage::modify(
     std::string provider_id,
     ai::CredentialModifyHook modifier) {
     // The producer captures the impl by raw pointer; the backing store is
-    // `shared_ptr`-held by Models and outlives every in-flight operation.
+    // `shared_ptr`-held by Models and outlives every in-flight operation. The
+    // coroutine runs on the AuthStorage worker `io_context` so file I/O and
+    // the modifier's OAuth refresh stay off the caller's Runtime loop; the
+    // private completion bridge maps setup failure to the operation's typed
+    // outcome.
     Impl* impl = impl_.get();
-    return cch::support::AsyncResult<std::optional<ai::Credential>>(
-        [impl, provider_id = std::move(provider_id), modifier = std::move(modifier)](
-            cch::support::AsyncCompletion<std::optional<ai::Credential>, cch::support::Error> completion) mutable noexcept {
-            boost::asio::co_spawn(
-                impl->io_,
-                impl->modify_awaitable(std::move(provider_id), std::move(modifier)),
-                [completion = std::move(completion)](
-                    std::exception_ptr eptr,
-                    support::Expected<std::optional<ai::Credential>> result) mutable noexcept {
-                    if (eptr) {
-                        completion(std::unexpected(support::make_error(
-                            support::ErrorCode::Unknown,
-                            "credential modification failed")));
-                    } else {
-                        completion(std::move(result));
-                    }
-                });
+    return cch::ai::detail::make_async_result_on(
+        impl->io_.get_executor(),
+        [impl, provider_id = std::move(provider_id), modifier = std::move(modifier)]() mutable
+            -> boost::asio::awaitable<support::Expected<std::optional<ai::Credential>>> {
+            co_return co_await impl->modify_awaitable(
+                std::move(provider_id), std::move(modifier));
         });
 }
 
 cch::support::AsyncResult<void> AuthStorage::remove(std::string provider_id) {
     Impl* impl = impl_.get();
-    return cch::support::AsyncResult<void>(
-        [impl, provider_id = std::move(provider_id)](
-            cch::support::AsyncCompletion<void, cch::support::Error> completion) mutable noexcept {
-            boost::asio::co_spawn(
-                impl->io_,
-                impl->remove_awaitable(std::move(provider_id)),
-                [completion = std::move(completion)](
-                    std::exception_ptr eptr,
-                    support::ExpectedVoid result) mutable noexcept {
-                    if (eptr) {
-                        completion(std::unexpected(support::make_error(
-                            support::ErrorCode::Unknown,
-                            "credential removal failed")));
-                    } else {
-                        completion(std::move(result));
-                    }
-                });
+    return cch::ai::detail::make_async_result_on(
+        impl->io_.get_executor(),
+        [impl, provider_id = std::move(provider_id)]()
+            -> boost::asio::awaitable<support::ExpectedVoid> {
+            co_return co_await impl->remove_awaitable(std::move(provider_id));
         });
 }
 

@@ -189,13 +189,19 @@ void IgnoreMatcher::add_rules(std::string_view content, std::string_view prefix)
 
         // A malformed pattern (e.g. an invalid character-class range) must
         // not abort the walk: the rule is skipped, like the npm `ignore`
-        // package's sanitization.
+        // package's sanitization. In the strict no-exception build the regex
+        // cannot report malformed input through exceptions, so the
+        // guard-preserved staged build keeps the skip semantics.
         std::regex compiled;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             compiled = std::regex{"^" + glob_to_regex(body) + "$", std::regex::ECMAScript};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::regex_error&) {
             continue;
         }
+#endif
         rules_.push_back(Rule{
             .pattern = std::move(compiled),
             .negated = negated,

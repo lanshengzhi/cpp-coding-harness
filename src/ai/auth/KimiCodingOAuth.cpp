@@ -458,16 +458,20 @@ KimiCodingOAuth::login(ai::AuthInteraction interaction) {
         interaction.stop_token,
         options_.request_timeout));
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         interaction.notify(ai::AuthEvent{ai::AuthDeviceCode{
             .user_code = device.user_code,
             .verification_uri = device.verification_uri_complete,
             .interval_seconds = device.interval_seconds,
             .expires_in_seconds = device.expires_in_seconds,
         }});
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         // Best-effort display: notify never vetoes login.
     }
+#endif
 
     CCH_TRY(token, co_await poll_for_token(
         http_client_,

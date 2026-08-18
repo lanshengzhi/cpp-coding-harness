@@ -274,10 +274,10 @@ struct BrowserLoginHarness {
                 [url_seen, on_auth_url = std::move(on_auth_url)]()
                     -> boost::asio::awaitable<void> {
                     std::string url;
-                    try {
-                        url = co_await url_seen->async_receive(
-                            boost::asio::use_awaitable);
-                    } catch (const boost::system::system_error&) {
+                    boost::system::error_code receive_error;
+                    url = co_await url_seen->async_receive(
+                        boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+                    if (receive_error) {
                         co_return;
                     }
                     co_await on_auth_url(url);
@@ -427,10 +427,9 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
                         cancel_seen->try_send(boost::system::error_code{});
                     },
                 };
-                try {
-                    co_await cancel_seen->async_receive(boost::asio::use_awaitable);
-                } catch (const boost::system::system_error&) {
-                }
+                boost::system::error_code receive_error;
+                co_await cancel_seen->async_receive(
+                    boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
                 co_return std::unexpected(support::make_error(
                     support::ErrorCode::Cancelled,
                     "Login cancelled"));
@@ -552,10 +551,9 @@ TEST_CASE("PI_OAUTH_CALLBACK_HOST overrides the callback server bind host", "[ai
                         cancel_seen->try_send(boost::system::error_code{});
                     },
                 };
-                try {
-                    co_await cancel_seen->async_receive(boost::asio::use_awaitable);
-                } catch (const boost::system::system_error&) {
-                }
+                boost::system::error_code receive_error;
+                co_await cancel_seen->async_receive(
+                    boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
                 co_return std::unexpected(support::make_error(
                     support::ErrorCode::Cancelled,
                     "Login cancelled"));
@@ -744,10 +742,9 @@ TEST_CASE("callback server settles the wait only for a valid callback", "[ai][au
                 "/auth/callback?code=real-code&state=expected-state");
             CHECK(response.first == 200);
 
-            try {
-                co_await code_seen->async_receive(boost::asio::use_awaitable);
-            } catch (const boost::system::system_error&) {
-            }
+            boost::system::error_code receive_error;
+            co_await code_seen->async_receive(
+                boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
             CHECK(*code_value == std::string{"real-code"});
             server->close();
         },

@@ -15,7 +15,6 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/system/error_code.hpp>
-#include <boost/system/system_error.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -113,10 +112,10 @@ std::uint16_t OAuthCallbackServer::bound_port() const {
 boost::asio::awaitable<support::Expected<std::optional<std::string>>>
 OAuthCallbackServer::wait_for_code() {
     std::optional<std::string> code;
-    try {
-        code = co_await impl_->wait_channel.async_receive(
-            boost::asio::use_awaitable);
-    } catch (const boost::system::system_error&) {
+    boost::system::error_code receive_error;
+    code = co_await impl_->wait_channel.async_receive(
+        boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+    if (receive_error) {
         co_return std::optional<std::string>{};
     }
     co_return code;
@@ -192,15 +191,16 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                             500,
                             oauth_error_html(
                                 "Internal error while processing OAuth callback."));
-                        try {
-                            beast::tcp_stream stream(std::move(socket));
-                            beast::flat_buffer buffer;
-                            http::request<http::string_body> request;
-                            co_await http::async_read(
-                                stream,
-                                buffer,
-                                request,
-                                asio::use_awaitable);
+                        beast::tcp_stream stream(std::move(socket));
+                        beast::flat_buffer buffer;
+                        http::request<http::string_body> request;
+                        boost::system::error_code handler_error;
+                        co_await http::async_read(
+                            stream,
+                            buffer,
+                            request,
+                            asio::redirect_error(asio::use_awaitable, handler_error));
+                        if (!handler_error) {
                             const auto target = parse_target(request.target());
                             if (target.path != kCallbackPath) {
                                 response = html_response(
@@ -225,14 +225,11 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                             co_await http::async_write(
                                 stream,
                                 response,
-                                asio::use_awaitable);
-                        } catch (const boost::system::system_error&) {
-                            // Best-effort session; a valid callback still
-                            // settles the wait before the write fails.
-                        } catch (...) {
-                            // pi returns the frozen internal-error page (500)
-                            // for any handler failure; best-effort here.
+                                asio::redirect_error(asio::use_awaitable, handler_error));
                         }
+                        // Best-effort session: any read/write failure still
+                        // leaves the 500 page and a valid callback settles the
+                        // wait before the write fails.
                     },
                     asio::detached);
             }

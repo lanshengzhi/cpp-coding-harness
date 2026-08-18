@@ -129,7 +129,8 @@ template <typename T>
         return std::unexpected(glaze_error(
             parsed.error(), json, ErrorCode::JsonParse, "failed to parse JSON"));
     }
-    return std::move(parsed).value();
+    // The engaged check above makes this a non-throwing move.
+    return std::move(*parsed);
 }
 
 /// Generic Glaze-DTO write; the `JsonValue` overload in `util/Json.hpp` wins
@@ -141,7 +142,8 @@ template <typename T>
         return std::unexpected(glaze_error(
             serialized.error(), {}, ErrorCode::JsonSerialize, "failed to serialize JSON"));
     }
-    return std::move(serialized).value();
+    // The engaged check above makes this a non-throwing move.
+    return std::move(*serialized);
 }
 
 } // namespace cch::support
