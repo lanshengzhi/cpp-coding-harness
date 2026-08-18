@@ -49,6 +49,46 @@ namespace {
     return text;
 }
 
+/// A structural validity scan for ECMAScript regular-expression patterns.
+/// The staged build additionally compiles the pattern with `std::regex`, which
+/// reports malformed input through `std::regex_error`; with exceptions disabled
+/// libstdc++ cannot report a malformed pattern (it aborts), so this scan rejects
+/// the structural errors users commonly type — an unterminated character class,
+/// an unmatched or unopened group, or a dangling escape — before any
+/// `std::regex` is constructed from the untrusted pattern. A pattern that passes
+/// this scan but is still rejected by the compiler remains a documented residual
+/// risk in the no-exception build.
+[[nodiscard]] bool structurally_valid_regex(std::string_view pattern) {
+    std::size_t group_depth = 0;
+    bool in_character_class = false;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        const char character = pattern[index];
+        if (character == '\\') {
+            if (index + 1 >= pattern.size()) return false;
+            ++index;  // the escaped character is literal
+            continue;
+        }
+        if (in_character_class) {
+            if (character == ']') in_character_class = false;
+            continue;
+        }
+        switch (character) {
+            case '[':
+                in_character_class = true;
+                break;
+            case '(':
+                ++group_depth;
+                break;
+            case ')':
+                if (group_depth == 0) return false;
+                --group_depth;
+                break;
+            default:
+                break;
+        }
+    }
+    return !in_character_class && group_depth == 0;
+}
 } // namespace
 
 /// Trim ASCII whitespace and return the trimmed view.
@@ -67,6 +107,7 @@ namespace {
         static_cast<std::size_t>(end - begin));
 }
 
+
 ParsedSessionQuery parse_session_search_query(std::string_view query) {
     ParsedSessionQuery parsed;
     const auto body = trim_view(query);
@@ -82,15 +123,24 @@ ParsedSessionQuery parse_session_search_query(std::string_view query) {
             parsed.regex_error = "Empty regex";
             return parsed;
         }
+        if (!structurally_valid_regex(pattern_trimmed)) {
+            parsed.regex_mode = true;
+            parsed.regex_error = "Invalid regular expression";
+            return parsed;
+        }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             (void)std::regex{
                 std::string{pattern_trimmed},
                 std::regex::ECMAScript | std::regex::icase};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::regex_error& error) {
             parsed.regex_mode = true;
             parsed.regex_error = error.what();
             return parsed;
         }
+#endif
         parsed.regex_mode = true;
         parsed.regex_pattern = std::string{pattern_trimmed};
         return parsed;

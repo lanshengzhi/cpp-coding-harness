@@ -38,9 +38,9 @@ struct SettingItem {
     bool operator==(const SettingItem&) const = default;
 };
 
-using SettingsChangeSink = std::move_only_function<void(std::string, std::string)>;
-using SettingsCancelSink = std::move_only_function<void()>;
-using SettingsSubmenuDoneSink = std::move_only_function<void(std::optional<std::string>)>;
+using SettingsChangeSink = std::move_only_function<support::ExpectedVoid(std::string, std::string)>;
+using SettingsCancelSink = std::move_only_function<support::ExpectedVoid()>;
+using SettingsSubmenuDoneSink = std::move_only_function<support::ExpectedVoid(std::optional<std::string>)>;
 using SettingsSubmenuFactoryHook = std::move_only_function<std::unique_ptr<Component>(
     const SettingItem&,
     SettingsSubmenuDoneSink)>;

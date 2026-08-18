@@ -56,7 +56,9 @@ public:
             std::lock_guard lock(mutex_);
             previous = std::exchange(state_, state);
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             std::thread([state]() {
                 {
                     std::lock_guard lock(state->mutex);
@@ -68,13 +70,14 @@ public:
                         break;
                     }
                     lock.unlock();
-                    if (state->tick) state->tick();
+                    if (state->tick) (void)state->tick();
                     lock.lock();
                 }
                 state->active = false;
                 lock.unlock();
                 state->condition.notify_all();
             }).detach();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception&) {
             {
                 std::lock_guard lock(state->mutex);
@@ -90,6 +93,7 @@ public:
                 support::ErrorCode::Unknown,
                 "TUI Loader could not start its animation timer"));
         }
+#endif
         stop_state(std::move(previous));
         return {};
     }
@@ -151,8 +155,14 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
 
     void request_render() {
         if (!request_render_sink || requesting.test_and_set()) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            request_render_sink();
+#endif
+            if (auto requested = request_render_sink(); !requested) {
+                std::lock_guard lock(state_mutex);
+                error = std::move(requested.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             std::lock_guard lock(state_mutex);
             error = support::make_error(
@@ -160,6 +170,7 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
                 "TUI Loader render request failed",
                 "the render request callback threw an exception");
         }
+#endif
         requesting.clear();
     }
 
@@ -193,14 +204,19 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
         }
         if (frame_count > 1) {
             std::weak_ptr<Impl> weak = shared_from_this();
-            if (auto started = timer->start(selected_interval, [weak]() {
+            if (auto started = timer->start(selected_interval, [weak]() -> support::ExpectedVoid {
                     if (auto impl = weak.lock()) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                         try {
+#endif
                             impl->tick();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                         } catch (...) {
                             impl->report_tick_failure();
                         }
+#endif
                     }
+                    return {};
                 });
                 !started) {
                 std::lock_guard state_lock(state_mutex);

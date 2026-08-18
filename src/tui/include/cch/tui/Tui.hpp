@@ -17,7 +17,9 @@ namespace cch::tui {
 
 /// Notification that a render should be scheduled. Calls are coalesced until
 /// the next successful render; the sink must return promptly and must not render inline.
-using TuiRenderRequestSink = std::move_only_function<void()>;
+/// A reported failure is a best-effort scheduling notification: it is not recorded and
+/// cannot veto input delivery or rendering.
+using TuiRenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 
 namespace detail {
 class InputDecoder;

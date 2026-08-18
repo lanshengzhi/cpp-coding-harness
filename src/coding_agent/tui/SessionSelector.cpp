@@ -227,7 +227,10 @@ SessionSelectorComponent::SessionSelectorComponent(
       search_input_(),
       rename_input_(
           cch::tui::InputOptions{},
-          [this](std::string value) { confirm_rename(std::move(value)); }) {
+          [this](std::string value) -> support::ExpectedVoid {
+              confirm_rename(std::move(value));
+              return {};
+          }) {
     if (current_loader_) {
         current_sessions_ = current_loader_();
     }

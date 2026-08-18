@@ -114,20 +114,34 @@ struct Input::Impl {
 
     void fire_submit() {
         if (!on_submit) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            on_submit(value());
+#endif
+            if (auto result = on_submit(value()); !result) {
+                // An explicit sink failure is a bounded callback diagnostic;
+                // it is recorded with its own message and never vetoes input.
+                callback_error = std::move(result.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             report_callback_failure("TUI Input submit callback failed");
         }
+#endif
     }
 
     void fire_escape() {
         if (!on_escape) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            on_escape();
+#endif
+            if (auto result = on_escape(); !result) {
+                callback_error = std::move(result.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             report_callback_failure("TUI Input escape callback failed");
         }
+#endif
     }
 
     void insert_character(std::string_view text) {

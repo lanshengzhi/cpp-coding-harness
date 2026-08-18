@@ -283,7 +283,7 @@ TEST_CASE("StatusIndicator renders the loader row with the message", "[coding_ag
     coding_agent::tui::StatusIndicator indicator(
         coding_agent::tui::StatusIndicator::Kind::Working,
         live,
-        [&renders] { ++renders; },
+        [&renders]() -> support::ExpectedVoid { ++renders; return {}; },
         "Working...");
     auto rendered = indicator.render(40);
     REQUIRE(rendered);

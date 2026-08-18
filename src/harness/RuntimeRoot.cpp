@@ -77,7 +77,9 @@ struct RuntimeRoot::State final {
     }
 
     [[nodiscard]] bool post_worker(RuntimeRoot::Task task) noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             {
                 std::lock_guard lock(worker_mutex);
                 if (stopping.load(std::memory_order_acquire)) {
@@ -87,18 +89,24 @@ struct RuntimeRoot::State final {
             }
             worker_ready.notify_one();
             return true;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             return false;
         }
+#endif
     }
 
     [[nodiscard]] bool post_loop(RuntimeRoot::Task task) noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             boost::asio::post(*loop, std::move(task));
             return true;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             return false;
         }
+#endif
     }
 
     [[nodiscard]] boost::asio::any_io_executor executor() const noexcept {
@@ -217,7 +225,9 @@ struct RuntimeTarget::State final : std::enable_shared_from_this<RuntimeTarget::
     }
 
     void post_result(std::size_t sequence, RuntimeRoot::Task task) noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             bool schedule_drain = false;
             {
                 std::lock_guard lock(mailbox_mutex);
@@ -235,11 +245,13 @@ struct RuntimeTarget::State final : std::enable_shared_from_this<RuntimeTarget::
                 })) {
                 std::terminate();
             }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // An admitted operation needs a terminal mailbox slot. Capacity
             // failure cannot be repaired by executing work inline.
             std::terminate();
         }
+#endif
     }
 
 private:

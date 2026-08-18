@@ -83,9 +83,18 @@ TEST_CASE("SelectList filters navigates wraps selects and cancels with semantic 
         },
         cch::tui::SelectListOptions{
             .max_visible = 2,
-            .on_select = [&selected](const cch::tui::SelectItem& item) { selected = item.value; },
-            .on_cancel = [&cancellations]() { ++cancellations; },
-            .on_selection_change = [&changed](const cch::tui::SelectItem& item) { changed = item.value; },
+            .on_select = [&selected](const cch::tui::SelectItem& item) -> cch::support::ExpectedVoid {
+                selected = item.value;
+                return {};
+            },
+            .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid {
+                ++cancellations;
+                return {};
+            },
+            .on_selection_change = [&changed](const cch::tui::SelectItem& item) -> cch::support::ExpectedVoid {
+                changed = item.value;
+                return {};
+            },
         });
 
     list.set_filter("al");
@@ -140,7 +149,10 @@ TEST_CASE("SelectList dispatches configured keys from its effective registry", "
     cch::tui::SelectList list(
         make_items(1),
         cch::tui::SelectListOptions{
-            .on_select = [&selections](const cch::tui::SelectItem&) { ++selections; },
+            .on_select = [&selections](const cch::tui::SelectItem&) -> cch::support::ExpectedVoid {
+                ++selections;
+                return {};
+            },
             .keybindings = keybindings->registry,
         });
     list.handle_input(cch::tui::KeyEvent{.key = "enter"});

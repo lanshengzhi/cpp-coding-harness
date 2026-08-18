@@ -335,8 +335,14 @@ TEST_CASE("VirtualTerminal consumes cell-size responses protocol-aware", "[tui][
     std::vector<std::string> inputs;
     std::vector<cch::tui::TerminalDimensions> notifications;
     REQUIRE(terminal.start(
-        [&](std::string input) { inputs.push_back(std::move(input)); },
-        [&](cch::tui::TerminalDimensions dimensions) { notifications.push_back(dimensions); }));
+        [&](std::string input) -> cch::support::ExpectedVoid {
+            inputs.push_back(std::move(input));
+            return {};
+        },
+        [&](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
+            notifications.push_back(dimensions);
+            return {};
+        }));
 
     // Pi's 9x18 default applies until a CSI 16 t response arrives, and the
     // startup query is recorded.
@@ -389,7 +395,9 @@ TEST_CASE("VirtualTerminal consumes cell-size responses protocol-aware", "[tui][
 
 TEST_CASE("VirtualTerminal emits the cell-size query only for image-capable terminals", "[tui][image][terminal-image][issue385]") {
     cch::tui::VirtualTerminal plain({.columns = 80, .rows = 24});
-    REQUIRE(plain.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(plain.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(plain.output().empty());
     REQUIRE(plain.stop());
 }

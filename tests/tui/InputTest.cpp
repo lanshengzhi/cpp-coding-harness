@@ -30,7 +30,12 @@ void type(cch::tui::Input& input, std::string text) {
 
 TEST_CASE("Input types printable text and routes submit through the sink", "[tui][input][issue380]") {
     std::vector<std::string> submitted;
-    cch::tui::Input input({}, [&submitted](std::string value) { submitted.push_back(std::move(value)); });
+    cch::tui::Input input(
+        {},
+        [&submitted](std::string value) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(value));
+            return {};
+        });
 
     type(input, "hello");
     key(input, "space");
@@ -52,7 +57,7 @@ TEST_CASE("Input types printable text and routes submit through the sink", "[tui
 
 TEST_CASE("Input routes escape and ctrl+c through the escape sink", "[tui][input][issue380]") {
     int escapes = 0;
-    cch::tui::Input input({}, {}, [&escapes] { ++escapes; });
+    cch::tui::Input input({}, {}, [&escapes]() -> cch::support::ExpectedVoid { ++escapes; return {}; });
 
     key(input, "escape");
     key(input, "c", true);
@@ -298,11 +303,14 @@ TEST_CASE("Input set_value replaces the value and clamps the cursor", "[tui][inp
     CHECK((*input.cursor_location() == cch::tui::CursorPosition{.column = 4, .row = 0}));
 }
 
-TEST_CASE("Input surfaces sink exceptions and degenerate widths", "[tui][input][issue380]") {
-    cch::tui::Input throwing({}, [](std::string) { throw std::runtime_error("boom"); });
-    type(throwing, "x");
-    key(throwing, "enter");
-    auto rendered = throwing.render(10);
+TEST_CASE("Input surfaces sink failures and degenerate widths", "[tui][input][issue380][issue485]") {
+    cch::tui::Input failing({}, [](std::string) -> cch::support::ExpectedVoid {
+        return std::unexpected(cch::support::make_error(
+            cch::support::ErrorCode::Unknown, "boom"));
+    });
+    type(failing, "x");
+    key(failing, "enter");
+    auto rendered = failing.render(10);
     CHECK_FALSE(rendered.has_value());
 
     cch::tui::Input input;
@@ -319,7 +327,10 @@ TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][i
     std::vector<std::string> submitted;
     auto input = std::make_unique<cch::tui::Input>(
         cch::tui::InputOptions{},
-        [&submitted](std::string value) { submitted.push_back(std::move(value)); });
+        [&submitted](std::string value) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(value));
+            return {};
+        });
     auto* input_ptr = input.get();
     REQUIRE(tui.add_child(std::move(input)));
     REQUIRE(tui.start());

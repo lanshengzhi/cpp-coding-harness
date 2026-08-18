@@ -7,7 +7,10 @@
     "forbidden_compile_flags": ["-fexceptions"],
     "allowed_exception_ptr_sources": [
       "src/ai/AsyncResultBridge.hpp",
-      "src/ai/ModelStreamBridge.hpp"
+      "src/ai/ModelStreamBridge.hpp",
+      "src/coding_agent/AgentSession.cpp",
+      "src/coding_agent/tui/InteractiveMode.cpp",
+      "src/tools/AsyncToolFactories.cpp"
     ],
     "forbidden_exception_calls": ["std::rethrow_exception"]
   },

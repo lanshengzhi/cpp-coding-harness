@@ -111,12 +111,14 @@ struct TerminalImage {
 };
 
 /// Delivers raw input bytes. An empty value flushes an incomplete escape sequence
-/// after the terminal's ambiguity timeout.
-using TerminalInputSink = std::move_only_function<void(std::string)>;
+/// after the terminal's ambiguity timeout. A reported failure is a bounded
+/// callback diagnostic and deactivates the sink (ADR 0017).
+using TerminalInputSink = std::move_only_function<support::ExpectedVoid(std::string)>;
 /// Notifies that the terminal presentation changed and should be re-rendered:
 /// terminal dimensions changed, or a presentation-affecting capability update
 /// (the `CSI 16 t` cell-size response) was absorbed with unchanged dimensions.
-using TerminalResizeSink = std::move_only_function<void(TerminalDimensions)>;
+/// A reported failure is a bounded callback diagnostic and deactivates the sink.
+using TerminalResizeSink = std::move_only_function<support::ExpectedVoid(TerminalDimensions)>;
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts (ProcessTerminal
 // setTitle/setProgress/drainInput and the TERMINAL_PROGRESS_* constants).

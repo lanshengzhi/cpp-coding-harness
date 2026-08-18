@@ -166,7 +166,9 @@ TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", 
         .input_fd = input.get(),
         .output_fd = output.get(),
     });
-    const auto result = terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {});
+    const auto result = terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == cch::support::ErrorCode::Validation);
@@ -189,7 +191,9 @@ TEST_CASE("Process Terminal restores raw paste cursor and pending render modes",
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     termios acquired{};
     REQUIRE(::tcgetattr(pty->slave.get(), &acquired) == 0);
@@ -230,27 +234,35 @@ TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(generic_terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK_FALSE(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
     (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("football");
-    REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(generic_terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK_FALSE(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
     (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("xterm-unknown");
     program_environment.set("WezTerm");
-    REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(generic_terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
     (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("xterm-kitty");
     program_environment.unset();
-    REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(generic_terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
 }
@@ -267,13 +279,15 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string input) {
+        [&](std::string input) -> cch::support::ExpectedVoid {
             std::lock_guard lock(events_mutex);
             inputs.push_back(std::move(input));
+            return {};
         },
-        [&](cch::tui::TerminalDimensions dimensions) {
+        [&](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
             std::lock_guard lock(events_mutex);
             resizes.push_back(dimensions);
+            return {};
         }));
     const auto startup_output = cch::tests::read_available(pty->master.get());
     CHECK(startup_output.find("\x1b[>7u\x1b[?u\x1b[c") != std::string::npos);
@@ -319,9 +333,10 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [&](cch::tui::TerminalDimensions dimensions) {
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [&](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
             resizes.push_back(dimensions);
+            return {};
         }));
     (void)cch::tests::read_available(pty->master.get());
 
@@ -359,13 +374,14 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string) {
+        [&](std::string) -> cch::support::ExpectedVoid {
             callback_started = true;
             while (!external_stop_started.load()) std::this_thread::yield();
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
             callback_stop_succeeded = terminal.stop().has_value();
+            return {};
         },
-        [](cch::tui::TerminalDimensions) {}));
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     REQUIRE(::write(pty->master.get(), "q", 1) == 1);
     REQUIRE(cch::tests::wait_until([&] { return callback_started.load(); }));
@@ -384,6 +400,10 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
     REQUIRE(terminal.stop());
 }
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+// The staged build's defensive sink boundary still isolates a throwing
+// interaction callback and reports it with the restoration failure; the
+// no-exception build enforces non-throwing callbacks by construction.
 TEST_CASE("Process Terminal reports callback and restoration failures together", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
@@ -397,11 +417,12 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
         .output_fd = output_descriptor,
     });
     REQUIRE(terminal.start(
-        [&](std::string) {
+        [&](std::string) -> cch::support::ExpectedVoid {
             callback_failed = true;
             throw ExpectedUnwind{};
+            return {};
         },
-        [](cch::tui::TerminalDimensions) {}));
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     REQUIRE(::write(pty->master.get(), "q", 1) == 1);
     REQUIRE(cch::tests::wait_until([&] { return callback_failed.load(); }));
@@ -419,6 +440,7 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
     REQUIRE(terminal.stop());
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
+#endif
 
 TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
@@ -427,7 +449,9 @@ TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     constexpr std::string_view kResponseStart = "\x1b[?";
@@ -448,6 +472,9 @@ TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][
     CHECK(restoration.find("\x1b[<u") != std::string::npos);
 }
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+// Unwinding through the TUI stack is an exception-enabled-build concern: the
+// no-exception build cannot throw through the runtime loop at all.
 TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwinding", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
@@ -496,6 +523,7 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
     CHECK(output.find("\x1b[?2004l") != std::string::npos);
     CHECK(output.find("\x1b[<u") != std::string::npos);
 }
+#endif
 
 TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
@@ -509,7 +537,9 @@ TEST_CASE("Process Terminal rolls back raw input after partial startup failure",
         .input_fd = pty->slave.get(),
         .output_fd = read_only_output.get(),
     });
-    const auto result = terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {});
+    const auto result = terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == cch::support::ErrorCode::Process);
@@ -557,7 +587,9 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     const auto probe_started = std::chrono::steady_clock::now();
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(std::chrono::steady_clock::now() - probe_started < std::chrono::milliseconds(500));
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Unknown);
@@ -566,7 +598,9 @@ TEST_CASE(
 
     color_terminal_environment.set("24BIT");
     foreground_background_environment.set("0; +15ignored ");
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light);
     REQUIRE(terminal.stop());
@@ -576,14 +610,18 @@ TEST_CASE(
     foreground_background_environment.set("15;0");
     terminal_environment.set("tmux-256color");
     program_environment.set("WezTerm");
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
     REQUIRE(terminal.stop());
     (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("xterm-unknown");
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
     REQUIRE(terminal.stop());
@@ -637,10 +675,11 @@ TEST_CASE(
         });
 
         REQUIRE(terminal.start(
-            [&](std::string input) {
+            [&](std::string input) -> cch::support::ExpectedVoid {
                 if (input.find("typed") != std::string::npos) delivered_input = true;
+                return {};
             },
-            [](cch::tui::TerminalDimensions) {}));
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
         responder.join();
         REQUIRE(answered.load());
         CHECK(terminal.capabilities().appearance == probe_case.expected);
@@ -668,11 +707,12 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string input) {
+        [&](std::string input) -> cch::support::ExpectedVoid {
             std::lock_guard lock(input_mutex);
             delivered += input;
+            return {};
         },
-        [](cch::tui::TerminalDimensions) {}));
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
 
@@ -752,7 +792,9 @@ TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue3
         before_start.error().message ==
         "Process Terminal must be started before terminal operations");
 
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     REQUIRE(terminal.set_title("cch - session - workspace"));
     CHECK(
@@ -777,7 +819,9 @@ TEST_CASE(
         before_start.error().message ==
         "Process Terminal must be started before terminal operations");
 
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     // ADR 0037: the resize full-redraw path clears screen, homes, and clears
     // the terminal's scroll history together (`\x1b[2J\x1b[H\x1b[3J`), matching
@@ -799,7 +843,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     std::string accumulated = cch::tests::read_available(pty->master.get());
 
     const auto count_active = [&] {
@@ -845,7 +891,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     REQUIRE(terminal.set_progress(true));
@@ -857,7 +905,9 @@ TEST_CASE(
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 
     // A restart must not re-arm the keepalive from the previous session.
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     const auto after_restart = cch::tests::read_available(pty->master.get());
@@ -877,11 +927,12 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string input) {
+        [&](std::string input) -> cch::support::ExpectedVoid {
             std::lock_guard lock(delivered_mutex);
             delivered.push_back(std::move(input));
+            return {};
         },
-        [](cch::tui::TerminalDimensions) {}));
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // A writer floods the terminal with Kitty key-release-style garbage. It
@@ -927,7 +978,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // Activate the modifyOtherKeys fallback via the device-attributes response.
@@ -979,7 +1032,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::Kitty);
     CHECK(terminal.capabilities().hyperlinks);
     // pi's 9x18 default applies until a CSI 16 t response arrives.
@@ -1001,7 +1056,9 @@ TEST_CASE(
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
         });
-        REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+        REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
         CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::None);
         CHECK_FALSE(terminal.capabilities().hyperlinks);
         CHECK_FALSE(cch::tests::read_available(pty->master.get()).find("\x1b[16t") != std::string::npos);
@@ -1016,7 +1073,9 @@ TEST_CASE(
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
         });
-        REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+        REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
         CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::None);
         REQUIRE(terminal.stop());
     }
@@ -1038,13 +1097,15 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string input) {
+        [&](std::string input) -> cch::support::ExpectedVoid {
             std::lock_guard lock(events_mutex);
             inputs.push_back(std::move(input));
+            return {};
         },
-        [&](cch::tui::TerminalDimensions dimensions) {
+        [&](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
             std::lock_guard lock(events_mutex);
             notifications.push_back(dimensions);
+            return {};
         }));
     (void)cch::tests::read_available(pty->master.get());
 
@@ -1093,7 +1154,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     const cch::tui::TerminalImage image{
@@ -1154,7 +1217,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     const cch::tui::TerminalImage image{
@@ -1188,7 +1253,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // Buffer row 10 on an 8-row viewport is 3 rows past the bottom: the
@@ -1243,11 +1310,12 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string input) {
+        [&](std::string input) -> cch::support::ExpectedVoid {
             std::lock_guard lock(events_mutex);
             inputs.push_back(std::move(input));
+            return {};
         },
-        [](cch::tui::TerminalDimensions) {}));
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     responder.join();
     REQUIRE(answered.load());
     const auto startup_output = cch::tests::read_available(pty->master.get());
@@ -1310,7 +1378,9 @@ TEST_CASE(
     // Nothing answers the DSR query: after the ~250 ms deadline the adapter
     // emits the clear-screen + home + scrollback fallback and anchors the
     // origin at row 0 (ADR 0041). One startup pays the timeout once.
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     const auto startup_output = cch::tests::read_available(pty->master.get());
     CHECK(startup_output.find("\x1b[6n") != std::string::npos);
     CHECK(startup_output.find("\x1b[2J\x1b[H\x1b[3J") != std::string::npos);
@@ -1331,7 +1401,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // Idle: the delivery worker parks in a blocking readiness wait (the only
@@ -1356,8 +1428,8 @@ TEST_CASE(
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start(
-        [&](std::string) { delivering = true; },
-        [](cch::tui::TerminalDimensions) {}));
+        [&](std::string) -> cch::support::ExpectedVoid { delivering = true; return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // Stream input continuously so the worker is busy reading and delivering;
@@ -1392,7 +1464,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // With the master never read, the PTY output buffer fills and writes back
@@ -1437,7 +1511,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // A single write larger than the queue bound (e.g. a large inline image)
@@ -1470,7 +1546,9 @@ TEST_CASE(
     const int original_flags = ::fcntl(pty->slave.get(), F_GETFL);
     REQUIRE(original_flags >= 0);
 
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     const int started_flags = ::fcntl(pty->slave.get(), F_GETFL);
     REQUIRE(started_flags >= 0);
     CHECK((started_flags & O_NONBLOCK) != 0);
@@ -1491,7 +1569,9 @@ TEST_CASE(
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
     // Closing the master makes the slave read return EOF (POLLIN|POLLHUP):
@@ -1514,4 +1594,3 @@ TEST_CASE(
     const auto second_elapsed = std::chrono::steady_clock::now() - second_started;
     CHECK(second_elapsed < std::chrono::milliseconds(400));
 }
-

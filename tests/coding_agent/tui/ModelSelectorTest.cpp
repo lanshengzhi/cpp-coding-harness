@@ -112,18 +112,20 @@ struct RuntimeFixture {
         auto result = std::optional<support::ExpectedVoid>{};
         boost::asio::co_spawn(
             io,
-            [runtime = runtime]() -> boost::asio::awaitable<void> {
+            [runtime = runtime]() -> boost::asio::awaitable<support::ExpectedVoid> {
                 auto available = co_await runtime->get_available();
                 if (!available) {
-                    throw std::runtime_error(available.error().message);
+                    co_return std::unexpected(available.error());
                 }
+                co_return support::ExpectedVoid{};
             },
-            [&](std::exception_ptr exception) {
+            [&](std::exception_ptr exception, support::ExpectedVoid outcome) {
                 REQUIRE(exception == nullptr);
-                result.emplace();
+                result.emplace(std::move(outcome));
             });
         io.run();
         REQUIRE(result.has_value());
+        REQUIRE(*result);
     }
 };
 
@@ -228,7 +230,7 @@ TEST_CASE(
         fixture.runtime,
         io.get_executor(),
         std::vector<cch::coding_agent::ScopedModel>{},
-        [](ai::Model) {},
+        [](ai::Model) -> support::ExpectedVoid { return {}; },
         [] {},
         [&io] { (void)io; });
     empty_selector->handle_input(tui::KeyEvent{.key = "z"});
@@ -256,7 +258,7 @@ TEST_CASE(
         fixture.runtime,
         io.get_executor(),
         std::vector<cch::coding_agent::ScopedModel>{},
-        [](ai::Model) {},
+        [](ai::Model) -> support::ExpectedVoid { return {}; },
         [&cancellations] { ++cancellations; },
         [&io] { (void)io; });
 
@@ -298,7 +300,7 @@ TEST_CASE(
         fixture.runtime,
         io.get_executor(),
         std::vector<cch::coding_agent::ScopedModel>{coding_agent::ScopedModel{.model = *scoped_model}},
-        [](ai::Model) {},
+        [](ai::Model) -> support::ExpectedVoid { return {}; },
         [] {},
         [&io] { (void)io; });
 
@@ -358,7 +360,7 @@ TEST_CASE(
         fixture.runtime,
         io.get_executor(),
         std::vector<cch::coding_agent::ScopedModel>{},
-        [](ai::Model) {},
+        [](ai::Model) -> support::ExpectedVoid { return {}; },
         [] {},
         [&io] { (void)io; });
 

@@ -34,8 +34,9 @@ TEST_CASE(
             },
         },
         cch::tui::SettingsListOptions{
-            .on_change = [&updates](std::string id, std::string value) {
+            .on_change = [&updates](std::string id, std::string value) -> cch::support::ExpectedVoid {
                 updates.push_back(std::move(id) + "=" + std::move(value));
+                return {};
             },
             .keybindings = keybindings->registry,
         });
@@ -128,8 +129,9 @@ TEST_CASE(
             {.id = "theme", .label = "Theme", .current_value = "dark", .control = cch::tui::SettingSubmenu{}},
         },
         cch::tui::SettingsListOptions{
-            .on_change = [&updates](std::string id, std::string value) {
+            .on_change = [&updates](std::string id, std::string value) -> cch::support::ExpectedVoid {
                 updates.push_back(std::move(id) + "=" + std::move(value));
+                return {};
             },
             .submenu_factory = [](const cch::tui::SettingItem&, cch::tui::SettingsSubmenuDoneSink done) {
                 auto shared_done = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
@@ -139,10 +141,14 @@ TEST_CASE(
                         {.value = "light", .label = "Light"},
                     },
                     cch::tui::SelectListOptions{
-                        .on_select = [shared_done](const cch::tui::SelectItem& item) {
-                            (*shared_done)(item.value);
+                        .on_select = [shared_done](const cch::tui::SelectItem& item) -> cch::support::ExpectedVoid {
+                            (void)(*shared_done)(item.value);
+                            return {};
                         },
-                        .on_cancel = [shared_done]() { (*shared_done)(std::nullopt); },
+                        .on_cancel = [shared_done]() -> cch::support::ExpectedVoid {
+                            (void)(*shared_done)(std::nullopt);
+                            return {};
+                        },
                     });
             },
         });
@@ -181,8 +187,8 @@ TEST_CASE("SettingsList renders and dispatches hints from one effective registry
             .control = cch::tui::SettingValues{{"dark", "light"}},
         }},
         cch::tui::SettingsListOptions{
-            .on_change = [&changes](std::string, std::string) { ++changes; },
-            .on_cancel = [&cancellations]() { ++cancellations; },
+            .on_change = [&changes](std::string, std::string) -> cch::support::ExpectedVoid { ++changes; return {}; },
+            .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { ++cancellations; return {}; },
             .keybindings = keybindings->registry,
         });
     const auto rendered = list.render(60);
@@ -213,8 +219,9 @@ TEST_CASE("SettingsList space confirms only while the search is empty", "[tui][s
         },
         cch::tui::SettingsListOptions{
             .enable_search = true,
-            .on_change = [&updates](std::string id, std::string value) {
+            .on_change = [&updates](std::string id, std::string value) -> cch::support::ExpectedVoid {
                 updates.push_back(std::move(id) + "=" + std::move(value));
+                return {};
             },
         });
 
@@ -311,7 +318,7 @@ TEST_CASE("SettingsList search line renders and locates the cursor through Input
 TEST_CASE("SettingsList cancellation invokes the callback once per semantic key", "[tui][settings-list][issue52]") {
     std::size_t cancellations = 0;
     cch::tui::SettingsList list({}, cch::tui::SettingsListOptions{
-        .on_cancel = [&cancellations]() { ++cancellations; },
+        .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { ++cancellations; return {}; },
     });
     list.handle_input(cch::tui::KeyEvent{.key = "escape"});
     CHECK(cancellations == 1);

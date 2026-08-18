@@ -41,13 +41,14 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
               .autocomplete_debounce_timer = std::move(options.autocomplete_debounce_timer),
               .autocomplete_render_request = std::move(options.autocomplete_render_request),
           },
-          [this](std::string text) {
+          [this](std::string text) -> support::ExpectedVoid {
               // Editor submission clears before invoking its submit sink;
               // keep that notification on the sampled text's revision.
               if (!text.empty()) ++editor_revision_;
               invoke_invalidate();
+              return {};
           },
-          [this](std::string text) {
+          [this](std::string text) -> support::ExpectedVoid {
               emit_action(
                   SubmitAction{
                       .request = EditorSubmissionRequest{
@@ -57,6 +58,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                       .submission = InputSubmission::Ordinary,
                   },
                   "Native TUI submit action failed");
+              return {};
           }) {
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
@@ -178,17 +180,22 @@ void InteractiveView::replace_status_indicator(StatusIndicator::Kind kind, std::
     status_indicator_ = std::make_unique<StatusIndicator>(
         kind,
         *theme_,
-        [this] {
+        [this]() -> support::ExpectedVoid {
             // The status indicator's loader render requests flow through the
             // view's separate coalescible invalidate sink (not the action
-            // seam); a throwing render request is a callback failure.
-            if (!on_invalidate_) return;
+            // seam); a failing render request is a callback diagnostic.
+            if (!on_invalidate_) return {};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 on_invalidate_();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 record_callback_error(
                     "Native TUI status indicator render request failed");
             }
+#endif
+            return {};
         },
         std::move(message));
 }
@@ -276,12 +283,17 @@ void InteractiveView::set_user_bash_progress(runtime::UserBashProgress progress)
             keybindings_,
             progress.command,
             progress.exclude_from_context);
-        pending_bash_->start_loader([this] {
-            if (!on_invalidate_) return;
+        pending_bash_->start_loader([this]() -> support::ExpectedVoid {
+            if (!on_invalidate_) return {};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 on_invalidate_();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
             }
+#endif
+            return {};
         });
         last_bash_output_size_ = 0;
         bash_outcome_set_ = false;

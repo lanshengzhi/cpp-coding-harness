@@ -49,8 +49,14 @@ LoginDialogComponent::LoginDialogComponent(
       on_cancel_(std::move(on_cancel)),
       input_(
           cch::tui::InputOptions{.keybindings = keybindings_},
-          [this](std::string value) { pending_submit_ = std::move(value); },
-          [this] { pending_escape_ = true; }) {}
+          [this](std::string value) -> support::ExpectedVoid {
+              pending_submit_ = std::move(value);
+              return {};
+          },
+          [this]() -> support::ExpectedVoid {
+              pending_escape_ = true;
+              return {};
+          }) {}
 
 void LoginDialogComponent::show_auth(
     std::string url,

@@ -45,9 +45,22 @@ struct CancellableLoader::Impl {
         }
         if (request_stop) stop_source.request_stop();
         loader.stop();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            if (completion) completion();
-            if (cancellation) cancellation();
+#endif
+            if (completion) {
+                if (auto completed = completion(); !completed) {
+                    std::lock_guard lock(mutex);
+                    callback_error = std::move(completed.error());
+                }
+            }
+            if (cancellation) {
+                if (auto cancelled = cancellation(); !cancelled) {
+                    std::lock_guard lock(mutex);
+                    callback_error = std::move(cancelled.error());
+                }
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             std::lock_guard lock(mutex);
             callback_error = support::make_error(
@@ -57,6 +70,7 @@ struct CancellableLoader::Impl {
                     : "TUI CancellableLoader completion callback failed",
                 "the terminal callback threw an exception");
         }
+#endif
         return true;
     }
 };

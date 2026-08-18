@@ -36,7 +36,7 @@ public:
     }
 
     void fire() {
-        if (tick_) tick_();
+        if (tick_) (void)tick_();
     }
 
     std::chrono::milliseconds interval_{0};
@@ -56,9 +56,10 @@ TEST_CASE("Loader requests renders for animation and stops without busy waiting"
     auto* timer_ptr = timer.get();
     std::size_t requests = 0;
     auto loader = std::make_unique<cch::tui::Loader>(cch::tui::LoaderOptions{
-        .request_render = [&]() {
+        .request_render = [&]() -> cch::support::ExpectedVoid {
             ++requests;
             tui.invalidate();
+            return {};
         },
         .message = "Working",
         .indicator = cch::tui::LoaderIndicatorOptions{
@@ -127,10 +128,11 @@ TEST_CASE("CancellableLoader mutations permit render-request reentry", "[tui][lo
     std::size_t reentries = 0;
     cch::tui::CancellableLoader loader(cch::tui::CancellableLoaderOptions{
         .loader = cch::tui::LoaderOptions{
-            .request_render = [&]() {
-                if (!armed) return;
+            .request_render = [&]() -> cch::support::ExpectedVoid {
+                if (!armed) return {};
                 CHECK(loader_ptr->state() == cch::tui::CancellableLoaderState::Active);
                 ++reentries;
+                return {};
             },
             .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
             .animation_timer = std::make_unique<ManualAnimationTimer>(),
@@ -154,8 +156,8 @@ TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once
             .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
             .animation_timer = std::make_unique<ManualAnimationTimer>(),
         },
-        .on_complete = [&completions]() { ++completions; },
-        .on_cancel = [&cancellations]() { ++cancellations; },
+        .on_complete = [&completions]() -> cch::support::ExpectedVoid { ++completions; return {}; },
+        .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { ++cancellations; return {}; },
     });
     CHECK(completed.complete());
     CHECK_FALSE(completed.complete());
@@ -169,8 +171,8 @@ TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once
             .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
             .animation_timer = std::make_unique<ManualAnimationTimer>(),
         },
-        .on_complete = [&completions]() { ++completions; },
-        .on_cancel = [&cancellations]() { ++cancellations; },
+        .on_complete = [&completions]() -> cch::support::ExpectedVoid { ++completions; return {}; },
+        .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { ++cancellations; return {}; },
     });
     const auto token = cancelled.cancellation_token();
     std::optional<cch::tui::CancellableLoaderState> callback_state;
@@ -213,8 +215,8 @@ TEST_CASE("CancellableLoader resolves concurrent terminal outcomes exactly once"
             .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
             .animation_timer = std::make_unique<ManualAnimationTimer>(),
         },
-        .on_complete = [&completions]() { completions.fetch_add(1); },
-        .on_cancel = [&cancellations]() { cancellations.fetch_add(1); },
+        .on_complete = [&completions]() -> cch::support::ExpectedVoid { completions.fetch_add(1); return {}; },
+        .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { cancellations.fetch_add(1); return {}; },
     });
 
     std::thread complete_thread([&loader]() { (void)loader.complete(); });
@@ -256,7 +258,7 @@ TEST_CASE("Cancelling a stacked loader restores the previous overlay input targe
             .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
             .animation_timer = std::make_unique<ManualAnimationTimer>(),
         },
-        .on_cancel = [&]() { REQUIRE(tui.remove_overlay(upper_ptr)); },
+        .on_cancel = [&]() -> cch::support::ExpectedVoid { REQUIRE(tui.remove_overlay(upper_ptr)); return {}; },
     });
     REQUIRE(upper->add_child(std::move(loader)));
     REQUIRE(upper->focus_first());
@@ -296,9 +298,10 @@ TEST_CASE("Cancelling an overlay loader restores focus through VirtualTerminal",
             .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
             .animation_timer = std::make_unique<ManualAnimationTimer>(),
         },
-        .on_cancel = [&]() {
+        .on_cancel = [&]() -> cch::support::ExpectedVoid {
             ++cancellations;
             REQUIRE(tui.remove_overlay(overlay_ptr));
+            return {};
         },
     });
     REQUIRE(overlay->add_child(std::move(loader)));

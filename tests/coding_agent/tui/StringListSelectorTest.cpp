@@ -165,7 +165,7 @@ TEST_CASE(
         test_keybindings(),
         "Pick:",
         {"one"},
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [&cancellations] { ++cancellations; });
 
     selector.handle_input(tui::KeyEvent{.key = "escape"});
@@ -184,7 +184,7 @@ TEST_CASE(
         test_keybindings(),
         "Pick:",
         {"one"},
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
         coding_agent::tui::StringListSelectorOptions{
             .on_toggle_tools_expanded = [&toggles] { ++toggles; },

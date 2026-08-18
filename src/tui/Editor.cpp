@@ -229,14 +229,22 @@ struct Editor::Impl {
 
     void notify_change() {
         if (!on_change) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            on_change(document_text(document));
+#endif
+            if (auto result = on_change(document_text(document)); !result) {
+                // An explicit change-sink failure is a bounded callback
+                // diagnostic (ADR 0017); it never vetoes editing.
+                callback_error = std::move(result.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             callback_error = support::make_error(
                 support::ErrorCode::Unknown,
                 "Editor change sink failed",
                 "the change callback threw an exception");
         }
+#endif
     }
 
     [[nodiscard]] std::string text() const {
@@ -292,11 +300,15 @@ struct Editor::Impl {
             ++autocomplete_request_id;
         }
         if (options.autocomplete_debounce_timer) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 options.autocomplete_debounce_timer->cancel();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 // Cancellation is best-effort; a throwing timer cannot veto input.
             }
+#endif
         }
         request_stop_source.request_stop();
     }
@@ -422,8 +434,9 @@ struct Editor::Impl {
         if (debounce_ms > std::chrono::milliseconds{} && options.autocomplete_debounce_timer) {
             options.autocomplete_debounce_timer->start(
                 debounce_ms,
-                [self = self, start_token, force, explicit_tab] {
+                [self = self, start_token, force, explicit_tab]() -> support::ExpectedVoid {
                     self->on_debounce_fired(start_token, force, explicit_tab);
+                    return {};
                 });
             return;
         }
@@ -453,11 +466,13 @@ struct Editor::Impl {
             .force = force,
             .stop_token = request_stop_source.get_token(),
         };
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             autocomplete_provider->get_suggestions(
                 request,
                 [self = self, request_id, snapshot_text, snapshot_cursor, force, explicit_tab](
-                    std::optional<AutocompleteSuggestions> result) {
+                    std::optional<AutocompleteSuggestions> result) -> support::ExpectedVoid {
                     self->deliver_autocomplete_result(
                         request_id,
                         std::move(result),
@@ -465,7 +480,9 @@ struct Editor::Impl {
                         snapshot_cursor,
                         force,
                         explicit_tab);
+                    return {};
                 });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             callback_error = support::make_error(
                 support::ErrorCode::Unknown,
@@ -474,6 +491,7 @@ struct Editor::Impl {
             cancel_autocomplete();
             return;
         }
+#endif
         drain_autocomplete_result();
     }
 
@@ -497,12 +515,16 @@ struct Editor::Impl {
             };
         }
         if (options.autocomplete_render_request) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
-                options.autocomplete_render_request();
+#endif
+                (void)options.autocomplete_render_request();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 // Scheduling notifications cannot make input delivery fail
                 // (same bound as Tui::invalidate's render-request sink).
             }
+#endif
         }
     }
 
@@ -1107,14 +1129,22 @@ struct Editor::Impl {
         scroll_offset = 0;
         notify_change();
         if (!on_submit) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            on_submit(result);
+#endif
+            if (auto submitted = on_submit(result); !submitted) {
+                // An explicit submit-sink failure is a bounded callback
+                // diagnostic (ADR 0017); it never vetoes editing state.
+                callback_error = std::move(submitted.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             callback_error = support::make_error(
                 support::ErrorCode::Unknown,
                 "Editor submit sink failed",
                 "the submit callback threw an exception");
         }
+#endif
     }
 
     void paste(std::string text) {

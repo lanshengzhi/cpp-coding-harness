@@ -126,41 +126,49 @@ void ModelSelectorComponent::start_refresh() {
     const auto self = shared_from_this();
     const auto runtime = runtime_;
     boost::asio::post(executor_, [self, runtime] {
+        // The completion is fire-and-forget: refresh failures are diagnostic
+        // observations, and the selector stays usable with the snapshot list.
+        // Invalidate on both success and failure paths so the status/error
+        // lines land (the non-null exception_ptr a detached handler could
+        // receive is a Runtime invariant in the no-exception build).
+        auto on_invalidate = std::move(self->on_invalidate_);
         boost::asio::co_spawn(
             self->executor_,
-            [runtime, self]() -> boost::asio::awaitable<void> {
+            [runtime, self, on_invalidate = std::move(on_invalidate)]() mutable
+                -> boost::asio::awaitable<void> {
                 auto available = co_await runtime->get_available();
-                std::lock_guard lock(self->mutex_);
-                if (self->closed_) co_return;
-                self->refresh_status_message_.clear();
-                if (!available) {
-                    self->error_message_ =
-                        "Could not refresh model catalogs; showing cached models.";
-                } else {
-                    // pi: after a clean refresh, the runtime's own error
-                    // (models.json diagnostics) still surfaces; otherwise the
-                    // success status.
-                    self->error_message_ = runtime->get_error();
-                    if (!self->error_message_) {
-                        self->refresh_status_message_ = "Model catalogs refreshed.";
-                        self->refresh_status_success_ = true;
+                {
+                    std::lock_guard lock(self->mutex_);
+                    if (self->closed_) co_return;
+                    self->refresh_status_message_.clear();
+                    if (!available) {
+                        self->error_message_ =
+                            "Could not refresh model catalogs; showing cached models.";
+                    } else {
+                        // pi: after a clean refresh, the runtime's own error
+                        // (models.json diagnostics) still surfaces; otherwise the
+                        // success status.
+                        self->error_message_ = runtime->get_error();
+                        if (!self->error_message_) {
+                            self->refresh_status_message_ = "Model catalogs refreshed.";
+                            self->refresh_status_success_ = true;
+                        }
                     }
+                    self->load_models_from_snapshot();
+                    self->filter_models(self->search_query_);
                 }
-                self->load_models_from_snapshot();
-                self->filter_models(self->search_query_);
-            },
-            [self, on_invalidate = std::move(self->on_invalidate_)](std::exception_ptr) mutable {
-                // A refresh failure is a diagnostic observation; the selector
-                // stays usable with the snapshot list. Invalidate on both
-                // paths so the status/error lines land.
                 if (on_invalidate) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                     try {
+#endif
                         on_invalidate();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                     } catch (...) {
                     }
+#endif
                 }
-                (void)self;
-            });
+            },
+            boost::asio::detached);
     });
 }
 

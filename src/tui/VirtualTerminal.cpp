@@ -664,36 +664,54 @@ support::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
                 .height = response.height_px,
             };
             if (impl_->resize_sink) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 try {
-                    impl_->resize_sink(impl_->dimensions);
+#endif
+                    if (auto delivered = impl_->resize_sink(impl_->dimensions); !delivered) {
+                        impl_->resize_sink = {};
+                        return std::unexpected(std::move(delivered.error()));
+                    }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (const std::exception&) {
+                    impl_->resize_sink = {};
                     return std::unexpected(support::make_error(
                         support::ErrorCode::Unknown,
                         "Virtual Terminal resize sink failed",
                         "the resize callback threw an exception"));
                 } catch (...) {
+                    impl_->resize_sink = {};
                     return std::unexpected(support::make_error(
                         support::ErrorCode::Unknown,
                         "Virtual Terminal resize sink failed",
                         "the resize callback threw an unknown exception"));
                 }
+#endif
             }
         }
     }
     if (input.empty() || !consumed.forwarded_input.empty()) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            impl_->input_sink(std::move(consumed.forwarded_input));
+#endif
+            if (auto delivered = impl_->input_sink(std::move(consumed.forwarded_input)); !delivered) {
+                impl_->input_sink = {};
+                return std::unexpected(std::move(delivered.error()));
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception&) {
+            impl_->input_sink = {};
             return std::unexpected(support::make_error(
                 support::ErrorCode::Unknown,
                 "Virtual Terminal input sink failed",
                 "the input callback threw an exception"));
         } catch (...) {
+            impl_->input_sink = {};
             return std::unexpected(support::make_error(
                 support::ErrorCode::Unknown,
                 "Virtual Terminal input sink failed",
                 "the input callback threw an unknown exception"));
         }
+#endif
     }
     return {};
 }
@@ -705,19 +723,28 @@ support::ExpectedVoid VirtualTerminal::flush_input() {
 support::ExpectedVoid VirtualTerminal::inject_resize(TerminalDimensions dimensions) {
     resize_cells(*impl_, dimensions);
     if (!impl_->modes.started || !impl_->resize_sink) return {};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
-        impl_->resize_sink(dimensions);
+#endif
+        if (auto delivered = impl_->resize_sink(dimensions); !delivered) {
+            impl_->resize_sink = {};
+            return std::unexpected(std::move(delivered.error()));
+        }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
+        impl_->resize_sink = {};
         return std::unexpected(support::make_error(
             support::ErrorCode::Unknown,
             "Virtual Terminal resize sink failed",
             "the resize callback threw an exception"));
     } catch (...) {
+        impl_->resize_sink = {};
         return std::unexpected(support::make_error(
             support::ErrorCode::Unknown,
             "Virtual Terminal resize sink failed",
             "the resize callback threw an unknown exception"));
     }
+#endif
     return {};
 }
 

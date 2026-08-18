@@ -597,7 +597,9 @@ TEST_CASE("VirtualTerminal enforces targeted image region ownership", "[tui][ima
             .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
         },
     });
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     const cch::tui::TerminalImage image{
         .encoded_data = base64_encode(png_header(10, 10)),
         .mime_type = "image/png",

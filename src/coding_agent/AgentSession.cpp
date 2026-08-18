@@ -33,20 +33,22 @@ private:
     const AgentSession::Impl* previous_;
 };
 
-[[nodiscard]] support::ExpectedVoid prompt_exception(std::exception_ptr exception) {
-    try {
-        std::rethrow_exception(exception);
-    } catch (const std::exception& error) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "session prompt coroutine failed",
-            error.what()));
-    } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "session prompt coroutine failed",
-            "unknown exception"));
+[[nodiscard]] support::ExpectedVoid prompt_bridge_failure(std::exception_ptr exception) {
+#if defined(BOOST_ASIO_NO_EXCEPTIONS)
+    if (exception) {
+        // Asio cannot produce an exception pointer in this mode; a non-null
+        // value is a Runtime invariant violation (ADR 0042).
+        std::terminate();
     }
+    return {};
+#else
+    if (exception) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session prompt coroutine failed"));
+    }
+    return {};
+#endif
 }
 
 } // namespace
@@ -310,15 +312,26 @@ boost::asio::awaitable<support::ExpectedVoid> detail::AgentSessionPromptAccess::
             support::ErrorCode::Validation,
             "session is not initialized"));
     }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         co_return co_await impl->runtime->run_prompt(
             std::move(text),
             std::move(images),
             expand_prompt_templates,
             std::move(on_preflight_accepted));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session prompt coroutine failed",
+            error.what()));
     } catch (...) {
-        co_return prompt_exception(std::current_exception());
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session prompt coroutine failed"));
     }
+#endif
 }
 
 boost::asio::awaitable<support::ExpectedVoid>
@@ -352,12 +365,22 @@ detail::AgentSessionPromptAccess::compact_impl(
             support::ErrorCode::Validation,
             "session is not initialized"));
     }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         co_return co_await impl->runtime->compact(std::move(custom_instructions));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session compact coroutine failed",
+            error.what()));
     } catch (...) {
-        const auto failure = prompt_exception(std::current_exception());
-        co_return std::unexpected(failure.error());
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session compact coroutine failed"));
     }
+#endif
 }
 
 boost::asio::awaitable<support::ExpectedVoid> AgentSession::set_model(
@@ -386,12 +409,22 @@ detail::AgentSessionPromptAccess::set_model_impl(
             support::ErrorCode::Validation,
             "session is not initialized"));
     }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         co_return co_await impl->runtime->set_model(std::move(model));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session set_model coroutine failed",
+            error.what()));
     } catch (...) {
-        const auto failure = prompt_exception(std::current_exception());
-        co_return std::unexpected(failure.error());
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session set_model coroutine failed"));
     }
+#endif
 }
 
 support::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
@@ -416,7 +449,7 @@ support::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
     io.run();
 
     if (exception) {
-        return prompt_exception(exception);
+        return prompt_bridge_failure(exception);
     }
     if (!result) {
         return std::unexpected(support::make_error(
@@ -453,12 +486,22 @@ detail::AgentSessionPromptAccess::cycle_model_impl(
             support::ErrorCode::Validation,
             "session is not initialized"));
     }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         co_return co_await impl->runtime->cycle_model(std::move(direction));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session cycle_model coroutine failed",
+            error.what()));
     } catch (...) {
-        const auto failure = prompt_exception(std::current_exception());
-        co_return std::unexpected(failure.error());
+        co_return std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session cycle_model coroutine failed"));
     }
+#endif
 }
 
 support::Expected<std::optional<ModelCycleResult>>
@@ -485,8 +528,7 @@ detail::AgentSessionPromptAccess::cycle_model_blocking(
     io.run();
 
     if (exception) {
-        const auto failure = prompt_exception(exception);
-        return std::unexpected(failure.error());
+        return std::unexpected(prompt_bridge_failure(exception).error());
     }
     if (!result) {
         return std::unexpected(support::make_error(
@@ -553,7 +595,7 @@ support::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
     io.run();
 
     if (exception) {
-        return prompt_exception(exception);
+        return prompt_bridge_failure(exception);
     }
     if (!result) {
         return std::unexpected(support::make_error(
@@ -836,12 +878,22 @@ public:
                 support::ErrorCode::Validation,
                 "session is not initialized"));
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             co_return co_await impl->runtime->reload();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        } catch (const std::exception& error) {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
+                "session reload coroutine failed",
+                error.what()));
         } catch (...) {
-            const auto failure = prompt_exception(std::current_exception());
-            co_return std::unexpected(failure.error());
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown,
+                "session reload coroutine failed"));
         }
+#endif
     }
 
     [[nodiscard]] static support::Expected<CreateAgentSessionResult> wrap_factory_result(

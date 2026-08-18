@@ -56,7 +56,10 @@ OAuthSelectorComponent::OAuthSelectorComponent(
       on_cancel_(std::move(on_cancel)),
       search_input_(
           cch::tui::InputOptions{.keybindings = keybindings_},
-          [this](std::string) { confirm_selection(); },
+          [this](std::string) -> support::ExpectedVoid {
+              confirm_selection();
+              return {};
+          },
           {}) {
     // pi: the auth-type labels render only when the list mixes auth types.
     std::size_t distinct_types = 0;

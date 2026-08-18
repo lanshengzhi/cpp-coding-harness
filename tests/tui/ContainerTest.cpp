@@ -93,11 +93,15 @@ TEST_CASE("Box renders with padding and background", "[tui][issue46][container]"
 }
 
 TEST_CASE("Box bounds throwing and overwide background hooks", "[tui][issue46][container]") {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    // The staged build still defends against a throwing background hook; the
+    // no-exception build enforces non-throwing hooks by construction.
     cch::tui::Box throwing_box(0, 0, [](std::string) -> std::string {
         throw std::runtime_error("background failed");
     });
     REQUIRE(throwing_box.add_child(std::make_unique<cch::tui::Text>("x", 0, 0)));
     CHECK_FALSE(throwing_box.render(4));
+#endif
 
     cch::tui::Box overwide_box(0, 0, [](std::string line) {
         return line + "x";

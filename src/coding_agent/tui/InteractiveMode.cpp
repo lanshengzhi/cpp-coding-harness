@@ -111,6 +111,21 @@ namespace {
 
 using ActionSink = std::move_only_function<void()>;
 
+/// Whether a `co_spawn` completion's exception pointer reports a failed flow.
+/// The spawned coroutines convert their own failures to `Expected`, so in the
+/// no-exception build Asio cannot produce an exception pointer and a non-null
+/// value is a Runtime invariant violation (ADR 0042).
+[[nodiscard]] bool co_spawn_failed(std::exception_ptr exception) {
+#if defined(BOOST_ASIO_NO_EXCEPTIONS)
+    if (exception) {
+        std::terminate();
+    }
+    return false;
+#else
+    return static_cast<bool>(exception);
+#endif
+}
+
 // ── Focused-editor User Bash syntax (ADR 0026) ────────────────────────────
 // Folded from the deleted UserBashSyntax module: only a direct focused
 // Native TUI editor submission interprets the `!`/`!!` prefixes.
@@ -246,9 +261,12 @@ struct InteractiveStartupDiagnostics {
 
     for (std::size_t attempt = 0; attempt < 16; ++attempt) {
         std::filesystem::path path;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             path = temp_directory /
                 std::format("pi-clipboard-{}{}", clipboard_uuid(), extension);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& error) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Process,
@@ -259,6 +277,7 @@ struct InteractiveStartupDiagnostics {
                 support::ErrorCode::Process,
                 "could not generate a clipboard image path"));
         }
+#endif
         support::UniqueFd fd(::open(
             path.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
@@ -672,7 +691,8 @@ public:
     explicit AsioAutocompleteDebounceTimer(boost::asio::any_io_executor executor)
         : state_(std::make_shared<State>(std::move(executor))) {}
 
-    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
+    void start(std::chrono::milliseconds delay,
+               std::move_only_function<support::ExpectedVoid()> on_fire) override {
         const auto state = state_;
         boost::asio::post(state->executor, [state, delay, on_fire = std::move(on_fire)]() mutable {
             const auto generation = ++state->generation;
@@ -682,7 +702,7 @@ public:
                 if (generation != state->generation) return;
                 auto callback = std::move(state->active_callback);
                 state->active_callback = nullptr;
-                if (!error && callback) callback();
+                if (!error && callback) (void)callback();
             });
         });
     }
@@ -698,11 +718,12 @@ public:
 
 private:
     struct State {
-        explicit State(boost::asio::any_io_executor executor) : timer(std::move(executor)) {}
+        explicit State(boost::asio::any_io_executor executor)
+            : executor(executor), timer(executor) {}
         boost::asio::any_io_executor executor;
         boost::asio::steady_timer timer;
         std::size_t generation{0};
-        std::move_only_function<void()> active_callback;
+        std::move_only_function<support::ExpectedVoid()> active_callback;
     };
     std::shared_ptr<State> state_;
 };
@@ -737,8 +758,11 @@ public:
             !keybindings_->matches(*key, "tui.select.cancel") || !on_cancel_) {
             return;
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             on_cancel_();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& error) {
             callback_error_ = support::make_error(
                 support::ErrorCode::Unknown,
@@ -749,6 +773,7 @@ public:
                 support::ErrorCode::Unknown,
                 "Hotkey help cancellation failed");
         }
+#endif
     }
     [[nodiscard]] bool accepts_key_releases() const override { return false; }
     void set_focused(bool focused) override { focused_ = focused; }
@@ -815,8 +840,9 @@ public:
             }
         }
 
-        tui_.set_render_request_sink([weak] {
+        tui_.set_render_request_sink([weak]() -> support::ExpectedVoid {
             if (const auto self = weak.lock()) self->post_render();
+            return {};
         });
         if (auto started = tui_.start(); !started) return fail_start(started.error());
         tui_started_ = true;
@@ -1324,8 +1350,9 @@ private:
         options.autocomplete_provider = build_autocomplete_provider();
         options.autocomplete_debounce_timer =
             std::make_unique<AsioAutocompleteDebounceTimer>(executor_);
-        options.autocomplete_render_request = [weak] {
+        options.autocomplete_render_request = [weak]() -> support::ExpectedVoid {
             if (const auto self = weak.lock()) self->post_invalidate();
+            return {};
         };
         options.theme = &theme_controller_->live_theme();
         return std::make_unique<InteractiveView>(std::move(options));
@@ -1588,20 +1615,18 @@ private:
                 if (!state) return;
                 state->clipboard_read_active_ = false;
                 std::optional<support::Error> ignored_failure;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 if (exception) {
-                    try {
-                        std::rethrow_exception(exception);
-                    } catch (const std::exception& error) {
-                        ignored_failure = support::make_error(
-                            support::ErrorCode::Unknown,
-                            "clipboard paste failed",
-                            error.what());
-                    } catch (...) {
-                        ignored_failure = support::make_error(
-                            support::ErrorCode::Unknown,
-                            "clipboard paste failed");
-                    }
-                } else if (!result) {
+                    // The staged build maps a launch exception to a generic
+                    // failure; the no-exception build treats a non-null
+                    // pointer as a Runtime invariant (the coroutine converts
+                    // its own failures to Expected).
+                    ignored_failure = support::make_error(
+                        support::ErrorCode::Unknown,
+                        "clipboard paste failed");
+                } else
+#endif
+                if (!result) {
                     ignored_failure = std::move(result.error());
                 }
                 // Baseline clipboard failures are intentionally silent.
@@ -1676,22 +1701,23 @@ private:
             executor_,
             self->handle_open_external_editor(),
             [self](std::exception_ptr exception) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 if (exception) {
-                    std::string detail = "unknown exception";
-                    try {
-                        std::rethrow_exception(exception);
-                    } catch (const std::exception& error) {
-                        detail = error.what();
-                    } catch (...) {
-                    }
-                    self->show_error(std::format(
-                        "External editor failed: {}", detail));
+                    // A launch exception is mapped to a generic diagnostic in
+                    // the staged build; the no-exception build treats a
+                    // non-null pointer as a Runtime invariant.
+                    self->show_error("External editor failed");
                 }
+#else
+                (void)exception;
+#endif
             });
     }
 
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> paste_from_clipboard() {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             auto image = co_await clipboard_reader_->read_image();
             if (image && *image && !(*image)->bytes.empty()) {
                 const auto mime_type = sniff_supported_image_mime_type((*image)->bytes);
@@ -1709,6 +1735,7 @@ private:
                     }
                 }
             }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& error) {
             const auto ignored = support::make_error(
                 support::ErrorCode::Unknown,
@@ -1721,13 +1748,17 @@ private:
                 "clipboard image read failed");
             (void)ignored;
         }
+#endif
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             auto text = co_await clipboard_reader_->read_text();
             if (text && *text && !(*text)->empty() && running_ && view_ != nullptr) {
                 view_->insert_editor_text(std::move(**text));
                 tui_.invalidate();
             }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& error) {
             const auto ignored = support::make_error(
                 support::ErrorCode::Unknown,
@@ -1740,6 +1771,7 @@ private:
                 "clipboard text read failed");
             (void)ignored;
         }
+#endif
         co_return support::ExpectedVoid{};
     }
 
@@ -2047,7 +2079,7 @@ private:
             (*start_owner)(),
             [weak, start_owner, failure_label = std::move(failure_label)](
                 std::exception_ptr exception) {
-                if (!exception) return;
+                if (!co_spawn_failed(exception)) return;
                 if (const auto self = weak.lock();
                     self && self->running_ && self->view_ != nullptr) {
                     self->view_->append_diagnostic(std::move(failure_label));
@@ -4332,7 +4364,7 @@ private:
                 self->user_bash_finished(started_generation, std::move(result), recall);
             },
             [weak = weak_from_this(), started_generation](std::exception_ptr exception) {
-                if (!exception) return;
+                if (!co_spawn_failed(exception)) return;
                 if (const auto self = weak.lock()) {
                     if (self->generation_retired(started_generation)) {
                         // A launch failure from a retired Session generation
@@ -4454,8 +4486,11 @@ private:
              options = std::move(options),
              started_generation]() mutable -> boost::asio::awaitable<void> {
                 support::ExpectedVoid result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 try {
+#endif
                     result = co_await self->session_->prompt(text, std::move(options));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (const std::exception& error) {
                     result = std::unexpected(support::make_error(
                         support::ErrorCode::Unknown,
@@ -4467,12 +4502,13 @@ private:
                         "Native TUI prompt failed",
                         "unknown exception"));
                 }
+#endif
                 self->prompt_finished(started_generation, std::move(result), text);
             },
             [weak = weak_from_this(), started_generation](std::exception_ptr exception) {
-                if (exception) {
+                if (co_spawn_failed(exception)) {
                     if (const auto self = weak.lock()) {
-                        self->prompt_launch_failed(started_generation, exception);
+                        self->prompt_launch_failed(started_generation);
                     }
                 }
             });
@@ -4515,9 +4551,7 @@ private:
         tui_.invalidate();
     }
 
-    void prompt_launch_failed(
-        std::size_t started_generation,
-        std::exception_ptr exception) {
+    void prompt_launch_failed(std::size_t started_generation) {
         if (generation_retired(started_generation)) {
             // A launch failure from a retired Session generation cannot
             // mutate or render as the current Session (issue #466).
@@ -4525,15 +4559,8 @@ private:
         }
         note_prompt_finished();
         prompt_active_ = false;
-        std::string detail = "unknown exception";
-        try {
-            std::rethrow_exception(exception);
-        } catch (const std::exception& error) {
-            detail = error.what();
-        } catch (...) {
-        }
         if (view_ != nullptr && running_) {
-            view_->append_diagnostic(std::format("Native TUI prompt failed: {}", detail));
+            view_->append_diagnostic("Native TUI prompt failed");
             tui_.invalidate();
         }
         if (exit_requested_) signal_exit();
@@ -4859,8 +4886,11 @@ private:
     }
 
     void signal_exit() {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             (void)exit_wait_.cancel();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             if (!completion_result_) {
                 completion_result_ = std::unexpected(support::make_error(
@@ -4868,6 +4898,7 @@ private:
                     "Native TUI exit notification failed"));
             }
         }
+#endif
     }
 
     AgentSession* session_; // must outlive this interactive run.

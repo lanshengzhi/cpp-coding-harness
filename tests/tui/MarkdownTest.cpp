@@ -46,8 +46,8 @@ void write_lines(tui::VirtualTerminal& terminal, const tui::RenderResult& lines)
 [[nodiscard]] std::string rendered_text(const tui::RenderResult& lines, std::size_t width) {
     tui::VirtualTerminal terminal({.columns = width, .rows = lines.lines.size() + 1});
     if (auto started = terminal.start(
-            [](std::string) {},
-            [](tui::TerminalDimensions) {});
+            [](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; });
         !started) {
         return {};
     }
@@ -63,8 +63,8 @@ void write_lines(tui::VirtualTerminal& terminal, const tui::RenderResult& lines)
 void require_virtual_terminal_accepts(const tui::RenderResult& lines, std::size_t width) {
     tui::VirtualTerminal terminal({.columns = width, .rows = lines.lines.size() + 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](tui::TerminalDimensions) {}));
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_lines(terminal, lines);
     CHECK(terminal.final_style() == tui::VirtualTerminalStyle{});
 }
@@ -176,8 +176,8 @@ TEST_CASE(
 
     tui::VirtualTerminal terminal({.columns = 12, .rows = lines->lines.size() + 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](tui::TerminalDimensions) {}));
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_lines(terminal, *lines);
     const auto* linked_cell = find_cell(terminal, "l");
     REQUIRE(linked_cell != nullptr);
@@ -206,8 +206,8 @@ TEST_CASE("Markdown injects syntax highlighting and falls back for unknown langu
     CHECK(received_language == "cpp");
     tui::VirtualTerminal terminal({.columns = 16, .rows = highlighted->lines.size() + 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](tui::TerminalDimensions) {}));
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_lines(terminal, *highlighted);
     const auto* highlighted_cell = find_cell(terminal, "v");
     REQUIRE(highlighted_cell != nullptr);
@@ -312,6 +312,9 @@ TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown
 }
 
 TEST_CASE("Markdown converts injected callback exceptions to render errors", "[tui][markdown][issue51]") {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    // The staged build still defends against a throwing style hook; the
+    // no-exception build enforces non-throwing hooks by construction.
     auto style = ansi_style();
     style.heading = [](std::string) -> std::string { throw std::runtime_error("style"); };
     tui::Markdown markdown("# heading", 0, 0, std::move(style));
@@ -321,6 +324,7 @@ TEST_CASE("Markdown converts injected callback exceptions to render errors", "[t
     REQUIRE_FALSE(result);
     CHECK(result.error().code == support::ErrorCode::Unknown);
     CHECK(result.error().message == "TUI Markdown callback failed");
+#endif
 }
 
 TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][markdown][issue51]") {
@@ -354,8 +358,8 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
         .rows = std::max(first->lines.size(), second->lines.size()),
     });
     REQUIRE(update_terminal.start(
-        [](std::string) {},
-        [](tui::TerminalDimensions) {}));
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_lines(update_terminal, *first);
     write_lines(update_terminal, *second);
     const auto* updated_cell = find_cell(update_terminal, "n");
@@ -392,8 +396,8 @@ TEST_CASE("Markdown applies configured padding and background to every cell", "[
     REQUIRE(lines->lines.size() == 3);
     tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](tui::TerminalDimensions) {}));
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_lines(terminal, *lines);
     for (const auto& row : terminal.cells()) {
         for (const auto& cell : row) CHECK(cell.style.bg_color == "44");

@@ -57,7 +57,9 @@ TEST_CASE(
     REQUIRE(terminal.seed_shell_content(
         {"cmd one", "cmd two", "cmd three"},
         {.column = 0, .row = 3}));
-    REQUIRE(terminal.start([](std::string) {}, [](tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
 
     // The first frame row lands at the shell's cursor row: the seeded shell
     // content above stays intact and rows below the short frame are untouched.
@@ -92,7 +94,9 @@ TEST_CASE(
     "[tui][terminal][issue476]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.seed_shell_content({"cmd"}, {.column = 0, .row = 1}));
-    REQUIRE(terminal.start([](std::string) {}, [](tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.set_cursor({.column = 0, .row = 0}));
     CHECK(terminal.cursor() == tui::CursorPosition{.column = 0, .row = 1});
@@ -129,7 +133,9 @@ TEST_CASE(
     REQUIRE_FALSE(multiline);
 
     REQUIRE(terminal.seed_shell_content({"a"}, {.column = 0, .row = 1}));
-    REQUIRE(terminal.start([](std::string) {}, [](tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> support::ExpectedVoid { return {}; },
+        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     const auto after_start = terminal.seed_shell_content({"b"}, {.column = 0, .row = 0});
     REQUIRE_FALSE(after_start);
     CHECK(

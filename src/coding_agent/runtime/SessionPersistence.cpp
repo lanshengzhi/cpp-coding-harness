@@ -125,8 +125,11 @@ void SessionPersistence::start_operation_locked(
     const bool queued = shared->admission.post_worker(
         [state, shared]() mutable noexcept {
             support::ExpectedVoid outcome;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 outcome = state->store->append(shared->message);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (const std::exception& error) {
                 outcome = std::unexpected(support::make_error(
                     support::ErrorCode::Session,
@@ -137,6 +140,7 @@ void SessionPersistence::start_operation_locked(
                     support::ErrorCode::Session,
                     "session persistence append failed"));
             }
+#endif
             std::move(shared->admission).complete(
                 [state, outcome = std::move(outcome)]() mutable noexcept {
                     deliver_result(state, std::move(outcome));

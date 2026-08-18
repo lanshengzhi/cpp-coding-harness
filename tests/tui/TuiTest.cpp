@@ -526,8 +526,14 @@ TEST_CASE("VirtualTerminal injects input and resize events deterministically", "
     std::optional<cch::tui::TerminalDimensions> received_resize;
 
     REQUIRE(terminal.start(
-        [&received_input](std::string input) { received_input = std::move(input); },
-        [&received_resize](cch::tui::TerminalDimensions dimensions) { received_resize = dimensions; }));
+        [&received_input](std::string input) -> cch::support::ExpectedVoid {
+            received_input = std::move(input);
+            return {};
+        },
+        [&received_resize](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
+            received_resize = dimensions;
+            return {};
+        }));
     REQUIRE(terminal.inject_input("x"));
     REQUIRE(terminal.inject_resize({.columns = 6, .rows = 2}));
 
@@ -541,8 +547,8 @@ TEST_CASE("VirtualTerminal injects input and resize events deterministically", "
 TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overflow", "[tui][issue45]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.set_cursor({.column = 2, .row = 0}));
     REQUIRE(terminal.write("x"));
 
@@ -562,8 +568,8 @@ TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overfl
 TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     const auto result = terminal.write("\xc3\xa9"); // é
 
@@ -575,8 +581,8 @@ TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode]") {
 TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue46][unicode]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.write("\x1b[31mA"));
 
@@ -592,8 +598,8 @@ TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue4
 TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][issue46][unicode]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.write("\xe4\xb8\xad"));
     REQUIRE(terminal.cells()[0][1].continuation);
 
@@ -607,26 +613,32 @@ TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45]") {
+TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45][issue485]") {
     cch::tui::VirtualTerminal terminal;
     REQUIRE(terminal.start(
-        [](std::string) { throw std::runtime_error("input failure"); },
-        [](cch::tui::TerminalDimensions) { throw std::runtime_error("resize failure"); }));
+        [](std::string) -> cch::support::ExpectedVoid {
+            return std::unexpected(cch::support::make_error(
+                cch::support::ErrorCode::Unknown, "input failure"));
+        },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid {
+            return std::unexpected(cch::support::make_error(
+                cch::support::ErrorCode::Unknown, "resize failure"));
+        }));
 
     const auto input_result = terminal.inject_input("x");
     REQUIRE_FALSE(input_result);
-    CHECK(input_result.error().message == "Virtual Terminal input sink failed");
-    CHECK(input_result.error().detail == "the input callback threw an exception");
+    CHECK(input_result.error().message == "input failure");
 
     const auto resize_result = terminal.inject_resize({.columns = 6, .rows = 2});
     REQUIRE_FALSE(resize_result);
-    CHECK(resize_result.error().message == "Virtual Terminal resize sink failed");
-    CHECK(resize_result.error().detail == "the resize callback threw an exception");
+    CHECK(resize_result.error().message == "resize failure");
 }
 
 TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[tui][terminal][issue378]") {
     cch::tui::VirtualTerminal terminal;
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.set_title("cch - session - workspace"));
     REQUIRE(terminal.set_progress(true));
@@ -644,7 +656,9 @@ TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[
 
 TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][terminal][issue378]") {
     cch::tui::VirtualTerminal terminal;
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.set_progress(true));
     REQUIRE(terminal.stop());
@@ -662,7 +676,9 @@ TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][termina
     REQUIRE_FALSE(before_start);
     CHECK(before_start.error().message == "Virtual Terminal must be started before terminal operations");
 
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.drain_input());
     REQUIRE(terminal.drain_input(std::chrono::milliseconds(100), std::chrono::milliseconds(10)));
 }
@@ -673,7 +689,7 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
 
     std::size_t render_requests{0};
-    tui.set_render_request_sink([&render_requests]() { ++render_requests; });
+    tui.set_render_request_sink([&render_requests]() -> cch::support::ExpectedVoid { ++render_requests; return {}; });
     REQUIRE(tui.start());
 
     // Replaceable render state: repeated invalidations before the next render

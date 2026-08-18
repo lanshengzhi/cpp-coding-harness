@@ -23,8 +23,8 @@ struct SelectItem {
     bool operator==(const SelectItem&) const = default;
 };
 
-using SelectItemSink = std::move_only_function<void(const SelectItem&)>;
-using SelectCancelSink = std::move_only_function<void()>;
+using SelectItemSink = std::move_only_function<support::ExpectedVoid(const SelectItem&)>;
+using SelectCancelSink = std::move_only_function<support::ExpectedVoid()>;
 using SelectPrimaryTruncateHook = std::move_only_function<std::string(
     std::string,
     std::size_t,

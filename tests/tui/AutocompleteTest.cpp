@@ -41,10 +41,12 @@ using cch::tui::SlashCommand;
         .force = force,
         .stop_token = std::stop_source{}.get_token(),
     };
-    provider.get_suggestions(request, [&result, &delivered](std::optional<AutocompleteSuggestions> suggestions) {
-        result = std::move(suggestions);
-        delivered = true;
-    });
+    provider.get_suggestions(request,
+        [&result, &delivered](std::optional<AutocompleteSuggestions> suggestions) -> cch::support::ExpectedVoid {
+            result = std::move(suggestions);
+            delivered = true;
+            return {};
+        });
     // fd-backed requests deliver from a worker thread.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!delivered && std::chrono::steady_clock::now() < deadline) {
@@ -305,9 +307,10 @@ TEST_CASE("CombinedAutocompleteProvider aborts the fd walk on stop request", "[t
             .force = false,
             .stop_token = source.get_token(),
         },
-        [&delivered](std::optional<AutocompleteSuggestions> suggestions) {
+        [&delivered](std::optional<AutocompleteSuggestions> suggestions) -> cch::support::ExpectedVoid {
             delivered = true;
             CHECK_FALSE(suggestions.has_value());
+            return {};
         });
     CHECK(delivered);
 }
@@ -341,9 +344,10 @@ TEST_CASE("CombinedAutocompleteProvider fd walk delivers async results from a wo
             .force = false,
             .stop_token = std::stop_source{}.get_token(),
         },
-        [&](std::optional<AutocompleteSuggestions> suggestions) {
+        [&](std::optional<AutocompleteSuggestions> suggestions) -> cch::support::ExpectedVoid {
             delivered = true;
             result = std::move(suggestions);
+            return {};
         });
     CHECK_FALSE(delivered);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);

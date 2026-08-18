@@ -78,8 +78,11 @@ template <typename Hook, typename Invoker>
     Invoker&& invoke) {
     if (!hook) return text;
     const auto input_width = visible_width(text);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         text = invoke(hook, std::move(text));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Unknown,
@@ -91,6 +94,7 @@ template <typename Hook, typename Invoker>
             std::format("TUI {} style hook failed", owner),
             "the style callback threw an unknown exception"));
     }
+#endif
     if (visible_width(text) != input_width) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,

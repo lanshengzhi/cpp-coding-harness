@@ -78,22 +78,6 @@ inline constexpr std::string_view kOverflowRecoveryFailedMessage =
     "Context overflow recovery failed after one compact-and-retry attempt. "
     "Try reducing context or switching to a larger-context model.";
 
-[[nodiscard]] support::ExpectedVoid prompt_exception(std::exception_ptr exception) {
-    try {
-        std::rethrow_exception(exception);
-    } catch (const std::exception& error) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "session prompt coroutine failed",
-            error.what()));
-    } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "session prompt coroutine failed",
-            "unknown exception"));
-    }
-}
-
 [[nodiscard]] ai::TimestampMs completion_timestamp_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -473,12 +457,16 @@ void AgentSessionRuntime::flush_pending_user_bash() {
                 support::ErrorCode::Validation,
                 "session Agent is unavailable"));
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             (void)entry->committed_signal.cancel();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // Releasing the awaiting coroutine is best-effort; the commitment
             // above is the authoritative outcome.
         }
+#endif
     }
 }
 
@@ -582,7 +570,9 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_prompt(
         std::chrono::steady_clock::time_point::max());
 
     support::ExpectedVoid result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         ai::UserMessage user_message = make_admitted_user_message(
             std::move(prompt),
             skills_,
@@ -629,9 +619,18 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_prompt(
                 std::move(user_message),
                 *active_stop_source_);
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        result = std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session prompt coroutine failed",
+            error.what()));
     } catch (...) {
-        result = prompt_exception(std::current_exception());
+        result = std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session prompt coroutine failed"));
     }
+#endif
 
     active_stop_source_.reset();
     // The whole run (including steering and follow-up continuations) has
@@ -688,7 +687,9 @@ AgentSessionRuntime::run_user_bash(
         support::ErrorCode::Unknown,
         "User Shell execution did not finish"));
     if (progress_sink) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             if (auto started = progress_sink(UserBashProgress{
                     .command = recorded_command,
                     .output = {},
@@ -699,6 +700,7 @@ AgentSessionRuntime::run_user_bash(
                 user_bash_active_ = false;
                 co_return std::unexpected(std::move(started.error()));
             }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& error) {
             active_user_bash_stop_source_.reset();
             user_bash_active_ = false;
@@ -713,9 +715,12 @@ AgentSessionRuntime::run_user_bash(
                 support::ErrorCode::Unknown,
                 "User Bash progress callback failed"));
         }
+#endif
     }
     UserBashOutputAccumulator output;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         shell_result = co_await ai::detail::await_async_result(
             services_.user_shell->execute(
                 std::move(command),
@@ -723,12 +728,15 @@ AgentSessionRuntime::run_user_bash(
                 std::string_view update) -> support::ExpectedVoid {
                 output.append(update);
                 if (!progress_sink) return {};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 try {
+#endif
                     return progress_sink(UserBashProgress{
                         .command = recorded_command,
                         .output = output.tail(),
                         .exclude_from_context = exclude_from_context,
                     });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (const std::exception& error) {
                     return std::unexpected(support::make_error(
                         support::ErrorCode::Unknown,
@@ -739,11 +747,13 @@ AgentSessionRuntime::run_user_bash(
                         support::ErrorCode::Unknown,
                         "User Bash progress callback failed"));
                 }
+#endif
             },
                 active_user_bash_stop_source_->get_token()));
         if (shell_result) {
             output.finish();
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception& error) {
         shell_result = std::unexpected(support::make_error(
             support::ErrorCode::Unknown,
@@ -755,6 +765,7 @@ AgentSessionRuntime::run_user_bash(
             "User Shell execution failed",
             "unknown exception"));
     }
+#endif
 
     active_user_bash_stop_source_.reset();
     user_bash_active_ = false;
@@ -801,7 +812,9 @@ AgentSessionRuntime::run_user_bash(
             std::chrono::steady_clock::time_point::max());
         pending_user_bash_.push_back(pending);
         if (progress_sink) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 (void)progress_sink(UserBashProgress{
                     .command = recorded_command,
                     .output = output.tail(),
@@ -812,10 +825,12 @@ AgentSessionRuntime::run_user_bash(
                     .truncated = pending->completion.message.truncated,
                     .full_output_path = pending->completion.message.full_output_path,
                 });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 // Execution already completed; a presentation failure must not
                 // lose the pending commitment.
             }
+#endif
         }
         boost::system::error_code wait_error;
         co_await pending->committed_signal.async_wait(
@@ -1081,7 +1096,9 @@ void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
         if (!subscriber->delivery_enabled || !subscriber->sink) {
             continue;
         }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             if (auto observed = subscriber->sink(event); !observed) {
                 // A failing observer is deactivated and never vetoes retry
                 // progress or persistence (ADR 0017); its failure is recorded
@@ -1091,6 +1108,7 @@ void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
             }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& exception) {
             record_session_observer_diagnostic(
                 session_event_diagnostics_,
@@ -1104,6 +1122,7 @@ void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         }
+#endif
     }
     std::erase_if(
         session_event_observers_,
@@ -1877,12 +1896,22 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
     }
 
     support::Expected<coding_agent::CompactionResult> result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         result = co_await compact_impl(std::move(custom_instructions));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        result = std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session compact coroutine failed",
+            error.what()));
     } catch (...) {
-        const auto failure = prompt_exception(std::current_exception());
-        result = std::unexpected(failure.error());
+        result = std::unexpected(support::make_error(
+            support::ErrorCode::Unknown,
+            "session compact coroutine failed"));
     }
+#endif
     compaction_active_ = false;
     emit_session_event(CompactionEndEvent{
         .reason = "manual",
@@ -2590,11 +2619,15 @@ boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_active_wo
     }
     auto owned_env = release_close_resources();
     if (owned_env) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             (void)co_await ai::detail::await_async_result(owned_env->cleanup());
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // cleanup() is best-effort and must not make close fallible.
         }
+#endif
     }
     lifecycle_ = Lifecycle::Closed;
 }
@@ -2617,7 +2650,9 @@ void AgentSessionRuntime::finalize_close() noexcept {
     // shared system executor. Host-owned environments were detached above
     // without cleanup().
     if (owned_env) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             // post() prevents a cleanup coroutine from executing inline on the
             // close() stack before its first suspension point.
             const auto cleanup_executor = services_.runtime_target
@@ -2626,24 +2661,34 @@ void AgentSessionRuntime::finalize_close() noexcept {
             boost::asio::post(
                 cleanup_executor,
                 [env = std::move(owned_env), cleanup_executor]() mutable {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                     try {
+#endif
                         boost::asio::co_spawn(
                             cleanup_executor,
                             [env = std::move(env)]() -> boost::asio::awaitable<void> {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 try {
+#endif
                                     (void)co_await ai::detail::await_async_result(env->cleanup());
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 } catch (...) {
                                     // cleanup() is best-effort and must not make close fallible.
                                 }
+#endif
                             },
                             boost::asio::detached);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                     } catch (...) {
                         // Launch remains best-effort after close has released ownership.
                     }
+#endif
                 });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // Scheduling is also best-effort; close remains noexcept.
         }
+#endif
     }
 }
 

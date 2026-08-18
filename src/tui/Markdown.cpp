@@ -201,7 +201,9 @@ struct ParseState {
 
 int enter_block(MD_BLOCKTYPE type, void* detail, void* userdata) noexcept {
     auto& state = *static_cast<ParseState*>(userdata);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         if (type == MD_BLOCK_DOC) {
             state.blocks.push_back(&state.root);
             return 0;
@@ -242,10 +244,12 @@ int enter_block(MD_BLOCKTYPE type, void* detail, void* userdata) noexcept {
         state.blocks.back()->children.push_back(std::move(node));
         state.blocks.push_back(node_pointer);
         return 0;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         state.failed = true;
         return 1;
     }
+#endif
 }
 
 int leave_block(MD_BLOCKTYPE, void*, void* userdata) noexcept {
@@ -257,7 +261,9 @@ int leave_block(MD_BLOCKTYPE, void*, void* userdata) noexcept {
 
 int enter_span(MD_SPANTYPE type, void* detail, void* userdata) noexcept {
     auto& state = *static_cast<ParseState*>(userdata);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         if (state.blocks.empty()) return 1;
         auto node = std::make_unique<InlineNode>();
         node->kind = inline_kind(type);
@@ -280,10 +286,12 @@ int enter_span(MD_SPANTYPE type, void* detail, void* userdata) noexcept {
         }
         state.inlines.push_back(node_pointer);
         return 0;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         state.failed = true;
         return 1;
     }
+#endif
 }
 
 int leave_span(MD_SPANTYPE, void*, void* userdata) noexcept {
@@ -295,7 +303,9 @@ int leave_span(MD_SPANTYPE, void*, void* userdata) noexcept {
 
 int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userdata) noexcept {
     auto& state = *static_cast<ParseState*>(userdata);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         if (state.blocks.empty()) return 1;
         auto& block = *state.blocks.back();
         if (block.kind == BlockKind::Code || block.kind == BlockKind::Html) {
@@ -324,10 +334,12 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
             state.inlines.back()->children.push_back(std::move(node));
         }
         return 0;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         state.failed = true;
         return 1;
     }
+#endif
 }
 
 [[nodiscard]] support::Expected<BlockNode> parse_markdown(std::string_view text) {
@@ -972,7 +984,9 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
         return std::unexpected(parsed.error());
     }
     const auto render_content = [&]() -> RenderedLines {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             return render_block(
                 document,
                 content_width,
@@ -980,6 +994,7 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
                     .style = impl_->style,
                     .syntax_highlighter = impl_->syntax_highlighter,
                 });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception&) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Unknown,
@@ -991,6 +1006,7 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
                 "TUI Markdown callback failed",
                 "the styling or syntax-highlighting callback threw an unknown exception"));
         }
+#endif
     };
     std::vector<std::string> content;
     if (auto rendered = render_content(); rendered) {

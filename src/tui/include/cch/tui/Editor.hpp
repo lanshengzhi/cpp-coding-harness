@@ -30,13 +30,15 @@ struct EditorCursor {
 /// otherwise) produced its items. The editor serializes all requests: a new
 /// request cancels the previous one, and stale results are rejected by
 /// generation and snapshot checks.
-using EditorChangeSink = std::move_only_function<void(std::string)>;
-using EditorSubmitSink = std::move_only_function<void(std::string)>;
+using EditorChangeSink = std::move_only_function<support::ExpectedVoid(std::string)>;
+using EditorSubmitSink = std::move_only_function<support::ExpectedVoid(std::string)>;
 
 /// Notification that the editor's presentation changed asynchronously (an
 /// autocomplete result arrived). Must return promptly and must not re-enter
-/// the editor; may be invoked from any thread.
-using EditorRenderRequestSink = std::move_only_function<void()>;
+/// the editor; may be invoked from any thread. A reported failure is a
+/// best-effort scheduling notification: it is not recorded and cannot make
+/// input delivery fail.
+using EditorRenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 
 struct EditorOptions {
     std::size_t max_visible_lines{5};

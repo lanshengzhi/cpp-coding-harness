@@ -15,8 +15,8 @@
 
 namespace cch::tui {
 
-using AnimationTickSink = std::move_only_function<void()>;
-using RenderRequestSink = std::move_only_function<void()>;
+using AnimationTickSink = std::move_only_function<support::ExpectedVoid()>;
+using RenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 
 /// Repeating-timer capability used by Loader. Methods must support concurrent
 /// and tick-reentrant start/stop calls. stop() synchronously prevents future

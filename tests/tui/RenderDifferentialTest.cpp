@@ -299,7 +299,7 @@ TEST_CASE("Render requests coalesce until render and include resize", "[tui][ren
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("initial", 0, 0)));
     std::size_t requests = 0;
-    tui.set_render_request_sink([&requests] { ++requests; });
+    tui.set_render_request_sink([&requests]() -> cch::support::ExpectedVoid { ++requests; return {}; });
     REQUIRE(tui.start());
     REQUIRE(tui.render());
 

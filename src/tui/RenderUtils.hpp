@@ -39,8 +39,11 @@ namespace cch::tui::detail {
     const auto input_width = visible_width(line);
     const auto has_background = static_cast<bool>(background_hook);
     if (background_hook) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
+#endif
             line = background_hook(std::move(line));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception&) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Unknown,
@@ -52,6 +55,7 @@ namespace cch::tui::detail {
                 std::format("TUI {} background hook failed", owner),
                 "the background callback threw an unknown exception"));
         }
+#endif
     }
     auto prepared = prepare_rendered_line(line, width);
     if (!prepared) return std::unexpected(prepared.error());

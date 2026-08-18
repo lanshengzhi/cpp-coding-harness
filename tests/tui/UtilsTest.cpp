@@ -139,8 +139,8 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
 
     cch::tui::VirtualTerminal styled_terminal({.columns = 10, .rows = 1});
     REQUIRE(styled_terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(styled_terminal.write((*styled)[0]));
     REQUIRE(styled_terminal.cells().size() == 1);
     REQUIRE(styled_terminal.cells()[0].size() == 10);
@@ -158,8 +158,8 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
 
     cch::tui::VirtualTerminal linked_terminal({.columns = 10, .rows = 1});
     REQUIRE(linked_terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(linked_terminal.write((*linked)[0]));
     CHECK(linked_terminal.cells()[0][1].grapheme == " ");
     CHECK(linked_terminal.cells()[0][1].style.hyperlink.empty());
@@ -171,8 +171,8 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     REQUIRE(trailing->size() == 1);
     cch::tui::VirtualTerminal trailing_terminal({.columns = 10, .rows = 1});
     REQUIRE(trailing_terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(trailing_terminal.write((*trailing)[0]));
     CHECK(trailing_terminal.cells()[0][1].grapheme == " ");
     CHECK(trailing_terminal.cells()[0][2].grapheme == " ");
@@ -185,8 +185,8 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     REQUIRE(wrapped->size() == 2);
     cch::tui::VirtualTerminal wrapped_terminal({.columns = 2, .rows = 2});
     REQUIRE(wrapped_terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(wrapped_terminal.write((*wrapped)[0]));
     CHECK(wrapped_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
     REQUIRE(wrapped_terminal.set_cursor({.column = 0, .row = 1}));

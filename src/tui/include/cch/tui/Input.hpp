@@ -14,10 +14,12 @@
 namespace cch::tui {
 
 /// Called with the current value when the user submits (pi `Input.onSubmit`).
-/// Must return promptly and must not re-enter the component.
-using InputSubmitSink = std::move_only_function<void(std::string)>;
-/// Called when the user cancels (pi `Input.onEscape`).
-using InputEscapeSink = std::move_only_function<void()>;
+/// Must return promptly and must not re-enter the component. A reported
+/// failure is a bounded callback diagnostic; it never vetoes input handling.
+using InputSubmitSink = std::move_only_function<support::ExpectedVoid(std::string)>;
+/// Called when the user cancels (pi `Input.onEscape`). A reported failure is
+/// a bounded callback diagnostic; it never vetoes input handling.
+using InputEscapeSink = std::move_only_function<support::ExpectedVoid()>;
 
 struct InputOptions {
     /// Keybinding registry for action matching; defaults to the built-in

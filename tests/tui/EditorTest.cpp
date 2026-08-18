@@ -108,7 +108,13 @@ TEST_CASE("Editor yanks multiline and pasted content without losing marker seman
 
 TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[tui][editor][issue48]") {
     std::vector<std::string> submitted;
-    cch::tui::Editor editor({}, {}, [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+    cch::tui::Editor editor(
+        {},
+        {},
+        [&submitted](std::string text) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(text));
+            return {};
+        });
     editor.handle_input(cch::tui::PasteEvent{
         .text = std::string(1001, 'x'),
         .original_bytes = 1001,
@@ -229,7 +235,9 @@ TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport"
     CHECK(lines->lines.back().find("yz") != std::string::npos);
 
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});
-    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     for (std::size_t row = 0; row < lines->lines.size(); ++row) {
         REQUIRE(terminal.set_cursor({.column = 0, .row = row}));
         REQUIRE(terminal.write(lines->lines[row]));
@@ -327,8 +335,14 @@ TEST_CASE(
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
         {.keybindings = keybindings->registry},
-        [&changes](std::string text) { changes.push_back(std::move(text)); },
-        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+        [&changes](std::string text) -> cch::support::ExpectedVoid {
+            changes.push_back(std::move(text));
+            return {};
+        },
+        [&submitted](std::string text) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(text));
+            return {};
+        });
 
     type(editor, "one");
     key(editor, "enter");
@@ -380,7 +394,9 @@ TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][edi
     REQUIRE_FALSE(width_failure);
     CHECK(width_failure.error().code == cch::support::ErrorCode::Validation);
     CHECK(width_failure.error().message.find("changed visible width") != std::string::npos);
-
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    // The staged build still defends against a throwing style hook; the
+    // no-exception build enforces non-throwing hooks by construction.
     cch::tui::EditorTheme throwing;
     throwing.text = [](std::string) -> std::string { throw std::runtime_error("style failed"); };
     editor.set_theme(std::move(throwing));
@@ -388,6 +404,7 @@ TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][edi
 
     REQUIRE_FALSE(callback_failure);
     CHECK(callback_failure.error().message.find("style hook failed") != std::string::npos);
+#endif
 }
 
 TEST_CASE("Editor does nothing on Up when history is empty", "[tui][editor][history][issue379]") {
@@ -602,7 +619,10 @@ TEST_CASE("Editor records every submit path and recalls the submitted entry", "[
     cch::tui::Editor editor(
         {},
         {},
-        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+        [&submitted](std::string text) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(text));
+            return {};
+        });
 
     type(editor, "one");
     key(editor, "enter");
@@ -647,7 +667,8 @@ public:
     std::size_t start_count{0};
     std::size_t cancel_count{0};
 
-    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
+    void start(std::chrono::milliseconds delay,
+               std::move_only_function<cch::support::ExpectedVoid()> on_fire) override {
         last_delay = delay;
         callback = std::move(on_fire);
         ++start_count;
@@ -659,11 +680,11 @@ public:
     void fire() {
         auto on_fire = std::move(callback);
         callback = nullptr;
-        if (on_fire) on_fire();
+        if (on_fire) (void)on_fire();
     }
 
 private:
-    std::move_only_function<void()> callback;
+    std::move_only_function<cch::support::ExpectedVoid()> callback;
 };
 
 /// Provider double with controllable sink delivery: `immediate` responds
@@ -915,8 +936,11 @@ TEST_CASE("Editor select.confirm applies and falls through to submit for slash c
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
         {},
-        [](std::string) {},
-        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [&submitted](std::string text) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(text));
+            return {};
+        });
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "/");
@@ -937,8 +961,11 @@ TEST_CASE("Editor select.confirm applies without submitting outside slash comman
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
         {},
-        [](std::string) {},
-        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [&submitted](std::string text) -> cch::support::ExpectedVoid {
+            submitted.push_back(std::move(text));
+            return {};
+        });
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "@");

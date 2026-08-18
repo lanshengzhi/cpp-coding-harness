@@ -752,8 +752,15 @@ void invoke_input(T& impl, std::string input) {
         sink = impl.input_sink;
     }
     if (!sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
-        (*sink)(std::move(input));
+#endif
+        if (auto delivered = (*sink)(std::move(input)); !delivered) {
+            record_worker_error(impl, std::move(delivered.error()));
+            std::lock_guard lock(impl.mutex);
+            if (impl.input_sink == sink) impl.input_sink.reset();
+        }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
         record_worker_error(impl, support::make_error(
             support::ErrorCode::Unknown,
@@ -769,6 +776,7 @@ void invoke_input(T& impl, std::string input) {
         std::lock_guard lock(impl.mutex);
         if (impl.input_sink == sink) impl.input_sink.reset();
     }
+#endif
 }
 
 template <typename T>
@@ -793,8 +801,15 @@ void deliver_resize_if_changed(T& impl) {
         sink = impl.resize_sink;
     }
     if (!sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
-        (*sink)(dimensions);
+#endif
+        if (auto delivered = (*sink)(dimensions); !delivered) {
+            record_worker_error(impl, std::move(delivered.error()));
+            std::lock_guard lock(impl.mutex);
+            if (impl.resize_sink == sink) impl.resize_sink.reset();
+        }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
         record_worker_error(impl, support::make_error(
             support::ErrorCode::Unknown,
@@ -810,6 +825,7 @@ void deliver_resize_if_changed(T& impl) {
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     }
+#endif
 }
 
 template <typename T>
@@ -1146,8 +1162,15 @@ void apply_cell_size_response(
         dimensions = impl.dimensions;
     }
     if (!sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
-        (*sink)(dimensions);
+#endif
+        if (auto delivered = (*sink)(dimensions); !delivered) {
+            record_worker_error(impl, std::move(delivered.error()));
+            std::lock_guard lock(impl.mutex);
+            if (impl.resize_sink == sink) impl.resize_sink.reset();
+        }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
         record_worker_error(impl, support::make_error(
             support::ErrorCode::Unknown,
@@ -1163,6 +1186,7 @@ void apply_cell_size_response(
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     }
+#endif
 }
 
 template <typename T>
@@ -1611,13 +1635,16 @@ support::ExpectedVoid ProcessTerminal::start(
     impl_->resize_sink = std::move(owned_resize_sink);
     impl_->dimensions = *dimensions;
     impl_->modes.started = true;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         // Impl outlives this borrowed pointer: destruction cannot occur from a sink,
         // and destructor-driven stop joins the delivery worker.
         auto* worker_impl = impl_.get();
         impl_->worker = std::jthread([worker_impl](std::stop_token stop_token) {
             run_terminal_worker(*worker_impl, stop_token);
         });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::system_error& error) {
         impl_->modes.started = false;
         impl_->input_sink.reset();
@@ -1646,6 +1673,7 @@ support::ExpectedVoid ProcessTerminal::start(
             "Process Terminal could not start input and resize delivery",
             "startup failed with an unknown exception"));
     }
+#endif
     return {};
 }
 

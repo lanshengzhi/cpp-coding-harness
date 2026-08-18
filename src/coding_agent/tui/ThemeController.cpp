@@ -181,10 +181,14 @@ void bound_diagnostics(std::vector<ResourceDiagnostic>& diagnostics) {
 template <typename Sink, typename... Args>
 void invoke_best_effort_sink(Sink&& sink, Args&&... args) {
     if (!sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         (void)std::forward<Sink>(sink)(std::forward<Args>(args)...);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
     }
+#endif
 }
 
 /// §5.4 callback boundary for the settings provider: a throwing provider
@@ -192,11 +196,15 @@ void invoke_best_effort_sink(Sink&& sink, Args&&... args) {
 template <typename Provider>
 [[nodiscard]] std::optional<std::string> read_theme_setting(Provider&& provider) {
     if (!provider) return std::nullopt;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         return provider();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         return std::nullopt;
     }
+#endif
 }
 
 /// Fallible §5.4 callback boundary for the settings committer: failures
@@ -204,8 +212,11 @@ template <typename Provider>
 template <typename Sink, typename... Args>
 [[nodiscard]] support::ExpectedVoid invoke_fallible_sink(Sink&& sink, Args&&... args) {
     if (!sink) return {};
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         return std::forward<Sink>(sink)(std::forward<Args>(args)...);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception& error) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Unknown,
@@ -216,6 +227,7 @@ template <typename Sink, typename... Args>
             support::ErrorCode::Unknown,
             "theme controller sink failed"));
     }
+#endif
 }
 
 } // namespace

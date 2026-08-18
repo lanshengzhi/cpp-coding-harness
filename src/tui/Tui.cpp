@@ -239,8 +239,14 @@ support::ExpectedVoid Tui::start() {
     }
 
     if (auto result = terminal_.start(
-            [this](std::string input) { handle_input(std::move(input)); },
-            [this](TerminalDimensions dimensions) { handle_resize(dimensions); });
+            [this](std::string input) -> support::ExpectedVoid {
+                handle_input(std::move(input));
+                return {};
+            },
+            [this](TerminalDimensions dimensions) -> support::ExpectedVoid {
+                handle_resize(dimensions);
+                return {};
+            });
         !result) {
         return std::unexpected(result.error());
     }
@@ -897,11 +903,15 @@ void Tui::invalidate() {
         overlay->invalidate();
     }
     if (request_render && render_request_sink_) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            render_request_sink_();
+#endif
+            (void)render_request_sink_();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // Scheduling notifications cannot make terminal input delivery fail.
         }
+#endif
     }
 }
 

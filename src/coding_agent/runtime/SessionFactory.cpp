@@ -517,11 +517,15 @@ void refresh_availability_sync(
         },
         boost::asio::use_future);
     io.run();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         future.get();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         // Availability failures keep the last-known snapshot.
     }
+#endif
 }
 
 /// Frozen runtime default selection (pi `findInitialModel` step 4): the

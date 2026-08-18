@@ -119,7 +119,7 @@ TEST_CASE(
         test_keybindings(),
         coding_agent::tui::AuthSelectorMode::Login,
         std::move(providers),
-        [](std::string, coding_agent::tui::AuthSelectorType) {},
+        [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
         [] {});
 
     const auto screen = screen_of(selector);
@@ -151,7 +151,7 @@ TEST_CASE(
         test_keybindings(),
         coding_agent::tui::AuthSelectorMode::Login,
         std::move(providers),
-        [](std::string, coding_agent::tui::AuthSelectorType) {},
+        [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
         [] {});
 
     const auto screen = screen_of(selector);
@@ -175,7 +175,7 @@ TEST_CASE(
         test_keybindings(),
         coding_agent::tui::AuthSelectorMode::Login,
         std::move(providers),
-        [](std::string, coding_agent::tui::AuthSelectorType) {},
+        [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
         [] {});
 
     type(selector, "kimi");
@@ -237,7 +237,7 @@ TEST_CASE(
         test_keybindings(),
         coding_agent::tui::AuthSelectorMode::Logout,
         {},
-        [](std::string, coding_agent::tui::AuthSelectorType) {},
+        [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
         [&cancellations] { ++cancellations; });
 
     const auto screen = screen_of(selector);
@@ -259,7 +259,7 @@ TEST_CASE(
             test_keybindings(),
             coding_agent::tui::AuthSelectorMode::Login,
             {},
-            [](std::string, coding_agent::tui::AuthSelectorType) {},
+            [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
             [] {});
         CHECK(screen_of(empty).find("No providers available") != std::string::npos);
     }
@@ -276,7 +276,7 @@ TEST_CASE(
         test_keybindings(),
         coding_agent::tui::AuthSelectorMode::Login,
         std::move(providers),
-        [](std::string, coding_agent::tui::AuthSelectorType) {},
+        [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
         [] {});
 
     // pi's maxVisible is 8: navigating to the last row windows the list and

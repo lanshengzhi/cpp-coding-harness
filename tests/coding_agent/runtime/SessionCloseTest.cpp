@@ -59,18 +59,24 @@ template <typename T>
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 result = co_await std::move(awaitable);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 exception = std::current_exception();
             }
+#endif
             co_return;
         },
         boost::asio::detached);
     io.run();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     if (exception) {
         std::rethrow_exception(exception);
     }
+#endif
     REQUIRE(result.has_value());
     return std::move(*result);
 }

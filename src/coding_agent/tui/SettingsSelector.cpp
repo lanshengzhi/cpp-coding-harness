@@ -87,14 +87,18 @@ struct SettingsSelectorState {
             .max_visible = 10,
             .theme = theme.select_list_theme(),
             .on_select = [completion, state = &state](
-                             const cch::tui::SelectItem& item) {
+                             const cch::tui::SelectItem& item) -> support::ExpectedVoid {
                 // The state outlives the submenu (both live in the selector).
                 if (state->callbacks.on_thinking_level_change) {
                     state->callbacks.on_thinking_level_change(item.value);
                 }
-                (*completion)(item.value);
+                (void)(*completion)(item.value);
+                return {};
             },
-            .on_cancel = [completion]() { (*completion)(std::nullopt); },
+            .on_cancel = [completion]() -> support::ExpectedVoid {
+                (void)(*completion)(std::nullopt);
+                return {};
+            },
             .keybindings = keybindings,
         });
     list->set_selected_index(selected_index);
@@ -185,17 +189,20 @@ public:
             cch::tui::SelectListOptions{
                 .max_visible = 10,
                 .theme = theme.select_list_theme(),
-                .on_select = [completion](const cch::tui::SelectItem& item) {
-                    (*completion)(item.value);
+                .on_select = [completion](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                    (void)(*completion)(item.value);
+                    return {};
                 },
-                .on_cancel = [completion, preview, original_theme_setting]() {
+                .on_cancel = [completion, preview, original_theme_setting]() -> support::ExpectedVoid {
                     // pi `cancel()`: re-preview the original setting (never
                     // a settings write) and complete without a value.
                     preview(original_theme_setting);
-                    (*completion)(std::nullopt);
+                    (void)(*completion)(std::nullopt);
+                    return {};
                 },
-                .on_selection_change = [preview](const cch::tui::SelectItem& item) {
+                .on_selection_change = [preview](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
                     preview(item.value);
+                    return {};
                 },
                 .keybindings = std::move(keybindings),
             });
@@ -329,31 +336,31 @@ struct SettingsSelectorComponent::Impl {
             .max_visible = 10,
             .enable_search = true,
             .theme = theme.settings_list_theme(),
-            .on_change = [state](std::string id, std::string new_value) {
+            .on_change = [state](std::string id, std::string new_value) -> support::ExpectedVoid {
                 if (id == "skill-commands") {
                     if (state->callbacks.on_enable_skill_commands_change) {
                         state->callbacks.on_enable_skill_commands_change(new_value == "true");
                     }
-                    return;
+                    return {};
                 }
                 if (id == "hide-thinking") {
                     if (state->callbacks.on_hide_thinking_block_change) {
                         state->callbacks.on_hide_thinking_block_change(new_value == "true");
                     }
-                    return;
+                    return {};
                 }
                 if (id == "output-padding") {
                     if (state->callbacks.on_output_pad_change) {
                         state->callbacks.on_output_pad_change(new_value == "0" ? 0 : 1);
                     }
-                    return;
+                    return {};
                 }
                 if (id == "default-project-trust") {
                     const auto trust = default_project_trust_by_label(new_value);
                     if (trust && state->callbacks.on_default_project_trust_change) {
                         state->callbacks.on_default_project_trust_change(*trust);
                     }
-                    return;
+                    return {};
                 }
                 if (id == "theme") {
                     // pi `case "theme": callbacks.onThemeChange(newValue)`
@@ -362,14 +369,16 @@ struct SettingsSelectorComponent::Impl {
                     if (state->callbacks.on_theme_change) {
                         state->callbacks.on_theme_change(std::move(new_value));
                     }
-                    return;
+                    return {};
                 }
                 // `thinking` reports through the submenu's select sink, so
                 // it fires a change here only to refresh the item's display
                 // value.
+                return {};
             },
-            .on_cancel = [cancel]() {
+            .on_cancel = [cancel]() -> support::ExpectedVoid {
                 if (*cancel) (*cancel)();
+                return {};
             },
             .keybindings = std::move(keybindings),
         };

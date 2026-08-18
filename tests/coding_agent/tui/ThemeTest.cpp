@@ -521,7 +521,7 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     const auto light_markdown = markdown.render(40);
     REQUIRE(light_markdown);
     tui::VirtualTerminal light_terminal({.columns = 40, .rows = light_markdown->lines.size() + 1});
-    REQUIRE(light_terminal.start([](std::string) {}, [](tui::TerminalDimensions) {}));
+    REQUIRE(light_terminal.start([](std::string) -> support::ExpectedVoid { return {}; }, [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_render_result(light_terminal, *light_markdown);
     CHECK(color_at_text(light_terminal, "plain") == "38;2;31;35;40");
     CHECK(color_at_text(light_terminal, "heading") == "38;2;154;115;38");
@@ -533,7 +533,7 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     const auto dark_markdown = markdown.render(40);
     REQUIRE(dark_markdown);
     tui::VirtualTerminal dark_terminal({.columns = 40, .rows = dark_markdown->lines.size() + 1});
-    REQUIRE(dark_terminal.start([](std::string) {}, [](tui::TerminalDimensions) {}));
+    REQUIRE(dark_terminal.start([](std::string) -> support::ExpectedVoid { return {}; }, [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_render_result(dark_terminal, *dark_markdown);
     CHECK(light_markdown->lines != dark_markdown->lines);
     CHECK(color_at_text(dark_terminal, "plain") == "38;2;212;212;212");

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cch/support/Error.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -70,7 +72,7 @@ struct AutocompleteApplyResult {
 /// Called exactly once per request with std::nullopt when no suggestions are
 /// available. May be invoked synchronously inside `get_suggestions` or later
 /// from any thread; the receiver must be safe for cross-thread invocation.
-using AutocompleteResultSink = std::move_only_function<void(std::optional<AutocompleteSuggestions>)>;
+using AutocompleteResultSink = std::move_only_function<support::ExpectedVoid(std::optional<AutocompleteSuggestions>)>;
 
 /// The asynchronous suggestion source (pi `AutocompleteProvider`).
 class AutocompleteProvider {
@@ -110,7 +112,7 @@ public:
 class AutocompleteDebounceTimer {
 public:
     virtual ~AutocompleteDebounceTimer() = default;
-    virtual void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) = 0;
+    virtual void start(std::chrono::milliseconds delay, std::move_only_function<support::ExpectedVoid()> on_fire) = 0;
     virtual void cancel() = 0;
 };
 

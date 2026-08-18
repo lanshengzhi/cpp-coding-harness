@@ -51,14 +51,14 @@ TEST_CASE("grapheme width counts trailing Thai and Lao AM vowels", "[tui][issue4
 
     cch::tui::VirtualTerminal narrow_terminal({.columns = 1, .rows = 1});
     REQUIRE(narrow_terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE_FALSE(narrow_terminal.write(thai));
 
     cch::tui::VirtualTerminal terminal({.columns = 2, .rows = 1});
     REQUIRE(terminal.start(
-        [](std::string) {},
-        [](cch::tui::TerminalDimensions) {}));
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.write(thai));
     REQUIRE(terminal.cells().size() == 1);
     REQUIRE(terminal.cells()[0].size() == 2);

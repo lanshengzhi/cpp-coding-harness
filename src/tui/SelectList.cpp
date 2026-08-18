@@ -96,11 +96,17 @@ struct SelectList::Impl {
         const auto* item = selected();
         auto sink = on_selection_change;
         if (item == nullptr || !sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            (*sink)(*item);
+#endif
+            if (auto observed = (*sink)(*item); !observed) {
+                callback_error = std::move(observed.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             report_callback_failure("TUI SelectList selection callback failed");
         }
+#endif
     }
 
     [[nodiscard]] std::pair<std::size_t, std::size_t> primary_bounds() const {
@@ -131,19 +137,23 @@ struct SelectList::Impl {
         const auto text = std::string(display_value(item));
         std::string transformed = text;
         if (layout.truncate_primary) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 transformed = layout.truncate_primary(
                     text,
                     max_width,
                     column_width,
                     item,
                     is_selected);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 return std::unexpected(support::make_error(
                     support::ErrorCode::Unknown,
                     "TUI SelectList truncation hook failed",
                     "the truncation callback threw an exception"));
             }
+#endif
         }
         return truncate_text(transformed, max_width, "");
     }
@@ -324,21 +334,33 @@ void SelectList::handle_input(const InputEventVariant& input) {
         const auto* item = impl->selected();
         auto sink = impl->on_select;
         if (item == nullptr || !sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            (*sink)(*item);
+#endif
+            if (auto selected = (*sink)(*item); !selected) {
+                impl->callback_error = std::move(selected.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             impl->report_callback_failure("TUI SelectList select callback failed");
         }
+#endif
         return;
     }
     if (impl->keybindings->matches(*key, "tui.select.cancel")) {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            (*sink)();
+#endif
+            if (auto cancelled = (*sink)(); !cancelled) {
+                impl->callback_error = std::move(cancelled.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             impl->report_callback_failure("TUI SelectList cancel callback failed");
         }
+#endif
     }
 }
 

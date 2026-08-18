@@ -109,12 +109,15 @@ template <typename T, typename Coroutine>
     auto future = boost::asio::co_spawn(
         io, std::move(coroutine)(terminal), boost::asio::use_future);
     io.run();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         auto result = future.get();
         if (!result) {
             return std::unexpected(result.error());
         }
         return std::move(*result);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception& error) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Unknown,
@@ -126,6 +129,7 @@ template <typename T, typename Coroutine>
             "startup UI failed",
             "unknown exception"));
     }
+#endif
 }
 
 } // namespace
@@ -160,14 +164,18 @@ template <typename T, typename BuildSelector>
     // the TUI is up; the controller default init renders at that depth).
     cch::coding_agent::tui::LiveTheme live_theme =
         start_live_theme(options, terminal);
-    const auto request_render = [slot, &tui] { slot->request_render(&tui); };
+    const auto request_render = [slot, &tui]() -> support::ExpectedVoid {
+        slot->request_render(&tui);
+        return {};
+    };
     tui.set_render_request_sink(request_render);
 
     auto selector = build_selector(
         live_theme,
         *keybindings,
         slot,
-        std::move_only_function<void()>{request_render});
+        std::move_only_function<void()>{
+            [slot, &tui] { slot->request_render(&tui); }});
     auto* selector_ptr = selector.get();
     CCH_TRY_VOID(tui.add_child(std::move(selector)));
     CCH_TRY_VOID(tui.set_focus(selector_ptr));
@@ -252,7 +260,7 @@ run_startup_session_picker(
                 // hook is a host-frame local; the component lives inside the
                 // host frame.
                 [request_render = std::move(request_render)]() mutable {
-                    request_render();
+                    (void)request_render();
                 });
         });
 }

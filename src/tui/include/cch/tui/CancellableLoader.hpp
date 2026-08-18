@@ -11,8 +11,8 @@
 
 namespace cch::tui {
 
-using LoaderCompletionSink = std::move_only_function<void()>;
-using LoaderCancellationSink = std::move_only_function<void()>;
+using LoaderCompletionSink = std::move_only_function<support::ExpectedVoid()>;
+using LoaderCancellationSink = std::move_only_function<support::ExpectedVoid()>;
 
 enum class CancellableLoaderState {
     Active,

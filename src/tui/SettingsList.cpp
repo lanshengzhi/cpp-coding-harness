@@ -89,11 +89,17 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     void emit_change(const SettingItem& item) {
         auto sink = on_change;
         if (!sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            (*sink)(item.id, item.current_value);
+#endif
+            if (auto changed = (*sink)(item.id, item.current_value); !changed) {
+                callback_error = std::move(changed.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             report_callback_failure("TUI SettingsList change callback failed");
         }
+#endif
     }
 
     void close_submenu(std::size_t parent_selection) {
@@ -120,24 +126,29 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
             auto finished = std::make_shared<bool>(false);
             std::weak_ptr<Impl> weak = shared_from_this();
             SettingsSubmenuDoneSink done = [weak, finished, item_index, parent_selection](
-                                           std::optional<std::string> selected_value) {
-                if (*finished) return;
+                                           std::optional<std::string> selected_value) -> support::ExpectedVoid {
+                if (*finished) return {};
                 *finished = true;
                 auto impl = weak.lock();
-                if (!impl || item_index >= impl->items.size()) return;
+                if (!impl || item_index >= impl->items.size()) return {};
                 if (selected_value) {
                     impl->items[item_index].current_value = std::move(*selected_value);
                     impl->emit_change(impl->items[item_index]);
                 }
                 impl->close_submenu(parent_selection);
+                return {};
             };
             std::unique_ptr<Component> created;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
+#endif
                 created = submenu_factory(*item, std::move(done));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
                 report_callback_failure("TUI SettingsList submenu factory failed");
                 return;
             }
+#endif
             if (*finished) return;
             if (!created) {
                 callback_error = support::make_error(
@@ -370,11 +381,17 @@ void SettingsList::handle_input(const InputEventVariant& input) {
     if (impl->keybindings->matches(*key, "tui.select.cancel")) {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
-            (*sink)();
+#endif
+            if (auto cancelled = (*sink)(); !cancelled) {
+                impl->callback_error = std::move(cancelled.error());
+            }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             impl->report_callback_failure("TUI SettingsList cancel callback failed");
         }
+#endif
         return;
     }
     if (!impl->search_enabled || !impl->search_input) return;

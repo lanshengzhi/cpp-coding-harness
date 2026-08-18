@@ -190,10 +190,10 @@ TEST_CASE(
         std::move(tree),
         *leaf_id,
         /*terminal_height=*/20,
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
-        [](std::string, std::optional<std::string>) {},
-        [](std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+        [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [] {});
 
     const auto text = render_text(component);
@@ -238,10 +238,10 @@ TEST_CASE(
         std::vector<Node>{std::move(root)},
         *leaf_id,
         /*terminal_height=*/20,
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
-        [](std::string, std::optional<std::string>) {},
-        [](std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+        [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [] {});
 
     // The default view hides the thinking/model entries.
@@ -302,10 +302,10 @@ TEST_CASE(
         std::move(tree),
         *leaf_id,
         /*terminal_height=*/20,
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
-        [](std::string, std::optional<std::string>) {},
-        [](std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+        [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [] {});
 
     // The leaf is selected; move up to the branch point a0, then fold it
@@ -390,7 +390,7 @@ TEST_CASE(
         /*terminal_height=*/20,
         [&](std::string id) { calls.selects.push_back(std::move(id)); },
         [&] { ++calls.cancels; },
-        [](std::string, std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [&](std::optional<std::string> text) { calls.copies.push_back(std::move(text)); },
         [] {});
 
@@ -415,9 +415,9 @@ TEST_CASE(
         std::vector<Node>{std::move(u0)},
         *other_leaf,
         /*terminal_height=*/20,
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
-        [](std::string, std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [&](std::optional<std::string> text) { calls.copies.push_back(std::move(text)); },
         [] {});
     component2.handle_input(tui::KeyEvent{.key = "a", .ctrl = true});
@@ -445,8 +445,8 @@ TEST_CASE(
         /*terminal_height=*/20,
         [&](std::string id) { calls.selects.push_back(std::move(id)); },
         [&] { ++calls.cancels; },
-        [](std::string, std::optional<std::string>) {},
-        [](std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+        [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [] {});
 
     // Enter selects the current leaf.
@@ -479,10 +479,10 @@ TEST_CASE(
         std::vector<Node>{std::move(thinking)},
         "thinking-1",
         /*terminal_height=*/20,
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
-        [](std::string, std::optional<std::string>) {},
-        [](std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+        [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [] {});
 
     const auto text = render_text(component);
@@ -525,10 +525,10 @@ TEST_CASE(
         std::vector<Node>{std::move(root)},
         "cp1",
         /*terminal_height=*/20,
-        [](std::string) {},
+        [](std::string) -> support::ExpectedVoid { return {}; },
         [] {},
-        [](std::string, std::optional<std::string>) {},
-        [](std::optional<std::string>) {},
+        [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+        [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [] {});
 
     const auto text = render_text(component);

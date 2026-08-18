@@ -496,7 +496,9 @@ struct ScopedQuery {
     std::stop_token stop_token) {
     if (stop_token.stop_requested()) return {};
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
+#endif
         const auto scoped_query = resolve_scoped_fuzzy_query(base_path, query);
         const auto fd_base_dir = scoped_query ? scoped_query->base_dir : base_path;
         const auto fd_query = scoped_query ? scoped_query->query : std::string{query};
@@ -540,9 +542,11 @@ struct ScopedQuery {
             });
         }
         return suggestions;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
         return {};
     }
+#endif
 }
 
 /// Extract the `@` prefix for fuzzy file suggestions (pi `extractAtPrefix`).
@@ -628,7 +632,7 @@ void CombinedAutocompleteProvider::get_suggestions(
     if (const auto at_prefix = extract_at_prefix(text_before_cursor)) {
         const auto parsed = parse_path_prefix(*at_prefix);
         if (!impl_->fd_path || request.stop_token.stop_requested()) {
-            sink(std::nullopt);
+            (void)sink(std::nullopt);
             return;
         }
         const std::string at_prefix_copy{*at_prefix};
@@ -642,10 +646,10 @@ void CombinedAutocompleteProvider::get_suggestions(
             const auto suggestions =
                 get_fuzzy_file_suggestions(base_path, fd_path, raw_prefix, is_quoted_prefix, stop_token);
             if (suggestions.empty()) {
-                sink(std::nullopt);
+                (void)sink(std::nullopt);
                 return;
             }
-            sink(AutocompleteSuggestions{
+            (void)sink(AutocompleteSuggestions{
                 .items = std::move(suggestions),
                 .prefix = at_prefix_copy,
             });
@@ -691,7 +695,7 @@ void CombinedAutocompleteProvider::get_suggestions(
                 prefix,
                 [](const CommandEntry& entry) -> const std::string& { return entry.name; });
             if (filtered.empty()) {
-                sink(std::nullopt);
+                (void)sink(std::nullopt);
                 return;
             }
             std::vector<AutocompleteItem> items;
@@ -703,7 +707,7 @@ void CombinedAutocompleteProvider::get_suggestions(
                     .description = entry.description,
                 });
             }
-            sink(AutocompleteSuggestions{
+            (void)sink(AutocompleteSuggestions{
                 .items = std::move(items),
                 .prefix = std::string{text_before_cursor},
             });
@@ -717,36 +721,36 @@ void CombinedAutocompleteProvider::get_suggestions(
             auto* slash_command = std::get_if<SlashCommand>(&command);
             if (slash_command == nullptr || slash_command->name != command_name) continue;
             if (!slash_command->get_argument_completions) {
-                sink(std::nullopt);
+                (void)sink(std::nullopt);
                 return;
             }
             const auto argument_suggestions = slash_command->get_argument_completions(argument_text);
             if (!argument_suggestions || argument_suggestions->empty()) {
-                sink(std::nullopt);
+                (void)sink(std::nullopt);
                 return;
             }
-            sink(AutocompleteSuggestions{
+            (void)sink(AutocompleteSuggestions{
                 .items = *std::move(argument_suggestions),
                 .prefix = std::string{argument_text},
             });
             return;
         }
-        sink(std::nullopt);
+        (void)sink(std::nullopt);
         return;
     }
 
     // Path-like prefix (natural or forced Tab; pi's extractPathPrefix).
     const auto path_match = extract_path_prefix(text_before_cursor, request.force);
     if (!path_match) {
-        sink(std::nullopt);
+        (void)sink(std::nullopt);
         return;
     }
     const auto suggestions = get_file_suggestions(impl_->base_path, *path_match);
     if (suggestions.empty()) {
-        sink(std::nullopt);
+        (void)sink(std::nullopt);
         return;
     }
-    sink(AutocompleteSuggestions{
+    (void)sink(AutocompleteSuggestions{
         .items = suggestions,
         .prefix = std::string{*path_match},
     });
