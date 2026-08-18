@@ -27,6 +27,48 @@ constexpr std::size_t kMaxSchemaDepth = 64;
 constexpr std::size_t kMaxSchemaNodes = 2048;
 constexpr std::size_t kMaxValidationFailures = 8;
 
+/// A structural validity scan for ECMAScript regular-expression patterns
+/// (the SessionSelectorSearch precedent; issue #487). libstdc++ has no
+/// non-throwing `std::regex` constructor: in the exception-enabled build
+/// malformed patterns surface as `std::regex_error`, but with exceptions
+/// disabled an invalid pattern aborts. This scan rejects the structural
+/// errors users commonly type — an unterminated character class, an unmatched
+/// or unopened group, or a dangling escape — before any `std::regex` is
+/// constructed from an untrusted pattern. A pattern that passes this scan but
+/// is still rejected by the compiler remains a documented residual risk in
+/// the no-exception build.
+[[nodiscard]] bool structurally_valid_regex(std::string_view pattern) {
+    std::size_t group_depth = 0;
+    bool in_character_class = false;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        const char character = pattern[index];
+        if (character == '\\') {
+            if (index + 1 >= pattern.size()) return false;
+            ++index;  // the escaped character is literal
+            continue;
+        }
+        if (in_character_class) {
+            if (character == ']') in_character_class = false;
+            continue;
+        }
+        switch (character) {
+            case '[':
+                in_character_class = true;
+                break;
+            case '(':
+                ++group_depth;
+                break;
+            case ')':
+                if (group_depth == 0) return false;
+                --group_depth;
+                break;
+            default:
+                break;
+        }
+    }
+    return !in_character_class && group_depth == 0;
+}
+
 enum class JsonType {
     Null,
     Boolean,
@@ -620,6 +662,15 @@ struct ValidationFailure {
                 "unsupported Tool Argument Contract",
                 child_path(schema_path, "pattern") +
                     " uses Unicode regular-expression syntax that cannot be enforced"));
+        }
+        // libstdc++ cannot report a malformed pattern without exceptions
+        // (issue #487): reject structurally invalid patterns before any
+        // `std::regex` construction, same as SessionSelectorSearch.
+        if (!structurally_valid_regex(*pattern)) {
+            return std::unexpected(schema_compile_error(
+                "unsupported Tool Argument Contract",
+                child_path(schema_path, "pattern") +
+                    " cannot be enforced as a regular expression"));
         }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
@@ -1779,6 +1830,10 @@ template <typename T>
         return is_json_pointer(value);
     case FormatKind::Regex:
         if (value.empty()) return false;
+        // libstdc++ cannot report a malformed pattern without exceptions
+        // (issue #487): reject structurally invalid patterns before any
+        // `std::regex` construction, same as SessionSelectorSearch.
+        if (!structurally_valid_regex(value)) return false;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
             (void)std::regex(std::string(value), std::regex::ECMAScript);

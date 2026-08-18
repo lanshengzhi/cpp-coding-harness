@@ -32,13 +32,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
 option(CCH_STRICT_NO_EXCEPTIONS
-    "Require -fno-exceptions and the strict exception allowlist (experimental)"
-    OFF)
+    "Require -fno-exceptions and the strict exception allowlist"
+    ON)
 if(CCH_STRICT_NO_EXCEPTIONS)
-    # The default build remains exception-enabled until the migration tickets
-    # have removed ordinary exception paths. This opt-in makes the eventual
-    # policy testable now and applies to every project-owned C++ target,
-    # including test shards.
+    # The strict no-exception policy is the default build (ADR 0042): ordinary
+    # failure is cch::support::Expected / std::error_code, and an exception is
+    # not a second error channel. It applies to every project-owned C++ target,
+    # including test shards. Disabling the option is a deliberate deviation
+    # from the supported policy and is intended only for local debugging.
     add_compile_options(-fno-exceptions)
     # Boost.Asio's completion machinery must take the same no-exception path
     # as the project-owned code. The compiler flag also makes Boost.Config set
@@ -46,6 +47,10 @@ if(CCH_STRICT_NO_EXCEPTIONS)
     # visible in every strict compile command.
     add_compile_definitions(BOOST_ASIO_NO_EXCEPTIONS)
     message(STATUS "Strict no-exception policy enabled")
+else()
+    message(WARNING
+        "CCH_STRICT_NO_EXCEPTIONS is OFF: the default strict no-exception "
+        "policy (ADR 0042) is disabled for this configuration")
 endif()
 
 find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
@@ -211,7 +216,8 @@ cch_parity_declare_target(
 cch_owner_include_roots(cch_ai src/ai/include)
 # Boost's no-exception configuration leaves the application-owned
 # boost::throw_exception termination hook to the consuming target. Compile the
-# private hook without exceptions even while the wider migration is staged.
+# private hook without exceptions even if the strict policy is disabled locally
+# (ADR 0042).
 set_source_files_properties(src/ai/BoostExceptionHandler.cpp PROPERTIES
     COMPILE_OPTIONS -fno-exceptions
     COMPILE_DEFINITIONS BOOST_ASIO_NO_EXCEPTIONS
@@ -734,9 +740,9 @@ if(CCH_BUILD_TESTS)
     catch_discover_tests(cch_tests_ai ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_ai ${CCH_PARITY_BUILD_GATE_TARGET})
 
-    # Private Boost.Asio bridges are validated in their own no-exception test
-    # target while the wider migration remains staged behind
-    # CCH_STRICT_NO_EXCEPTIONS (#482).
+    # Private Boost.Asio bridges carry the only exception-shaped detail in the
+    # strict policy (ADR 0042): this no-exception test target validates the
+    # bridge contract directly.
     add_executable(cch_tests_ai_async_bridge
         tests/Catch2Main.cpp
         tests/ai/AsyncBridgeTest.cpp

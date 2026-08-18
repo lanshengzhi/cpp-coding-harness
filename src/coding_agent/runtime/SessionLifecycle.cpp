@@ -288,10 +288,17 @@ support::Expected<OpenSession> publish_session(
         workspace = explicit_new.workspace;
     }
 
+    // Build the metadata from the workspace before moving it into the
+    // publication: function-argument evaluation order is unspecified, so
+    // `new_session_metadata(workspace, ...)` must not read a workspace that a
+    // sibling `std::move(workspace)` argument may have already moved from
+    // (issue #487; surfaced by the Clang conformance build).
+    auto metadata = new_session_metadata(
+        workspace, identity, std::move(provider), std::move(model));
     return publish_new_jsonl_session(
         std::move(session_path),
         std::move(workspace),
-        new_session_metadata(workspace, identity, std::move(provider), std::move(model)));
+        std::move(metadata));
 }
 
 support::Expected<PreparedResumeTarget> prepare_resume_target(

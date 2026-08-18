@@ -11,7 +11,10 @@
 #include <utility>
 
 namespace cch::harness::session {
-namespace {
+// The session-entry DTOs must have external linkage: Glaze reflects them
+// through glz::detail::external, which Clang rejects for anonymous-namespace
+// types (issue #487; the Clang conformance build).
+namespace detail {
 
 /// Wire nullable string: `std::monostate` serializes as explicit JSON `null`
 /// (pi root entries carry `parentId: null`; a root leaf carries
@@ -164,6 +167,10 @@ struct LeafDto {
     NullableString targetId;
 };
 
+} // namespace detail
+
+namespace {
+
 [[nodiscard]] support::Error session_error(std::string message, std::string detail = {}) {
     return support::make_error(support::ErrorCode::Session, std::move(message), std::move(detail));
 }
@@ -274,14 +281,14 @@ template <typename T>
     return oss.str();
 }
 
-[[nodiscard]] NullableString nullable_string(const std::optional<std::string>& value) {
+[[nodiscard]] detail::NullableString nullable_string(const std::optional<std::string>& value) {
     if (value) {
-        return NullableString{*value};
+        return detail::NullableString{*value};
     }
-    return NullableString{std::monostate{}};
+    return detail::NullableString{std::monostate{}};
 }
 
-[[nodiscard]] std::optional<std::string> optional_from_nullable(const NullableString& value) {
+[[nodiscard]] std::optional<std::string> optional_from_nullable(const detail::NullableString& value) {
     if (const auto* text = std::get_if<std::string>(&value)) {
         return *text;
     }
@@ -362,8 +369,8 @@ template <typename T>
     return total_seconds * 1000 + millis;
 }
 
-[[nodiscard]] WriteHeaderDto to_dto(const SessionMetadata& metadata) {
-    WriteHeaderDto dto{
+[[nodiscard]] detail::WriteHeaderDto to_dto(const SessionMetadata& metadata) {
+    detail::WriteHeaderDto dto{
         "session",
         3,
         metadata.session_id,
@@ -379,7 +386,7 @@ template <typename T>
     return dto;
 }
 
-[[nodiscard]] SessionMetadata from_dto(const ReadHeaderDto& dto) {
+[[nodiscard]] SessionMetadata from_dto(const detail::ReadHeaderDto& dto) {
     if (dto.type == "session") {
         SessionMetadata metadata{
             dto.id.value_or(std::string{}),
@@ -404,12 +411,12 @@ template <typename T>
     return metadata;
 }
 
-[[nodiscard]] MessageEntryDto to_dto(
+[[nodiscard]] detail::MessageEntryDto to_dto(
     std::string entry_id,
     const ai::MessageVariant& message,
     std::optional<std::string> parent_id = std::nullopt,
     std::int64_t timestamp = 0) {
-    MessageEntryDto dto;
+    detail::MessageEntryDto dto;
     dto.id = std::move(entry_id);
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = format_iso_timestamp_ms(timestamp);
@@ -490,7 +497,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     return found->second;
 }
 
-[[nodiscard]] std::vector<std::string> active_tool_names_from_dto(const ActiveToolsChangeDto& dto) {
+[[nodiscard]] std::vector<std::string> active_tool_names_from_dto(const detail::ActiveToolsChangeDto& dto) {
     if (dto.tools.has_value()) {
         return *dto.tools;
     }
@@ -498,7 +505,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
 }
 
 [[nodiscard]] support::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
-    const CustomMessageContentDto& content,
+    const detail::CustomMessageContentDto& content,
     std::string_view context) {
     if (const auto* text = std::get_if<std::string>(&content)) {
         return CustomMessageEntryContent{*text};
@@ -526,10 +533,10 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     return CustomMessageEntryContent{std::move(converted)};
 }
 
-[[nodiscard]] CustomMessageContentDto custom_message_content_to_dto(
+[[nodiscard]] detail::CustomMessageContentDto custom_message_content_to_dto(
     CustomMessageEntryContent content) {
     if (auto* text = std::get_if<std::string>(&content)) {
-        return CustomMessageContentDto{std::move(*text)};
+        return detail::CustomMessageContentDto{std::move(*text)};
     }
 
     const auto& blocks = std::get<std::vector<CustomMessageEntryContentBlock>>(content);
@@ -540,7 +547,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
             [](const auto& concrete) { return ai::glaze::detail::to_dto(concrete); },
             block));
     }
-    return CustomMessageContentDto{std::move(dtos)};
+    return detail::CustomMessageContentDto{std::move(dtos)};
 }
 
 [[nodiscard]] support::JsonValue redact_json_value(const support::JsonValue& value) {
@@ -701,7 +708,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
         auto payload = support::json_from_glaze(*generic);
 
         if (line_number == 1 && (*type == "header" || *type == "session")) {
-            auto header = entry_from_generic<ReadHeaderDto>(*generic, stored_line, line_number);
+            auto header = entry_from_generic<detail::ReadHeaderDto>(*generic, stored_line, line_number);
             if (!header) {
                 return std::unexpected(header.error());
             }
@@ -719,7 +726,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
 
         auto kind = kind_from_type(*type);
         if (kind == SessionEntryKind::Message) {
-            auto dto = entry_from_generic<MessageEntryDto>(*generic, stored_line, line_number);
+            auto dto = entry_from_generic<detail::MessageEntryDto>(*generic, stored_line, line_number);
             if (!dto) {
                 return std::unexpected(dto.error());
             }
@@ -748,7 +755,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
             entry.payload = std::move(payload);
             switch (kind) {
             case SessionEntryKind::ModelChange: {
-                auto dto = entry_from_generic<ModelChangeDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::ModelChangeDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -760,7 +767,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::ThinkingLevelChange: {
-                auto dto = entry_from_generic<ThinkingLevelChangeDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::ThinkingLevelChangeDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -769,7 +776,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::ActiveToolsChange: {
-                auto dto = entry_from_generic<ActiveToolsChangeDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::ActiveToolsChangeDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -778,7 +785,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::Custom: {
-                auto dto = entry_from_generic<CustomDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::CustomDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -790,7 +797,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::CustomMessage: {
-                auto dto = entry_from_generic<CustomMessageDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::CustomMessageDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -808,7 +815,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::Label: {
-                auto dto = entry_from_generic<LabelDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::LabelDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -820,7 +827,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::Compaction: {
-                auto dto = entry_from_generic<CompactionDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::CompactionDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -858,7 +865,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::BranchSummary: {
-                auto dto = entry_from_generic<BranchSummaryDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::BranchSummaryDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -881,7 +888,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::SessionInfo: {
-                auto dto = entry_from_generic<SessionInfoDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::SessionInfoDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -890,7 +897,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
                 break;
             }
             case SessionEntryKind::Leaf: {
-                auto dto = entry_from_generic<LeafDto>(*generic, stored_line, line_number);
+                auto dto = entry_from_generic<detail::LeafDto>(*generic, stored_line, line_number);
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
@@ -945,7 +952,7 @@ support::Expected<std::string> EntrySerializer::serialize_model_change(
     std::optional<std::string> parent_id,
     std::string provider,
     std::string model_id) const {
-    ModelChangeDto dto;
+    detail::ModelChangeDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -957,7 +964,7 @@ support::Expected<std::string> EntrySerializer::serialize_model_change(
 support::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) const {
-    ThinkingLevelChangeDto dto;
+    detail::ThinkingLevelChangeDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -968,7 +975,7 @@ support::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
 support::Expected<std::string> EntrySerializer::serialize_active_tools_change(
     std::optional<std::string> parent_id,
     std::vector<std::string> tools) const {
-    ActiveToolsChangeDto dto;
+    detail::ActiveToolsChangeDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -980,7 +987,7 @@ support::Expected<std::string> EntrySerializer::serialize_custom_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
     std::optional<support::JsonValue> data) const {
-    CustomDto dto;
+    detail::CustomDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1006,7 +1013,7 @@ support::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
         details = redact_json_value(*details);
     }
 
-    CustomMessageDto dto;
+    detail::CustomMessageDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1027,7 +1034,7 @@ support::Expected<std::string> EntrySerializer::serialize_label_change(
     std::optional<std::string> parent_id,
     std::string target_id,
     std::optional<std::string> label) const {
-    LabelDto dto;
+    detail::LabelDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1045,7 +1052,7 @@ support::Expected<std::string> EntrySerializer::serialize_compaction(
     std::optional<bool> from_hook,
     std::vector<ai::MessageVariant> retained_tail,
     std::optional<ai::Usage> usage) const {
-    CompactionDto dto;
+    detail::CompactionDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1081,7 +1088,7 @@ support::Expected<std::string> EntrySerializer::serialize_branch_summary(
     std::optional<support::JsonValue> details,
     std::optional<bool> from_hook,
     std::optional<ai::Usage> usage) const {
-    BranchSummaryDto dto;
+    detail::BranchSummaryDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1104,7 +1111,7 @@ support::Expected<std::string> EntrySerializer::serialize_branch_summary(
 support::Expected<std::string> EntrySerializer::serialize_session_info(
     std::optional<std::string> parent_id,
     std::optional<std::string> name) const {
-    SessionInfoDto dto;
+    detail::SessionInfoDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1115,7 +1122,7 @@ support::Expected<std::string> EntrySerializer::serialize_session_info(
 support::Expected<std::string> EntrySerializer::serialize_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) const {
-    LeafDto dto;
+    detail::LeafDto dto;
     dto.id = generate_entry_id();
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
@@ -1130,7 +1137,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     // append-time policy; round-trip fidelity is the contract.
     struct IdOnly {
         std::string id;
-        NullableString parentId;
+        detail::NullableString parentId;
         std::string timestamp;
     };
     const auto base_fields = [&]() {
@@ -1147,7 +1154,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         if (!entry.message.has_value()) {
             return std::unexpected(session_error("message entry has no message value"));
         }
-        MessageEntryDto dto;
+        detail::MessageEntryDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1156,7 +1163,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::ModelChange: {
         const auto& value = std::get<ModelChangeValue>(entry.value);
-        ModelChangeDto dto;
+        detail::ModelChangeDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1166,7 +1173,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::ThinkingLevelChange: {
         const auto& value = std::get<ThinkingLevelChangeValue>(entry.value);
-        ThinkingLevelChangeDto dto;
+        detail::ThinkingLevelChangeDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1175,7 +1182,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::ActiveToolsChange: {
         const auto& value = std::get<ActiveToolsChangeValue>(entry.value);
-        ActiveToolsChangeDto dto;
+        detail::ActiveToolsChangeDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1184,7 +1191,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::Custom: {
         const auto& value = std::get<CustomEntryValue>(entry.value);
-        CustomDto dto;
+        detail::CustomDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1200,7 +1207,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::CustomMessage: {
         const auto& value = std::get<CustomMessageEntryValue>(entry.value);
-        CustomMessageDto dto;
+        detail::CustomMessageDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1218,7 +1225,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::Label: {
         const auto& value = std::get<LabelEntryValue>(entry.value);
-        LabelDto dto;
+        detail::LabelDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1228,7 +1235,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::Compaction: {
         const auto& value = std::get<CompactionEntryValue>(entry.value);
-        CompactionDto dto;
+        detail::CompactionDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1258,7 +1265,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::BranchSummary: {
         const auto& value = std::get<BranchSummaryEntryValue>(entry.value);
-        BranchSummaryDto dto;
+        detail::BranchSummaryDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1279,7 +1286,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::SessionInfo: {
         const auto& value = std::get<SessionInfoEntryValue>(entry.value);
-        SessionInfoDto dto;
+        detail::SessionInfoDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
@@ -1288,7 +1295,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::Leaf: {
         const auto& value = std::get<LeafEntryValue>(entry.value);
-        LeafDto dto;
+        detail::LeafDto dto;
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);

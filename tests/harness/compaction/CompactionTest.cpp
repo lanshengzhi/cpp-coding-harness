@@ -17,14 +17,13 @@
 #include "ai/glaze/AiJson.hpp"
 #include "harness/compaction/Compaction.hpp"
 #include <cch/ai/Models.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
@@ -252,22 +251,19 @@ template <typename T>
 [[nodiscard]] T run_awaitable(boost::asio::awaitable<T> awaitable) {
     boost::asio::io_context io;
     std::optional<T> result;
-    std::exception_ptr exception;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            try {
-                result = co_await std::move(awaitable);
-            } catch (...) {
-                exception = std::current_exception();
-            }
-            co_return;
-        },
-        boost::asio::detached);
+    // Run the lazy coroutine on the temporary executor through the private
+    // completion bridge so the awaitable's terminal outcome stays on the
+    // typed `Expected` channel (ADR 0042; no exception path in test code).
+    auto bridged = ai::detail::make_async_result_on(
+        io.get_executor(),
+        [awaitable = std::move(awaitable)]() mutable
+            -> boost::asio::awaitable<T> {
+            co_return co_await std::move(awaitable);
+        });
+    std::move(bridged).start([&result](T completion) noexcept {
+        result.emplace(std::move(completion));
+    });
     io.run();
-    if (exception) {
-        std::rethrow_exception(exception);
-    }
     REQUIRE(result.has_value());
     return std::move(*result);
 }

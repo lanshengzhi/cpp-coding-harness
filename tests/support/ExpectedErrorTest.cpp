@@ -7,14 +7,16 @@
 #include <expected>
 #include <string>
 
-namespace {
+namespace detail {
 
+// The glaze-reflected payload must have external linkage: Clang rejects
+// glz::detail::external for anonymous-namespace types (issue #487).
 struct ProbePayload {
     int count{};
     std::string label;
 };
 
-} // namespace
+} // namespace detail
 
 TEST_CASE("std expected is the project failure carrier", "[support][expected][u1]") {
     cch::support::Expected<int> ok = 42;
@@ -34,19 +36,19 @@ TEST_CASE("std expected is the project failure carrier", "[support][expected][u1
 }
 
 TEST_CASE("Glaze round-trip failures become typed project errors", "[support][glaze][u1]") {
-    ProbePayload payload{7, "ok"};
+    detail::ProbePayload payload{7, "ok"};
 
     auto json = cch::support::write_json(payload);
     REQUIRE(json);
     CHECK(json->find("count") != std::string::npos);
     CHECK(json->find("label") != std::string::npos);
 
-    auto parsed = cch::support::read_json<ProbePayload>(*json);
+    auto parsed = cch::support::read_json<detail::ProbePayload>(*json);
     REQUIRE(parsed);
     CHECK(parsed->count == 7);
     CHECK(parsed->label == "ok");
 
-    auto malformed = cch::support::read_json<ProbePayload>(R"({"count":"not-an-int","label":"bad"})");
+    auto malformed = cch::support::read_json<detail::ProbePayload>(R"({"count":"not-an-int","label":"bad"})");
     REQUIRE_FALSE(malformed);
     CHECK(malformed.error().code == cch::support::ErrorCode::JsonParse);
     CHECK(cch::support::to_string(malformed.error().code) == "json_parse");

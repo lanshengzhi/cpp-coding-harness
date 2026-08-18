@@ -68,7 +68,6 @@
 
 #include <cch/support/Error.hpp>
 #include <boost/asio/any_io_executor.hpp>
-#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -110,21 +109,6 @@ namespace cch::coding_agent::tui {
 namespace {
 
 using ActionSink = std::move_only_function<void()>;
-
-/// Whether a `co_spawn` completion's exception pointer reports a failed flow.
-/// The spawned coroutines convert their own failures to `Expected`, so in the
-/// no-exception build Asio cannot produce an exception pointer and a non-null
-/// value is a Runtime invariant violation (ADR 0042).
-[[nodiscard]] bool co_spawn_failed(std::exception_ptr exception) {
-#if defined(BOOST_ASIO_NO_EXCEPTIONS)
-    if (exception) {
-        std::terminate();
-    }
-    return false;
-#else
-    return static_cast<bool>(exception);
-#endif
-}
 
 // ── Focused-editor User Bash syntax (ADR 0026) ────────────────────────────
 // Folded from the deleted UserBashSyntax module: only a direct focused
@@ -1606,31 +1590,21 @@ private:
     void dispatch(ClipboardPasteAction) {
         if (clipboard_reader_ == nullptr || clipboard_read_active_) return;
         clipboard_read_active_ = true;
-        const auto weak = weak_from_this();
-        boost::asio::co_spawn(
+        const auto self = shared_from_this();
+        auto bridged = ai::detail::make_async_result_on(
             executor_,
-            paste_from_clipboard(),
-            [weak](std::exception_ptr exception, support::ExpectedVoid result) {
+            [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await self->paste_from_clipboard();
+            });
+        std::move(bridged).start(
+            [weak = weak_from_this()](support::ExpectedVoid result) noexcept {
                 const auto state = weak.lock();
                 if (!state) return;
                 state->clipboard_read_active_ = false;
-                std::optional<support::Error> ignored_failure;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                if (exception) {
-                    // The staged build maps a launch exception to a generic
-                    // failure; the no-exception build treats a non-null
-                    // pointer as a Runtime invariant (the coroutine converts
-                    // its own failures to Expected).
-                    ignored_failure = support::make_error(
-                        support::ErrorCode::Unknown,
-                        "clipboard paste failed");
-                } else
-#endif
-                if (!result) {
-                    ignored_failure = std::move(result.error());
-                }
-                // Baseline clipboard failures are intentionally silent.
-                (void)ignored_failure;
+                // Baseline clipboard failures are intentionally silent; the
+                // private bridge already mapped a launch failure to the same
+                // generic outcome.
+                (void)result;
             });
     }
 
@@ -1697,21 +1671,20 @@ private:
 
     void dispatch(ExternalEditorAction) {
         const auto self = shared_from_this();
-        boost::asio::co_spawn(
+        auto bridged = ai::detail::make_async_result_on(
             executor_,
-            self->handle_open_external_editor(),
-            [self](std::exception_ptr exception) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                if (exception) {
-                    // A launch exception is mapped to a generic diagnostic in
-                    // the staged build; the no-exception build treats a
-                    // non-null pointer as a Runtime invariant.
-                    self->show_error("External editor failed");
-                }
-#else
-                (void)exception;
-#endif
+            [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_await self->handle_open_external_editor();
+                co_return support::ExpectedVoid{};
             });
+        std::move(bridged).start([self](support::ExpectedVoid result) noexcept {
+            if (!result) {
+                // The bridge maps a launch/body failure to the generic
+                // outcome; the strict build treats a failure as a Runtime
+                // invariant (the coroutine converts its own failures).
+                self->show_error("External editor failed");
+            }
+        });
     }
 
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> paste_from_clipboard() {
@@ -2069,17 +2042,21 @@ private:
         const auto weak = weak_from_this();
         // The coroutine lambda's frame may reference its closure (the
         // `start` move_only_function), so keep the closure alive until the
-        // spawned coroutine reaches its terminal completion (same pattern as
-        // make_model_stream / ADR 0040 §Behavior mechanisms).
+        // spawned coroutine reaches its terminal completion (the bridge holds
+        // the factory for the coroutine's whole lifetime; ADR 0040
+        // §Behavior mechanisms).
         auto start_owner =
             std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(
                 std::move(start));
-        boost::asio::co_spawn(
+        auto bridged = ai::detail::make_async_result_on(
             executor_,
-            (*start_owner)(),
-            [weak, start_owner, failure_label = std::move(failure_label)](
-                std::exception_ptr exception) {
-                if (!co_spawn_failed(exception)) return;
+            [start_owner]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_await (*start_owner)();
+                co_return support::ExpectedVoid{};
+            });
+        std::move(bridged).start(
+            [weak, failure_label = std::move(failure_label)](support::ExpectedVoid result) noexcept {
+                if (result) return;
                 if (const auto self = weak.lock();
                     self && self->running_ && self->view_ != nullptr) {
                     self->view_->append_diagnostic(std::move(failure_label));
@@ -4343,12 +4320,12 @@ private:
         auto recall = trim_editor_submission(text);
         const auto self = shared_from_this();
         const std::size_t started_generation = action_generation_;
-        boost::asio::co_spawn(
+        auto bridged = ai::detail::make_async_result_on(
             executor_,
             [self,
              invocation = std::move(invocation),
              recall = std::move(recall),
-             started_generation]() mutable -> boost::asio::awaitable<void> {
+             started_generation]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
                 auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
                     *self->session_,
                     std::move(invocation->command),
@@ -4362,9 +4339,11 @@ private:
                         return {};
                     });
                 self->user_bash_finished(started_generation, std::move(result), recall);
-            },
-            [weak = weak_from_this(), started_generation](std::exception_ptr exception) {
-                if (!co_spawn_failed(exception)) return;
+                co_return support::ExpectedVoid{};
+            });
+        std::move(bridged).start(
+            [weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
+                if (result) return;
                 if (const auto self = weak.lock()) {
                     if (self->generation_retired(started_generation)) {
                         // A launch failure from a retired Session generation
@@ -4479,12 +4458,12 @@ private:
         prompt_active_ = true;
         const auto self = shared_from_this();
         const std::size_t started_generation = action_generation_;
-        boost::asio::co_spawn(
+        auto bridged = ai::detail::make_async_result_on(
             executor_,
             [self,
              text = std::move(text),
              options = std::move(options),
-             started_generation]() mutable -> boost::asio::awaitable<void> {
+             started_generation]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
                 support::ExpectedVoid result;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 try {
@@ -4504,12 +4483,13 @@ private:
                 }
 #endif
                 self->prompt_finished(started_generation, std::move(result), text);
-            },
-            [weak = weak_from_this(), started_generation](std::exception_ptr exception) {
-                if (co_spawn_failed(exception)) {
-                    if (const auto self = weak.lock()) {
-                        self->prompt_launch_failed(started_generation);
-                    }
+                co_return support::ExpectedVoid{};
+            });
+        std::move(bridged).start(
+            [weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
+                if (result) return;
+                if (const auto self = weak.lock()) {
+                    self->prompt_launch_failed(started_generation);
                 }
             });
     }

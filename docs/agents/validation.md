@@ -18,7 +18,12 @@ Run architecture tests when Owner Interface headers, include surfaces, dependenc
 
 ## Strict no-exception validation
 
-The no-exception core is staged behind the `CCH_STRICT_NO_EXCEPTIONS=ON` configure option until the migration tickets have removed the existing exception paths. The option adds `-fno-exceptions` to project-owned production and test targets and passes strict mode to the Parity Architecture Gate. It is not part of the default build yet.
+The strict no-exception core is the default build (ADR 0042; issue #487):
+`CCH_STRICT_NO_EXCEPTIONS=ON` is the default, adding `-fno-exceptions` to
+every project-owned production and test target and passing strict mode to the
+Parity Architecture Gate. Turning the option off is a deliberate deviation
+from the supported policy, intended only for local debugging, and emits a
+configure-time warning.
 
 Strict-mode evidence must include:
 
@@ -27,7 +32,14 @@ Strict-mode evidence must include:
 - no `std::exception_ptr` outside the manifest's private completion-bridge allowlist; and
 - no rethrow operation in the project source tree.
 
-The supported strict configurations are the normal GCC 16 Debug and Release builds, the Clang 22 Debug conformance build, and the ASan/UBSan and TSan Debug configurations, each with the same pinned vcpkg toolchain. A strict validation run configures with `-DCCH_STRICT_NO_EXCEPTIONS=ON`, builds the complete target graph, runs the architecture tests, and runs the full offline CTest suite. Do not use live provider credentials or network access. The default `scripts/bootstrap.sh --test` remains required while this ticket is staged.
+Because strict mode is the default, the default `scripts/bootstrap.sh --test`
+run and every supported configure already validate it. The supported strict
+configurations are the normal GCC 16 Debug and Release builds, the Clang 22
+Debug conformance build, and the ASan/UBSan and TSan Debug configurations,
+each with the same pinned vcpkg toolchain: every configure runs the Parity
+Architecture Gate fail-closed with strict evidence, every normal build runs
+the build-phase Gate, and the full offline CTest suite runs the no-exception
+target graph. Do not use live provider credentials or network access.
 
 ## Documentation-only changes
 

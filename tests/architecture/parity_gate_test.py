@@ -1238,6 +1238,30 @@ class DepfileRecorderTest(unittest.TestCase):
                 ],
             )
 
+    def test_records_clang_modmap_response_depfile(self):
+        # Clang/CMake passes the module mapper through a response file
+        # (`@<base>.modmap`); the depfile is still `<base>.ddi.d`.
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            source.write_text("int x;\n")
+            depfile = Path(tmp) / "model.cpp.o.ddi.d"
+            depfile.write_text("model.cpp.o.ddi: model.cpp\n")
+            command = (
+                f"clang++ -MD @model.cpp.o.modmap "
+                f"-o model.cpp.o -c {source}"
+            )
+            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            self.assertEqual(
+                document["entries"],
+                [
+                    {
+                        "source": str(source),
+                        "depfile": str(depfile),
+                        "digest": sha256_file(depfile),
+                    }
+                ],
+            )
+
     def test_records_traditional_output_depfile_without_module_mapper(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "model.cpp"

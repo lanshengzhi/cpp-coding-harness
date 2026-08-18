@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <exception>
 #include <new>
 
 namespace {
@@ -27,7 +28,10 @@ void* operator new(std::size_t size) {
     if (void* memory = std::malloc(size)) {
         return memory;
     }
-    throw std::bad_alloc();
+    // Test-only OOM fallback: the strict no-exception build (ADR 0042) has no
+    // throw channel, and allocation failure on this counting override is an
+    // unrecoverable invariant, so terminate.
+    std::terminate();
 }
 
 void* operator new[](std::size_t size) {
@@ -35,7 +39,7 @@ void* operator new[](std::size_t size) {
     if (void* memory = std::malloc(size)) {
         return memory;
     }
-    throw std::bad_alloc();
+    std::terminate();
 }
 
 void operator delete(void* memory) noexcept {

@@ -2095,6 +2095,8 @@ def _depfile_for_command(command: str, directory: str) -> Optional[str]:
 
     * With the GCC/CMake C++ modules pipeline (`-fmodule-mapper=<base>.modmap`)
       the dependency file is `<base>.ddi.d`.
+    * With the Clang/CMake C++ modules pipeline (`@<base>.modmap` response
+      file) the dependency file is the same `<base>.ddi.d`.
     * With an explicit `-MF <path>` the dependency file is that path.
     * Otherwise the traditional Ninja depfile is `<output>.d`, where `<output>`
       comes from `-o <output>`.
@@ -2113,6 +2115,11 @@ def _depfile_for_command(command: str, directory: str) -> Optional[str]:
         token = tokens[i]
         if token.startswith("-fmodule-mapper=") and not token.startswith("-fmodule-mapper=:"):
             mapper_base = token[len("-fmodule-mapper="):]
+        elif token.startswith("@") and token.endswith(".modmap"):
+            # Clang/CMake passes the module mapper through a response file
+            # (`@<base>.modmap`); the produced dependency file is still the
+            # `<base>.ddi.d` of the C++ modules pipeline.
+            mapper_base = token[1:]
         elif token == "-MF" and i + 1 < n:
             explicit_mf = tokens[i + 1]
         elif token == "-o" and i + 1 < n:

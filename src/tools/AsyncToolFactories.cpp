@@ -20,7 +20,10 @@
 #include <utility>
 
 namespace cch::tools {
-namespace {
+// The tool-argument DTOs must have external linkage: Glaze reflects them
+// through glz::detail::external, which Clang rejects for anonymous-namespace
+// types (issue #487; the Clang conformance build).
+namespace detail {
 
 struct ReadFileArgs {
     std::string path;
@@ -47,6 +50,10 @@ struct BashArgs {
     std::string command;
     std::optional<int> timeout;  // seconds, optional (no default = no timeout)
 };
+
+} // namespace detail
+
+namespace {
 
 [[nodiscard]] support::JsonValue typed_schema(
     std::string type,
@@ -156,7 +163,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
-    auto parsed = parse_invocation_args<ReadFileArgs>(invocation);
+    auto parsed = parse_invocation_args<detail::ReadFileArgs>(invocation);
     if (!parsed || parsed->path.empty()) {
         co_return error_result("invalid read arguments");
     }
@@ -212,7 +219,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> write
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
-    auto parsed = parse_invocation_args<WriteFileArgs>(invocation);
+    auto parsed = parse_invocation_args<detail::WriteFileArgs>(invocation);
     if (!parsed || parsed->path.empty()) {
         co_return error_result("invalid write arguments");
     }
@@ -235,7 +242,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
-    auto parsed = parse_invocation_args<EditArgs>(invocation);
+    auto parsed = parse_invocation_args<detail::EditArgs>(invocation);
     if (!parsed || parsed->path.empty()) {
         co_return error_result("invalid edit arguments: missing path");
     }
@@ -306,7 +313,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
     std::shared_ptr<BashSessionEnvironment> session_environment,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
-    auto parsed = parse_invocation_args<BashArgs>(invocation);
+    auto parsed = parse_invocation_args<detail::BashArgs>(invocation);
     if (!parsed || parsed->command.empty()) {
         co_return error_result("invalid bash arguments");
     }
