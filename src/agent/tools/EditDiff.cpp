@@ -1,4 +1,4 @@
-#include "tools/EditDiff.hpp"
+#include "agent/tools/EditDiff.hpp"
 
 #include <utf8proc.h>
 

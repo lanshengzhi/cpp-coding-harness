@@ -1,8 +1,8 @@
 #include "SessionFork.hpp"
 
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "harness/session/EntrySerializer.hpp"
-#include "harness/session/SessionJournal.hpp"
+#include "agent/harness/session/EntrySerializer.hpp"
+#include "agent/harness/session/SessionJournal.hpp"
 #include "support/Json.hpp"
 
 #include <fstream>

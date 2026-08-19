@@ -4,9 +4,9 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "agent/ToolArgumentPreparation.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "harness/RuntimeRoot.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "support/Json.hpp"
-#include "harness/OutputLimiter.hpp"
+#include "agent/harness/OutputLimiter.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>

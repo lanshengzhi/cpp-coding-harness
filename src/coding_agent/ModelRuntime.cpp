@@ -12,7 +12,7 @@
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "support/ExpectedMacros.hpp"
-#include "harness/Process.hpp"
+#include "agent/harness/Process.hpp"
 
 #include <map>
 #include <memory>

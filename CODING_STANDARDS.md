@@ -154,7 +154,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.3. Bounded output goes through the owning package's declared output/presentation budgets. No ad hoc `substr` truncation of model- or user-visible text, and process pipes continue draining after retained output reaches its bound (ADR 0040).
 
-10.4. Workspace containment lives in `src/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspaceFileSystem{FdWalk,Legacy,Pi,Temp}.cpp` (absolute-path and `..` rejection, symlink-escape checks, atomic writes). File tools route through it; no parallel path-validation logic.
+10.4. Workspace containment lives in `src/agent/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspaceFileSystem{FdWalk,Legacy,Pi,Temp}.cpp` (absolute-path and `..` rejection, symlink-escape checks, atomic writes). File tools route through it; no parallel path-validation logic.
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 

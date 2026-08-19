@@ -6,7 +6,7 @@ Status: Current policy record. This document records the scenario measurements t
 
 `RuntimeRoot` is a private, coding-agent-composed Runtime root. Ordinary bulk work (filesystem, Shell, model streaming) draws from the admitted budget; persistence, credential, terminal-completion, and Close control work draws from the reserved budget so ordinary traffic can never reject required progress. Mailbox drains process bounded batches and requeue themselves at the loop tail so one busy target cannot monopolize the loop. These limits are the policy knobs this document selects. They are not product interfaces: `harness::RuntimeLimits` is private to `cch_agent_core`.
 
-The chosen values live in one place — the `harness::RuntimeLimits` defaults in `src/harness/RuntimeRoot.hpp` — and the production CLI uses that default set unchanged (`kRuntimeLimits{}` in `AsyncCliRuntime.cpp`), so replacement Sessions reuse identical admission and mailbox-batch behavior.
+The chosen values live in one place — the `harness::RuntimeLimits` defaults in `src/agent/harness/RuntimeRoot.hpp` — and the production CLI uses that default set unchanged (`kRuntimeLimits{}` in `AsyncCliRuntime.cpp`), so replacement Sessions reuse identical admission and mailbox-batch behavior.
 
 ## Measurement environment
 

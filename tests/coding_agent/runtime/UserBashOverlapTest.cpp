@@ -3,7 +3,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/SessionResume.hpp>
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "harness/session/SessionJournalTestHooks.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ReleaseGate.hpp"

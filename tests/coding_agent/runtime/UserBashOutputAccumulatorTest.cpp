@@ -1,7 +1,7 @@
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
-#include "harness/OutputLimiter.hpp"
+#include "agent/harness/OutputLimiter.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

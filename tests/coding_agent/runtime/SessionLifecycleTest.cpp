@@ -3,7 +3,7 @@
 #include "ai/providers/FakeProvider.hpp"
 
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include "harness/session/SessionJournalTestHooks.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 

@@ -6,7 +6,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
-#include "harness/WorkspaceFileSystem.hpp"
+#include "agent/harness/WorkspaceFileSystem.hpp"
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
@@ -22,8 +22,8 @@
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
-#include "harness/compaction/Compaction.hpp"
-#include "harness/RuntimeRoot.hpp"
+#include "agent/harness/compaction/Compaction.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>

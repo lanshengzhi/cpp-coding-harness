@@ -12,7 +12,7 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include "harness/session/SessionJournalTestHooks.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include <cch/support/Error.hpp>
 #include "ai/providers/FakeProvider.hpp"
 #include "support/GatedChatProvider.hpp"

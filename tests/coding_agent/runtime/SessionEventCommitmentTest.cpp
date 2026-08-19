@@ -3,8 +3,8 @@
 #include "coding_agent/runtime/SessionPersistence.hpp"
 
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
-#include "harness/RuntimeRoot.hpp"
-#include "harness/session/SessionJournalTestHooks.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 

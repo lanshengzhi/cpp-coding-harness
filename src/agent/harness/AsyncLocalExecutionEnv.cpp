@@ -4,7 +4,7 @@
 #include "RuntimeRoot.hpp"
 #include "SyncLocalExecutionEnv.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "harness/Process.hpp"
+#include "agent/harness/Process.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

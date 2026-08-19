@@ -1,7 +1,7 @@
 #include "ShellResolver.hpp"
 
 #include "ai/BoundedText.hpp"
-#include "harness/OutputLimiter.hpp"
+#include "agent/harness/OutputLimiter.hpp"
 
 #include <pwd.h>
 #include <sys/types.h>

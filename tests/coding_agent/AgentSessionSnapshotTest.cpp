@@ -9,7 +9,7 @@
 
 #include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "harness/session/SessionJournalTestHooks.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>

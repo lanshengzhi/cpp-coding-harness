@@ -4,7 +4,7 @@
 #include <cch/ai/Provider.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "harness/RuntimeRoot.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>

@@ -1,4 +1,4 @@
-#include "harness/OutputLimiter.hpp"
+#include "agent/harness/OutputLimiter.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

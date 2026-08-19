@@ -3,7 +3,7 @@
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "ai/providers/FakeProvider.hpp"
-#include "harness/session/SessionJournalTestHooks.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"

@@ -2,11 +2,11 @@
 #include "../support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
-#include "harness/ShellResolver.hpp"
-#include "harness/SyncLocalExecutionEnv.hpp"
-#include "harness/RuntimeRoot.hpp"
+#include "agent/harness/ShellResolver.hpp"
+#include "agent/harness/SyncLocalExecutionEnv.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "harness/Process.hpp"
+#include "agent/harness/Process.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>

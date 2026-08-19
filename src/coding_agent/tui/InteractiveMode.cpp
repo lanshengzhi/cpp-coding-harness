@@ -13,7 +13,7 @@
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include "harness/WorkspaceFileSystem.hpp"
+#include "agent/harness/WorkspaceFileSystem.hpp"
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Fuzzy.hpp>
@@ -60,10 +60,10 @@
 #include "coding_agent/tui/TreeSelector.hpp"
 #include "coding_agent/tui/UserMessageSelector.hpp"
 #include "support/UniqueFd.hpp"
-#include "tools/TerminalText.hpp"
+#include "agent/tools/TerminalText.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include "harness/compaction/Compaction.hpp"
+#include "agent/harness/compaction/Compaction.hpp"
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 
 #include <cch/support/Error.hpp>

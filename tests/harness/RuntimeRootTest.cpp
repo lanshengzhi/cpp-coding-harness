@@ -1,4 +1,4 @@
-#include "harness/RuntimeRoot.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "support/PumpUntil.hpp"
 
 #include <catch2/catch_test_macros.hpp>

@@ -3,7 +3,7 @@
 #include <cch/agent/harness/ExecutionEnv.hpp>
 
 #include "WorkspaceFileSystem.hpp"
-#include "harness/Process.hpp"
+#include "agent/harness/Process.hpp"
 
 #include <memory>
 #include <vector>

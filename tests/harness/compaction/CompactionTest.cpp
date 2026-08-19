@@ -15,7 +15,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/glaze/AiJson.hpp"
-#include "harness/compaction/Compaction.hpp"
+#include "agent/harness/compaction/Compaction.hpp"
 #include <cch/ai/Models.hpp>
 #include "ai/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"

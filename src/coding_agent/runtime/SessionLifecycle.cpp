@@ -5,8 +5,8 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "harness/session/EntrySerializer.hpp"
-#include "harness/session/SessionJournal.hpp"
+#include "agent/harness/session/EntrySerializer.hpp"
+#include "agent/harness/session/SessionJournal.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cerrno>

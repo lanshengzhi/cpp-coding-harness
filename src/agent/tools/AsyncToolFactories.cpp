@@ -1,12 +1,12 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 
-#include "tools/EditDiff.hpp"
+#include "agent/tools/EditDiff.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include "ai/BoundedText.hpp"
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
-#include "harness/OutputLimiter.hpp"
-#include "tools/TerminalText.hpp"
+#include "agent/harness/OutputLimiter.hpp"
+#include "agent/tools/TerminalText.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>

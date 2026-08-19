@@ -1,4 +1,4 @@
-#include "harness/Process.hpp"
+#include "agent/harness/Process.hpp"
 
 #include "support/TempWorkspace.hpp"
 

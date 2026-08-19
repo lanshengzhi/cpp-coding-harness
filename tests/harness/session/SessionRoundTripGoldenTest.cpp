@@ -17,7 +17,7 @@
 
 #include "agent/AgentLoop.hpp"
 #include "ai/glaze/AiJson.hpp"
-#include "harness/session/EntrySerializer.hpp"
+#include "agent/harness/session/EntrySerializer.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ExpectedMacros.hpp"

@@ -1,9 +1,9 @@
 #include "LocalUserShell.hpp"
 
 #include "ai/AsyncResultBridge.hpp"
-#include "harness/ShellEnvironment.hpp"
-#include "harness/ShellResolver.hpp"
-#include "harness/Process.hpp"
+#include "agent/harness/ShellEnvironment.hpp"
+#include "agent/harness/ShellResolver.hpp"
+#include "agent/harness/Process.hpp"
 
 #include <chrono>
 #include <optional>

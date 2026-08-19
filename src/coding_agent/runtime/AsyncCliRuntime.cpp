@@ -8,7 +8,7 @@
 #include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionCwd.hpp"
-#include "harness/RuntimeRoot.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"

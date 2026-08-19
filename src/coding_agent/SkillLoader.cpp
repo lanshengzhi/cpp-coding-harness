@@ -3,7 +3,7 @@
 #include "coding_agent/GitIgnoreMatcher.hpp"
 #include "LoaderPath.hpp"
 #include "coding_agent/SkillFrontmatterParser.hpp"
-#include "harness/WorkspaceFileSystem.hpp"
+#include "agent/harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
 #include <array>

@@ -10,7 +10,7 @@
 // a complete spill file in the OS temporary directory.
 
 #include "support/UniqueFd.hpp"
-#include "harness/OutputLimiter.hpp"
+#include "agent/harness/OutputLimiter.hpp"
 
 #include <cch/support/Error.hpp>
 

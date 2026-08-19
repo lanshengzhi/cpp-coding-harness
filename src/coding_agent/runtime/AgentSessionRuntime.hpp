@@ -14,7 +14,7 @@
 #include "coding_agent/runtime/SessionPersistence.hpp"
 #include "coding_agent/runtime/SessionStats.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
-#include "harness/compaction/Compaction.hpp"
+#include "agent/harness/compaction/Compaction.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>

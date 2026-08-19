@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/support/Error.hpp>
-#include "harness/OutputLimiter.hpp"
+#include "agent/harness/OutputLimiter.hpp"
 
 #include <boost/asio/awaitable.hpp>
 

@@ -9,7 +9,7 @@
 #include "ai/providers/WebSocketTransport.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include <cch/support/Error.hpp>
-#include "harness/Process.hpp"
+#include "agent/harness/Process.hpp"
 
 #include <map>
 #include <memory>

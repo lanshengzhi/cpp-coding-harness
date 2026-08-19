@@ -19,7 +19,7 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
-#include "harness/WorkspaceFileSystem.hpp"
+#include "agent/harness/WorkspaceFileSystem.hpp"
 #include "ai/providers/FakeProvider.hpp"
 #include "support/ExpectedMacros.hpp"
 
