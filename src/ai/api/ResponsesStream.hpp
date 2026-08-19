@@ -13,11 +13,6 @@
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -559,79 +554,6 @@ inline void apply_message_phase_stop_reason(
         return std::unexpected(emitted.error());
     }
     return assistant;
-}
-
-[[nodiscard]] inline providers::ProviderFailure response_failure(
-    const providers::StreamResponse& response) {
-    ProviderHeaders headers;
-    headers.insert(response.head.headers.begin(), response.head.headers.end());
-    return providers::ProviderFailure{
-        .network_error = false,
-        .status = response.head.status_code,
-        .headers = std::move(headers),
-        .message = response.body,
-    };
-}
-
-[[nodiscard]] inline providers::ProviderFailure transport_failure(
-    const support::Error& error) {
-    return providers::ProviderFailure{
-        .network_error = error.code == support::ErrorCode::Network ||
-                         error.code == support::ErrorCode::Timeout,
-        .status = std::nullopt,
-        .headers = {},
-        .message = error.detail.empty() ? error.message : error.detail,
-    };
-}
-
-[[nodiscard]] inline boost::asio::awaitable<support::ExpectedVoid> wait_before_retry(
-    std::uint64_t delay_ms,
-    std::stop_token stop_token) {
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Request was aborted"));
-    }
-    if (delay_ms == 0) {
-        co_return support::ExpectedVoid{};
-    }
-    auto executor = co_await boost::asio::this_coro::executor;
-    boost::asio::steady_timer timer(executor, std::chrono::milliseconds{delay_ms});
-    std::stop_callback cancellation{stop_token, [&timer] { timer.cancel(); }};
-    boost::system::error_code error;
-    co_await timer.async_wait(boost::asio::redirect_error(
-        boost::asio::use_awaitable, error));
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Request was aborted"));
-    }
-    if (error) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Stream,
-            "Responses retry wait failed",
-            error.message()));
-    }
-    co_return support::ExpectedVoid{};
-}
-
-[[nodiscard]] inline boost::asio::awaitable<support::Expected<bool>> retry_provider_failure(
-    providers::ProviderFailure failure,
-    std::uint32_t attempt,
-    std::uint32_t max_retries,
-    std::uint64_t max_retry_delay_ms,
-    std::stop_token stop_token) {
-    if (attempt >= max_retries ||
-        !providers::is_retryable_provider_failure(failure)) {
-        co_return false;
-    }
-    CCH_TRY(delay, providers::provider_retry_delay_ms(
-        failure,
-        attempt,
-        max_retry_delay_ms,
-        current_timestamp_ms()));
-    CCH_TRY_VOID(co_await wait_before_retry(delay, stop_token));
-    co_return true;
 }
 
 } // namespace responses_stream

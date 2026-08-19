@@ -202,6 +202,7 @@ cch_parity_declare_target(
         src/ai/providers/KimiCatalog.cpp
         src/ai/providers/RetryPolicy.cpp
         src/ai/providers/SseParser.cpp
+        src/ai/providers/StreamExecutionEngine.cpp
         src/ai/utils/RetryClassifier.cpp
     DEPENDS
         cch_support
@@ -724,6 +725,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
         tests/ai/providers/FakeProviderTest.cpp
         tests/ai/providers/SseParserTest.cpp
+        tests/ai/providers/StreamExecutionEngineTest.cpp
 )
     target_include_directories(cch_tests_ai PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_ai

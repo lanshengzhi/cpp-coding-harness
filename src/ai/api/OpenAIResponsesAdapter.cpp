@@ -5,15 +5,11 @@
 #include "Termination.hpp"
 #include "UsageNormalization.hpp"
 #include "ai/providers/ProviderError.hpp"
-#include "ai/providers/RetryPolicy.hpp"
-#include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
+#include "ai/providers/StreamExecutionEngine.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
@@ -312,160 +308,51 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
     assistant.stop_reason = AssistantStopReason::Pending;
     assistant.timestamp = stream::current_timestamp_ms();
 
-    std::optional<support::Error> sink_failure;
-    AssistantEventSink guarded_sink =
-        [&sink, &sink_failure](const AssistantStreamEvent& event) -> support::ExpectedVoid {
-            auto emitted = providers::emit(sink, event);
-            if (!emitted) {
-                sink_failure = emitted.error();
-            }
-            return emitted;
+    struct AttemptState {
+        std::map<std::size_t, stream::OutputSlot> slots{};
+        bool saw_terminal{false};
+    };
+
+    auto attempt_state = std::make_shared<AttemptState>();
+
+    auto attempt_hook = [attempt_state, &model]() -> support::Expected<providers::SseEventHook> {
+        *attempt_state = AttemptState{};
+        return [attempt_state, &model](
+            const providers::SseEvent& event,
+            AssistantMessage& assistant,
+            AssistantEventSink& sink) -> support::ExpectedVoid {
+            return process_sse_event(
+                event,
+                model,
+                assistant,
+                attempt_state->slots,
+                sink,
+                attempt_state->saw_terminal);
         };
+    };
 
-    for (std::uint32_t attempt = 0;; ++attempt) {
-        providers::SseParser parser;
-        std::map<std::size_t, stream::OutputSlot> slots;
-        bool saw_terminal = false;
-        bool started = false;
-        bool saw_body = false;
-        std::optional<support::Error> handler_failure;
-
-        auto handle_chunk = [&](std::string_view bytes) -> support::ExpectedVoid {
-            saw_body = true;
-            if (auto emitted = stream::emit_start(guarded_sink, assistant, started); !emitted) {
-                handler_failure = emitted.error();
-                return std::unexpected(emitted.error());
-            }
-            auto events = parser.append(bytes);
-            if (!events) {
-                handler_failure = events.error();
-                return std::unexpected(events.error());
-            }
-            for (const auto& event : *events) {
-                auto processed = process_sse_event(
-                    event, model, assistant, slots, guarded_sink, saw_terminal);
-                if (!processed) {
-                    handler_failure = processed.error();
-                    return std::unexpected(processed.error());
-                }
-            }
-            return {};
-        };
-
-        auto response = co_await transport_->async_stream(request, handle_chunk);
-        if (!response) {
-            if (sink_failure) {
-                co_return std::unexpected(*sink_failure);
-            }
-            if (handler_failure) {
-                co_return stream::complete_failure(
-                    assistant, *handler_failure, guarded_sink);
-            }
-            if (response.error().code == support::ErrorCode::Cancelled ||
-                options.stop_token.stop_requested()) {
-                co_return stream::complete_failure(
-                    assistant,
-                    support::make_error(
-                        support::ErrorCode::Cancelled,
-                        "Request was aborted"),
-                    guarded_sink);
-            }
-            const auto failure = stream::transport_failure(response.error());
-            if (!saw_body) {
-                CCH_TRY(retry, co_await stream::retry_provider_failure(
-                    failure,
-                    attempt,
-                    options.max_retries,
-                    options.max_retry_delay_ms,
-                    options.stop_token));
-                if (retry) {
-                    continue;
-                }
-            }
-            co_return stream::complete_failure(
-                assistant,
-                normalize_transport_error(response.error()),
-                guarded_sink);
-        }
-
-        if (response->head.status_code < 200 || response->head.status_code >= 300) {
-            const auto failure = stream::response_failure(*response);
-            CCH_TRY(retry, co_await stream::retry_provider_failure(
-                failure,
-                attempt,
-                options.max_retries,
-                options.max_retry_delay_ms,
-                options.stop_token));
-            if (retry) {
-                continue;
-            }
-            co_return stream::complete_failure(
-                assistant,
-                stream::stream_error(
-                    "OpenAI Responses request failed with HTTP " +
-                        std::to_string(response->head.status_code),
-                    response->body),
-                guarded_sink);
-        }
-
-        if (!started) {
-            if (auto emitted = stream::emit_start(guarded_sink, assistant, started); !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-        }
-        auto final_event = parser.finish();
-        if (!final_event) {
-            co_return stream::complete_failure(
-                assistant, final_event.error(), guarded_sink);
-        }
-        if (*final_event) {
-            if (auto processed = process_sse_event(
-                    **final_event,
-                    model,
-                    assistant,
-                    slots,
-                    guarded_sink,
-                    saw_terminal);
-                !processed) {
-                if (sink_failure) {
-                    co_return std::unexpected(*sink_failure);
-                }
-                co_return stream::complete_failure(
-                    assistant, processed.error(), guarded_sink);
-            }
-        }
-        if (options.stop_token.stop_requested()) {
-            co_return stream::complete_failure(
-                assistant,
-                support::make_error(
-                    support::ErrorCode::Cancelled,
-                    "Request was aborted"),
-                guarded_sink);
-        }
-        // pi's shared processor guard: a stream that ends without a terminal
-        // response event is an error (openai-responses-shared.ts); this is
-        // the wording pi observably surfaces, before the wrapper's defensive
-        // pending check (openai-responses.ts) which is unreachable in pi.
-        if (!saw_terminal) {
-            co_return stream::complete_failure(
-                assistant,
-                stream::stream_error(
-                    "OpenAI Responses stream ended before a terminal response event"),
-                guarded_sink);
+    auto finalize_hook = [attempt_state](AssistantMessage& assistant) -> support::ExpectedVoid {
+        if (!attempt_state->saw_terminal) {
+            return std::unexpected(stream::stream_error(
+                "OpenAI Responses stream ended before a terminal response event"));
         }
         if (assistant.stop_reason == AssistantStopReason::Error) {
-            co_return stream::complete_failure(
-                assistant,
-                stream::stream_error(assistant.error_message.value_or(
-                    "OpenAI Responses request failed")),
-                guarded_sink);
+            return std::unexpected(stream::stream_error(
+                assistant.error_message.value_or("OpenAI Responses request failed")));
         }
-        CCH_TRY_VOID(providers::emit(guarded_sink, AssistantDoneEvent{
-            .reason = assistant.stop_reason,
-            .message = assistant,
-        }));
-        co_return assistant;
-    }
+        return {};
+    };
+
+    co_return co_await providers::execute_sse_stream(providers::SseStreamExecutionOptions{
+        .protocol_name = "OpenAI Responses",
+        .request = request,
+        .transport = *transport_,
+        .options = options,
+        .initial_assistant = std::move(assistant),
+        .sink = std::move(sink),
+        .attempt_hook = std::move(attempt_hook),
+        .finalize_hook = std::move(finalize_hook),
+    });
 }
 
 } // namespace cch::ai::api

@@ -1,19 +1,15 @@
 #include "AnthropicMessagesAdapter.hpp"
 
 #include "MessageConversion.hpp"
+#include "PartialJson.hpp"
 #include "Termination.hpp"
 #include "UsageNormalization.hpp"
 #include "ai/providers/ProviderError.hpp"
-#include "ai/providers/RetryPolicy.hpp"
-#include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
-#include "PartialJson.hpp"
+#include "ai/providers/StreamExecutionEngine.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
@@ -198,18 +194,6 @@ template <typename Headers>
         providers::bounded_provider_error_detail(std::move(detail)));
 }
 
-[[nodiscard]] support::Error normalize_transport_error(const support::Error& error) {
-    if (error.code == support::ErrorCode::Cancelled) {
-        return support::make_error(support::ErrorCode::Cancelled, "Request was aborted");
-    }
-    if (error.code == support::ErrorCode::Unknown) {
-        return error;
-    }
-    return stream_error(
-        error.message.empty() ? "Anthropic Messages request failed" : error.message,
-        error.detail);
-}
-
 [[nodiscard]] support::Expected<support::JsonValue> parse_event_json(
     const providers::SseEvent& event) {
     if (auto parsed = support::read_json(event.data)) {
@@ -248,17 +232,6 @@ template <typename Headers>
         update.reasoning = integer_member(*output_details, "thinking_tokens");
     }
     return update;
-}
-
-[[nodiscard]] support::ExpectedVoid emit_start(
-    AssistantEventSink& sink,
-    AssistantMessage& assistant,
-    bool& started) {
-    if (started) {
-        return {};
-    }
-    started = true;
-    return providers::emit(sink, AssistantStartEvent{.partial = assistant});
 }
 
 [[nodiscard]] support::ExpectedVoid start_content_block(
@@ -563,192 +536,6 @@ template <typename Headers>
         termination);
 }
 
-struct AnthropicAttemptState {
-    providers::SseParser parser;
-    std::map<std::size_t, BlockSlot> slots;
-    bool started{false};
-    bool saw_body{false};
-    bool saw_message_start{false};
-    bool saw_message_stop{false};
-    std::optional<TerminationResult> termination{std::nullopt};
-    std::optional<support::Error> handler_failure{std::nullopt};
-};
-
-[[nodiscard]] support::ExpectedVoid handle_body_chunk(
-    std::string_view bytes,
-    const Model& model,
-    AssistantMessage& assistant,
-    AssistantEventSink& sink,
-    AnthropicAttemptState& state) {
-    state.saw_body = true;
-    if (auto emitted = emit_start(sink, assistant, state.started); !emitted) {
-        state.handler_failure = emitted.error();
-        return std::unexpected(emitted.error());
-    }
-    auto events = state.parser.append(bytes);
-    if (!events) {
-        state.handler_failure = events.error();
-        return std::unexpected(events.error());
-    }
-    for (const auto& event : *events) {
-        auto processed = process_sse_event(
-            event,
-            model,
-            assistant,
-            state.slots,
-            sink,
-            state.saw_message_start,
-            state.saw_message_stop,
-            state.termination);
-        if (!processed) {
-            state.handler_failure = processed.error();
-            return std::unexpected(processed.error());
-        }
-    }
-    return {};
-}
-
-[[nodiscard]] support::ExpectedVoid finish_event_parser(
-    const Model& model,
-    AssistantMessage& assistant,
-    AssistantEventSink& sink,
-    AnthropicAttemptState& state) {
-    auto final_event = state.parser.finish();
-    if (!final_event) {
-        return std::unexpected(final_event.error());
-    }
-    if (!*final_event) {
-        return {};
-    }
-    return process_sse_event(
-        **final_event,
-        model,
-        assistant,
-        state.slots,
-        sink,
-        state.saw_message_start,
-        state.saw_message_stop,
-        state.termination);
-}
-
-void finalize_partial_tools(AssistantMessage& assistant) {
-    for (auto& content : assistant.content) {
-        auto* tool = std::get_if<ToolCallContent>(&content);
-        if (!tool) {
-            continue;
-        }
-        tool->arguments = parse_streaming_json(tool->raw_arguments);
-        tool->arguments_valid = true;
-        tool->argument_error = std::nullopt;
-    }
-}
-
-[[nodiscard]] support::Expected<AssistantMessage> complete_failure(
-    AssistantMessage assistant,
-    support::Error failure,
-    AssistantEventSink& sink) {
-    finalize_partial_tools(assistant);
-    const auto aborted = failure.code == support::ErrorCode::Cancelled;
-    assistant.stop_reason = aborted
-        ? AssistantStopReason::Aborted
-        : AssistantStopReason::Error;
-    if (aborted) {
-        assistant.error_message = "Request was aborted";
-        failure = support::make_error(support::ErrorCode::Cancelled, *assistant.error_message);
-    } else {
-        std::string diagnostic = failure.message;
-        if (!failure.detail.empty() && diagnostic.find(failure.detail) == std::string::npos) {
-            if (!diagnostic.empty()) {
-                diagnostic += ": ";
-            }
-            diagnostic += failure.detail;
-        }
-        assistant.error_message = providers::bounded_provider_error_detail(
-            std::move(diagnostic));
-        failure = support::make_error(support::ErrorCode::Stream, *assistant.error_message);
-    }
-    auto emitted = providers::emit(sink, AssistantErrorEvent{
-        .reason = assistant.stop_reason,
-        .error = assistant,
-        .failure = std::move(failure),
-    });
-    if (!emitted) {
-        return std::unexpected(emitted.error());
-    }
-    return assistant;
-}
-
-[[nodiscard]] providers::ProviderFailure response_failure(
-    const providers::StreamResponse& response) {
-    ProviderHeaders headers;
-    headers.insert(response.head.headers.begin(), response.head.headers.end());
-    return providers::ProviderFailure{
-        .network_error = false,
-        .status = response.head.status_code,
-        .headers = std::move(headers),
-        .message = response.body,
-    };
-}
-
-[[nodiscard]] providers::ProviderFailure transport_failure(const support::Error& error) {
-    return providers::ProviderFailure{
-        .network_error = error.code == support::ErrorCode::Network ||
-                         error.code == support::ErrorCode::Timeout,
-        .status = std::nullopt,
-        .headers = {},
-        .message = error.detail.empty() ? error.message : error.detail,
-    };
-}
-
-[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> wait_before_retry(
-    std::uint64_t delay_ms,
-    std::stop_token stop_token) {
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Request was aborted"));
-    }
-    if (delay_ms == 0) {
-        co_return support::ExpectedVoid{};
-    }
-    auto executor = co_await boost::asio::this_coro::executor;
-    boost::asio::steady_timer timer(executor, std::chrono::milliseconds{delay_ms});
-    std::stop_callback cancellation{stop_token, [&timer] { timer.cancel(); }};
-    boost::system::error_code error;
-    co_await timer.async_wait(boost::asio::redirect_error(
-        boost::asio::use_awaitable, error));
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Request was aborted"));
-    }
-    if (error) {
-        co_return std::unexpected(stream_error(
-            "Anthropic Messages retry wait failed",
-            error.message()));
-    }
-    co_return support::ExpectedVoid{};
-}
-
-[[nodiscard]] boost::asio::awaitable<support::Expected<bool>> retry_provider_failure(
-    providers::ProviderFailure failure,
-    std::uint32_t attempt,
-    std::uint32_t max_retries,
-    std::uint64_t max_retry_delay_ms,
-    std::stop_token stop_token) {
-    if (attempt >= max_retries ||
-        !providers::is_retryable_provider_failure(failure)) {
-        co_return false;
-    }
-    CCH_TRY(delay, providers::provider_retry_delay_ms(
-        failure,
-        attempt,
-        max_retry_delay_ms,
-        current_timestamp_ms()));
-    CCH_TRY_VOID(co_await wait_before_retry(delay, stop_token));
-    co_return true;
-}
-
 } // namespace
 
 AnthropicMessagesAdapter::AnthropicMessagesAdapter(
@@ -798,132 +585,65 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
     assistant.stop_reason = AssistantStopReason::Pending;
     assistant.timestamp = current_timestamp_ms();
 
-    std::optional<support::Error> sink_failure;
-    AssistantEventSink guarded_sink =
-        [&sink, &sink_failure](const AssistantStreamEvent& event) -> support::ExpectedVoid {
-            auto emitted = providers::emit(sink, event);
-            if (!emitted) {
-                sink_failure = emitted.error();
-            }
-            return emitted;
+    struct AttemptState {
+        std::map<std::size_t, BlockSlot> slots{};
+        bool saw_message_start{false};
+        bool saw_message_stop{false};
+        std::optional<TerminationResult> termination{std::nullopt};
+    };
+
+    auto attempt_state = std::make_shared<AttemptState>();
+
+    auto attempt_hook = [attempt_state, &model]() -> support::Expected<providers::SseEventHook> {
+        *attempt_state = AttemptState{};
+        return [attempt_state, &model](
+            const providers::SseEvent& event,
+            AssistantMessage& assistant,
+            AssistantEventSink& sink) -> support::ExpectedVoid {
+            return process_sse_event(
+                event,
+                model,
+                assistant,
+                attempt_state->slots,
+                sink,
+                attempt_state->saw_message_start,
+                attempt_state->saw_message_stop,
+                attempt_state->termination);
         };
+    };
 
-    for (std::uint32_t attempt = 0;; ++attempt) {
-        AnthropicAttemptState attempt_state;
-        auto response = co_await transport_->async_stream(
-            request,
-            [&](std::string_view bytes) -> support::ExpectedVoid {
-                return handle_body_chunk(
-                    bytes,
-                    model,
-                    assistant,
-                    guarded_sink,
-                    attempt_state);
-            });
-        if (!response) {
-            if (sink_failure) {
-                co_return std::unexpected(*sink_failure);
-            }
-            if (attempt_state.handler_failure) {
-                co_return complete_failure(
-                    assistant, *attempt_state.handler_failure, guarded_sink);
-            }
-            if (response.error().code == support::ErrorCode::Cancelled ||
-                options.stop_token.stop_requested()) {
-                co_return complete_failure(
-                    assistant,
-                    support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
-                    guarded_sink);
-            }
-            const auto failure = transport_failure(response.error());
-            if (!attempt_state.saw_body) {
-                CCH_TRY(retry, co_await retry_provider_failure(
-                    failure,
-                    attempt,
-                    options.max_retries,
-                    options.max_retry_delay_ms,
-                    options.stop_token));
-                if (retry) {
-                    continue;
-                }
-            }
-            co_return complete_failure(
-                assistant,
-                normalize_transport_error(response.error()),
-                guarded_sink);
+    auto finalize_hook = [attempt_state](AssistantMessage& assistant) -> support::ExpectedVoid {
+        if (!attempt_state->saw_message_stop) {
+            return std::unexpected(stream_error(attempt_state->saw_message_start
+                ? "Anthropic stream ended before message_stop"
+                : "Anthropic stream ended without message_stop"));
         }
-
-        if (response->head.status_code < 200 || response->head.status_code >= 300) {
-            const auto failure = response_failure(*response);
-            CCH_TRY(retry, co_await retry_provider_failure(
-                failure,
-                attempt,
-                options.max_retries,
-                options.max_retry_delay_ms,
-                options.stop_token));
-            if (retry) {
-                continue;
-            }
-            co_return complete_failure(
-                assistant,
-                stream_error(
-                    "Anthropic Messages request failed with HTTP " +
-                        std::to_string(response->head.status_code),
-                    response->body),
-                guarded_sink);
-        }
-
-        if (!attempt_state.started) {
-            if (auto emitted = emit_start(
-                    guarded_sink, assistant, attempt_state.started);
-                !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-        }
-        if (auto finished = finish_event_parser(
-                model, assistant, guarded_sink, attempt_state);
-            !finished) {
-            if (sink_failure) {
-                co_return std::unexpected(*sink_failure);
-            }
-            co_return complete_failure(assistant, finished.error(), guarded_sink);
-        }
-        if (options.stop_token.stop_requested()) {
-            co_return complete_failure(
-                assistant,
-                support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
-                guarded_sink);
-        }
-        if (!attempt_state.saw_message_stop) {
-            co_return complete_failure(
-                assistant,
-                stream_error(attempt_state.saw_message_start
-                    ? "Anthropic stream ended before message_stop"
-                    : "Anthropic stream ended without message_stop"),
-                guarded_sink);
-        }
-        // pi: a stream whose accumulation ends still-pending is an error.
         if (assistant.stop_reason == AssistantStopReason::Pending) {
-            co_return complete_failure(
-                assistant,
-                stream_error("Anthropic stream ended without a stop reason"),
-                guarded_sink);
+            return std::unexpected(stream_error(
+                "Anthropic stream ended without a stop reason"));
         }
-        if (attempt_state.termination->reason == AssistantStopReason::Error) {
-            co_return complete_failure(
-                assistant,
-                stream_error(attempt_state.termination->error_message.value_or(
-                    "Anthropic Messages request failed")),
-                guarded_sink);
+        if (attempt_state->termination && attempt_state->termination->reason == AssistantStopReason::Error) {
+            assistant.stop_reason = AssistantStopReason::Error;
+            return std::unexpected(stream_error(
+                attempt_state->termination->error_message.value_or("Anthropic Messages request failed")));
         }
-        assistant.stop_reason = attempt_state.termination->reason;
-        assistant.error_message = std::nullopt;
-        CCH_TRY_VOID(providers::emit(guarded_sink, AssistantDoneEvent{
-            .reason = assistant.stop_reason,
-            .message = assistant,
-        }));
-        co_return assistant;
-    }
+        if (attempt_state->termination) {
+            assistant.stop_reason = attempt_state->termination->reason;
+            assistant.error_message = std::nullopt;
+        }
+        return {};
+    };
+
+    co_return co_await providers::execute_sse_stream(providers::SseStreamExecutionOptions{
+        .protocol_name = "Anthropic Messages",
+        .request = request,
+        .transport = *transport_,
+        .options = options,
+        .initial_assistant = std::move(assistant),
+        .sink = std::move(sink),
+        .attempt_hook = std::move(attempt_hook),
+        .finalize_hook = std::move(finalize_hook),
+    });
 }
 
 } // namespace cch::ai::api
