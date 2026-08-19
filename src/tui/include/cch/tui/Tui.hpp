@@ -23,6 +23,7 @@ using TuiRenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 
 namespace detail {
 class InputDecoder;
+class OverlayCompositor;
 } // namespace detail
 
 class Tui final {
@@ -63,11 +64,6 @@ public:
     [[nodiscard]] support::ExpectedVoid restore_overlay(Overlay* overlay);
 
 private:
-    struct OverlayFocusEntry {
-        Overlay* overlay; // aliases an element owned by overlays_.
-        Component* previous; // null or aliases an element owned by children_ or overlays_.
-    };
-
     struct ActiveImage {
         TerminalImageHandle handle;
         CellRegion region;
@@ -76,17 +72,7 @@ private:
     };
 
     [[nodiscard]] bool owns(const Component* component) const;
-    [[nodiscard]] bool owns_overlay(const Overlay* overlay) const;
     [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions);
-    [[nodiscard]] RenderResult materialize_images(
-        RenderResult output,
-        const TerminalCapabilities& capabilities,
-        std::size_t width,
-        std::size_t available_rows) const;
-    [[nodiscard]] support::ExpectedVoid composite_overlays(
-        TerminalDimensions dimensions,
-        const TerminalCapabilities& capabilities,
-        RenderResult& output);
     [[nodiscard]] support::ExpectedVoid remove_active_images();
     [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
     [[nodiscard]] support::ExpectedVoid remove_stale_images(
@@ -97,9 +83,6 @@ private:
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
     void apply_focus(Component* component);
-    void remember_overlay_focus(Overlay* overlay);
-    [[nodiscard]] Component* overlay_return_focus(const Overlay* overlay) const;
-    void forget_overlay_focus(Overlay* overlay, Component* replacement);
     [[nodiscard]] bool focus_target_available(Component* component) const;
     void fallback_focus();
     [[nodiscard]] Focusable* find_focusable_target();
@@ -108,11 +91,10 @@ private:
     Terminal& terminal_; // must outlive this Tui.
     std::recursive_mutex mutex_;
     std::unique_ptr<detail::InputDecoder> input_decoder_;
+    std::unique_ptr<detail::OverlayCompositor> compositor_;
     TuiRenderRequestSink render_request_sink_;
     std::vector<std::unique_ptr<Component>> children_;
-    std::vector<std::unique_ptr<Overlay>> overlays_;
-    std::vector<OverlayFocusEntry> overlay_focus_history_;
-    Component* focused_{nullptr}; // Null or aliases an element owned by children_ or overlays_.
+    Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
     bool started_{false};
     bool first_render_{true};
     bool pending_render_{false};

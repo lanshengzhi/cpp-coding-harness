@@ -149,6 +149,7 @@ cch_parity_declare_target(
         src/tui/Loader.cpp
         src/tui/Markdown.cpp
         src/tui/Overlay.cpp
+        src/tui/OverlayCompositor.cpp
         src/tui/ProcessTerminal.cpp
         src/tui/SelectList.cpp
         src/tui/SettingsList.cpp
@@ -675,6 +676,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
+        tests/tui/OverlayCompositorTest.cpp
         tests/tui/PiTuiDifferentialTest.cpp
         tests/tui/ProcessTerminalTest.cpp
         tests/tui/RenderDifferentialTest.cpp
