@@ -6,7 +6,8 @@
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
 #include "ai/AsyncResultBridge.hpp"
-#include "ai/providers/KimiProvider.hpp"
+#include "ai/providers/ComposedProvider.hpp"
+#include "ai/providers/KimiCatalog.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -183,7 +184,8 @@ struct LoginHarness {
         models = std::make_unique<ai::Models>(storage, auth_context);
         ai::ProviderAuth provider_auth;
         provider_auth.oauth = ai::auth::make_kimi_coding_oauth_auth(http);
-        auto provider = ai::providers::make_kimi_coding_provider(
+        auto provider = ai::providers::make_composed_provider(
+            "kimi-coding", "Kimi For Coding", ai::providers::kimi_coding_models(),
             std::move(provider_auth), nullptr);
         REQUIRE(models->set_provider(std::move(provider)));
     }

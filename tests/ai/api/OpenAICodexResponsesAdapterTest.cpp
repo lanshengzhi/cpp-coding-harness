@@ -1,7 +1,8 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
 #include "ai/providers/StreamTransport.hpp"
-#include "support/AdapterProviderFixture.hpp"
+#include "ai/providers/ComposedProvider.hpp"
+#include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
@@ -90,8 +91,10 @@ struct CodexHarness {
     harness.models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    auto provider = tests::make_openai_codex_responses_test_provider(
-        "openai-codex", {model}, {}, harness.http, harness.ws, cache_config);
+    auto provider = ai::providers::make_composed_provider(
+        "openai-codex", "openai-codex", {model},
+        ai::providers::make_env_api_key_auth("API key", {}),
+        harness.http, harness.ws, cache_config);
     auto registered = harness.models->set_provider(std::move(provider));
     REQUIRE(registered);
     return harness;

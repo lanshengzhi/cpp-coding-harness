@@ -1,8 +1,8 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
 #include "ai/providers/StreamTransport.hpp"
+#include "ai/providers/ComposedProvider.hpp"
 #include "ai/providers/KimiCatalog.hpp"
-#include "ai/providers/KimiProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
@@ -86,7 +86,8 @@ struct RunResult {
     auto models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    auto provider = ai::providers::make_kimi_coding_provider(
+    auto provider = ai::providers::make_composed_provider(
+        "kimi-coding", "Kimi For Coding", ai::providers::kimi_coding_models(),
         header_auth(), transport);
     if (auto registered = models->set_provider(std::move(provider)); !registered) {
         return nullptr;

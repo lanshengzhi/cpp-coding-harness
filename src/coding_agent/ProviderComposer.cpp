@@ -1,7 +1,6 @@
 #include "ProviderComposer.hpp"
 
-#include "ai/api/AnthropicMessagesAdapter.hpp"
-#include "ai/api/OpenAIResponsesAdapter.hpp"
+#include "ai/providers/ComposedProvider.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
@@ -695,78 +694,6 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     return auth;
 }
 
-/// Composed long-lived Provider for one provider identity: built-in models
-/// overlaid by models.json plus the three privately registered API adapters.
-class ComposedProvider final : public ai::Provider {
-public:
-    ComposedProvider(
-        std::string provider_id,
-        std::string name,
-        std::vector<ai::Model> models,
-        ai::ProviderAuth auth,
-        std::shared_ptr<ai::providers::StreamTransport> http_transport,
-        std::shared_ptr<ai::providers::WebSocketTransport> ws_transport,
-        ai::providers::CodexWebSocketCacheConfig cache_config)
-        : provider_id_(std::move(provider_id)),
-          name_(std::move(name)),
-          models_(std::move(models)),
-          auth_(std::move(auth)),
-          responses_adapter_(http_transport),
-          // The codex adapter takes the HTTP transport by value for its SSE
-          // fallback; the anthropic adapter then takes the original so every
-          // scoped adapter owns a usable transport (the anthropic adapter
-          // must never receive the moved-from parameter).
-          codex_adapter_(http_transport, std::move(ws_transport), cache_config),
-          anthropic_adapter_(std::move(http_transport)) {}
-
-    [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
-    [[nodiscard]] std::string_view name() const noexcept override { return name_; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
-
-    [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
-        return ai::detail::make_model_stream(
-            [this,
-             model = std::move(model),
-             context = std::move(context),
-             options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                if (model.api == "openai-responses") {
-                    CCH_TRY(message, co_await responses_adapter_.stream(
-                        model, context, std::move(options), std::move(sink)));
-                    co_return message;
-                }
-                if (model.api == "openai-codex-responses") {
-                    CCH_TRY(message, co_await codex_adapter_.stream(
-                        model, context, std::move(options), std::move(sink)));
-                    co_return message;
-                }
-                if (model.api == "anthropic-messages") {
-                    CCH_TRY(message, co_await anthropic_adapter_.stream(
-                        model, context, std::move(options), std::move(sink)));
-                    co_return message;
-                }
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Stream,
-                    "Provider " + provider_id_ +
-                        " has no API implementation for \"" + model.api + "\""));
-            });
-    }
-
-private:
-    std::string provider_id_;
-    std::string name_;
-    std::vector<ai::Model> models_;
-    ai::ProviderAuth auth_;
-    ai::api::OpenAIResponsesAdapter responses_adapter_;
-    ai::api::OpenAICodexResponsesAdapter codex_adapter_;
-    ai::api::AnthropicMessagesAdapter anthropic_adapter_;
-};
-
 } // namespace
 
 std::map<std::string, std::shared_ptr<ai::Provider>, std::less<>>
@@ -777,7 +704,7 @@ builtin_providers(const ProviderComposerOptions& options) {
     codex_auth.oauth = ai::auth::make_openai_codex_oauth_auth();
     providers.emplace(
         "openai-codex",
-        std::make_shared<ComposedProvider>(
+        ai::providers::make_composed_provider(
             "openai-codex",
             "OpenAI Codex",
             ai::providers::codex_models(),
@@ -793,7 +720,7 @@ builtin_providers(const ProviderComposerOptions& options) {
     kimi_auth.oauth = ai::auth::make_kimi_coding_oauth_auth();
     providers.emplace(
         "kimi-coding",
-        std::make_shared<ComposedProvider>(
+        ai::providers::make_composed_provider(
             "kimi-coding",
             "Kimi For Coding",
             ai::providers::kimi_coding_models(),
@@ -846,7 +773,7 @@ std::shared_ptr<ai::Provider> compose_provider(
         error = auth_result.error().message;
         return base;
     }
-    auto provider = std::make_shared<ComposedProvider>(
+    auto provider = ai::providers::make_composed_provider(
         std::string{provider_id},
         std::move(name),
         std::move(models),
