@@ -3,14 +3,16 @@
 #include <cch/tui/Utils.hpp>
 
 #include "tui/InteractionUtils.hpp"
+#include "tui/TextBuffer.hpp"
 #include "tui/UnicodeWidth.hpp"
-#include "tui/WordNavigation.hpp"
 
 #include <cch/support/Error.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stop_token>
@@ -30,14 +32,6 @@ namespace {
 
 /// History depth cap matching pi's addToHistory.
 constexpr std::size_t kMaxHistoryEntries = 100;
-
-struct Segment {
-    std::string text;
-    std::optional<std::size_t> paste_id;
-};
-
-using Line = std::vector<Segment>;
-using Document = std::vector<Line>;
 
 /// U+2500 BOX DRAWINGS LIGHT HORIZONTAL repeated to the width (the editor
 /// border rule, matching pi's `borderColor("─").repeat(width)`).
@@ -64,36 +58,6 @@ using Document = std::vector<Line>;
     return normalized;
 }
 
-[[nodiscard]] std::vector<Line> segment_lines(std::string_view text) {
-    std::vector<Line> result(1);
-    std::size_t start = 0;
-    while (start <= text.size()) {
-        const auto newline = text.find('\n', start);
-        const auto end = newline == std::string_view::npos ? text.size() : newline;
-        auto graphemes = detail::split_graphemes(text.substr(start, end - start));
-        for (auto& grapheme : graphemes) result.back().push_back({.text = std::move(grapheme), .paste_id = std::nullopt});
-        if (newline == std::string_view::npos) break;
-        result.emplace_back();
-        start = newline + 1;
-    }
-    return result;
-}
-
-[[nodiscard]] std::string line_text(const Line& line) {
-    std::string text;
-    for (const auto& segment : line) text += segment.text;
-    return text;
-}
-
-[[nodiscard]] std::string document_text(const Document& document) {
-    std::string text;
-    for (std::size_t index = 0; index < document.size(); ++index) {
-        if (index != 0) text += '\n';
-        text += line_text(document[index]);
-    }
-    return text;
-}
-
 [[nodiscard]] std::string trim_outer_whitespace(std::string text) {
     const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
         return std::isspace(value) != 0;
@@ -108,29 +72,13 @@ using Document = std::vector<Line>;
 } // namespace
 
 struct Editor::Impl {
-    struct Snapshot {
-        Document document;
-        EditorCursor cursor;
-        std::map<std::size_t, std::string> pastes;
-        std::size_t paste_counter{0};
-    };
-
     EditorOptions options;
     EditorChangeSink on_change;
     EditorSubmitSink on_submit;
     EditorTheme theme;
-    Document document{1};
-    EditorCursor cursor;
-    std::map<std::size_t, std::string> pastes;
-    std::size_t paste_counter{0};
-    std::vector<Snapshot> undo;
-    struct KillEntry {
-        Document document;
-        std::map<std::size_t, std::string> pastes;
-    };
-    std::vector<KillEntry> kill_ring;
-    std::optional<std::size_t> last_yank_ring_index;
-    std::optional<std::pair<EditorCursor, EditorCursor>> last_yank_range;
+
+    detail::TextBuffer buffer{detail::TextBufferOptions{.multiline = true, .enable_paste_markers = true}};
+
     std::unique_ptr<AutocompleteProvider> autocomplete_provider;
     std::vector<AutocompleteItem> autocomplete;
     std::string autocomplete_prefix;
@@ -166,8 +114,7 @@ struct Editor::Impl {
     std::vector<std::string> history;
     std::optional<std::size_t> history_index;
     struct HistoryDraft {
-        Document document;
-        EditorCursor cursor;
+        detail::TextBuffer buffer;
     };
     std::optional<HistoryDraft> history_draft;
     bool focused{false};
@@ -178,14 +125,9 @@ struct Editor::Impl {
     std::optional<JumpDirection> jump_direction;
     std::optional<support::Error> callback_error;
 
-    void clamp_cursor() {
-        if (document.empty()) document.emplace_back();
-        cursor.line = std::min(cursor.line, document.size() - 1);
-        cursor.column = std::min(cursor.column, document[cursor.line].size());
-    }
-
-    [[nodiscard]] Snapshot snapshot() const {
-        return {.document = document, .cursor = cursor, .pastes = pastes, .paste_counter = paste_counter};
+    [[nodiscard]] EditorCursor cursor() const {
+        const auto cur = buffer.cursor();
+        return EditorCursor{.line = cur.line, .column = cur.column};
     }
 
     /// Rows reserved for the optional top/bottom border (pi's editor always
@@ -221,18 +163,12 @@ struct Editor::Impl {
         return indicator + horizontal_rule(width - indicator_width);
     }
 
-    void push_undo() {
-        undo.push_back(snapshot());
-        last_yank_ring_index.reset();
-        last_yank_range.reset();
-    }
-
     void notify_change() {
         if (!on_change) return;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
-            if (auto result = on_change(document_text(document)); !result) {
+            if (auto result = on_change(buffer.text()); !result) {
                 // An explicit change-sink failure is a bounded callback
                 // diagnostic (ADR 0017); it never vetoes editing.
                 callback_error = std::move(result.error());
@@ -248,46 +184,23 @@ struct Editor::Impl {
     }
 
     [[nodiscard]] std::string text() const {
-        return document_text(document);
+        return buffer.text();
     }
 
     [[nodiscard]] std::string expanded() const {
-        std::string result;
-        for (std::size_t line_index = 0; line_index < document.size(); ++line_index) {
-            if (line_index != 0) result += '\n';
-            for (const auto& segment : document[line_index]) {
-                if (segment.paste_id) {
-                    const auto found = pastes.find(*segment.paste_id);
-                    result += found == pastes.end() ? segment.text : found->second;
-                } else {
-                    result += segment.text;
-                }
-            }
-        }
-        return result;
-    }
-
-    [[nodiscard]] std::size_t byte_offset_of(const Line& line, std::size_t grapheme_column) const {
-        std::size_t bytes = 0;
-        for (std::size_t index = 0; index < std::min(grapheme_column, line.size()); ++index) {
-            bytes += line[index].text.size();
-        }
-        return bytes;
+        return buffer.expanded_text();
     }
 
     [[nodiscard]] std::size_t cursor_byte_offset() const {
-        return byte_offset_of(document[cursor.line], cursor.column);
+        return buffer.cursor_byte_offset();
     }
 
     [[nodiscard]] std::string line_prefix_before_cursor() const {
-        return line_text(document[cursor.line]).substr(0, cursor_byte_offset());
+        return buffer.line_prefix_before_cursor();
     }
 
     [[nodiscard]] std::vector<std::string> line_strings() const {
-        std::vector<std::string> result;
-        result.reserve(document.size());
-        for (const auto& line : document) result.push_back(line_text(line));
-        return result;
+        return buffer.line_strings();
     }
 
     void cancel_autocomplete_request() {
@@ -343,7 +256,7 @@ struct Editor::Impl {
     }
 
     /// Whether an attachment request deserves the 20 ms debounce (pi
-    /// buildDebouncePattern): an unclosed `@\"...` quoted path may contain
+    /// buildDebouncePattern): an unclosed `@"..."` quoted path may contain
     /// spaces, so the plain token test alone misses it.
     [[nodiscard]] bool autocomplete_debounce_matches(std::string_view text_before_cursor) const {
         bool in_quotes = false;
@@ -363,7 +276,7 @@ struct Editor::Impl {
     }
 
     [[nodiscard]] bool is_slash_menu_allowed() const {
-        return cursor.line == 0;
+        return buffer.cursor().line == 0;
     }
 
     [[nodiscard]] bool is_at_start_of_message() const {
@@ -424,7 +337,7 @@ struct Editor::Impl {
         if (force &&
             !autocomplete_provider->should_trigger_file_completion(
                 line_strings(),
-                cursor.line,
+                buffer.cursor().line,
                 cursor_byte_offset())) {
             return;
         }
@@ -452,7 +365,7 @@ struct Editor::Impl {
         if (start_token != autocomplete_start_token) return;
         if (!autocomplete_provider) return;
         const auto snapshot_text = text();
-        const auto snapshot_cursor = cursor;
+        const auto snapshot_cursor = cursor();
         const auto cursor_column = cursor_byte_offset();
         const auto request_id = [this] {
             std::lock_guard lock(autocomplete_mutex);
@@ -461,7 +374,7 @@ struct Editor::Impl {
         request_stop_source = std::stop_source{};
         AutocompleteRequest request{
             .lines = line_strings(),
-            .cursor_line = cursor.line,
+            .cursor_line = buffer.cursor().line,
             .cursor_column = cursor_column,
             .force = force,
             .stop_token = request_stop_source.get_token(),
@@ -538,7 +451,7 @@ struct Editor::Impl {
         if (!pending) return;
         // pi isAutocompleteRequestCurrent: the result only applies while the
         // buffer and cursor still match the request snapshot.
-        if (pending->snapshot_text != text() || pending->snapshot_cursor != cursor) return;
+        if (pending->snapshot_text != text() || pending->snapshot_cursor != cursor()) return;
         if (!pending->result || pending->result->items.empty()) {
             cancel_autocomplete();
             return;
@@ -626,12 +539,13 @@ struct Editor::Impl {
     }
 
     void apply_completion_result(const AutocompleteApplyResult& result, std::string_view prefix) {
-        if (result.cursor_line >= document.size()) return;
-        auto& line = document[result.cursor_line];
-        const auto cursor_bytes = cursor_byte_offset();
+        if (result.cursor_line >= buffer.line_count()) return;
+        const auto& lines = buffer.document();
+        const auto& line = lines[result.cursor_line];
+        const auto cursor_bytes = buffer.cursor_byte_offset();
         if (prefix.size() > cursor_bytes) return;
         const auto start_bytes = cursor_bytes - prefix.size();
-        const auto current_line_text = line_text(line);
+        const auto current_line_text = buffer.line_strings()[result.cursor_line];
         if (current_line_text.substr(start_bytes, prefix.size()) != prefix) return;
 
         // Map byte offsets to segment boundaries; bail when a boundary cuts
@@ -667,9 +581,6 @@ struct Editor::Impl {
         const auto after_begin = cursor_segment_value +
             ((is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor) ? 1 : 0);
 
-        // The provider's surgery only touches the region between the prefix
-        // start and the result cursor; the regions outside it must be
-        // byte-identical to the original line (pi's applyCompletion shape).
         const auto original_after = current_line_text.substr(cursor_bytes);
         const auto expected_after = result_line.substr(result_cursor);
         const bool quote_adjusted =
@@ -680,35 +591,21 @@ struct Editor::Impl {
             return;
         }
 
-        // Rebuild the line from the result text for the edited region while
-        // preserving the untouched segments (paste-marker associations).
-        Line rebuilt;
-        rebuilt.reserve(start_segment_value + (line.size() - after_begin) + 1);
-        rebuilt.insert(
-            rebuilt.end(),
-            line.begin(),
-            line.begin() + static_cast<std::ptrdiff_t>(start_segment_value));
-        auto middle_segments = segment_lines(result_line.substr(start_bytes, result_cursor - start_bytes)).front();
-        rebuilt.insert(
-            rebuilt.end(),
-            std::make_move_iterator(middle_segments.begin()),
-            std::make_move_iterator(middle_segments.end()));
-        rebuilt.insert(
-            rebuilt.end(),
-            line.begin() + static_cast<std::ptrdiff_t>(after_begin),
-            line.end());
-        line = std::move(rebuilt);
-
-        const auto result_prefix = std::string_view{result_line}.substr(0, result_cursor);
-        cursor.column = segment_lines(result_prefix).front().size();
+        buffer.apply_completion_edit(
+            result.cursor_line,
+            start_segment_value,
+            after_begin,
+            result_line.substr(start_bytes, result_cursor - start_bytes),
+            result_line.substr(0, result_cursor));
     }
 
     void apply_autocomplete_item(const AutocompleteItem& item, std::string_view prefix, bool notify) {
         if (!autocomplete_provider) return;
-        push_undo();
+        buffer.push_undo();
+        const auto cur = buffer.cursor();
         const auto result = autocomplete_provider->apply_completion(
             line_strings(),
-            cursor.line,
+            cur.line,
             cursor_byte_offset(),
             item,
             prefix);
@@ -722,305 +619,87 @@ struct Editor::Impl {
         apply_autocomplete_item(autocomplete[autocomplete_selected], autocomplete_prefix, !fallthrough_submit);
     }
 
-    void insert_segments(std::vector<Line> inserted) {
-        clamp_cursor();
-        auto& current = document[cursor.line];
-        Line after(current.begin() + static_cast<std::ptrdiff_t>(cursor.column), current.end());
-        current.erase(current.begin() + static_cast<std::ptrdiff_t>(cursor.column), current.end());
-        if (inserted.size() == 1) {
-            current.insert(current.end(), inserted.front().begin(), inserted.front().end());
-            current.insert(current.end(), after.begin(), after.end());
-            cursor.column = current.size() - after.size();
-            return;
-        }
-        current.insert(current.end(), inserted.front().begin(), inserted.front().end());
-        const auto insertion = document.begin() + static_cast<std::ptrdiff_t>(cursor.line + 1);
-        const auto first_inserted = document.insert(insertion, inserted.begin() + 1, inserted.end());
-        const auto last_inserted = first_inserted + static_cast<std::ptrdiff_t>(inserted.size() - 2);
-        last_inserted->insert(last_inserted->end(), after.begin(), after.end());
-        cursor.line += inserted.size() - 1;
-        cursor.column = last_inserted->size() - after.size();
+    void insert_character(std::string_view text) {
+        if (text.empty()) return;
+        exit_history_browsing();
+        buffer.insert_character(text);
+        notify_change();
+        maybe_trigger_autocomplete(text.back());
     }
 
     void insert_text(std::string text, bool record_undo, bool update_autocomplete = true) {
         text = normalize_input(std::move(text));
         if (text.empty()) return;
         exit_history_browsing();
-        if (record_undo) push_undo();
-        insert_segments(segment_lines(text));
+        buffer.insert_text(text, record_undo);
         notify_change();
         if (update_autocomplete) maybe_trigger_autocomplete(text.back());
     }
 
-    [[nodiscard]] static std::string marker_for(std::size_t id, std::string_view text) {
-        const auto lines = static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n')) + 1;
-        if (lines > 10) {
-            return "[paste #" + std::to_string(id) + " +" + std::to_string(lines) + " lines]";
-        }
-        return "[paste #" + std::to_string(id) + " " + std::to_string(text.size()) + " chars]";
-    }
-
-    void forget_paste(std::size_t id) {
-        pastes.erase(id);
-        for (auto& line : document) {
-            for (auto& segment : line) {
-                if (segment.paste_id && *segment.paste_id > id) {
-                    --*segment.paste_id;
-                    const auto marker = segment.text;
-                    const auto number_start = marker.find('#') + 1;
-                    const auto number_end = marker.find(' ', number_start);
-                    segment.text = marker.substr(0, number_start) + std::to_string(*segment.paste_id) +
-                        marker.substr(number_end);
-                }
-            }
-        }
-        std::map<std::size_t, std::string> renumbered;
-        for (auto& [paste_id, text] : pastes) {
-            renumbered.emplace(paste_id > id ? paste_id - 1 : paste_id, std::move(text));
-        }
-        pastes = std::move(renumbered);
-        if (paste_counter > 0) --paste_counter;
-    }
-
     void erase_at_cursor(bool backward) {
         exit_history_browsing();
-        clamp_cursor();
         if (backward) {
-            if (cursor.column > 0) {
-                push_undo();
-                auto& line = document[cursor.line];
-                const auto index = --cursor.column;
-                if (line[index].paste_id) forget_paste(*line[index].paste_id);
-                line.erase(line.begin() + static_cast<std::ptrdiff_t>(index));
-            } else if (cursor.line > 0) {
-                push_undo();
-                const auto prior_size = document[cursor.line - 1].size();
-                document[cursor.line - 1].insert(
-                    document[cursor.line - 1].end(), document[cursor.line].begin(), document[cursor.line].end());
-                document.erase(document.begin() + static_cast<std::ptrdiff_t>(cursor.line));
-                --cursor.line;
-                cursor.column = prior_size;
-            } else {
-                return;
-            }
+            buffer.backspace();
         } else {
-            auto& line = document[cursor.line];
-            if (cursor.column < line.size()) {
-                push_undo();
-                if (line[cursor.column].paste_id) forget_paste(*line[cursor.column].paste_id);
-                line.erase(line.begin() + static_cast<std::ptrdiff_t>(cursor.column));
-            } else if (cursor.line + 1 < document.size()) {
-                push_undo();
-                line.insert(line.end(), document[cursor.line + 1].begin(), document[cursor.line + 1].end());
-                document.erase(document.begin() + static_cast<std::ptrdiff_t>(cursor.line + 1));
-            } else {
-                return;
-            }
+            buffer.forward_delete();
         }
         notify_change();
         update_or_retrigger_after_erase();
     }
 
     void move_left() {
-        if (cursor.column > 0) --cursor.column;
-        else if (cursor.line > 0) {
-            --cursor.line;
-            cursor.column = document[cursor.line].size();
-        }
-        last_yank_ring_index.reset();
+        buffer.move_left();
         if (autocomplete_state != AutocompleteState::None) update_autocomplete();
     }
 
     void move_right() {
-        if (cursor.column < document[cursor.line].size()) ++cursor.column;
-        else if (cursor.line + 1 < document.size()) {
-            ++cursor.line;
-            cursor.column = 0;
-        }
-        last_yank_ring_index.reset();
+        buffer.move_right();
         if (autocomplete_state != AutocompleteState::None) update_autocomplete();
     }
 
     void move_word(bool forward) {
         if (forward) {
-            while (cursor.line + 1 < document.size() || cursor.column < document[cursor.line].size()) {
-                if (cursor.column == document[cursor.line].size()) {
-                    ++cursor.line;
-                    cursor.column = 0;
-                    continue;
-                }
-                if (detail::is_word_segment(document[cursor.line][cursor.column].text)) break;
-                ++cursor.column;
-            }
-            while (cursor.column < document[cursor.line].size() &&
-                   detail::is_word_segment(document[cursor.line][cursor.column].text)) ++cursor.column;
+            buffer.move_word_forward();
         } else {
-            while (cursor.line > 0 || cursor.column > 0) {
-                if (cursor.column == 0) {
-                    --cursor.line;
-                    cursor.column = document[cursor.line].size();
-                    continue;
-                }
-                if (detail::is_word_segment(document[cursor.line][cursor.column - 1].text)) break;
-                --cursor.column;
-            }
-            while (cursor.column > 0 && detail::is_word_segment(document[cursor.line][cursor.column - 1].text)) --cursor.column;
+            buffer.move_word_backward();
         }
-        last_yank_ring_index.reset();
-    }
-
-    [[nodiscard]] Line remove_until(std::size_t target, bool forward) {
-        auto& line = document[cursor.line];
-        const auto start = forward ? cursor.column : target;
-        const auto end = forward ? target : cursor.column;
-        Line removed(
-            line.begin() + static_cast<std::ptrdiff_t>(start),
-            line.begin() + static_cast<std::ptrdiff_t>(end));
-        line.erase(
-            line.begin() + static_cast<std::ptrdiff_t>(start),
-            line.begin() + static_cast<std::ptrdiff_t>(end));
-        cursor.column = start;
-        return removed;
-    }
-
-    void erase_range(EditorCursor start, EditorCursor end) {
-        if (start.line == end.line) {
-            auto& line = document[start.line];
-            line.erase(
-                line.begin() + static_cast<std::ptrdiff_t>(start.column),
-                line.begin() + static_cast<std::ptrdiff_t>(end.column));
-        } else {
-            Line tail(
-                document[end.line].begin() + static_cast<std::ptrdiff_t>(end.column),
-                document[end.line].end());
-            auto& first = document[start.line];
-            first.erase(first.begin() + static_cast<std::ptrdiff_t>(start.column), first.end());
-            first.insert(first.end(), tail.begin(), tail.end());
-            document.erase(
-                document.begin() + static_cast<std::ptrdiff_t>(start.line + 1),
-                document.begin() + static_cast<std::ptrdiff_t>(end.line + 1));
-        }
-        cursor = start;
-    }
-
-    [[nodiscard]] KillEntry kill_entry(Document killed) const {
-        KillEntry entry{.document = std::move(killed), .pastes = {}};
-        for (const auto& line : entry.document) {
-            for (const auto& segment : line) {
-                if (segment.paste_id) entry.pastes.emplace(*segment.paste_id, pastes.at(*segment.paste_id));
-            }
-        }
-        return entry;
-    }
-
-    [[nodiscard]] Document materialize_kill(const KillEntry& entry) {
-        auto result = entry.document;
-        std::map<std::size_t, std::size_t> remapped_ids;
-        for (auto& line : result) {
-            for (auto& segment : line) {
-                if (!segment.paste_id) continue;
-                const auto source_id = *segment.paste_id;
-                const auto existing = remapped_ids.find(source_id);
-                if (existing != remapped_ids.end()) {
-                    segment.paste_id = existing->second;
-                    segment.text = marker_for(existing->second, entry.pastes.at(source_id));
-                    continue;
-                }
-                const auto target_id = ++paste_counter;
-                pastes[target_id] = entry.pastes.at(source_id);
-                remapped_ids.emplace(source_id, target_id);
-                segment.paste_id = target_id;
-                segment.text = marker_for(target_id, entry.pastes.at(source_id));
-            }
-        }
-        return result;
     }
 
     void kill_to_line(bool forward) {
         exit_history_browsing();
-        const auto target = forward ? document[cursor.line].size() : 0U;
-        if (target != cursor.column) {
-            push_undo();
-            kill_ring.insert(kill_ring.begin(), kill_entry(Document{remove_until(target, forward)}));
-        } else if ((!forward && cursor.line > 0) || (forward && cursor.line + 1 < document.size())) {
-            push_undo();
-            kill_ring.insert(kill_ring.begin(), kill_entry(Document{Line{}, Line{}}));
-            if (forward) {
-                document[cursor.line].insert(
-                    document[cursor.line].end(),
-                    document[cursor.line + 1].begin(),
-                    document[cursor.line + 1].end());
-                document.erase(document.begin() + static_cast<std::ptrdiff_t>(cursor.line + 1));
-            } else {
-                const auto prior_size = document[cursor.line - 1].size();
-                document[cursor.line - 1].insert(
-                    document[cursor.line - 1].end(),
-                    document[cursor.line].begin(),
-                    document[cursor.line].end());
-                document.erase(document.begin() + static_cast<std::ptrdiff_t>(cursor.line));
-                --cursor.line;
-                cursor.column = prior_size;
-            }
+        if (forward) {
+            buffer.kill_to_line_end();
         } else {
-            return;
+            buffer.kill_to_line_start();
         }
         notify_change();
     }
 
     void delete_word(bool forward) {
         exit_history_browsing();
-        const auto original = cursor;
-        move_word(forward);
-        const auto target = cursor;
-        if (original == target || original.line != target.line) {
-            cursor = original;
-            return;
+        if (forward) {
+            buffer.delete_word_forward();
+        } else {
+            buffer.delete_word_backward();
         }
-        const auto start = forward ? original.column : target.column;
-        const auto end = forward ? target.column : original.column;
-        cursor = {.line = original.line, .column = start};
-        push_undo();
-        const auto removed = remove_until(end, true);
-        kill_ring.insert(kill_ring.begin(), kill_entry(Document{std::move(removed)}));
         notify_change();
     }
 
     void yank() {
-        if (kill_ring.empty()) return;
         exit_history_browsing();
-        push_undo();
-        const auto start = cursor;
-        insert_segments(materialize_kill(kill_ring.front()));
+        buffer.yank();
         notify_change();
-        last_yank_ring_index = 0;
-        last_yank_range = std::pair{start, cursor};
     }
 
     void yank_pop() {
-        if (!last_yank_ring_index || !last_yank_range || kill_ring.size() < 2) return;
         exit_history_browsing();
-        const auto previous = *last_yank_range;
-        const auto prior_ring_index = *last_yank_ring_index;
-        if (previous.first.line != previous.second.line) return;
-        push_undo();
-        cursor = previous.first;
-        erase_range(previous.first, previous.second);
-        const auto next = (prior_ring_index + 1) % kill_ring.size();
-        insert_segments(materialize_kill(kill_ring[next]));
+        buffer.yank_pop();
         notify_change();
-        last_yank_ring_index = next;
-        last_yank_range = std::pair{previous.first, cursor};
     }
 
     void undo_once() {
         exit_history_browsing();
-        if (undo.empty()) return;
-        auto previous = std::move(undo.back());
-        undo.pop_back();
-        document = std::move(previous.document);
-        cursor = previous.cursor;
-        pastes = std::move(previous.pastes);
-        paste_counter = previous.paste_counter;
+        buffer.undo();
         cancel_autocomplete();
         notify_change();
     }
@@ -1039,15 +718,21 @@ struct Editor::Impl {
     }
 
     [[nodiscard]] bool editor_is_empty() const {
-        return document.size() == 1 && document.front().empty();
+        return buffer.empty();
     }
 
-    struct VisualLine;
+    struct VisualLine {
+        std::size_t logical_line{0};
+        std::size_t start{0};
+        std::size_t end{0};
+        std::string text;
+    };
 
     [[nodiscard]] std::size_t find_current_visual_line(const std::vector<VisualLine>& visual) const {
+        const auto cur = buffer.cursor();
         for (std::size_t index = 0; index < visual.size(); ++index) {
-            if (visual[index].logical_line == cursor.line && cursor.column >= visual[index].start &&
-                cursor.column <= visual[index].end) {
+            if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
+                cur.column <= visual[index].end) {
                 return index;
             }
         }
@@ -1064,28 +749,23 @@ struct Editor::Impl {
     }
 
     void move_to_line_start() {
-        last_yank_ring_index.reset();
-        last_yank_range.reset();
-        cursor.column = 0;
+        buffer.move_to_line_start();
     }
 
     void move_to_line_end() {
-        last_yank_ring_index.reset();
-        last_yank_range.reset();
-        cursor.column = document[cursor.line].size();
+        buffer.move_to_line_end();
     }
 
     void set_text_internal(std::string text, bool cursor_at_start) {
-        document = segment_lines(std::move(text));
-        cursor.line = cursor_at_start ? 0 : document.size() - 1;
-        cursor.column = cursor_at_start ? 0 : document[cursor.line].size();
+        buffer.set_text(std::move(text));
+        if (cursor_at_start) {
+            buffer.set_cursor(detail::BufferCursor{.line = 0, .column = 0});
+        }
         scroll_offset = 0;
         notify_change();
     }
 
     void navigate_history(int direction) {
-        last_yank_ring_index.reset();
-        last_yank_range.reset();
         if (history.empty()) return;
 
         const auto current = history_index ? static_cast<int>(*history_index) : -1;
@@ -1094,8 +774,8 @@ struct Editor::Impl {
 
         // Capture state when first entering history browsing mode.
         if (!history_index && new_index >= 0) {
-            push_undo();
-            history_draft = HistoryDraft{.document = document, .cursor = cursor};
+            buffer.push_undo();
+            history_draft = HistoryDraft{.buffer = buffer};
         }
 
         if (new_index == -1) {
@@ -1103,8 +783,7 @@ struct Editor::Impl {
             auto draft = history_draft;
             history_draft.reset();
             if (draft) {
-                document = std::move(draft->document);
-                cursor = draft->cursor;
+                buffer = std::move(draft->buffer);
                 scroll_offset = 0;
                 notify_change();
             } else {
@@ -1120,11 +799,7 @@ struct Editor::Impl {
         const auto result = trim_outer_whitespace(expanded());
         exit_history_browsing();
         add_to_history(result);
-        document.assign(1, {});
-        cursor = {};
-        pastes.clear();
-        paste_counter = 0;
-        undo.clear();
+        buffer.set_text("");
         cancel_autocomplete();
         scroll_offset = 0;
         notify_change();
@@ -1149,44 +824,16 @@ struct Editor::Impl {
 
     void paste(std::string text) {
         exit_history_browsing();
-        std::string filtered;
-        text = normalize_input(std::move(text));
-        for (std::size_t index = 0; index < text.size();) {
-            const auto [codepoint, bytes] = detail::decode_utf8(text, index);
-            if (bytes == 0) break;
-            if (codepoint == '\n' || (codepoint >= 0x20 && codepoint != 0x7f)) {
-                filtered.append(text.substr(index, bytes));
-            }
-            index += bytes;
-        }
-        if (filtered.empty()) return;
-        push_undo();
-        const auto line_count = static_cast<std::size_t>(std::count(filtered.begin(), filtered.end(), '\n')) + 1;
-        if (line_count > 10 || filtered.size() > 1000) {
-            const auto id = ++paste_counter;
-            pastes.emplace(id, filtered);
-            const auto marker = marker_for(id, filtered);
-            insert_segments({{{.text = marker, .paste_id = id}}});
-            notify_change();
-            cancel_autocomplete();
-            return;
-        }
-        insert_segments(segment_lines(filtered));
+        buffer.insert_paste(std::move(text));
         notify_change();
         cancel_autocomplete();
     }
 
-    struct VisualLine {
-        std::size_t logical_line{0};
-        std::size_t start{0};
-        std::size_t end{0};
-        std::string text;
-    };
-
     [[nodiscard]] std::vector<VisualLine> visual_lines(std::size_t width) const {
         std::vector<VisualLine> result;
-        for (std::size_t line_index = 0; line_index < document.size(); ++line_index) {
-            const auto& line = document[line_index];
+        const auto& doc = buffer.document();
+        for (std::size_t line_index = 0; line_index < doc.size(); ++line_index) {
+            const auto& line = doc[line_index];
             if (line.empty()) {
                 result.push_back({.logical_line = line_index, .start = 0, .end = 0, .text = {}});
                 continue;
@@ -1223,21 +870,16 @@ struct Editor::Impl {
     }
 
     /// Render pi's fake cursor (editor.ts render): reverse video on the grapheme
-    /// at the cursor position, or a highlighted space at end of line. The render
-    /// pads the line to `width` afterward, so the end-of-line cursor consumes one
-    /// padding cell and the rendered line stays within the width bound; when the
-    /// visual line is already full width (cursor at a wrap boundary), there is no
-    /// room for an extra cell and no cursor is drawn there. `\x1b[27m` (reverse
-    /// off) preserves any caller-applied foreground style for the rest of the
-    /// line.
+    /// at the cursor position, or a highlighted space at end of line.
     void insert_fake_cursor(const VisualLine& visual_line, std::size_t width, std::string& line) const {
-        const auto cursor_segment = cursor.column;
+        const auto cursor_segment = buffer.cursor().column;
+        const auto& doc = buffer.document();
         if (cursor_segment < visual_line.end) {
             std::size_t byte_offset = 0;
             for (std::size_t index = visual_line.start; index < cursor_segment; ++index) {
-                byte_offset += document[visual_line.logical_line][index].text.size();
+                byte_offset += doc[visual_line.logical_line][index].text.size();
             }
-            const auto& segment_text = document[visual_line.logical_line][cursor_segment].text;
+            const auto& segment_text = doc[visual_line.logical_line][cursor_segment].text;
             const auto graphemes = detail::split_graphemes(segment_text);
             const auto& at_cursor = graphemes.front();
             line.insert(byte_offset, "\x1b[7m");
@@ -1251,10 +893,11 @@ struct Editor::Impl {
 
     void move_vertical(int direction) {
         const auto visual = visual_lines(layout_width);
+        const auto cur = buffer.cursor();
         std::size_t current = 0;
         for (std::size_t index = 0; index < visual.size(); ++index) {
-            if (visual[index].logical_line == cursor.line && cursor.column >= visual[index].start &&
-                cursor.column <= visual[index].end) {
+            if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
+                cur.column <= visual[index].end) {
                 current = index;
                 break;
             }
@@ -1263,35 +906,14 @@ struct Editor::Impl {
         if (direction > 0 && current + 1 == visual.size()) return;
         const auto& from = visual[current];
         const auto& to = visual[static_cast<std::size_t>(static_cast<int>(current) + direction)];
-        cursor.line = to.logical_line;
-        cursor.column = std::min(to.end, to.start + (cursor.column - from.start));
-        last_yank_ring_index.reset();
+        const auto target_line = to.logical_line;
+        const auto target_column = std::min(to.end, to.start + (cur.column - from.start));
+        buffer.set_cursor(detail::BufferCursor{.line = target_line, .column = target_column});
         if (autocomplete_state != AutocompleteState::None) update_autocomplete();
     }
 
     void jump_to(std::string_view target, JumpDirection direction) {
-        if (direction == JumpDirection::Forward) {
-            for (std::size_t line_index = cursor.line; line_index < document.size(); ++line_index) {
-                const auto start = line_index == cursor.line ? cursor.column + 1 : 0U;
-                for (std::size_t index = start; index < document[line_index].size(); ++index) {
-                    if (document[line_index][index].text == target) {
-                        cursor = {.line = line_index, .column = index};
-                        return;
-                    }
-                }
-            }
-        } else {
-            for (std::size_t line_index = cursor.line + 1; line_index-- > 0;) {
-                const auto start = line_index == cursor.line ? cursor.column : document[line_index].size();
-                for (std::size_t index = start; index-- > 0;) {
-                    if (document[line_index][index].text == target) {
-                        cursor = {.line = line_index, .column = index};
-                        return;
-                    }
-                }
-                if (line_index == 0) break;
-            }
-        }
+        buffer.jump_to(target, direction == JumpDirection::Forward);
     }
 };
 
@@ -1307,12 +929,7 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
 Editor::Editor(Editor&& other) noexcept : impl_(std::move(other.impl_)) {
     other.impl_.reset();
 }
-/// Break every Impl-lifetime cycle before the Editor releases its reference:
-/// the debounce timer and an in-flight request's result sink capture `self`,
-/// and an autocomplete provider owned by the Impl that retains the sink past
-/// Editor destruction would keep the Impl alive forever (ASan, issue #473).
-/// Cancelling rejects late deliveries as stale; releasing the provider
-/// destroys the held sinks.
+
 void Editor::release_autocomplete_cycles() noexcept {
     if (!impl_) return;
     impl_->cancel_autocomplete_request();
@@ -1328,13 +945,14 @@ Editor& Editor::operator=(Editor&& other) noexcept {
     }
     return *this;
 }
+
 Editor::~Editor() {
     release_autocomplete_cycles();
 }
 
 std::string Editor::text() const {
     std::lock_guard lock(impl_->impl_mutex);
-    return document_text(impl_->document);
+    return impl_->text();
 }
 
 std::string Editor::expanded_text() const {
@@ -1349,19 +967,16 @@ std::vector<std::string> Editor::lines() const {
 
 EditorCursor Editor::cursor() const {
     std::lock_guard lock(impl_->impl_mutex);
-    return impl_->cursor;
+    return impl_->cursor();
 }
 
 void Editor::set_text(std::string text) {
     std::lock_guard lock(impl_->impl_mutex);
     impl_->exit_history_browsing();
     text = normalize_input(std::move(text));
-    if (text == document_text(impl_->document)) return;
-    impl_->push_undo();
-    impl_->document = segment_lines(text);
-    impl_->pastes.clear();
-    impl_->paste_counter = 0;
-    impl_->cursor = {.line = impl_->document.size() - 1, .column = impl_->document.back().size()};
+    if (text == impl_->buffer.text()) return;
+    impl_->buffer.push_undo();
+    impl_->buffer.set_text(std::move(text));
     impl_->cancel_autocomplete();
     impl_->notify_change();
 }
@@ -1423,7 +1038,7 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
     }
     impl_->layout_width = width;
-    for (const auto& logical_line : impl_->document) {
+    for (const auto& logical_line : impl_->buffer.document()) {
         for (const auto& segment : logical_line) {
             for (const auto& grapheme : detail::split_graphemes(segment.text)) {
                 if (detail::grapheme_width(grapheme) > width) {
@@ -1436,9 +1051,10 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
     }
     const auto visual = impl_->visual_lines(width);
     std::size_t cursor_line = 0;
+    const auto cur = impl_->buffer.cursor();
     for (std::size_t index = 0; index < visual.size(); ++index) {
-        if (visual[index].logical_line == impl_->cursor.line && impl_->cursor.column >= visual[index].start &&
-            impl_->cursor.column <= visual[index].end) {
+        if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
+            cur.column <= visual[index].end) {
             cursor_line = index;
             break;
         }
@@ -1448,8 +1064,6 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
     if (cursor_line >= impl_->scroll_offset + visible_count) impl_->scroll_offset = cursor_line + 1 - visible_count;
     std::vector<std::string> result;
     if (impl_->theme.border) {
-        // pi editor render: the top border shows the scroll-up indicator when
-        // scrolled, otherwise a plain full-width rule.
         auto top_border = impl_->scroll_offset > 0
             ? impl_->scroll_border("↑", impl_->scroll_offset, width)
             : horizontal_rule(width);
@@ -1477,8 +1091,6 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
         result.push_back(std::move(*styled));
     }
     if (impl_->theme.border) {
-        // pi editor render: the bottom border shows the scroll-down indicator
-        // when more content remains below.
         const auto shown = impl_->scroll_offset + visible_count;
         const auto lines_below = visual.size() > shown ? visual.size() - shown : 0;
         auto bottom_border = lines_below > 0
@@ -1543,7 +1155,6 @@ void Editor::handle_input(const InputEventVariant& input) {
             const bool fallthrough_submit = impl_->autocomplete_prefix.starts_with('/');
             impl_->accept_selected_autocomplete(fallthrough_submit);
             if (!fallthrough_submit) return;
-            // Slash-command confirm cancels the menu and falls through to submit.
         }
     }
 
@@ -1618,11 +1229,11 @@ void Editor::handle_input(const InputEventVariant& input) {
         return;
     }
     if (matches("tui.editor.cursorUp")) {
+        const auto cur = impl_->buffer.cursor();
         if (impl_->on_first_visual_line() &&
-            (impl_->editor_is_empty() || impl_->history_index.has_value() || impl_->cursor.column == 0)) {
+            (impl_->editor_is_empty() || impl_->history_index.has_value() || cur.column == 0)) {
             impl_->navigate_history(-1);
         } else if (impl_->on_first_visual_line()) {
-            // Already at top - jump to start of line
             impl_->move_to_line_start();
         } else {
             impl_->move_vertical(-1);
@@ -1633,7 +1244,6 @@ void Editor::handle_input(const InputEventVariant& input) {
         if (impl_->history_index.has_value() && impl_->on_last_visual_line()) {
             impl_->navigate_history(1);
         } else if (impl_->on_last_visual_line()) {
-            // Already at bottom - jump to end of line
             impl_->move_to_line_end();
         } else {
             impl_->move_vertical(1);
@@ -1657,7 +1267,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         impl_->submit();
         return;
     }
-    if (detail::is_printable(*event)) impl_->insert_text(std::string(detail::printable_text(*event)), true);
+    if (detail::is_printable(*event)) impl_->insert_character(detail::printable_text(*event));
 }
 
 bool Editor::accepts_key_releases() const {
@@ -1678,16 +1288,16 @@ bool Editor::focused() const {
 std::optional<CursorPosition> Editor::cursor_location() const {
     std::lock_guard lock(impl_->impl_mutex);
     if (!impl_->focused || impl_->layout_width == 0) return std::nullopt;
-    // Compute visual row/column for the cursor position
     const auto visual = impl_->visual_lines(impl_->layout_width);
     if (visual.empty()) return std::nullopt;
 
     std::size_t visual_row = 0;
     bool found = false;
+    const auto cur = impl_->buffer.cursor();
     for (std::size_t index = 0; index < visual.size(); ++index) {
-        if (visual[index].logical_line == impl_->cursor.line &&
-            impl_->cursor.column >= visual[index].start &&
-            impl_->cursor.column <= visual[index].end) {
+        if (visual[index].logical_line == cur.line &&
+            cur.column >= visual[index].start &&
+            cur.column <= visual[index].end) {
             visual_row = index;
             found = true;
             break;
@@ -1695,31 +1305,23 @@ std::optional<CursorPosition> Editor::cursor_location() const {
     }
     if (!found) return std::nullopt;
 
-    // Account for scroll offset and the optional top border row.
     const auto visible_count = std::max<std::size_t>(1, impl_->content_height());
     if (visual_row < impl_->scroll_offset) return std::nullopt;
     if (visual_row >= impl_->scroll_offset + visible_count) return std::nullopt;
 
     const auto display_row = impl_->border_rows() + visual_row - impl_->scroll_offset;
 
-    // The column within the visual line is based on the actual rendered text
-    // of the visual line, mapped from the cursor's logical column position.
-    // Since visual lines may split single wide segments, we use the visual
-    // line's text width from its start to the cursor's proportional position.
     const auto& vl = visual[visual_row];
     const auto vl_text_width = visible_width(vl.text);
-    // Compute the column as the cursor's position within this visual line,
-    // relative to the visual line's segment range.
-    const auto cursor_in_line = impl_->cursor.column - vl.start;
+    const auto cursor_in_line = cur.column - vl.start;
     const auto segs_in_line = vl.end - vl.start;
     std::size_t col = 0;
     if (segs_in_line > 0 && cursor_in_line <= segs_in_line) {
-        // Sum visible widths of segments that are fully within this visual line
         const auto seg_end = vl.start + cursor_in_line;
-        for (std::size_t i = vl.start; i < seg_end && i < impl_->document[vl.logical_line].size(); ++i) {
-            col += visible_width(impl_->document[vl.logical_line][i].text);
+        const auto& doc = impl_->buffer.document();
+        for (std::size_t i = vl.start; i < seg_end && i < doc[vl.logical_line].size(); ++i) {
+            col += visible_width(doc[vl.logical_line][i].text);
         }
-        // Cap at the visual line's text width
         col = std::min(col, vl_text_width);
     }
     return CursorPosition{.column = col, .row = display_row};

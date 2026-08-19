@@ -154,6 +154,7 @@ cch_parity_declare_target(
         src/tui/SettingsList.cpp
         src/tui/TerminalImage.cpp
         src/tui/Text.cpp
+        src/tui/TextBuffer.cpp
         src/tui/TruncatedText.cpp
         src/tui/Tui.cpp
         src/tui/UnicodeWidth.cpp
@@ -681,6 +682,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
         tests/tui/TerminalImageTest.cpp
+        tests/tui/TextBufferTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
