@@ -2,7 +2,7 @@
 
 #include <cch/tui/TerminalImage.hpp>
 
-#include "KeyboardProtocol.hpp"
+#include "tui/InputDecoder.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cch/support/Error.hpp>
@@ -65,6 +65,10 @@ constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
 constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
 constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
+/// Startup appearance probe window (the color-scheme and OSC 11 background
+/// queries run before the delivery worker starts; pi probes synchronously at
+/// startup).
+constexpr auto kAppearanceProbeTimeout = std::chrono::milliseconds(100);
 /// Escape-sequence and negotiation idle flush window: after input leaves a
 /// partial protocol/appearance response (or a decoder flush) pending, the
 /// delivery worker flushes it once this window passes (was 15 polls at 10 ms
@@ -236,366 +240,77 @@ struct EnvironmentRgb {
     return background ? appearance_for_index(*background) : TerminalAppearance::Unknown;
 }
 
-[[nodiscard]] TerminalAppearance appearance_for_rgb(const EnvironmentRgb& rgb) {
-    const auto luminance = 0.2126 * linear_channel(rgb.red) +
-        0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
-    return luminance >= 0.5 ? TerminalAppearance::Light : TerminalAppearance::Dark;
-}
-
-[[nodiscard]] std::optional<int> parse_osc_hex_channel(std::string_view channel) {
-    if (channel.empty() || channel.size() > 8) return std::nullopt;
-    std::uint64_t value = 0;
-    std::uint64_t maximum = 0;
-    for (const auto character : channel) {
-        int digit = 0;
-        if (character >= '0' && character <= '9') {
-            digit = character - '0';
-        } else if (character >= 'a' && character <= 'f') {
-            digit = 10 + character - 'a';
-        } else if (character >= 'A' && character <= 'F') {
-            digit = 10 + character - 'A';
-        } else {
-            return std::nullopt;
-        }
-        value = value * 16 + static_cast<std::uint64_t>(digit);
-        maximum = maximum * 16 + 15;
-    }
-    if (maximum == 0) return std::nullopt;
-    return static_cast<int>(std::round(static_cast<double>(value) / static_cast<double>(maximum) * 255.0));
-}
-
-[[nodiscard]] std::optional<EnvironmentRgb> parse_osc_background(std::string_view value) {
-    const auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos) return std::nullopt;
-    const auto last = value.find_last_not_of(" \t\r\n");
-    value = value.substr(first, last - first + 1);
-    if (value.starts_with('#')) {
-        value.remove_prefix(1);
-        if (value.size() != 6 && value.size() != 12) return std::nullopt;
-        const auto channel_width = value.size() / 3;
-        const auto red = parse_osc_hex_channel(value.substr(0, channel_width));
-        const auto green = parse_osc_hex_channel(value.substr(channel_width, channel_width));
-        const auto blue = parse_osc_hex_channel(value.substr(channel_width * 2, channel_width));
-        if (!red || !green || !blue) return std::nullopt;
-        return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
-    }
-
-    auto lower = std::string(value.substr(0, std::min<std::size_t>(5, value.size())));
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char character) {
-        return static_cast<char>(std::tolower(character));
-    });
-    if (lower.starts_with("rgba:")) {
-        value.remove_prefix(5);
-    } else if (lower.starts_with("rgb:")) {
-        value.remove_prefix(4);
-    } else {
-        return std::nullopt;
-    }
-    const auto first_separator = value.find('/');
-    if (first_separator == std::string_view::npos) return std::nullopt;
-    const auto second_separator = value.find('/', first_separator + 1);
-    if (second_separator == std::string_view::npos) return std::nullopt;
-    const auto third_separator = value.find('/', second_separator + 1);
-    const auto red = parse_osc_hex_channel(value.substr(0, first_separator));
-    const auto green = parse_osc_hex_channel(value.substr(
-        first_separator + 1,
-        second_separator - first_separator - 1));
-    const auto blue = parse_osc_hex_channel(value.substr(
-        second_separator + 1,
-        third_separator == std::string_view::npos
-            ? std::string_view::npos
-            : third_separator - second_separator - 1));
-    if (!red || !green || !blue) return std::nullopt;
-    return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
-}
-
-constexpr std::size_t kAppearanceResponseMaxBytes{4096};
-constexpr std::string_view kColorSchemeResponsePrefix{"\x1b[?997;"};
-constexpr std::string_view kOscBackgroundResponsePrefix{"\x1b]11;"};
-
-enum class AppearanceDiscardKind {
-    None,
-    ColorScheme,
-    OscBackground,
-};
-
-struct AppearanceInputState {
-    std::string pending;
-    AppearanceDiscardKind discard{AppearanceDiscardKind::None};
+/// Startup probe state shared by the appearance and cursor-position probe
+/// phases: one stream decoder accumulates the pre-worker byte stream, so
+/// responses split across reads reassemble in the decoder's single fragment
+/// buffer and every other byte is preserved verbatim for the input sink.
+struct StartupProbe {
+    detail::TerminalStreamDecoder decoder;
     std::optional<TerminalAppearance> color_scheme{std::nullopt};
     std::optional<TerminalAppearance> background{std::nullopt};
-};
-
-[[nodiscard]] bool partial_response_prefix(std::string_view input) {
-    return kColorSchemeResponsePrefix.starts_with(input) ||
-        kOscBackgroundResponsePrefix.starts_with(input);
-}
-
-[[nodiscard]] std::optional<std::size_t> osc_terminator(std::string_view input) {
-    const auto bell = input.find('\x07');
-    const auto string_terminator = input.find("\x1b\\");
-    if (bell == std::string_view::npos && string_terminator == std::string_view::npos) {
-        return std::nullopt;
-    }
-    if (bell == std::string_view::npos) return string_terminator;
-    if (string_terminator == std::string_view::npos) return bell;
-    return std::min(bell, string_terminator);
-}
-
-[[nodiscard]] std::string consume_appearance_input(
-    AppearanceInputState& state,
-    std::string_view input) {
-    state.pending.append(input);
-    std::string forwarded;
-    for (std::size_t index = 0; index < state.pending.size();) {
-        auto remaining = std::string_view(state.pending).substr(index);
-        if (state.discard == AppearanceDiscardKind::ColorScheme) {
-            const auto end = remaining.find('n');
-            if (end == std::string_view::npos) {
-                state.pending.clear();
-                return forwarded;
-            }
-            state.discard = AppearanceDiscardKind::None;
-            index += end + 1;
-            continue;
-        }
-        if (state.discard == AppearanceDiscardKind::OscBackground) {
-            const auto end = osc_terminator(remaining);
-            if (!end) {
-                state.pending.clear();
-                return forwarded;
-            }
-            const bool string_terminated = remaining.substr(*end).starts_with("\x1b\\");
-            state.discard = AppearanceDiscardKind::None;
-            index += *end + (string_terminated ? 2 : 1);
-            continue;
-        }
-        if (remaining.starts_with(kColorSchemeResponsePrefix)) {
-            const auto end = remaining.find('n', kColorSchemeResponsePrefix.size());
-            if (end == std::string_view::npos) {
-                if (remaining.size() > kAppearanceResponseMaxBytes) {
-                    state.discard = AppearanceDiscardKind::ColorScheme;
-                    state.pending.clear();
-                    return forwarded;
-                }
-                state.pending.erase(0, index);
-                return forwarded;
-            }
-            const auto value = remaining.substr(
-                kColorSchemeResponsePrefix.size(),
-                end - kColorSchemeResponsePrefix.size());
-            if (value == "1") state.color_scheme = TerminalAppearance::Dark;
-            if (value == "2") state.color_scheme = TerminalAppearance::Light;
-            index += end + 1;
-            continue;
-        }
-        if (remaining.starts_with(kOscBackgroundResponsePrefix)) {
-            const auto body = remaining.substr(kOscBackgroundResponsePrefix.size());
-            const auto end = osc_terminator(body);
-            if (!end) {
-                if (remaining.size() > kAppearanceResponseMaxBytes) {
-                    state.discard = AppearanceDiscardKind::OscBackground;
-                    state.pending.clear();
-                    return forwarded;
-                }
-                state.pending.erase(0, index);
-                return forwarded;
-            }
-            const auto rgb = parse_osc_background(body.substr(0, *end));
-            if (rgb) state.background = appearance_for_rgb(*rgb);
-            const bool string_terminated = body.substr(*end).starts_with("\x1b\\");
-            index += kOscBackgroundResponsePrefix.size() + *end + (string_terminated ? 2 : 1);
-            continue;
-        }
-        if (remaining.front() == '\x1b' && partial_response_prefix(remaining)) {
-            state.pending.erase(0, index);
-            return forwarded;
-        }
-        forwarded.push_back(remaining.front());
-        ++index;
-    }
-    state.pending.clear();
-    return forwarded;
-}
-
-struct AppearanceProbeResult {
-    AppearanceInputState state;
-    std::string forwarded_input;
-};
-
-[[nodiscard]] AppearanceProbeResult probe_terminal_appearance(int descriptor) {
-    constexpr auto kProbeTimeout = std::chrono::milliseconds(100);
-    const auto deadline = std::chrono::steady_clock::now() + kProbeTimeout;
-    AppearanceProbeResult result;
-    while (true) {
-        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-            deadline - std::chrono::steady_clock::now());
-        if (remaining.count() <= 0) break;
-        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
-        const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
-        if (ready < 0) {
-            if (errno == EINTR) continue;
-            break;
-        }
-        if (ready == 0) break;
-        if ((item.revents & POLLIN) == 0) break;
-        std::array<char, kAppearanceResponseMaxBytes> buffer{};
-        const auto count = ::read(descriptor, buffer.data(), buffer.size());
-        if (count < 0) {
-            if (errno == EINTR) continue;
-            break;
-        }
-        if (count == 0) break;
-        result.forwarded_input += consume_appearance_input(
-            result.state,
-            std::string_view(buffer.data(), static_cast<std::size_t>(count)));
-    }
-    return result;
-}
-
-constexpr std::size_t kCursorPositionPendingMax{64};
-
-struct CursorPositionInputResult {
-    std::string pending;
-    std::string forwarded_input;
-    std::vector<CursorPosition> responses;
-};
-
-/// Parse a complete CPR response (`ESC [ rows ; cols R`, 1-based) into a
-/// 0-based cursor position.
-[[nodiscard]] std::optional<CursorPosition> parse_cursor_position_response(std::string_view response) {
-    if (!response.starts_with("\x1b[") || !response.ends_with("R")) return std::nullopt;
-    const auto body = response.substr(2, response.size() - 3);
-    const auto separator = body.find(';');
-    if (separator == std::string_view::npos) return std::nullopt;
-    std::size_t rows = 0;
-    std::size_t columns = 0;
-    const auto [rows_end, rows_error] = std::from_chars(body.data(), body.data() + separator, rows);
-    if (rows_error != std::errc{} || rows_end != body.data() + separator) return std::nullopt;
-    const auto [columns_end, columns_error] = std::from_chars(
-        body.data() + separator + 1,
-        body.data() + body.size(),
-        columns);
-    if (columns_error != std::errc{} || columns_end != body.data() + body.size()) {
-        return std::nullopt;
-    }
-    if (rows == 0 || columns == 0) return std::nullopt;
-    return CursorPosition{.column = columns - 1, .row = rows - 1};
-}
-
-/// Extract complete CPR responses (the answer to the startup DSR query) from
-/// `input`, buffering partial leading fragments in `pending` exactly as the
-/// cell-size and appearance consumers do. Bytes that cannot belong to a CPR
-/// are forwarded unchanged, so a late or duplicate response never leaks into
-/// the user key stream (ADR 0041). The grammar (`CSI` digits `;` digits `R`)
-/// shares its shape with the modifier-F3 sequence the input decoder already
-/// drops silently, so stripping it here is neutral for decoded keys.
-[[nodiscard]] CursorPositionInputResult consume_cursor_position_input(
-    std::string pending,
-    std::string_view input) {
-    CursorPositionInputResult result{
-        .pending = std::move(pending),
-        .forwarded_input = {},
-        .responses = {},
-    };
-    result.pending += input;
-    while (!result.pending.empty()) {
-        if (!result.pending.starts_with("\x1b")) {
-            const auto escape = result.pending.find('\x1b');
-            const auto count = escape == std::string::npos ? result.pending.size() : escape;
-            result.forwarded_input += result.pending.substr(0, count);
-            result.pending.erase(0, count);
-            continue;
-        }
-        // Walk the CPR grammar past ESC [: row digits, ';', column digits, 'R'.
-        std::size_t index = 1;
-        if (index < result.pending.size() && result.pending[index] == '[') ++index;
-        while (index < result.pending.size() &&
-               std::isdigit(static_cast<unsigned char>(result.pending[index]))) {
-            ++index;
-        }
-        if (index < result.pending.size() && result.pending[index] == ';') ++index;
-        while (index < result.pending.size() &&
-               std::isdigit(static_cast<unsigned char>(result.pending[index]))) {
-            ++index;
-        }
-        if (index == result.pending.size()) {
-            // The whole buffer is a grammar prefix: wait for more input.
-            if (result.pending.size() > kCursorPositionPendingMax) {
-                result.forwarded_input += result.pending;
-                result.pending.clear();
-            }
-            return result;
-        }
-        if (result.pending[index] == 'R') {
-            if (auto response = parse_cursor_position_response(
-                    result.pending.substr(0, index + 1))) {
-                result.responses.push_back(*response);
-                result.pending.erase(0, index + 1);
-                continue;
-            }
-        }
-        // Not a CPR: forward the ESC byte and keep scanning past it.
-        result.forwarded_input += result.pending.substr(0, 1);
-        result.pending.erase(0, 1);
-    }
-    return result;
-}
-
-struct CursorPositionProbeResult {
     /// The reported cursor position (0-based) when a CPR arrived in time.
     std::optional<CursorPosition> position{std::nullopt};
     std::string forwarded_input;
 };
 
-/// Poll for the DSR cursor-position response with a deadline, mirroring the
-/// appearance probe's synchronous-poll pattern. Non-CPR bytes are routed
-/// through the appearance sidecar so late appearance replies still parse and
-/// no input byte is lost (ADR 0041).
-[[nodiscard]] CursorPositionProbeResult probe_cursor_position(
+void collect_probe_responses(
+    StartupProbe& probe,
+    const std::vector<detail::TerminalResponseVariant>& responses) {
+    for (const auto& response : responses) {
+        if (const auto* position = std::get_if<CursorPosition>(&response)) {
+            probe.position = *position;
+            continue;
+        }
+        if (const auto* scheme = std::get_if<detail::ColorSchemeResponse>(&response)) {
+            if (scheme->kind == detail::ColorSchemeResponseKind::ColorScheme) {
+                probe.color_scheme = scheme->appearance;
+            } else {
+                probe.background = scheme->appearance;
+            }
+            continue;
+        }
+        // Cell-size and keyboard negotiation answers cannot arrive before
+        // their queries are sent (both follow the probes below): any such
+        // response here is unsolicited and ignored.
+    }
+}
+
+/// Poll the input descriptor until the timeout passes, feeding every chunk
+/// through the probe's decoder (pi's synchronous startup probes). The
+/// appearance probe always runs out its full window; the cursor-position
+/// probe returns early once the DSR answer arrives (ADR 0041).
+void poll_startup_probe(
+    StartupProbe& probe,
     int descriptor,
-    AppearanceInputState& appearance) {
-    const auto deadline = std::chrono::steady_clock::now() + kCursorPositionTimeout;
-    CursorPositionProbeResult result;
-    std::string pending;
-    while (!result.position.has_value()) {
+    std::chrono::milliseconds timeout,
+    bool stop_at_cursor_position) {
+    constexpr std::size_t kProbeReadChunkBytes{4096};
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true) {
+        if (stop_at_cursor_position && probe.position) return;
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
             deadline - std::chrono::steady_clock::now());
-        if (remaining.count() <= 0) break;
+        if (remaining.count() <= 0) return;
         pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
         const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
         if (ready < 0) {
             if (errno == EINTR) continue;
-            break;
+            return;
         }
-        if (ready == 0) break;
-        if ((item.revents & POLLIN) == 0) break;
-        std::array<char, kAppearanceResponseMaxBytes> buffer{};
+        if (ready == 0) return;
+        if ((item.revents & POLLIN) == 0) return;
+        std::array<char, kProbeReadChunkBytes> buffer{};
         const auto count = ::read(descriptor, buffer.data(), buffer.size());
         if (count < 0) {
             if (errno == EINTR) continue;
-            break;
+            return;
         }
-        if (count == 0) break;
-        auto consumed = consume_cursor_position_input(
-            std::move(pending),
+        if (count == 0) return;
+        auto decoded = probe.decoder.feed(
             std::string_view(buffer.data(), static_cast<std::size_t>(count)));
-        pending = std::move(consumed.pending);
-        if (!consumed.forwarded_input.empty()) {
-            result.forwarded_input += consume_appearance_input(
-                appearance,
-                consumed.forwarded_input);
-        }
-        if (!consumed.responses.empty()) {
-            result.position = consumed.responses.back();
-        }
+        probe.forwarded_input += decoded.forwarded_input;
+        collect_probe_responses(probe, decoded.responses);
     }
-    // A buffered fragment that never completed is not a CPR: route it through
-    // the appearance sidecar so it still reaches the user key stream.
-    if (!pending.empty()) {
-        result.forwarded_input += consume_appearance_input(appearance, pending);
-    }
-    return result;
 }
 
 } // namespace
@@ -615,7 +330,7 @@ struct ProcessTerminal::Impl {
     std::shared_ptr<TerminalInputSink> input_sink;
     std::shared_ptr<TerminalResizeSink> resize_sink;
     std::string startup_input;
-    AppearanceInputState startup_appearance;
+    bool startup_color_scheme_reported{false};
     std::jthread worker;
     std::optional<support::Error> worker_error;
     bool keyboard_protocol_pushed{false};
@@ -1019,18 +734,11 @@ struct WorkerWake {
 };
 
 struct WorkerInputState {
-    AppearanceInputState appearance;
-    std::string keyboard_pending;
-    std::string cell_size_pending;
-    /// Buffered partial CPR fragment (a late or duplicate startup-probe
-    /// response is consumed and ignored once complete; ADR 0041).
-    std::string cursor_position_pending;
+    detail::TerminalStreamDecoder decoder;
+    bool color_scheme_reported{false};
     bool needs_input_flush{false};
-    /// Readiness-driven deadlines: armed (now + kNegotiationTimeout) whenever
-    /// input leaves partial protocol/appearance bytes or a decoder flush
-    /// pending, firing once. They replace the old 10 ms poll counters.
-    std::chrono::steady_clock::time_point appearance_deadline{
-        std::chrono::steady_clock::time_point::max()};
+    /// Readiness-driven deadline: armed (now + kNegotiationTimeout) whenever
+    /// input leaves a decoder fragment or forwarded bytes that Tui must flush.
     std::chrono::steady_clock::time_point negotiation_deadline{
         std::chrono::steady_clock::time_point::max()};
 };
@@ -1065,9 +773,6 @@ template <typename T>
         }
         const auto resize_watchdog = impl.last_resize_check + kResizeWatchdogInterval;
         if (!earliest || resize_watchdog < *earliest) earliest = resize_watchdog;
-    }
-    if (state.appearance_deadline != std::chrono::steady_clock::time_point::max()) {
-        if (!earliest || state.appearance_deadline < *earliest) earliest = state.appearance_deadline;
     }
     if (state.negotiation_deadline != std::chrono::steady_clock::time_point::max()) {
         if (!earliest || state.negotiation_deadline < *earliest) earliest = state.negotiation_deadline;
@@ -1132,16 +837,6 @@ template <typename T>
 }
 
 template <typename T>
-void apply_detected_appearance(T& impl, const AppearanceInputState& appearance) {
-    const auto detected = appearance.color_scheme
-        ? appearance.color_scheme
-        : appearance.background;
-    if (!detected) return;
-    std::lock_guard lock(impl.mutex);
-    impl.capabilities.appearance = *detected;
-}
-
-template <typename T>
 void apply_cell_size_response(
     T& impl,
     const detail::CellSizeResponse& response) {
@@ -1190,33 +885,35 @@ void apply_cell_size_response(
 }
 
 template <typename T>
-void handle_forwarded_input(
+void apply_terminal_responses(
     T& impl,
     WorkerInputState& state,
-    std::string input) {
-    auto cell_size = detail::consume_cell_size_input(
-        std::move(state.cell_size_pending),
-        input);
-    state.cell_size_pending = std::move(cell_size.pending);
-    if (!cell_size.responses.empty()) {
-        apply_cell_size_response(impl, cell_size.responses.back());
-    }
-    // A CPR arriving on the worker is a late or duplicate answer to the
-    // startup DSR query: the anchor is established once at startup, so consume
-    // and ignore it (ADR 0041) instead of leaking it into the user key stream.
-    auto cursor_position = consume_cursor_position_input(
-        std::move(state.cursor_position_pending),
-        cell_size.forwarded_input);
-    state.cursor_position_pending = std::move(cursor_position.pending);
-    auto parsed = detail::parse_keyboard_protocol_input(
-        std::move(state.keyboard_pending),
-        cursor_position.forwarded_input);
-    state.keyboard_pending = std::move(parsed.pending);
-    state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
-    for (const auto& response : parsed.responses) apply_keyboard_response(impl, response);
-    if (!parsed.forwarded_input.empty()) {
-        invoke_input(impl, std::move(parsed.forwarded_input));
-        state.needs_input_flush = true;
+    const std::vector<detail::TerminalResponseVariant>& responses) {
+    for (const auto& response : responses) {
+        if (const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response)) {
+            apply_cell_size_response(impl, *cell_size);
+            continue;
+        }
+        if (const auto* keyboard = std::get_if<detail::KeyboardProtocolResponse>(&response)) {
+            apply_keyboard_response(impl, *keyboard);
+            continue;
+        }
+        if (std::get_if<CursorPosition>(&response) != nullptr) {
+            // A CPR arriving on the worker is a late or duplicate answer to
+            // the startup DSR query. The anchor is established once at
+            // startup, so consume and ignore it (ADR 0041).
+            continue;
+        }
+        const auto* appearance = std::get_if<detail::ColorSchemeResponse>(&response);
+        if (appearance == nullptr) continue;
+        if (appearance->kind == detail::ColorSchemeResponseKind::ColorScheme) {
+            std::lock_guard lock(impl.mutex);
+            impl.capabilities.appearance = appearance->appearance;
+            state.color_scheme_reported = true;
+        } else if (!state.color_scheme_reported) {
+            std::lock_guard lock(impl.mutex);
+            impl.capabilities.appearance = appearance->appearance;
+        }
     }
 }
 
@@ -1236,47 +933,27 @@ template <typename T>
             impl.drain_last_activity = std::chrono::steady_clock::now();
             return true;
         }
-        state.appearance_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
-        auto forwarded = consume_appearance_input(state.appearance, event.input);
-        apply_detected_appearance(impl, state.appearance);
-        if (!forwarded.empty()) handle_forwarded_input(impl, state, std::move(forwarded));
+        state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
+        auto decoded = state.decoder.feed(event.input);
+        apply_terminal_responses(impl, state, decoded.responses);
+        if (!decoded.forwarded_input.empty()) {
+            invoke_input(impl, std::move(decoded.forwarded_input));
+            state.needs_input_flush = true;
+        }
         return true;
     }
 
-    // A timeout wake means one armed deadline passed; fire the ones that are
-    // due. Both deadlines are armed on input and fire once, mirroring the old
-    // 15-poll (150 ms) idle windows.
-    if (deadline_fired(state.appearance_deadline)) {
-        const bool terminal_response_pending =
-            state.appearance.discard != AppearanceDiscardKind::None ||
-            state.appearance.pending.starts_with(kColorSchemeResponsePrefix) ||
-            state.appearance.pending.starts_with(kOscBackgroundResponsePrefix);
-        if (terminal_response_pending) {
-            state.appearance.pending.clear();
-            state.appearance.discard = AppearanceDiscardKind::None;
-        } else if (!state.appearance.pending.empty()) {
-            handle_forwarded_input(impl, state, std::move(state.appearance.pending));
-            state.appearance.pending.clear();
-        }
-        state.appearance_deadline = std::chrono::steady_clock::time_point::max();
-    }
+    // A timeout wake ends the single decoder fragment window. Appearance
+    // fragments are dropped by flush(); all other fragments are forwarded
+    // verbatim and Tui is then asked to flush its event view.
     if (deadline_fired(state.negotiation_deadline)) {
-        if (!state.keyboard_pending.empty()) {
-            invoke_input(impl, std::move(state.keyboard_pending));
-            state.keyboard_pending.clear();
+        auto decoded = state.decoder.flush();
+        apply_terminal_responses(impl, state, decoded.responses);
+        if (!decoded.forwarded_input.empty()) {
+            invoke_input(impl, std::move(decoded.forwarded_input));
             state.needs_input_flush = true;
         }
-        if (!state.cell_size_pending.empty()) {
-            invoke_input(impl, std::move(state.cell_size_pending));
-            state.cell_size_pending.clear();
-            state.needs_input_flush = true;
-        }
-        if (!state.cursor_position_pending.empty()) {
-            invoke_input(impl, std::move(state.cursor_position_pending));
-            state.cursor_position_pending.clear();
-            state.needs_input_flush = true;
-        }
-        if (state.needs_input_flush && state.keyboard_pending.empty()) {
+        if (state.needs_input_flush) {
             invoke_input(impl, {});
             state.needs_input_flush = false;
         }
@@ -1292,10 +969,17 @@ void run_terminal_worker(T& impl, std::stop_token stop_token) {
     {
         std::lock_guard lock(impl.mutex);
         startup_input = std::move(impl.startup_input);
-        input_state.appearance = std::move(impl.startup_appearance);
+        input_state.color_scheme_reported = impl.startup_color_scheme_reported;
     }
     if (!startup_input.empty()) {
-        handle_forwarded_input(impl, input_state, std::move(startup_input));
+        auto decoded = input_state.decoder.feed(startup_input);
+        apply_terminal_responses(impl, input_state, decoded.responses);
+        if (!decoded.forwarded_input.empty()) {
+            invoke_input(impl, std::move(decoded.forwarded_input));
+            input_state.needs_input_flush = true;
+            input_state.negotiation_deadline =
+                std::chrono::steady_clock::now() + kNegotiationTimeout;
+        }
     }
     auto stop_drain_deadline = std::chrono::steady_clock::time_point::max();
     while (true) {
@@ -1475,7 +1159,7 @@ support::ExpectedVoid ProcessTerminal::start(
     auto dimensions = read_dimensions(impl_->options.output_fd);
     if (!dimensions) return std::unexpected(dimensions.error());
     impl_->startup_input.clear();
-    impl_->startup_appearance = {};
+    impl_->startup_color_scheme_reported = false;
     const auto environment_appearance = detect_terminal_appearance();
     const auto detected_images = detect_image_capabilities();
     impl_->capabilities = TerminalCapabilities{
@@ -1519,9 +1203,14 @@ support::ExpectedVoid ProcessTerminal::start(
     if (!appearance_query.result) {
         return fail_startup(appearance_query.result.error());
     }
-    auto appearance = probe_terminal_appearance(impl_->options.input_fd);
-    impl_->capabilities.appearance = appearance.state.color_scheme.value_or(
-        appearance.state.background.value_or(environment_appearance));
+    StartupProbe probe;
+    poll_startup_probe(
+        probe,
+        impl_->options.input_fd,
+        kAppearanceProbeTimeout,
+        false);
+    impl_->capabilities.appearance = probe.color_scheme.value_or(
+        probe.background.value_or(environment_appearance));
 
     // ADR 0041 anchored absolute flow (issue #476): query the cursor position
     // once (DSR `\x1b[6n`) through the same blocking pre-worker write path and
@@ -1533,12 +1222,17 @@ support::ExpectedVoid ProcessTerminal::start(
     if (!cursor_query.result) {
         return fail_startup(cursor_query.result.error());
     }
-    auto cursor_probe = probe_cursor_position(impl_->options.input_fd, appearance.state);
-    appearance.forwarded_input += cursor_probe.forwarded_input;
-    if (cursor_probe.position) {
-        impl_->scroll_origin = cursor_probe.position->row;
+    poll_startup_probe(
+        probe,
+        impl_->options.input_fd,
+        kCursorPositionTimeout,
+        true);
+    impl_->capabilities.appearance = probe.color_scheme.value_or(
+        probe.background.value_or(environment_appearance));
+    if (probe.position) {
+        impl_->scroll_origin = probe.position->row;
         impl_->viewport_top = 0;
-        impl_->cursor = *cursor_probe.position;
+        impl_->cursor = *probe.position;
     } else {
         // DSR timeout fallback (ADR 0041): clear screen, home, and clear
         // scrollback, then anchor at row 0 — deterministic on terminals that
@@ -1551,8 +1245,10 @@ support::ExpectedVoid ProcessTerminal::start(
         impl_->viewport_top = 0;
         impl_->cursor = {};
     }
-    impl_->startup_appearance = std::move(appearance.state);
-    impl_->startup_input = std::move(appearance.forwarded_input);
+    auto flushed_probe = probe.decoder.flush();
+    probe.forwarded_input += std::move(flushed_probe.forwarded_input);
+    impl_->startup_color_scheme_reported = probe.color_scheme.has_value();
+    impl_->startup_input = std::move(probe.forwarded_input);
 
     auto keyboard_push = attempt_write_all(impl_->options.output_fd, kKeyboardProtocolPush);
     if (!keyboard_push.result) {

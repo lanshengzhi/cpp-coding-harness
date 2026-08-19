@@ -22,7 +22,7 @@ namespace cch::tui {
 using TuiRenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 
 namespace detail {
-class InputDecoder;
+class TerminalStreamDecoder;
 class OverlayCompositor;
 } // namespace detail
 
@@ -90,7 +90,7 @@ private:
 
     Terminal& terminal_; // must outlive this Tui.
     std::recursive_mutex mutex_;
-    std::unique_ptr<detail::InputDecoder> input_decoder_;
+    std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
     TuiRenderRequestSink render_request_sink_;
     std::vector<std::unique_ptr<Component>> children_;

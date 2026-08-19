@@ -144,7 +144,6 @@ cch_parity_declare_target(
         src/tui/Input.cpp
         src/tui/InputDecoder.cpp
         src/tui/Keybindings.cpp
-        src/tui/KeyboardProtocol.cpp
         src/tui/Keys.cpp
         src/tui/Loader.cpp
         src/tui/Markdown.cpp
@@ -684,6 +683,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
         tests/tui/TerminalImageTest.cpp
+        tests/tui/TerminalStreamDecoderTest.cpp
         tests/tui/TextBufferTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp

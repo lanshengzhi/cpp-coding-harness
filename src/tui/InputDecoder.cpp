@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cctype>
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <string>
@@ -426,24 +428,272 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
     return std::nullopt;
 }
 
+// --- Out-of-band terminal response grammars ---
+//
+// The response parsers below are the deep-module consolidation of the
+// pre-unification sidecar consumers: the CPR answer (ProcessTerminal's
+// parse_cursor_position_response, ADR 0041), the cell-size answer
+// (TerminalImage's consume_cell_size_response grammar), keyboard-protocol
+// negotiation (KeyboardProtocol's parse_response; pi 83114817
+// packages/tui/src/terminal.ts), and the appearance reports (pi 83114817
+// packages/tui/src/terminal-colors.ts). Complete sequences only: split
+// fragments reassemble in the decoder's single pending buffer before any of
+// these run.
+
+constexpr std::string_view kColorSchemeResponsePrefix{"\x1b[?997;"};
+constexpr std::string_view kOscBackgroundResponsePrefix{"\x1b]11;"};
+constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
+
+/// Parse a complete CPR response (`ESC [ rows ; cols R`, 1-based) into a
+/// 0-based cursor position.
+[[nodiscard]] std::optional<CursorPosition> parse_cursor_position_response(std::string_view response) {
+    if (!response.starts_with("\x1b[") || !response.ends_with("R")) return std::nullopt;
+    const auto body = response.substr(2, response.size() - 3);
+    const auto separator = body.find(';');
+    if (separator == std::string_view::npos) return std::nullopt;
+    std::size_t rows = 0;
+    std::size_t columns = 0;
+    const auto [rows_end, rows_error] = std::from_chars(body.data(), body.data() + separator, rows);
+    if (rows_error != std::errc{} || rows_end != body.data() + separator) return std::nullopt;
+    const auto [columns_end, columns_error] = std::from_chars(
+        body.data() + separator + 1,
+        body.data() + body.size(),
+        columns);
+    if (columns_error != std::errc{} || columns_end != body.data() + body.size()) {
+        return std::nullopt;
+    }
+    if (rows == 0 || columns == 0) return std::nullopt;
+    return CursorPosition{.column = columns - 1, .row = rows - 1};
+}
+
+/// Parse a complete `ESC [ 6 ; h ; w t` cell-size answer (pi
+/// terminal-image.ts consumeCellSizeResponse).
+[[nodiscard]] std::optional<CellSizeResponse> parse_cell_size_response(std::string_view response) {
+    if (!response.starts_with(kCellSizeResponsePrefix) || response.back() != 't') {
+        return std::nullopt;
+    }
+    const auto body = response.substr(
+        kCellSizeResponsePrefix.size(),
+        response.size() - kCellSizeResponsePrefix.size() - 1);
+    const auto separator = body.find(';');
+    if (separator == std::string_view::npos) return std::nullopt;
+    const auto height = body.substr(0, separator);
+    const auto width = body.substr(separator + 1);
+
+    std::size_t height_px = 0;
+    std::size_t width_px = 0;
+    const auto [height_end, height_error] =
+        std::from_chars(height.data(), height.data() + height.size(), height_px);
+    const auto [width_end, width_error] =
+        std::from_chars(width.data(), width.data() + width.size(), width_px);
+    if (height_error != std::errc{} || width_error != std::errc{} ||
+        height_end != height.data() + height.size() ||
+        width_end != width.data() + width.size()) {
+        return std::nullopt;
+    }
+    return CellSizeResponse{
+        .height_px = height_px,
+        .width_px = width_px,
+    };
+}
+
+/// Parse a complete keyboard-protocol negotiation answer: `CSI ? flags u`
+/// (Kitty flags) or `CSI ? ... c` (device attributes, the modifyOtherKeys
+/// fallback sentinel).
+[[nodiscard]] std::optional<KeyboardProtocolResponse> parse_keyboard_protocol_response(
+    std::string_view response) {
+    if (!response.starts_with("\x1b[?") || response.size() < 5) return std::nullopt;
+    const auto final = response.back();
+    const auto body = response.substr(3, response.size() - 4);
+    if (final == 'u') {
+        unsigned int flags = 0;
+        const auto [end, error] = std::from_chars(body.data(), body.data() + body.size(), flags);
+        if (error != std::errc{} || end != body.data() + body.size()) return std::nullopt;
+        return KeyboardProtocolResponse{
+            .kind = KeyboardProtocolResponseKind::KittyFlags,
+            .flags = flags,
+        };
+    }
+    if (final != 'c') return std::nullopt;
+    for (const auto& byte : body) {
+        if ((byte < '0' || byte > '9') && byte != ';') return std::nullopt;
+    }
+    return KeyboardProtocolResponse{
+        .kind = KeyboardProtocolResponseKind::DeviceAttributes,
+    };
+}
+
+struct EnvironmentRgb {
+    int red{0};
+    int green{0};
+    int blue{0};
+};
+
+[[nodiscard]] double linear_channel(int channel) {
+    const auto value = static_cast<double>(channel) / 255.0;
+    return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+}
+
+[[nodiscard]] TerminalAppearance appearance_for_rgb(const EnvironmentRgb& rgb) {
+    const auto luminance = 0.2126 * linear_channel(rgb.red) +
+        0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
+    return luminance >= 0.5 ? TerminalAppearance::Light : TerminalAppearance::Dark;
+}
+
+[[nodiscard]] std::optional<int> parse_osc_hex_channel(std::string_view channel) {
+    if (channel.empty() || channel.size() > 8) return std::nullopt;
+    std::uint64_t value = 0;
+    std::uint64_t maximum = 0;
+    for (const auto character : channel) {
+        int digit = 0;
+        if (character >= '0' && character <= '9') {
+            digit = character - '0';
+        } else if (character >= 'a' && character <= 'f') {
+            digit = 10 + character - 'a';
+        } else if (character >= 'A' && character <= 'F') {
+            digit = 10 + character - 'A';
+        } else {
+            return std::nullopt;
+        }
+        value = value * 16 + static_cast<std::uint64_t>(digit);
+        maximum = maximum * 16 + 15;
+    }
+    if (maximum == 0) return std::nullopt;
+    return static_cast<int>(std::round(static_cast<double>(value) / static_cast<double>(maximum) * 255.0));
+}
+
+[[nodiscard]] std::optional<EnvironmentRgb> parse_osc_background(std::string_view value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) return std::nullopt;
+    const auto last = value.find_last_not_of(" \t\r\n");
+    value = value.substr(first, last - first + 1);
+    if (value.starts_with('#')) {
+        value.remove_prefix(1);
+        if (value.size() != 6 && value.size() != 12) return std::nullopt;
+        const auto channel_width = value.size() / 3;
+        const auto red = parse_osc_hex_channel(value.substr(0, channel_width));
+        const auto green = parse_osc_hex_channel(value.substr(channel_width, channel_width));
+        const auto blue = parse_osc_hex_channel(value.substr(channel_width * 2, channel_width));
+        if (!red || !green || !blue) return std::nullopt;
+        return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
+    }
+
+    auto lower = std::string(value.substr(0, std::min<std::size_t>(5, value.size())));
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    if (lower.starts_with("rgba:")) {
+        value.remove_prefix(5);
+    } else if (lower.starts_with("rgb:")) {
+        value.remove_prefix(4);
+    } else {
+        return std::nullopt;
+    }
+    const auto first_separator = value.find('/');
+    if (first_separator == std::string_view::npos) return std::nullopt;
+    const auto second_separator = value.find('/', first_separator + 1);
+    if (second_separator == std::string_view::npos) return std::nullopt;
+    const auto third_separator = value.find('/', second_separator + 1);
+    const auto red = parse_osc_hex_channel(value.substr(0, first_separator));
+    const auto green = parse_osc_hex_channel(value.substr(
+        first_separator + 1,
+        second_separator - first_separator - 1));
+    const auto blue = parse_osc_hex_channel(value.substr(
+        second_separator + 1,
+        third_separator == std::string_view::npos
+            ? std::string_view::npos
+            : third_separator - second_separator - 1));
+    if (!red || !green || !blue) return std::nullopt;
+    return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
+}
+
+/// How one complete escape sequence classifies in the demux: an out-of-band
+/// terminal response, a response-shaped sequence to consume silently, or
+/// ordinary in-band input to forward and key-decode.
+struct ResponseScan {
+    std::optional<TerminalResponseVariant> response{std::nullopt};
+    /// Response-shaped sequences are never forwarded as input: the appearance
+    /// grammars consume their bytes even when the body is malformed, exactly
+    /// as the pre-unification appearance sidecar did.
+    bool consumed{false};
+};
+
+[[nodiscard]] ResponseScan scan_terminal_response(std::string_view sequence) {
+    // `CSI ? 997 ; 1|2 n` color-scheme report (pi terminal-colors.ts
+    // parseTerminalColorSchemeReport): consumed even when the value is
+    // unrecognized.
+    if (sequence.starts_with(kColorSchemeResponsePrefix) && sequence.back() == 'n') {
+        ResponseScan scan{.response = std::nullopt, .consumed = true};
+        const auto value = sequence.substr(
+            kColorSchemeResponsePrefix.size(),
+            sequence.size() - kColorSchemeResponsePrefix.size() - 1);
+        if (value == "1" || value == "2") {
+            scan.response = ColorSchemeResponse{
+                .kind = ColorSchemeResponseKind::ColorScheme,
+                .appearance = value == "1" ? TerminalAppearance::Dark : TerminalAppearance::Light,
+            };
+        }
+        return scan;
+    }
+    // OSC 11 background-color report (pi terminal-colors.ts
+    // parseOsc11BackgroundColor): consumed even when the body is malformed.
+    if (sequence.starts_with(kOscBackgroundResponsePrefix)) {
+        ResponseScan scan{.response = std::nullopt, .consumed = true};
+        auto body = sequence.substr(kOscBackgroundResponsePrefix.size());
+        if (body.ends_with('\x07')) {
+            body.remove_suffix(1);
+        } else if (body.ends_with("\x1b\\")) {
+            body.remove_suffix(2);
+        }
+        if (const auto rgb = parse_osc_background(body)) {
+            scan.response = ColorSchemeResponse{
+                .kind = ColorSchemeResponseKind::Background,
+                .appearance = appearance_for_rgb(*rgb),
+            };
+        }
+        return scan;
+    }
+    // Cell size, CPR, and keyboard negotiation emit only on a fully valid
+    // parse; a malformed lookalike stays ordinary in-band input.
+    if (auto cell_size = parse_cell_size_response(sequence)) {
+        return ResponseScan{.response = std::move(*cell_size), .consumed = true};
+    }
+    if (auto position = parse_cursor_position_response(sequence)) {
+        return ResponseScan{.response = *position, .consumed = true};
+    }
+    if (auto keyboard = parse_keyboard_protocol_response(sequence)) {
+        return ResponseScan{.response = *keyboard, .consumed = true};
+    }
+    return {};
+}
+
+/// Whether a buffered fragment can only complete into an appearance
+/// response: such fragments are dropped at the flush deadline (the
+/// pre-unification appearance sidecar dropped them at its 150 ms deadline)
+/// instead of leaking into the user key stream.
+[[nodiscard]] bool is_appearance_response_fragment(std::string_view pending) {
+    return pending.starts_with(kColorSchemeResponsePrefix) ||
+        pending.starts_with(kOscBackgroundResponsePrefix);
+}
+
 } // namespace
 
-std::vector<InputEventVariant> InputDecoder::feed(std::string_view input) {
-    std::vector<InputEventVariant> events;
+StreamDecodeResult TerminalStreamDecoder::feed(std::string_view input) {
+    StreamDecodeResult result;
     for (const auto byte : input) {
         if (paste_mode_) {
-            consume_paste_byte(byte, events);
+            consume_paste_byte(byte, result);
             continue;
         }
         if (discard_escape_byte(byte)) continue;
         pending_.push_back(byte);
-        drain(events, false);
+        drain(result, false);
     }
-    drain(events, true);
-    return events;
+    drain(result, true);
+    return result;
 }
 
-bool InputDecoder::discard_escape_byte(char byte) {
+bool TerminalStreamDecoder::discard_escape_byte(char byte) {
     if (discard_mode_ == EscapeDiscardMode::None) return false;
 
     if (discard_mode_ == EscapeDiscardMode::Csi) {
@@ -470,33 +720,33 @@ bool InputDecoder::discard_escape_byte(char byte) {
     return true;
 }
 
-std::vector<InputEventVariant> InputDecoder::flush() {
-    std::vector<InputEventVariant> events;
+StreamDecodeResult TerminalStreamDecoder::flush() {
+    StreamDecodeResult result;
     if (paste_mode_) {
         reset();
-        return events;
+        return result;
     }
-    if (pending_.empty()) {
-        discard_mode_ = EscapeDiscardMode::None;
-        discard_saw_escape_ = false;
-        return events;
-    }
-    if (pending_.front() != '\x1b') {
+    if (!pending_.empty()) {
+        if (!is_appearance_response_fragment(pending_)) {
+            // The fragment window ended: event consumers get the best-effort
+            // key decode (a lone ESC resolves to the escape key, pi's
+            // fragment timeout) and byte-level consumers get the fragment
+            // verbatim so no input byte is lost.
+            if (pending_.front() == '\x1b') {
+                if (auto key = parse_raw_sequence(pending_)) {
+                    result.events.emplace_back(std::move(*key));
+                }
+            }
+            result.forwarded_input = std::move(pending_);
+        }
         pending_.clear();
-        discard_mode_ = EscapeDiscardMode::None;
-        discard_saw_escape_ = false;
-        return events;
     }
-
-    auto sequence = std::move(pending_);
-    pending_.clear();
     discard_mode_ = EscapeDiscardMode::None;
     discard_saw_escape_ = false;
-    if (auto key = parse_raw_sequence(sequence)) events.emplace_back(std::move(*key));
-    return events;
+    return result;
 }
 
-void InputDecoder::reset() {
+void TerminalStreamDecoder::reset() {
     pending_.clear();
     discard_mode_ = EscapeDiscardMode::None;
     discard_saw_escape_ = false;
@@ -507,12 +757,11 @@ void InputDecoder::reset() {
     paste_lines_ = 1;
 }
 
-void InputDecoder::drain(std::vector<InputEventVariant>& events, bool end_of_feed) {
+void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) {
     while (!pending_.empty()) {
         if (pending_.size() <= kPasteStart.size() && starts_with_prefix(pending_, kPasteStart)) {
             if (pending_ == kPasteStart) {
-                pending_.clear();
-                enter_paste();
+                enter_paste(result);
             }
             return;
         }
@@ -537,11 +786,15 @@ void InputDecoder::drain(std::vector<InputEventVariant>& events, bool end_of_fee
         } else {
             length = utf8_sequence_length(static_cast<unsigned char>(pending_.front()));
             if (length == 0) {
+                // Invalid UTF-8 lead byte: no event, but the byte still
+                // forwards verbatim for byte-level consumers.
+                result.forwarded_input.push_back(pending_.front());
                 pending_.erase(0, 1);
                 continue;
             }
             if (pending_.size() < length) return;
             if (!valid_utf8_prefix(pending_, length)) {
+                result.forwarded_input.push_back(pending_.front());
                 pending_.erase(0, 1);
                 continue;
             }
@@ -549,11 +802,24 @@ void InputDecoder::drain(std::vector<InputEventVariant>& events, bool end_of_fee
 
         const auto sequence = pending_.substr(0, length);
         pending_.erase(0, length);
-        if (auto key = parse_raw_sequence(sequence)) events.emplace_back(std::move(*key));
+        if (sequence.front() == '\x1b') {
+            auto scan = scan_terminal_response(sequence);
+            if (scan.consumed) {
+                if (scan.response) result.responses.push_back(std::move(*scan.response));
+                continue;
+            }
+        }
+        result.forwarded_input += sequence;
+        if (auto key = parse_raw_sequence(sequence)) result.events.emplace_back(std::move(*key));
     }
 }
 
-void InputDecoder::enter_paste() {
+void TerminalStreamDecoder::enter_paste(StreamDecodeResult& result) {
+    // Byte-level consumers receive the complete bracketed-paste framing so
+    // the downstream input decoder re-derives the same paste (pi's
+    // StdinBuffer re-wraps paste content with its markers).
+    result.forwarded_input += pending_;
+    pending_.clear();
     paste_mode_ = true;
     paste_text_.clear();
     paste_end_candidate_.clear();
@@ -561,7 +827,8 @@ void InputDecoder::enter_paste() {
     paste_lines_ = 1;
 }
 
-void InputDecoder::consume_paste_byte(char byte, std::vector<InputEventVariant>& events) {
+void TerminalStreamDecoder::consume_paste_byte(char byte, StreamDecodeResult& result) {
+    result.forwarded_input.push_back(byte);
     paste_end_candidate_.push_back(byte);
     while (!starts_with_prefix(paste_end_candidate_, kPasteEnd)) {
         commit_paste_byte(paste_end_candidate_.front());
@@ -569,7 +836,7 @@ void InputDecoder::consume_paste_byte(char byte, std::vector<InputEventVariant>&
     }
     if (paste_end_candidate_ != kPasteEnd) return;
 
-    events.emplace_back(PasteEvent{
+    result.events.emplace_back(PasteEvent{
         .text = std::move(paste_text_),
         .original_bytes = paste_original_bytes_,
         .lines = paste_lines_,
@@ -582,7 +849,7 @@ void InputDecoder::consume_paste_byte(char byte, std::vector<InputEventVariant>&
     paste_lines_ = 1;
 }
 
-void InputDecoder::commit_paste_byte(char byte) {
+void TerminalStreamDecoder::commit_paste_byte(char byte) {
     if (paste_original_bytes_ != std::numeric_limits<std::size_t>::max()) ++paste_original_bytes_;
     if (byte == '\n' && paste_lines_ != std::numeric_limits<std::size_t>::max()) ++paste_lines_;
     if (paste_text_.size() < kMaxPasteBytes) paste_text_.push_back(byte);

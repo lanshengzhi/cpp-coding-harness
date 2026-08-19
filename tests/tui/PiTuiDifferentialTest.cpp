@@ -104,9 +104,9 @@ struct ExpectedKey {
 /// return the single decoded key event, or `std::nullopt` when no key event
 /// is produced.
 [[nodiscard]] std::optional<tui::KeyEvent> decode_key(std::string_view sequence) {
-    tui::detail::InputDecoder decoder;
-    auto events = decoder.feed(sequence);
-    const auto flushed = decoder.flush();
+    tui::detail::TerminalStreamDecoder decoder;
+    auto events = decoder.feed(sequence).events;
+    const auto flushed = decoder.flush().events;
     events.insert(events.end(), flushed.begin(), flushed.end());
     if (events.size() != 1) return std::nullopt;
     const auto* key = std::get_if<tui::KeyEvent>(&events.front());
@@ -206,8 +206,8 @@ TEST_CASE("discarded control sequences produce no key events", "[tui][differenti
     for (const auto& entry : discarded) {
         const auto sequence = entry.get_string();
         INFO(std::string{"sequence "} + sequence);
-        tui::detail::InputDecoder decoder;
-        CHECK(decoder.feed(sequence).empty());
+        tui::detail::TerminalStreamDecoder decoder;
+        CHECK(decoder.feed(sequence).events.empty());
     }
 }
 
@@ -226,8 +226,8 @@ TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differ
         const auto context = std::string{"content "} + content;
         INFO(context);
 
-        tui::detail::InputDecoder decoder;
-        const auto events = decoder.feed(framed);
+        tui::detail::TerminalStreamDecoder decoder;
+        const auto events = decoder.feed(framed).events;
         REQUIRE(events.size() == 1);
         const auto* paste_event = std::get_if<tui::PasteEvent>(&events.front());
         REQUIRE(paste_event != nullptr);
@@ -253,13 +253,13 @@ TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][
         const auto context = std::string{"sequence "} + sequence;
         INFO(context);
 
-        tui::detail::InputDecoder decoder;
+        tui::detail::TerminalStreamDecoder decoder;
         std::vector<tui::InputEventVariant> events;
         for (std::size_t offset = 0; offset < sequence.size(); offset += chunk_size) {
-            auto chunk_events = decoder.feed(sequence.substr(offset, chunk_size));
+            auto chunk_events = decoder.feed(sequence.substr(offset, chunk_size)).events;
             events.insert(events.end(), chunk_events.begin(), chunk_events.end());
         }
-        const auto flushed = decoder.flush();
+        const auto flushed = decoder.flush().events;
         events.insert(events.end(), flushed.begin(), flushed.end());
 
         if (expected.id.empty()) {

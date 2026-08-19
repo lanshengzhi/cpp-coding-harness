@@ -75,7 +75,7 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
 
 Tui::Tui(Terminal& terminal)
     : terminal_(terminal),
-      input_decoder_(std::make_unique<detail::InputDecoder>()),
+      stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
       compositor_(std::make_unique<detail::OverlayCompositor>()) {}
 
 Tui::~Tui() {
@@ -223,7 +223,7 @@ support::ExpectedVoid Tui::stop() {
     }
     const auto cursor_result = terminal_.set_cursor_visible(true);
     active_images_.clear();
-    input_decoder_->reset();
+    stream_decoder_->reset();
     first_render_ = true;
     pending_render_ = false;
 
@@ -676,13 +676,15 @@ void Tui::handle_input(std::string input) {
     std::lock_guard lock(mutex_);
     if (!started_) return;
     if (input.empty()) {
-        for (const auto& event : input_decoder_->flush()) dispatch_input(event);
+        // ProcessTerminal applies out-of-band responses before delivering the
+        // same bytes here; late response fragments are dropped by its flush.
+        for (const auto& event : stream_decoder_->flush().events) dispatch_input(event);
         return;
     }
 
     for (std::size_t offset = 0; offset < input.size(); offset += kInputDecodeChunkBytes) {
         const auto chunk = std::string_view(input).substr(offset, kInputDecodeChunkBytes);
-        for (const auto& event : input_decoder_->feed(chunk)) dispatch_input(event);
+        for (const auto& event : stream_decoder_->feed(chunk).events) dispatch_input(event);
     }
 }
 
