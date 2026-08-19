@@ -143,7 +143,7 @@ TEST_CASE(
             const cch::tui::AutocompleteRequest& request,
             cch::tui::AutocompleteResultSink sink) override {
             requests.push_back(request);
-            sink(response);
+            (void)sink(response);
         }
         cch::tui::AutocompleteApplyResult apply_completion(
             const std::vector<std::string>& lines,
@@ -705,7 +705,7 @@ public:
             held_sinks.push_back(std::move(sink));
             return;
         }
-        sink(response);
+        (void)sink(response);
     }
     cch::tui::AutocompleteApplyResult apply_completion(
         const std::vector<std::string>& lines,
@@ -818,11 +818,11 @@ TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][ed
     REQUIRE(provider_ptr->requests.size() == 2);
 
     // The stale response for A is dropped at delivery time.
-    provider_ptr->held_sinks[0](slash_suggestions());
+    (void)provider_ptr->held_sinks[0](slash_suggestions());
     CHECK_FALSE(editor.autocomplete_open());
 
     // The current response for B opens the menu at the next input boundary.
-    provider_ptr->held_sinks[1](slash_suggestions());
+    (void)provider_ptr->held_sinks[1](slash_suggestions());
     CHECK_FALSE(editor.autocomplete_open());
     type(editor, "e");
     REQUIRE(editor.autocomplete_open());
@@ -847,7 +847,7 @@ TEST_CASE("Editor aborts an in-flight autocomplete request when superseded", "[t
     CHECK_FALSE(provider_ptr->requests[1].stop_token.stop_requested());
 
     // The aborted request's late response is rejected.
-    provider_ptr->held_sinks[0](slash_suggestions());
+    (void)provider_ptr->held_sinks[0](slash_suggestions());
     CHECK_FALSE(editor.autocomplete_open());
 }
 
@@ -860,7 +860,7 @@ TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the
 
     type(editor, "/");  // request A held
     REQUIRE(provider_ptr->requests.size() == 1);
-    provider_ptr->held_sinks[0](slash_suggestions());  // A resolves
+    (void)provider_ptr->held_sinks[0](slash_suggestions());  // A resolves
     type(editor, "x");  // drain opens the menu; typing re-requests (held)
     REQUIRE(editor.autocomplete_open());
     REQUIRE(provider_ptr->requests.size() == 2);
@@ -871,7 +871,7 @@ TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the
 
     // The late result of the cancelled request must not reopen the menu (pi
     // aborted-signal check).
-    provider_ptr->held_sinks[1](slash_suggestions());
+    (void)provider_ptr->held_sinks[1](slash_suggestions());
     CHECK_FALSE(editor.autocomplete_open());
     type(editor, "y");
     CHECK_FALSE(editor.autocomplete_open());
@@ -890,7 +890,7 @@ TEST_CASE("Editor drops autocomplete results that no longer match the buffer sna
     REQUIRE(provider_ptr->requests.size() == 1);
 
     // A's result lands after the buffer moved; the snapshot check drops it.
-    provider_ptr->held_sinks[0](cch::tui::AutocompleteSuggestions{
+    (void)provider_ptr->held_sinks[0](cch::tui::AutocompleteSuggestions{
         .items = {{.value = "@src/", .label = "src/", .description = {}}},
         .prefix = "@",
     });

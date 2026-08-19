@@ -391,7 +391,9 @@ void ThemeController::apply_from_settings() {
     const auto raw_setting = read_theme_setting(impl_->theme_setting);
     const auto theme_setting = resolve_theme_setting(raw_setting, impl_->terminal_theme);
     if (theme_setting) {
-        impl_->apply_theme_name(*theme_setting, /*show_error=*/true);
+        // Best-effort: a rejected theme name is surfaced by the settings
+        // path, not by this env-detection fallback.
+        (void)impl_->apply_theme_name(*theme_setting, /*show_error=*/true);
         return;
     }
     const auto detection = detect_terminal_theme_from_env();

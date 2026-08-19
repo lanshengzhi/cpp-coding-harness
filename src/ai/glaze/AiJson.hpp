@@ -195,7 +195,7 @@ template <typename T>
             std::string{"missing required field 'content' for "} + std::string(role),
             context));
     }
-    if (const auto* text = std::get_if<std::string>(&*content)) {
+    if (std::holds_alternative<std::string>(*content)) {
         return std::unexpected(json_contract_error(
             "content must be a block array",
             std::string{"content for "} + std::string(role) +
@@ -504,7 +504,7 @@ template <typename T>
             std::string(role) + " message is missing the 'content' field",
             context));
     }
-    if (const auto* text = std::get_if<std::string>(&*content)) {
+    if (std::holds_alternative<std::string>(*content)) {
         return std::unexpected(json_contract_error(
             "content must be a block array",
             std::string(role) +

@@ -168,7 +168,11 @@ TEST_CASE(
         runtime->factory(),
         agent::ToolRegistry{},
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "high"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "high",
+        });
+
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -546,7 +550,11 @@ TEST_CASE(
         std::move(options),
         // The Agent requests the level from its initial state; "max" clamps
         // to the partial model's top supported level at creation.
-        agent::AgentInitialState{.thinking_level = "max"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "max",
+        });
+
     REQUIRE(run_prompt(subject, "first"));
     REQUIRE(run_prompt(subject, "second"));
 
@@ -596,7 +604,11 @@ TEST_CASE(
         runtime->factory(),
         agent::ToolRegistry{},
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "max"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "max",
+        });
+
 
     CHECK(subject.state().thinking_level == "xhigh");
 }
@@ -617,7 +629,11 @@ TEST_CASE(
         runtime->factory(),
         agent::ToolRegistry{},
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "medium"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "medium",
+        });
+
 
     auto clamped = subject.set_thinking_level("max");
     REQUIRE(clamped.has_value());
@@ -642,7 +658,11 @@ TEST_CASE(
         runtime->factory(),
         agent::ToolRegistry{},
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "high"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "high",
+        });
+
 
     auto invalid = subject.set_thinking_level("sometimes");
     REQUIRE_FALSE(invalid.has_value());

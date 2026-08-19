@@ -46,6 +46,7 @@ struct SessionFixture {
             .cwd = cwd.value_or(workspace.path()),
             .env = env,
             .stdin_text = std::move(stdin_text),
+            .models = {},
         });
     }
 };
@@ -231,6 +232,8 @@ TEST_CASE("session-family: --session on an existing file resumes with the header
         .args = {"--session", session.string(), "first"},
         .cwd = original.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(created.exit_code == 0);
 
@@ -252,6 +255,8 @@ TEST_CASE("session-family: --session with a global id prompts to fork and confir
         .args = {"only-message"},
         .cwd = other.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(other_run.exit_code == 0);
     const auto other_files = session_files(fixture.agent_dir / "sessions");
@@ -287,6 +292,8 @@ TEST_CASE("session-family: declining the cross-project fork prints Aborted and e
         .args = {"only-message"},
         .cwd = other.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(other_run.exit_code == 0);
     const auto other_files = session_files(fixture.agent_dir / "sessions");
@@ -366,6 +373,8 @@ TEST_CASE("session-family: --fork resolves a local id and never prompts cross-pr
         .args = {"only-message"},
         .cwd = other.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(other_run.exit_code == 0);
     const auto other_files = session_files(fixture.agent_dir / "sessions");
@@ -603,6 +612,8 @@ TEST_CASE("session-family: custom --session-dir filters local id search by cwd",
         .args = {"--session-dir", shared.string(), "other-message"},
         .cwd = other.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(other_run.exit_code == 0);
     const auto other_files = session_files(shared);
@@ -637,6 +648,8 @@ TEST_CASE("session-family: custom --session-dir filters --continue by cwd", "[cl
         .args = {"--session-dir", shared.string(), "other-message"},
         .cwd = other.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(other_run.exit_code == 0);
 
@@ -702,6 +715,8 @@ TEST_CASE("session-family: --resume opens the picker and resumes the picked sess
         .args = {"--resume", "second"},
         .cwd = fixture.workspace.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
         .resume_picker = scripted_picker(files.front(), &called),
     });
 
@@ -723,6 +738,8 @@ TEST_CASE("session-family: --resume cancel prints pi's No session selected and e
         .args = {"--resume"},
         .cwd = fixture.workspace.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
         .resume_picker = scripted_picker(std::nullopt, &called),
     });
 
@@ -739,6 +756,8 @@ TEST_CASE("session-family: --no-session wins before the --resume picker opens", 
         .args = {"--no-session", "--resume", "hello"},
         .cwd = fixture.workspace.path(),
         .env = fixture.env,
+        .stdin_text = {},
+        .models = {},
         .resume_picker = scripted_picker(std::nullopt, &called),
     });
 
@@ -788,6 +807,8 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
         .args = {"--session", continue_session.string(), "from-elsewhere"},
         .cwd = vanished_launch.path(),
         .env = {{"PI_CODING_AGENT_DIR", continue_agent.path().string()}},
+        .stdin_text = {},
+        .models = {},
     });
     REQUIRE(launched.exit_code == 0);
     REQUIRE(std::filesystem::exists(continue_session));

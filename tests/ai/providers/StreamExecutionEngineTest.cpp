@@ -16,7 +16,12 @@ TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done event
         },
     });
 
-    ai::providers::StreamRequest request{.url = "https://api.test/v1/stream"};
+    ai::providers::StreamRequest request{
+        .url = "https://api.test/v1/stream",
+        .headers = {},
+        .body = {},
+    };
+
     ai::ProviderStreamOptions options;
     ai::AssistantMessage initial_assistant;
     initial_assistant.api = "test-api";
@@ -88,7 +93,12 @@ TEST_CASE("StreamExecutionEngine retries on 429 and resets state via factory", "
         .chunks = {"event: data\ndata: success\n\n"},
     });
 
-    ai::providers::StreamRequest request{.url = "https://api.test/v1/stream"};
+    ai::providers::StreamRequest request{
+        .url = "https://api.test/v1/stream",
+        .headers = {},
+        .body = {},
+    };
+
     ai::ProviderStreamOptions options;
     options.max_retries = 2;
     options.max_retry_delay_ms = 1000;
@@ -149,7 +159,12 @@ TEST_CASE("StreamExecutionEngine isolates sink failure and halts immediately", "
         .chunks = {"event: message\ndata: payload\n\n"},
     });
 
-    ai::providers::StreamRequest request{.url = "https://api.test/v1/stream"};
+    ai::providers::StreamRequest request{
+        .url = "https://api.test/v1/stream",
+        .headers = {},
+        .body = {},
+    };
+
     ai::ProviderStreamOptions options;
     ai::AssistantMessage initial_assistant;
     initial_assistant.api = "test-api";

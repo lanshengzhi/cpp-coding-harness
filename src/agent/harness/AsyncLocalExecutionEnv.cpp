@@ -44,6 +44,7 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
     };
 }
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 [[nodiscard]] FileError unknown_file_error(std::optional<std::string> path = std::nullopt) {
     return FileError{
         .code = FileErrorCode::Unknown,
@@ -51,6 +52,7 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
         .path = std::move(path),
     };
 }
+#endif
 
 [[nodiscard]] ExecutionError busy_execution_error() {
     return ExecutionError{

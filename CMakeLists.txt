@@ -610,6 +610,29 @@ if(CCH_BUILD_TESTS)
     )
     set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469")
 
+    # Zero-compiler-warning gate (issue #492): recompiles every project-owned
+    # compile command from the generated compile_commands.json with the
+    # project's own `-Wall -Wextra -Wpedantic` profile plus `-Werror` (and
+    # `-fsyntax-only`), failing closed on any diagnostic in the production or
+    # test source graph. CODING_STANDARDS.md §14 keeps compiler diagnostics
+    # as review findings without warnings-as-errors in the normal build; this
+    # gate makes the "zero warnings" requirement enforceable against
+    # regressions. Requires the build to have produced compile_commands.json;
+    # the build-phase Gate custom target is already a prerequisite of every
+    # test shard.
+    add_test(
+        NAME cch_warning_gate
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/warning_gate.py
+            --compile-commands ${CMAKE_BINARY_DIR}/compile_commands.json
+            --project-root ${CMAKE_CURRENT_SOURCE_DIR}
+            --exclude-root ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+    )
+    set_tests_properties(cch_warning_gate PROPERTIES
+        LABELS "architecture;build;issue492"
+        TIMEOUT 900)
+
     # Package-aligned test shard executables (issue #447; CODING_STANDARDS.md
     # section 11.6). Shards are build grouping only: `catch_discover_tests`
     # registers Catch2 cases as individual CTest tests, and CTest names/labels

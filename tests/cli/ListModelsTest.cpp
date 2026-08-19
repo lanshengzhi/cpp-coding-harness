@@ -107,6 +107,9 @@ private:
     std::shared_ptr<ai::Models> models) {
     return tests::run_cli(tests::CliRunOptions{
         .args = std::move(args),
+        .cwd = {},
+        .env = {},
+        .stdin_text = {},
         .models = std::move(models),
     });
 }
@@ -176,6 +179,9 @@ TEST_CASE(
     auto result = tests::run_cli(tests::CliRunOptions{
         .args = {"--list-models"},
         .cwd = workspace.path(),
+        .env = {},
+        .stdin_text = {},
+        .models = {},
     });
 
     REQUIRE(result.exit_code == 0);

@@ -249,7 +249,10 @@ struct Parser {
 
     [[nodiscard]] Expected<double> parse_number() {
         const std::size_t start = index;
-        consume('-');
+        // Optional leading minus: consume it when present; the caller
+        // validates the remaining number shape below. The [[nodiscard]]
+        // result is intentionally unused here.
+        (void)consume('-');
         if (index >= text.size()) {
             return std::unexpected(fail("invalid number"));
         }

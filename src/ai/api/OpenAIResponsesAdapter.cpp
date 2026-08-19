@@ -83,17 +83,6 @@ using JsonArray = support::JsonValue::array_t;
     return request;
 }
 
-[[nodiscard]] support::Error normalize_transport_error(const support::Error& error) {
-    if (error.code == support::ErrorCode::Cancelled) {
-        return support::make_error(support::ErrorCode::Cancelled, "Request was aborted");
-    }
-    if (error.code == support::ErrorCode::Unknown) {
-        return error;
-    }
-    return stream::stream_error(
-        error.message.empty() ? "OpenAI Responses request failed" : error.message,
-        error.detail);
-}
 
 void apply_usage(
     const Model& model,

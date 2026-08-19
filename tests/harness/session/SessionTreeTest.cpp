@@ -574,6 +574,7 @@ TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[ha
         .from_id = "oldleaf",
         .summary = "branch summary",
         .details = std::nullopt,
+        .usage = {},
         .from_hook = std::nullopt,
     };
     loaded.entries.push_back(std::move(branch));
@@ -587,7 +588,9 @@ TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[ha
         .summary = "compact summary",
         .first_kept_entry_id = "msg001",
         .tokens_before = 42,
+        .retained_tail = {},
         .details = std::nullopt,
+        .usage = {},
         .from_hook = std::nullopt,
     };
     loaded.entries.push_back(std::move(compaction));
@@ -653,6 +656,7 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
         .from_id = "typed-from",
         .summary = "typed branch",
         .details = std::nullopt,
+        .usage = {},
         .from_hook = std::nullopt,
     };
     branch.payload = ignored_payload_marker("branch");
@@ -666,7 +670,9 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
         .summary = "typed compact",
         .first_kept_entry_id = "custom01",
         .tokens_before = 77,
+        .retained_tail = {},
         .details = std::nullopt,
+        .usage = {},
         .from_hook = std::nullopt,
     };
     compaction.payload = ignored_payload_marker("compaction");

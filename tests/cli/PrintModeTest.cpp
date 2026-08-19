@@ -224,7 +224,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 0);
     CHECK(output.str() == "fake: hello\n");
@@ -244,7 +244,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 1);
     CHECK(output.str().empty());
@@ -264,7 +264,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 1);
     CHECK(output.str().empty());
@@ -284,7 +284,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 1);
     CHECK(output.str().empty());
@@ -307,7 +307,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 1);
     CHECK(output.str().empty());
@@ -376,7 +376,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 1);
     CHECK(output.str().empty());
@@ -397,7 +397,7 @@ TEST_CASE(
     std::thread runner{[&] {
         exit_code = run_print(
             *session.created.session, output, error,
-            cli::PrintModePlan{.initial_message = "hello"});
+            cli::PrintModePlan{.initial_message = "hello", .messages = {}});
     }};
     while (probe->request_count.load() == 0) {
         std::this_thread::yield();
@@ -425,7 +425,7 @@ TEST_CASE(
     std::thread runner{[&] {
         exit_code = run_print(
             *session.created.session, output, error,
-            cli::PrintModePlan{.initial_message = "hello"});
+            cli::PrintModePlan{.initial_message = "hello", .messages = {}});
     }};
     while (probe->request_count.load() == 0) {
         std::this_thread::yield();
@@ -449,7 +449,7 @@ TEST_CASE(
     std::ostringstream error;
     const auto exit_code = run_print(
         *session.created.session, output, error,
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     CHECK(exit_code == 0);
     CHECK(session.created.session->is_open());
@@ -469,7 +469,7 @@ TEST_CASE(
         io,
         *session.created.session,
         cli::PrintModeConfig{.output = broken_output, .error = error},
-        cli::PrintModePlan{.initial_message = "hello"});
+        cli::PrintModePlan{.initial_message = "hello", .messages = {}});
 
     // pi writes the final text blocks without an error channel; a broken
     // output stream cannot change the outcome, so the run still exits 0.

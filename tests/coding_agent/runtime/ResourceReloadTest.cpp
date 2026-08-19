@@ -257,7 +257,6 @@ TEST_CASE(
     {
         ReloadFixture fixture;
         fixture.create(/*trusted*/ true);
-        auto* session = fixture.session.get();
         // The retained request gains an explicit prompt-template file that we
         // delete before reload. (The reload re-runs the SAME retained request,
         // so the file must exist at creation time to be retained.)

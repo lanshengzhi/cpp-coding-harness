@@ -56,6 +56,7 @@ coding_agent::PromptTemplate make_template(std::string name, std::string content
         .description = std::nullopt,
         .content = std::move(content),
         .filePath = "/snapshot/" + name + ".md",
+        .sourceInfo = {},
     };
 }
 

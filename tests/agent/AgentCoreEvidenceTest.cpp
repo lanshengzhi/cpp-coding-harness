@@ -420,7 +420,11 @@ TEST_CASE(
         runtime->factory(),
         agent::ToolRegistry{},
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "high"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "high",
+        });
+
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -495,7 +499,11 @@ TEST_CASE(
         runtime->factory(),
         std::move(tools),
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "medium"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "medium",
+        });
+
 
     // A follow-up queued up front drains only after the last tool-call turn
     // completes; a steering message steered from the turn_end(1) observer
@@ -613,7 +621,11 @@ TEST_CASE(
         runtime->factory(),
         agent::ToolRegistry{},
         std::move(options),
-        agent::AgentInitialState{.thinking_level = "max"});
+        agent::AgentInitialState{
+            .messages = {},
+            .thinking_level = "max",
+        });
+
 
     REQUIRE(run_prompt(subject, "think hard"));
     REQUIRE(run_prompt(subject, "switch model"));

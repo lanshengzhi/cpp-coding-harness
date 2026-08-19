@@ -15,6 +15,8 @@ namespace {
 
 std::string_view stop_reason_name(ai::AssistantStopReason reason) {
     switch (reason) {
+    case ai::AssistantStopReason::Pending:
+        return "pending";
     case ai::AssistantStopReason::Stop:
         return "stop";
     case ai::AssistantStopReason::Length:

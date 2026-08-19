@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -303,7 +304,6 @@ TEST_CASE("Overlay z-index controls input routing order", "[tui][overlay][issue5
     auto* comp1_ptr = comp1.get();
     REQUIRE(overlay1->add_child(std::move(comp1)));
     REQUIRE(overlay1->focus_first());
-    auto* overlay1_ptr = overlay1.get();
     REQUIRE(tui.add_overlay(std::move(overlay1)));
 
     cch::tui::OverlayOptions opts2;
@@ -341,7 +341,6 @@ TEST_CASE("Hide and restore overlay with focus fallback", "[tui][overlay][issue5
 
     auto overlay = std::make_unique<cch::tui::Overlay>();
     auto overlay_comp = std::make_unique<FocusableInputComponent>("over");
-    auto* overlay_comp_ptr = overlay_comp.get();
     REQUIRE(overlay->add_child(std::move(overlay_comp)));
     REQUIRE(overlay->focus_first());
     auto* overlay_ptr = overlay.get();
@@ -448,15 +447,26 @@ TEST_CASE("Stacked overlays render in z-order", "[tui][overlay][issue50]") {
 
     // Overlay 1 (lower z-index)
     auto overlay1 = std::make_unique<cch::tui::Overlay>(
-        cch::tui::OverlayOptions{.z_index = 0});
+        cch::tui::OverlayOptions{
+            .size_constraints = {},
+            .margins = {},
+            .visibility = {},
+            .z_index = 0,
+        });
+
     auto text1 = std::make_unique<cch::tui::Text>("overlay1", 0, 0);
     REQUIRE(overlay1->add_child(std::move(text1)));
-    auto* overlay1_ptr = overlay1.get();
     REQUIRE(tui.add_overlay(std::move(overlay1)));
 
     // Overlay 2 (higher z-index)
     auto overlay2 = std::make_unique<cch::tui::Overlay>(
-        cch::tui::OverlayOptions{.z_index = 1});
+        cch::tui::OverlayOptions{
+            .size_constraints = {},
+            .margins = {},
+            .visibility = {},
+            .z_index = 1,
+        });
+
     auto text2 = std::make_unique<cch::tui::Text>("overlay2", 0, 0);
     REQUIRE(overlay2->add_child(std::move(text2)));
     REQUIRE(tui.add_overlay(std::move(overlay2)));
@@ -495,11 +505,9 @@ TEST_CASE("Focusable Components expose cursor_location for IME", "[tui][overlay]
 }
 
 TEST_CASE("Default cursor_location returns nullopt for non-focusable", "[tui][overlay][issue50]") {
-    // Text is not Focusable, so no cursor location
-    cch::tui::Text text("hello", 0, 0);
-    // Text doesn't inherit from Focusable, verify by dynamic_cast
-    auto* focusable = dynamic_cast<cch::tui::Focusable*>(&text);
-    CHECK(focusable == nullptr);
+    // Text is not Focusable, so it has no cursor location: proven at compile
+    // time (the dynamic_cast would be constant-false).
+    static_assert(!std::is_base_of_v<cch::tui::Focusable, cch::tui::Text>);
 }
 
 TEST_CASE("Overlay rejects a disposed component after removal", "[tui][overlay][issue50]") {

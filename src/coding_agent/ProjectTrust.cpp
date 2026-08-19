@@ -320,6 +320,8 @@ ProjectTrustResolution resolve_project_trust(
         return ProjectTrustResolution{
             .decision = *trust_override ? ProjectTrustDecision::Trusted : ProjectTrustDecision::Untrusted,
             .source = ProjectTrustSource::CliOverride,
+            .matched_path = {},
+            .diagnostics = {},
         };
     }
 
@@ -327,6 +329,8 @@ ProjectTrustResolution resolve_project_trust(
         return ProjectTrustResolution{
             .decision = ProjectTrustDecision::Trusted,
             .source = ProjectTrustSource::NoProjectResources,
+            .matched_path = {},
+            .diagnostics = {},
         };
     }
 
@@ -335,6 +339,7 @@ ProjectTrustResolution resolve_project_trust(
         return ProjectTrustResolution{
             .decision = ProjectTrustDecision::Untrusted,
             .source = ProjectTrustSource::StoreUnavailable,
+            .matched_path = {},
             .diagnostics = {ProjectTrustDiagnostic{
                 .severity = ProjectTrustDiagnosticSeverity::Warning,
                 .code = "trust_store_unavailable",
@@ -348,6 +353,7 @@ ProjectTrustResolution resolve_project_trust(
             .decision = (*entry)->decision,
             .source = ProjectTrustSource::StoreEntry,
             .matched_path = (*entry)->path,
+            .diagnostics = {},
         };
     }
 
@@ -356,22 +362,30 @@ ProjectTrustResolution resolve_project_trust(
         return ProjectTrustResolution{
             .decision = ProjectTrustDecision::Trusted,
             .source = ProjectTrustSource::DefaultAlways,
+            .matched_path = {},
+            .diagnostics = {},
         };
     case DefaultProjectTrust::Never:
         return ProjectTrustResolution{
             .decision = ProjectTrustDecision::Untrusted,
             .source = ProjectTrustSource::DefaultNever,
+            .matched_path = {},
+            .diagnostics = {},
         };
     case DefaultProjectTrust::Ask:
         return ProjectTrustResolution{
             .decision = ProjectTrustDecision::Untrusted,
             .source = ProjectTrustSource::DefaultAskNoUi,
+            .matched_path = {},
+            .diagnostics = {},
         };
     }
 
     return ProjectTrustResolution{
         .decision = ProjectTrustDecision::Untrusted,
         .source = ProjectTrustSource::DefaultAskNoUi,
+        .matched_path = {},
+        .diagnostics = {},
     };
 }
 

@@ -68,13 +68,6 @@ void append_render_result(
     }
 }
 
-void append_lines(std::vector<std::string>& destination, std::vector<std::string> lines) {
-    destination.insert(
-        destination.end(),
-        std::make_move_iterator(lines.begin()),
-        std::make_move_iterator(lines.end()));
-}
-
 /// The pi `custom-message.ts`/`compaction-summary-message.ts`/
 /// `branch-summary-message.ts` box shape: a padded `customMessageBg` box with
 /// a bold `[label]` header, a collapsed/expanded body in `customMessageText`,
@@ -369,6 +362,8 @@ struct ChatContainer::Impl {
         }
         items.emplace_back(MessageItem{
             .message = std::move(message),
+            .component = {},
+            .tools = {},
         });
         auto& item = std::get<MessageItem>(items.back());
         rebuild_message(item);
@@ -540,12 +535,15 @@ struct ChatContainer::Impl {
         // A tool without an owning assistant message renders standalone.
         items.emplace_back(MessageItem{
             .message = ai::MessageVariant{ai::ToolResultMessage{}},
+            .component = {},
+            .tools = {},
         });
         auto& item = std::get<MessageItem>(items.back());
         auto tool = std::make_unique<ToolItem>(ToolItem{
             .call_id = call_id,
             .name = name,
             .arguments = arguments,
+            .result = {},
             .component = std::make_unique<ToolExecutionComponent>(
                 theme,
                 keybindings,

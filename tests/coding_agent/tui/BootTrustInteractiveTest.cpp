@@ -339,6 +339,9 @@ TEST_CASE(
         tests::CliRunOptions{
             .args = {"--print", "hello"},
             .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
+            .models = {},
         });
     CHECK(result.exit_code == 0);
     CHECK(result.stdout_text.find("hello") != std::string::npos);

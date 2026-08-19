@@ -623,7 +623,7 @@ void load_user_skills_adapter(
 /// is the user's own directory is skipped (pi `package-manager.ts`
 /// `collectAncestorAgentsSkillDirs` filter).
 void load_project_agents_skills_adapter(
-    const harness::WorkspaceFileSystem& fs,
+    const harness::WorkspaceFileSystem& /*fs*/,
     const std::filesystem::path& workspace,
     const std::filesystem::path& user_agents_skills_dir,
     bool project_trusted,

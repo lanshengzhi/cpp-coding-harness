@@ -112,19 +112,6 @@ using Node = harness::session::SessionTreeNode;
     return node;
 }
 
-[[nodiscard]] Node tool_node(std::string id, std::string tool_name, std::int64_t ts = 0) {
-    Node node;
-    node.entry.entry_id = std::move(id);
-    node.entry.kind = harness::session::SessionEntryKind::Message;
-    node.entry.timestamp = ts;
-    ai::ToolResultMessage tool;
-    tool.tool_call_id = "call-1";
-    tool.tool_name = std::move(tool_name);
-    tool.content.push_back(ai::text_content("result text"));
-    node.entry.message = ai::MessageVariant{std::move(tool)};
-    return node;
-}
-
 [[nodiscard]] Node thinking_node(std::string id, std::int64_t ts = 0) {
     Node node;
     node.entry.entry_id = std::move(id);
@@ -507,6 +494,9 @@ TEST_CASE(
     summary.entry.value = harness::session::BranchSummaryEntryValue{
         .from_id = "old-leaf",
         .summary = "abandoned branch notes",
+        .details = std::nullopt,
+        .usage = std::nullopt,
+        .from_hook = std::nullopt,
     };
     Node compaction;
     compaction.entry.entry_id = "cp1";
@@ -514,7 +504,12 @@ TEST_CASE(
     compaction.entry.kind = harness::session::SessionEntryKind::Compaction;
     compaction.entry.value = harness::session::CompactionEntryValue{
         .summary = "compacted history",
+        .first_kept_entry_id = std::nullopt,
         .tokens_before = 15234,
+        .retained_tail = std::nullopt,
+        .details = std::nullopt,
+        .usage = std::nullopt,
+        .from_hook = std::nullopt,
     };
     root.children.push_back(std::move(summary));
     root.children[0].children.push_back(std::move(compaction));

@@ -19,6 +19,8 @@ TEST_CASE("formatSkillsForPrompt all disabled returns empty", "[coding_agent][sk
         {.name = "test-skill",
          .description = "Does something.",
          .filePath = "/path/to/skill.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = true},
     };
     auto result = coding_agent::formatSkillsForPrompt(skills);
@@ -30,6 +32,8 @@ TEST_CASE("formatSkillsForPrompt one visible skill", "[coding_agent][skill-forma
         {.name = "my-skill",
          .description = "Does things.",
          .filePath = "/home/user/skills/my-skill/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = false},
     };
     auto result = coding_agent::formatSkillsForPrompt(skills);
@@ -54,14 +58,20 @@ TEST_CASE("formatSkillsForPrompt mixed visible and disabled", "[coding_agent][sk
         {.name = "visible-skill",
          .description = "Visible.",
          .filePath = "/path/a/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = false},
         {.name = "hidden-skill",
          .description = "Hidden.",
          .filePath = "/path/b/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = true},
         {.name = "another-visible",
          .description = "Also visible.",
          .filePath = "/path/c/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = false},
     };
     auto result = coding_agent::formatSkillsForPrompt(skills);
@@ -77,6 +87,8 @@ TEST_CASE("formatSkillsForPrompt xml escaping", "[coding_agent][skill-formatting
         {.name = "test&skill",
          .description = "Does <things> & \"stuff\" with 'quotes'.",
          .filePath = "/path/with&ampersand/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = false},
     };
     auto result = coding_agent::formatSkillsForPrompt(skills);
@@ -98,6 +110,8 @@ TEST_CASE("formatSkillsForPrompt multiline description", "[coding_agent][skill-f
         {.name = "multi-line",
          .description = "Line one.\nLine two.\nLine three.",
          .filePath = "/path/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = false},
     };
     auto result = coding_agent::formatSkillsForPrompt(skills);
@@ -112,6 +126,8 @@ TEST_CASE("formatSkillsForPrompt long description included", "[coding_agent][ski
         {.name = "long-desc",
          .description = long_desc,
          .filePath = "/path/SKILL.md",
+         .baseDir = {},
+         .sourceInfo = {},
          .disableModelInvocation = false},
     };
     auto result = coding_agent::formatSkillsForPrompt(skills);
@@ -124,7 +140,8 @@ TEST_CASE("formatSkillInvocation basic", "[coding_agent][skill-formatting][u2]")
     coding_agent::Skill skill{.name = "my-skill",
                               .description = "Does things.",
                               .filePath = "/home/user/skills/my-skill/SKILL.md",
-                              .baseDir = "/home/user/skills/my-skill"};
+                              .baseDir = "/home/user/skills/my-skill",
+                              .sourceInfo = {}};
     auto result = coding_agent::formatSkillInvocation(skill, "The body content.");
     CHECK(result.find("<skill name=\"my-skill\"") != std::string::npos);
     CHECK(result.find("location=\"/home/user/skills/my-skill/SKILL.md\"") != std::string::npos);
@@ -138,13 +155,18 @@ TEST_CASE("formatSkillInvocation with additional instructions", "[coding_agent][
     coding_agent::Skill skill{.name = "my-skill",
                               .description = "Does things.",
                               .filePath = "/home/user/skills/my-skill/SKILL.md",
-                              .baseDir = "/home/user/skills/my-skill"};
+                              .baseDir = "/home/user/skills/my-skill",
+                              .sourceInfo = {}};
     auto result = coding_agent::formatSkillInvocation(skill, "The body content.", "extra args here");
     CHECK(result.find("</skill>\n\nextra args here") != std::string::npos);
 }
 
 TEST_CASE("formatSkillInvocation empty content", "[coding_agent][skill-formatting][u2]") {
-    coding_agent::Skill skill{.name = "empty-body", .filePath = "/root/skill.md"};
+    coding_agent::Skill skill{.name = "empty-body",
+                              .description = {},
+                              .filePath = "/root/skill.md",
+                              .baseDir = {},
+                              .sourceInfo = {}};
     auto result = coding_agent::formatSkillInvocation(skill, "");
     // Content area exists between tags, even if empty
     CHECK(result.find("\n\n</skill>") != std::string::npos);
@@ -152,19 +174,31 @@ TEST_CASE("formatSkillInvocation empty content", "[coding_agent][skill-formattin
 
 TEST_CASE("formatSkillInvocation content with xml special chars not escaped", "[coding_agent][skill-formatting][u2]") {
     // Content inside <skill> is raw body — NOT XML-escaped
-    coding_agent::Skill skill{.name = "raw-body", .filePath = "/path/SKILL.md"};
+    coding_agent::Skill skill{.name = "raw-body",
+                              .description = {},
+                              .filePath = "/path/SKILL.md",
+                              .baseDir = {},
+                              .sourceInfo = {}};
     auto result = coding_agent::formatSkillInvocation(skill, "<tag>&amp;content&quot;");
     CHECK(result.find("<tag>&amp;content&quot;") != std::string::npos);
 }
 
 TEST_CASE("formatSkillInvocation root directory", "[coding_agent][skill-formatting][u2]") {
-    coding_agent::Skill skill{.name = "root-skill", .filePath = "/SKILL.md", .baseDir = "/"};
+    coding_agent::Skill skill{.name = "root-skill",
+                              .description = {},
+                              .filePath = "/SKILL.md",
+                              .baseDir = "/",
+                              .sourceInfo = {}};
     auto result = coding_agent::formatSkillInvocation(skill, "Root content.");
     CHECK(result.find("References are relative to /") != std::string::npos);
 }
 
 TEST_CASE("formatSkillInvocation additional instructions whitespace", "[coding_agent][skill-formatting][u2]") {
-    coding_agent::Skill skill{.name = "ws-skill", .filePath = "/path/SKILL.md"};
+    coding_agent::Skill skill{.name = "ws-skill",
+                              .description = {},
+                              .filePath = "/path/SKILL.md",
+                              .baseDir = {},
+                              .sourceInfo = {}};
     auto result = coding_agent::formatSkillInvocation(skill, "body", "  spaced  ");
     // Whitespace preserved verbatim
     CHECK(result.find("\n\n  spaced  ") != std::string::npos);

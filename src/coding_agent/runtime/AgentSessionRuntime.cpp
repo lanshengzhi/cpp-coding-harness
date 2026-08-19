@@ -695,6 +695,8 @@ AgentSessionRuntime::run_user_bash(
                     .command = recorded_command,
                     .output = {},
                     .exclude_from_context = exclude_from_context,
+                    .exit_code = {},
+                    .full_output_path = {},
                 });
                 !started) {
                 active_user_bash_stop_source_.reset();
@@ -736,6 +738,8 @@ AgentSessionRuntime::run_user_bash(
                         .command = recorded_command,
                         .output = output.tail(),
                         .exclude_from_context = exclude_from_context,
+                        .exit_code = {},
+                        .full_output_path = {},
                     });
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 } catch (const std::exception& error) {
@@ -1812,7 +1816,7 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
 boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
 AgentSessionRuntime::execute_compaction(
     const harness::session::CompactionPreparation& preparation,
-    const harness::session::CompactionSettings& settings,
+    const harness::session::CompactionSettings& /*settings*/,
     std::string custom_instructions) {
     if (!agent_ || !session_.store) {
         co_return std::unexpected(support::make_error(
@@ -2070,7 +2074,9 @@ AgentSessionRuntime::check_auto_compaction(
             // The usage source must be post-compaction: kept pre-compaction
             // messages carry stale usage reflecting the old (larger) context
             // and would falsely trigger compaction right after one finished.
-            const auto& usage_message =
+            // state() returns a by-value snapshot; bind a copy or the
+            // reference would dangle into the temporary's message vector.
+            const auto usage_message =
                 agent_->state().messages[*estimate.last_usage_index];
             const auto* usage_assistant =
                 std::get_if<ai::AssistantMessage>(&usage_message);

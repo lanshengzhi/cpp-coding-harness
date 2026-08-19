@@ -163,7 +163,7 @@ struct IntraLineDiff {
 }
 
 [[nodiscard]] IntraLineDiff render_intra_line_diff(
-    const LiveTheme& theme,
+    const LiveTheme& /*theme*/,
     std::string_view old_content,
     std::string_view new_content) {
     const auto parts = word_diff(word_tokens(old_content), word_tokens(new_content));

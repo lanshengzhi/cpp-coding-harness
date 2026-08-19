@@ -358,6 +358,8 @@ struct LabelFacts {
         .session_id = identity.session_id,
         .created_at = identity.created_at,
         .workspace = workspace,
+        .provider = {},
+        .model = {},
         .parent_session = source_path,
     };
     harness::session::EntrySerializer serializer;

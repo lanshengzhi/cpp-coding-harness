@@ -79,6 +79,7 @@ TEST_CASE("SkillDiagnostic construction", "[coding_agent][skill][u1]") {
         .code = coding_agent::SkillDiagnosticCode::invalid_metadata,
         .message = "description exceeds 1024 characters",
         .path = "/some/path/SKILL.md",
+        .collision = {},
     };
 
     CHECK(diag.type == "warning");
@@ -121,6 +122,8 @@ TEST_CASE("SkillLoadResult construction with provenance", "[coding_agent][skill]
                 .name = "a-skill",
                 .winner_path = "/a/SKILL.md",
                 .loser_path = "/b/SKILL.md",
+                .winner_source = {},
+                .loser_source = {},
             },
         }},
     };
