@@ -9,7 +9,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
@@ -207,7 +207,7 @@ TEST_CASE(
 
     // The model_change entries persist each cycle (pi appendModelChange).
     result->session->close();
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_model_change_entry(*loaded);
     REQUIRE(entry != nullptr);

@@ -11,7 +11,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include "ai/providers/FakeProvider.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 
@@ -41,7 +41,7 @@ struct Fixture {
     /// populate).
     [[nodiscard]] std::filesystem::path session_file() const {
         const auto path = workspace.path() / "shared-runtime.jsonl";
-        auto store = harness::session::JsonlSessionStore::create_new(
+        auto store = harness::session::SessionStore::create_new(
             path,
             {
                 .session_id = "shared-runtime",

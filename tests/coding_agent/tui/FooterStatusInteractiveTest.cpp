@@ -7,7 +7,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
@@ -67,7 +67,7 @@ struct ResumedSessionFixture {
 
     void create() {
         session_file = workspace.path() / "footer-session.jsonl";
-        auto store = harness::session::JsonlSessionStore::create_new(
+        auto store = harness::session::SessionStore::create_new(
             session_file,
             {
                 .session_id = "footer-session",

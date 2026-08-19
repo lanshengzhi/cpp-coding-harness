@@ -17,7 +17,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"

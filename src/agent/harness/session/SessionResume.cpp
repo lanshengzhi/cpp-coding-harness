@@ -1,6 +1,6 @@
 #include <cch/agent/harness/session/SessionResume.hpp>
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include "agent/harness/session/JsonlSessionStore.hpp"
 #include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <algorithm>

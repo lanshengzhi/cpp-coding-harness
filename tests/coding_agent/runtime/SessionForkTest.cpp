@@ -5,7 +5,7 @@
 #include "coding_agent/runtime/SessionFork.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionResume.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
@@ -59,10 +59,10 @@ std::string user_text_at(const std::vector<ai::MessageVariant>& messages, std::s
 }
 
 /// Build a linear session: user, assistant, user, assistant, user, assistant.
-support::Expected<harness::session::JsonlSessionStore> build_linear_session(
+[[nodiscard]] support::Expected<harness::session::SessionStore> build_linear_session(
     const std::filesystem::path& path,
     const tests::TempWorkspace& workspace) {
-    auto created = harness::session::JsonlSessionStore::create_new(
+    auto created = harness::session::SessionStore::create_new(
         path, test_metadata(workspace));
     if (!created) return std::unexpected(created.error());
     auto store = std::move(*created);
@@ -82,7 +82,7 @@ support::Expected<harness::session::JsonlSessionStore> build_linear_session(
 /// The entry id of the last message entry in a session file (used to target
 /// label entries at real ids).
 [[nodiscard]] std::string last_message_entry_id(const std::filesystem::path& path) {
-    auto loaded = harness::session::JsonlSessionStore::load(path);
+    auto loaded = harness::session::SessionStore::load(path);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     for (auto it = tree.entries().rbegin(); it != tree.entries().rend(); ++it) {
@@ -97,10 +97,10 @@ support::Expected<harness::session::JsonlSessionStore> build_linear_session(
 /// A session with a label on the first user message and a label entry
 /// BETWEEN the second user message and its assistant response, so the branch
 /// writer must re-chain the assistant's parent past the removed label.
-support::Expected<harness::session::JsonlSessionStore> build_labeled_session(
+[[nodiscard]] support::Expected<harness::session::SessionStore> build_labeled_session(
     const std::filesystem::path& path,
     const tests::TempWorkspace& workspace) {
-    auto created = harness::session::JsonlSessionStore::create_new(
+    auto created = harness::session::SessionStore::create_new(
         path, test_metadata(workspace));
     if (!created) return std::unexpected(created.error());
     auto store = std::move(*created);
@@ -140,7 +140,7 @@ std::vector<ai::MessageVariant> resumed_history(const std::filesystem::path& pat
 TEST_CASE("user messages for forking list user texts in order", "[coding_agent][runtime][session-fork][issue409]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
-    auto created = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto created = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(created.has_value());
     REQUIRE(created->append(user_msg("first")).has_value());
     REQUIRE(created->append(user_msg("   ")).has_value());
@@ -187,7 +187,7 @@ TEST_CASE("fork before a middle user message writes the prefix branch with selec
     CHECK(user_text_at(history, 0) == "user-0");
 
     // The branch file carries the fresh identity and the parent pointer.
-    auto loaded = harness::session::JsonlSessionStore::load(*prepared->branched_path);
+    auto loaded = harness::session::SessionStore::load(*prepared->branched_path);
     REQUIRE(loaded.has_value());
     CHECK(loaded->metadata.session_id != kSessionId);
     REQUIRE(loaded->metadata.parent_session.has_value());
@@ -242,7 +242,7 @@ TEST_CASE("fork before a root user message creates an empty parented session", "
     // pi: the no-target-leaf fork is a fresh session with the parent pointer.
     const auto history = resumed_history(*prepared->branched_path);
     CHECK(history.empty());
-    auto loaded = harness::session::JsonlSessionStore::load(*prepared->branched_path);
+    auto loaded = harness::session::SessionStore::load(*prepared->branched_path);
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->metadata.parent_session.has_value());
     CHECK(*loaded->metadata.parent_session == path);
@@ -265,7 +265,7 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
 
     // A non-user entry with position "before": fork the last assistant
     // entry's id.
-    auto loaded = harness::session::JsonlSessionStore::load(path);
+    auto loaded = harness::session::SessionStore::load(path);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     const auto assistant_entry = std::find_if(
@@ -352,7 +352,7 @@ TEST_CASE("fork re-chains parents past labels and re-creates retained labels", "
     REQUIRE(prepared.has_value());
     REQUIRE(prepared->branched_path.has_value());
 
-    auto loaded = harness::session::JsonlSessionStore::load(*prepared->branched_path);
+    auto loaded = harness::session::SessionStore::load(*prepared->branched_path);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     REQUIRE(tree.entries().size() == 4);

@@ -28,49 +28,88 @@ SessionTree::SessionTree(LoadedSession session)
 }
 
 void SessionTree::build_index() {
-    std::optional<std::string> previous_id;
-
+    chain_tail_.reset();
     for (std::size_t i = 0; i < entries_.size(); ++i) {
-        const auto& entry = entries_[i];
+        index_appended_entry(i);
+    }
+}
 
-        // Index by entry ID for O(1) lookup.
-        if (!entry.entry_id.empty()) {
-            id_to_index_[entry.entry_id] = i;
-        }
+void SessionTree::index_appended_entry(std::size_t index) {
+    const auto& entry = entries_[index];
 
-        // Determine parent: use explicit parent_id if set, otherwise infer
-        // from the previous entry's ID (linear chain).
-        std::string effective_parent;
-        if (entry.parent_id.has_value() && !entry.parent_id->empty()) {
-            effective_parent = *entry.parent_id;
-        } else if (previous_id.has_value()) {
-            effective_parent = *previous_id;
-        } else {
-            // First entry with no explicit parent: root, no children entry.
-            previous_id = entry.entry_id;
-            continue;
-        }
+    // Index by entry ID for O(1) lookup.
+    if (!entry.entry_id.empty()) {
+        id_to_index_[entry.entry_id] = index;
+    }
 
-        children_[effective_parent].push_back(i);
-
+    // Determine parent: use explicit parent_id if set, otherwise infer
+    // from the chain tail's ID (linear chain).
+    std::string effective_parent;
+    if (entry.parent_id.has_value() && !entry.parent_id->empty()) {
+        effective_parent = *entry.parent_id;
+    } else if (chain_tail_.has_value()) {
+        effective_parent = *chain_tail_;
         // Record the effective parent for leaf-to-root traversal.
-        if (!entry.parent_id.has_value() || entry.parent_id->empty()) {
-            inferred_parent_[entry.entry_id] = effective_parent;
-        }
+        inferred_parent_[entry.entry_id] = effective_parent;
+    } else {
+        // First entry with no explicit parent: root, no children entry.
+        chain_tail_ = entry.entry_id;
+        return;
+    }
 
-        // A root leaf marker (`targetId: null`, written when the active
-        // leaf moves back before the first entry) ends the linear chain: the
-        // next null-parent append starts a NEW root (pi `resetLeaf`), not a
-        // continuation of the previous history.
-        if (entry.kind == SessionEntryKind::Leaf) {
-            if (const auto* value = std::get_if<LeafEntryValue>(&entry.value);
-                value != nullptr && !value->target_id.has_value()) {
-                previous_id.reset();
-                continue;
-            }
-        }
+    children_[effective_parent].push_back(index);
 
-        previous_id = entry.entry_id;
+    // A root leaf marker (`targetId: null`, written when the active
+    // leaf moves back before the first entry) ends the linear chain: the
+    // next null-parent append starts a NEW root (pi `resetLeaf`), not a
+    // continuation of the previous history.
+    if (entry.kind == SessionEntryKind::Leaf) {
+        if (const auto* value = std::get_if<LeafEntryValue>(&entry.value);
+            value != nullptr && !value->target_id.has_value()) {
+            chain_tail_.reset();
+            return;
+        }
+    }
+
+    chain_tail_ = entry.entry_id;
+}
+
+void SessionTree::append_entry(SessionEntry entry) {
+    // Mirror the construction-time filter: the tree never tracks header or
+    // unknown entries.
+    if (entry.kind == SessionEntryKind::Header ||
+        entry.kind == SessionEntryKind::Unknown) {
+        return;
+    }
+
+    // Read the leaf-relevant facts before moving the entry into the store
+    // vector: a Leaf marker moves the active leaf to its target (a root
+    // marker clears it, pi `setLeafId(null)`); every other navigable append
+    // becomes the new leaf (pi `_appendEntry` `this.leafId = entry.id`).
+    std::optional<std::string> marker_target;
+    const bool is_marker = entry.kind == SessionEntryKind::Leaf;
+    if (is_marker) {
+        if (const auto* value = std::get_if<LeafEntryValue>(&entry.value)) {
+            marker_target = value->target_id;
+        }
+    }
+    const bool navigable = is_navigable_leaf_target(entry);
+    const std::string appended_id = entry.entry_id;
+
+    entries_.push_back(std::move(entry));
+    index_appended_entry(entries_.size() - 1);
+
+    if (is_marker) {
+        // Mirror the load-time selection (select_active_leaf_target): a
+        // marker whose target never materialized keeps the current position
+        // (the last navigable entry) instead of pointing at a missing id.
+        if (!marker_target.has_value()) {
+            leaf_id_.clear();
+        } else if (id_to_index_.contains(*marker_target)) {
+            leaf_id_ = *marker_target;
+        }
+    } else if (navigable) {
+        leaf_id_ = appended_id;
     }
 }
 

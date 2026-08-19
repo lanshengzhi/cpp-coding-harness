@@ -8,7 +8,7 @@
 #include <fstream>
 #include <iterator>
 #include <cch/ai/Message.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <algorithm>
@@ -280,7 +280,7 @@ struct LabelFacts {
     const std::filesystem::path& session_dir,
     const std::filesystem::path& workspace,
     const std::string& target_leaf_id) {
-    auto loaded = harness::session::JsonlSessionStore::load(source_path);
+    auto loaded = harness::session::SessionStore::load(source_path);
     if (!loaded) {
         // G3 verbatim: the source file could not be read as a session.
         return std::unexpected(invalid_fork_source_error(source_path));
@@ -466,7 +466,7 @@ struct InMemoryBranchResult {
 std::vector<UserForkMessage> user_messages_for_forking(
     const ForkSource& source) {
     if (source.session_path) {
-        auto loaded = harness::session::JsonlSessionStore::load(*source.session_path);
+        auto loaded = harness::session::SessionStore::load(*source.session_path);
         if (!loaded) {
             return {};
         }
@@ -495,7 +495,7 @@ support::Expected<ForkPreparation> prepare_fork(
         if (!std::filesystem::exists(*source.session_path, exists_ec)) {
             return std::unexpected(unsaved_session_error());
         }
-        auto loaded = harness::session::JsonlSessionStore::load(*source.session_path);
+        auto loaded = harness::session::SessionStore::load(*source.session_path);
         if (!loaded) {
             // G3 verbatim source classification (pi forkFrom strings).
             return std::unexpected(fork_source_load_error(*source.session_path));

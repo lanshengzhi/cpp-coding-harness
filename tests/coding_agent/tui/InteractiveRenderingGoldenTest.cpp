@@ -32,7 +32,7 @@
 #include "support/FakeModelRuntime.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
@@ -128,7 +128,7 @@ struct PipelineSession {
     auto fixture = std::make_unique<PipelineSession>();
     fixture->workspace = rendering_workspace_path("message-pipeline");
     const auto session_file = fixture->workspace / "message-pipeline.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "message-pipeline",
@@ -143,7 +143,7 @@ struct PipelineSession {
         ai::user_text_message("before compaction", 1'700'000'000'000)}));
     REQUIRE(store->append(ai::MessageVariant{
         ai::user_text_message("resume request", 1'700'000'000'001)}));
-    auto loaded = harness::session::JsonlSessionStore::load(session_file);
+    auto loaded = harness::session::SessionStore::load(session_file);
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() >= 3);
     const auto kept_entry_id = loaded->entries[2].entry_id;
@@ -283,7 +283,7 @@ struct InterruptSession {
     fixture->workspace = rendering_workspace_path("interrupt");
 
     const auto session_file = fixture->workspace / "interrupt-session.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "interrupt-session",
@@ -467,7 +467,7 @@ TEST_CASE(
             agent_dir.path() / "keybindings.json", std::ios::binary);
         keybindings << R"({"app.session.fork":"f7"})";
     }
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "fork-session",

@@ -64,7 +64,7 @@
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include "agent/harness/compaction/Compaction.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 
 #include <cch/support/Error.hpp>
 #include <boost/asio/any_io_executor.hpp>
@@ -3003,9 +3003,9 @@ private:
                 if (const auto self = weak.lock()) self->post_exit();
             },
             [weak](std::string session_path, std::string name) -> support::ExpectedVoid {
-                // pi `renameSession`: open the session manager and append the
+                // pi `renameSession`: open the session store and append the
                 // trimmed session_info entry.
-                auto opened = harness::session::JsonlSessionStore::open_existing(
+                auto opened = harness::session::SessionStore::open_existing(
                     std::filesystem::path{session_path});
                 if (!opened) {
                     return std::unexpected(opened.error());

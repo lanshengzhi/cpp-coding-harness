@@ -15,7 +15,7 @@
 #include <cch/agent/Agent.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -421,7 +421,7 @@ TEST_CASE(
         created->session->close();
     }
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const harness::session::SessionEntry* model_change = nullptr;
     for (const auto& entry : loaded->entries) {
@@ -498,7 +498,7 @@ TEST_CASE(
     REQUIRE(result.has_value());
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     bool persisted_model_change = false;
     for (const auto& entry : loaded->entries) {
@@ -618,7 +618,7 @@ TEST_CASE(
     result->session->close();
 
     // The durable session file carries the `thinking_level_change` entry.
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);
@@ -731,7 +731,7 @@ TEST_CASE(
     CHECK(result->session->snapshot().agent_state.thinking_level == "off");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     REQUIRE(find_thinking_entry(*loaded) != nullptr);
 
@@ -772,7 +772,7 @@ TEST_CASE(
     CHECK(*unchanged == "high");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto entries = std::count_if(
         loaded->entries.begin(),
@@ -802,7 +802,7 @@ TEST_CASE(
     // the initial (clamped) `thinking_level_change` so a later resume can
     // restore both. The reasoning model supports off..high, so the creation
     // default "medium" survives the clamp.
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     // The first content entries after the header are the model_change and the
     // initial thinking_level_change, in pi sdk.ts's order.
@@ -839,7 +839,7 @@ TEST_CASE(
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* thinking = find_thinking_entry(*loaded);
     REQUIRE(thinking != nullptr);
@@ -883,7 +883,7 @@ TEST_CASE(
 
     // pi sdk.ts: the resumed session without a thinking entry gets the
     // restored level appended so a later resume restores it.
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* thinking = find_thinking_entry(*loaded);
     REQUIRE(thinking != nullptr);
@@ -957,7 +957,7 @@ TEST_CASE(
     CHECK(*changed == "high");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);

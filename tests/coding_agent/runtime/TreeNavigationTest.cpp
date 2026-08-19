@@ -16,7 +16,7 @@
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -79,7 +79,7 @@ ai::MessageVariant assistant_msg(std::string text) {
 void build_linear_session(
     const std::filesystem::path& path,
     const Fixture& fixture) {
-    auto created = harness::session::JsonlSessionStore::create_new(
+    auto created = harness::session::SessionStore::create_new(
         path, test_metadata(fixture));
     REQUIRE(created.has_value());
     for (std::size_t index = 0; index < 3; ++index) {
@@ -91,7 +91,7 @@ void build_linear_session(
 /// The entry ids of the message entries in store order.
 [[nodiscard]] std::vector<std::string> message_entry_ids(
     const std::filesystem::path& path) {
-    auto loaded = harness::session::JsonlSessionStore::load(path);
+    auto loaded = harness::session::SessionStore::load(path);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     std::vector<std::string> ids;
@@ -112,7 +112,7 @@ struct PersistedLeafMarker {
 
 [[nodiscard]] PersistedLeafMarker persisted_leaf_target(
     const std::filesystem::path& path) {
-    auto loaded = harness::session::JsonlSessionStore::load(path);
+    auto loaded = harness::session::SessionStore::load(path);
     REQUIRE(loaded.has_value());
     for (auto it = loaded->entries.rbegin(); it != loaded->entries.rend(); ++it) {
         if (it->kind == harness::session::SessionEntryKind::Leaf) {
@@ -532,7 +532,7 @@ TEST_CASE(
     // child of ids[1] in the file (the leaf marker moved the append parent).
     REQUIRE(session.prompt_blocking("branch prompt").has_value());
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     const harness::session::SessionEntry* branch_user = nullptr;
@@ -559,7 +559,7 @@ TEST_CASE(
     "session_tree exposes the topology for an empty persisted session",
     "[coding_agent][runtime][tree-navigation][issue410]") {
     Fixture fixture;
-    auto created = harness::session::JsonlSessionStore::create_new(
+    auto created = harness::session::SessionStore::create_new(
         fixture.session_file, test_metadata(fixture));
     REQUIRE(created.has_value());
     auto session = open_session(fixture);

@@ -15,7 +15,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -71,7 +71,7 @@ struct Fixture {
         const std::filesystem::path& path,
         std::vector<std::string> user_messages,
         std::string session_id = "boot-session") {
-        auto created = harness::session::JsonlSessionStore::create_new(
+        auto created = harness::session::SessionStore::create_new(
             path,
             {
                 .session_id = session_id,
@@ -374,7 +374,7 @@ TEST_CASE(
 
     // The label entry landed in the session file targeting the first user
     // message.
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     std::optional<std::string> first_user_id;

@@ -1,5 +1,5 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include "agent/harness/session/JsonlSessionStore.hpp"
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "../../support/TempWorkspace.hpp"
@@ -18,6 +18,16 @@ harness::session::SessionMetadata test_metadata(const tests::TempWorkspace& work
     return {"session-test", "2026-06-10T00:00:00Z", workspace.path(), "fake", "fake-model"};
 }
 
+/// One-shot load of a session file as a SessionTree (the former
+/// JsonlSessionStore::open_as_tree test convenience).
+[[nodiscard]] support::Expected<harness::session::SessionTree> open_tree(const std::filesystem::path& path) {
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    if (!loaded) {
+        return std::unexpected(loaded.error());
+    }
+    return harness::session::SessionTree(std::move(*loaded));
+}
+
 } // namespace
 
 // ── U1: SessionTree construction and basic queries ──
@@ -27,8 +37,8 @@ TEST_CASE("SessionTree constructs from linear LoadedSession", "[harness][session
     auto path = workspace.path() / "linear.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("hello")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("world")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("hello")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("world")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -45,7 +55,7 @@ TEST_CASE("SessionTree getEntry finds entry by ID", "[harness][session][tree]") 
     auto path = workspace.path() / "lookup.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -66,7 +76,7 @@ TEST_CASE("SessionTree getEntry returns nullptr for unknown ID", "[harness][sess
     auto path = workspace.path() / "empty.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -83,9 +93,9 @@ TEST_CASE("SessionTree getChildren returns correct children", "[harness][session
     // Simulate a fork: A → B → C and A → B → D
     // We can't directly create forks via JsonlSessionStore, but we can write entries with explicit parent IDs.
     // Use model_change entries that can set parentId.
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("root")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("branch-1")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("branch-2")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("root")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("branch-1")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("branch-2")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -125,7 +135,7 @@ TEST_CASE("SessionTree is move-only", "[harness][session][tree]") {
     auto path = workspace.path() / "move.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -149,8 +159,8 @@ TEST_CASE("SessionTree leaf_id defaults to last entry in linear session", "[harn
     auto path = workspace.path() / "leaf-default.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -168,9 +178,9 @@ TEST_CASE("SessionTree branch switches active leaf", "[harness][session][tree]")
     auto path = workspace.path() / "branch.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("third")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("third")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -192,7 +202,7 @@ TEST_CASE("SessionTree branch rejects unknown entry ID", "[harness][session][tre
     auto path = workspace.path() / "branch-err.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -211,9 +221,9 @@ TEST_CASE("SessionTree getBranch returns leaf-to-root path", "[harness][session]
     auto path = workspace.path() / "path.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("root")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("child")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("leaf")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("root")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("child")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("leaf")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -236,7 +246,7 @@ TEST_CASE("SessionTree getBranch from root returns single entry", "[harness][ses
     auto path = workspace.path() / "root-path.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("only")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("only")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -251,8 +261,8 @@ TEST_CASE("SessionTree root returns root entry", "[harness][session][tree]") {
     auto path = workspace.path() / "find-root.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -311,8 +321,8 @@ TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][ses
     auto path = workspace.path() / "ctx-linear.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")));
-    REQUIRE(store->append(user_msg("second")));
+    REQUIRE(store->append(user_msg("first")).status);
+    REQUIRE(store->append(user_msg("second")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -337,7 +347,7 @@ TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][se
     // Use nullopt parent_ids for linear chain inference.
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
     REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
-    REQUIRE(store->append(user_msg("hello")));
+    REQUIRE(store->append(user_msg("hello")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -363,7 +373,7 @@ TEST_CASE(
     // the derived state; the last derived-state entry of each kind wins
     // (pi `deriveSessionContextState`). The assistant message lands after the
     // `model_change`, so its provider/model override the earlier entry.
-    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append(user_msg("root")).status);
     REQUIRE(store->append_compaction(std::nullopt, "minimal summary", "", 1234, std::nullopt, std::nullopt));
     REQUIRE(store->append_label_change(std::nullopt, "", "checkpoint"));
     REQUIRE(store->append_custom_entry(std::nullopt, "extension.meta", support::JsonValue{42}));
@@ -381,7 +391,7 @@ TEST_CASE(
     assistant.provider = "anthropic";
     assistant.model = "claude-sonnet-4-5";
     assistant.timestamp = 1784678402000;
-    REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}));
+    REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}).status);
 
     // Point the leaf at the last message so the branch covers the whole chain
     // (all eleven entry kinds participate in topology).
@@ -419,14 +429,14 @@ TEST_CASE(
     auto path = workspace.path() / "ctx-derived-model.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append(user_msg("root")).status);
 
     ai::AssistantMessage assistant = ai::assistant_text_message("earlier");
     assistant.api = "anthropic-messages";
     assistant.provider = "anthropic";
     assistant.model = "claude-sonnet-4-5";
     assistant.timestamp = 1784678402000;
-    REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}));
+    REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}).status);
 
     // The `model_change` closest to the leaf wins over the earlier assistant
     // message; an explicit "off" thinking entry and an empty tools entry stay
@@ -456,9 +466,9 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
     // Write 3 messages, then a compaction that keeps from message 3
-    REQUIRE(store->append(user_msg("msg1")));
-    REQUIRE(store->append(user_msg("msg2")));
-    REQUIRE(store->append(user_msg("msg3")));
+    REQUIRE(store->append(user_msg("msg1")).status);
+    REQUIRE(store->append(user_msg("msg2")).status);
+    REQUIRE(store->append(user_msg("msg3")).status);
 
     // Get the entry IDs from a separate load to construct the compaction
     auto pre = harness::session::JsonlSessionStore::load(path);
@@ -470,7 +480,7 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     auto resumed = harness::session::JsonlSessionStore::open_existing(path);
     REQUIRE(resumed);
     REQUIRE(resumed->append_compaction(std::nullopt, "summary of msg1-2", msg3_id, 1000, std::nullopt, std::nullopt));
-    REQUIRE(resumed->append(user_msg("msg4")));
+    REQUIRE(resumed->append(user_msg("msg4")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -493,7 +503,7 @@ TEST_CASE("buildSessionContext branch summary converted to message", "[harness][
     auto path = workspace.path() / "ctx-branch.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append(user_msg("root")).status);
     REQUIRE(store->append_branch_summary(std::nullopt, "from-branch", "explored X", std::nullopt, std::nullopt));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -514,7 +524,7 @@ TEST_CASE("buildSessionContext custom message converted", "[harness][session][tr
     auto path = workspace.path() / "ctx-custom.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append(user_msg("root")).status);
     REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "injected", true, std::nullopt));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -702,9 +712,9 @@ TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][
     auto path = workspace.path() / "ctx-nav.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")));
-    REQUIRE(store->append(user_msg("second")));
-    REQUIRE(store->append(user_msg("third")));
+    REQUIRE(store->append(user_msg("first")).status);
+    REQUIRE(store->append(user_msg("second")).status);
+    REQUIRE(store->append(user_msg("third")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -726,14 +736,14 @@ TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][
 
 // ── U5: JsonlSessionStore integration ──
 
-TEST_CASE("open_as_tree returns valid SessionTree", "[harness][session][tree]") {
+TEST_CASE("loading a session file returns a valid SessionTree", "[harness][session][tree]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "open-tree.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("hello")));
+    REQUIRE(store->append(user_msg("hello")).status);
 
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE(tree.has_value());
     CHECK(tree->size() == 1);
     CHECK_FALSE(tree->leaf_id().empty());
@@ -744,8 +754,8 @@ TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][sessi
     auto path = workspace.path() / "leaf-roundtrip.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")));
-    REQUIRE(store->append(user_msg("second")));
+    REQUIRE(store->append(user_msg("first")).status);
+    REQUIRE(store->append(user_msg("second")).status);
 
     // Get second message's ID
     auto pre = harness::session::JsonlSessionStore::load(path);
@@ -759,7 +769,7 @@ TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][sessi
     REQUIRE(resumed->append_leaf(std::nullopt, second_id));
 
     // Load as tree — leaf should be restored to second_id
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE(tree.has_value());
     CHECK(tree->leaf_id() == second_id);
 }
@@ -769,9 +779,9 @@ TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last
     auto path = workspace.path() / "leaf-stale-latest.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")));
-    REQUIRE(store->append(user_msg("second")));
-    REQUIRE(store->append(user_msg("third")));
+    REQUIRE(store->append(user_msg("first")).status);
+    REQUIRE(store->append(user_msg("second")).status);
+    REQUIRE(store->append(user_msg("third")).status);
 
     auto pre = harness::session::JsonlSessionStore::load(path);
     REQUIRE(pre);
@@ -784,7 +794,7 @@ TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last
     REQUIRE(resumed->append_leaf(std::nullopt, first_id));
     REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
 
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE(tree.has_value());
     CHECK(tree->leaf_id() == third_id);
 }
@@ -818,10 +828,10 @@ TEST_CASE("SessionTree restores leaf from typed leaf value", "[harness][session]
     CHECK(tree.leaf_id() == "first001");
 }
 
-TEST_CASE("open_as_tree missing file returns error", "[harness][session][tree]") {
+TEST_CASE("loading a missing session file returns an error", "[harness][session][tree]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "nonexistent.jsonl";
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE_FALSE(tree.has_value());
 }
 
@@ -832,11 +842,11 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     auto path = workspace.path() / "branch-summary-hook.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("root")));
-    REQUIRE(store->append(user_msg("branch-a")));
-    REQUIRE(store->append(user_msg("branch-b")));
+    REQUIRE(store->append(user_msg("root")).status);
+    REQUIRE(store->append(user_msg("branch-a")).status);
+    REQUIRE(store->append(user_msg("branch-b")).status);
 
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE(tree.has_value());
 
     std::string root_id = tree->entries()[0].entry_id;
@@ -878,10 +888,10 @@ TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree]")
     auto path = workspace.path() / "skip-summary.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("root")));
-    REQUIRE(store->append(user_msg("leaf")));
+    REQUIRE(store->append(user_msg("root")).status);
+    REQUIRE(store->append(user_msg("leaf")).status);
 
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE(tree.has_value());
 
     std::string root_id = tree->entries()[0].entry_id;
@@ -910,9 +920,9 @@ TEST_CASE("branchWithSummary rejects unknown target", "[harness][session][tree]"
     auto path = workspace.path() / "bad-target.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("msg")));
+    REQUIRE(store->append(user_msg("msg")).status);
 
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    auto tree = open_tree(path);
     REQUIRE(tree.has_value());
 
     harness::session::SessionTree::BranchSummaryHook hook =

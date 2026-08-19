@@ -14,7 +14,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "support/EnvVarGuard.hpp"
@@ -624,7 +624,7 @@ TEST_CASE(
         snapshot.agent_state.messages[0]));
 
     // The overflow error is retained in session history.
-    auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
     bool found_overflow = false;
     for (const auto& entry : loaded->entries) {
@@ -690,7 +690,7 @@ TEST_CASE(
 
     // Session history: user + error + recovered — the failed message was
     // persisted before the retry (pi `_prepareRetry` keeps it in session).
-    auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
     std::size_t message_entries = 0;
     std::size_t error_entries = 0;
@@ -789,7 +789,7 @@ TEST_CASE(
     REQUIRE(snapshot.agent_state.messages.size() == 1);
     CHECK(std::holds_alternative<ai::UserMessage>(
         snapshot.agent_state.messages[0]));
-    auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
     bool found_error = false;
     for (const auto& entry : loaded->entries) {

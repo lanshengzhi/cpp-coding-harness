@@ -5,7 +5,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include "agent/harness/session/JsonlSessionStore.hpp"
 
 #include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -319,8 +319,8 @@ TEST_CASE(
         paths.session_file,
         test_metadata(paths));
     REQUIRE(store.has_value());
-    REQUIRE(store->append(user_message("before compaction")));
-    REQUIRE(store->append(user_message("kept")));
+    REQUIRE(store->append(user_message("before compaction")).status);
+    REQUIRE(store->append(user_message("kept")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
@@ -336,7 +336,7 @@ TEST_CASE(
         1000,
         std::nullopt,
         std::nullopt));
-    REQUIRE(resumed_store->append(user_message("after compaction")));
+    REQUIRE(resumed_store->append(user_message("after compaction")).status);
 
     auto resumed = resume_for_frontend(paths);
     REQUIRE(resumed.has_value());
@@ -361,7 +361,7 @@ TEST_CASE(
         paths.session_file,
         test_metadata(paths));
     REQUIRE(store.has_value());
-    REQUIRE(store->append(user_message("branch root")));
+    REQUIRE(store->append(user_message("branch root")).status);
     REQUIRE(store->append_branch_summary(
         std::nullopt,
         "abandoned-leaf",

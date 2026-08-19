@@ -9,7 +9,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
@@ -220,7 +220,7 @@ struct SessionUnderTest {
 
 [[nodiscard]] std::optional<harness::session::CompactionEntryValue> find_compaction_entry(
     const TestPaths& paths) {
-    auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
     for (const auto& entry : loaded->entries) {
         if (entry.kind == harness::session::SessionEntryKind::Compaction) {

@@ -2,7 +2,7 @@
 
 #include "coding_agent/runtime/SessionPersistence.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/RuntimeRoot.hpp"
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/PumpUntil.hpp"
@@ -75,7 +75,7 @@ struct CommitmentChannel {
             .model = "fake-model",
         };
         auto jsonl =
-            harness::session::JsonlSessionStore::create_new(session_path, metadata);
+            harness::session::SessionStore::create_new(session_path, metadata);
         REQUIRE(jsonl);
         store =
             std::make_shared<harness::session::SessionStore>(std::move(*jsonl));
@@ -106,7 +106,7 @@ struct CommitmentChannel {
     }
 
     [[nodiscard]] std::vector<std::string> persisted_user_texts() const {
-        auto loaded = harness::session::JsonlSessionStore::load(session_path);
+        auto loaded = harness::session::SessionStore::load(session_path);
         REQUIRE(loaded);
         std::vector<std::string> texts;
         for (const auto& message : loaded->messages) {

@@ -68,6 +68,16 @@ public:
     SessionTree(const SessionTree&) = delete;
     SessionTree& operator=(const SessionTree&) = delete;
 
+    // ── Incremental append ──
+
+    /// Append one entry exactly as it was accepted by the store (pi
+    /// `_appendEntry`): index it, chain it onto the previous entry when it
+    /// carries no explicit wire parent, and advance the active leaf — a
+    /// Leaf marker moves the leaf to its target (a root marker clears it),
+    /// and any other navigable entry becomes the leaf. Header and Unknown
+    /// entries are ignored exactly like the construction-time filter.
+    void append_entry(SessionEntry entry);
+
     // ── Basic queries ──
 
     /// Get an entry by its 8-char hex ID. Returns nullptr if not found.
@@ -186,6 +196,10 @@ public:
 private:
     void build_index();
 
+    /// Index one entry at `index` exactly like one `build_index` iteration
+    /// (shared by the construction-time full build and `append_entry`).
+    void index_appended_entry(std::size_t index);
+
     void restore_leaf_position();
 
     SessionMetadata metadata_;
@@ -195,6 +209,10 @@ private:
     std::unordered_map<std::string, std::vector<std::size_t>> children_;
     /// Inferred parent relationships for entries without explicit parent_id.
     std::unordered_map<std::string, std::string> inferred_parent_;
+    /// Linear-chain tail for parent inference (the index build's running
+    /// `previous_id`): a root leaf marker resets it so the next null-parent
+    /// append starts a new root (pi `resetLeaf`).
+    std::optional<std::string> chain_tail_;
 };
 
 /// Reconstruct LLM context from a root-to-leaf entry path without a

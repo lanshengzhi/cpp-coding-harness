@@ -10,7 +10,7 @@
 // session-family flows).
 
 #include <cch/ai/Message.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include "coding_agent/SessionDiscovery.hpp"
@@ -438,7 +438,7 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
 
   const auto snapshot = session->snapshot();
   const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::JsonlSessionStore::load(path);
+  auto loaded = harness::session::SessionStore::load(path);
   REQUIRE(loaded);
 
   support::JsonValue::object_t golden{
@@ -502,7 +502,7 @@ TEST_CASE("session resume golden: persisted history restores at message level",
 
   const auto snapshot = session->snapshot();
   const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::JsonlSessionStore::load(path);
+  auto loaded = harness::session::SessionStore::load(path);
   REQUIRE(loaded);
 
   support::JsonValue::object_t golden{
@@ -565,7 +565,7 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
 
   const auto snapshot = session->snapshot();
   const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::JsonlSessionStore::load(path);
+  auto loaded = harness::session::SessionStore::load(path);
   REQUIRE(loaded);
 
   support::JsonValue::object_t golden{
@@ -621,7 +621,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
 
   const auto snapshot = session->snapshot();
   const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::JsonlSessionStore::load(path);
+  auto loaded = harness::session::SessionStore::load(path);
   REQUIRE(loaded);
 
   support::JsonValue::object_t golden{
@@ -664,7 +664,7 @@ TEST_CASE("session-family golden: most-recent selection and header values",
         .model = "faux-1",
     };
     auto store =
-        harness::session::JsonlSessionStore::create_new(file, metadata);
+        harness::session::SessionStore::create_new(file, metadata);
     REQUIRE(store.has_value());
     REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("hello")})
                 .has_value());
@@ -687,7 +687,7 @@ TEST_CASE("session-family golden: most-recent selection and header values",
                                                                 std::nullopt);
   REQUIRE(most_recent.has_value());
 
-  auto loaded = harness::session::JsonlSessionStore::load(most_recent->path);
+  auto loaded = harness::session::SessionStore::load(most_recent->path);
   REQUIRE(loaded);
 
   support::JsonValue::object_t golden{

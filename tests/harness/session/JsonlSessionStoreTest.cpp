@@ -1,4 +1,4 @@
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include "agent/harness/session/JsonlSessionStore.hpp"
 #include <cch/agent/harness/session/SessionResume.hpp>
 #include "support/Json.hpp"
 #include "../../support/TempWorkspace.hpp"
@@ -113,7 +113,7 @@ TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harne
     auto path = workspace.path() / "new.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_message("hello")));
+    REQUIRE(store->append(user_message("hello")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
 
@@ -132,8 +132,8 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
 
-    REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}));
-    REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")));
+    REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}).status);
+    REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")).status);
 
     auto arguments = support::read_json(
         R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","nested":{"kimi_api_key":"kimi-nested-argument"},"path":"secret.txt"})");
@@ -154,7 +154,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     assistant.model = "gpt-test";
     assistant.error_message = "provider error kimi_api_key=kimi-error-secret";
     assistant.timestamp = 1718000000123;
-    REQUIRE(store->append(ai::MessageVariant{assistant}));
+    REQUIRE(store->append(ai::MessageVariant{assistant}).status);
 
     auto details = support::read_json(
         R"({"token":"sk-detailsecret123","safe":"kept","nested":{"KIMI_API_KEY":"kimi-detail-secret","array":[{"kimi_api_key":"kimi-array-secret"}]}})");
@@ -164,7 +164,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     tool.tool_name = "write_file";
     tool.content.emplace_back(ai::TextContent{"tool secret=plain-secret KIMI_API_KEY=kimi-tool-content", std::nullopt});
     tool.details = *details;
-    REQUIRE(store->append(ai::MessageVariant{tool}));
+    REQUIRE(store->append(ai::MessageVariant{tool}).status);
 
     std::vector<harness::session::CustomMessageEntryContentBlock> custom_content;
     custom_content.emplace_back(ai::text_content("custom token=custom-secret"));
@@ -232,7 +232,7 @@ TEST_CASE(
     };
     assistant.stop_reason = ai::AssistantStopReason::Stop;
     assistant.timestamp = 1718000000123;
-    REQUIRE(store->append(ai::MessageVariant{assistant}));
+    REQUIRE(store->append(ai::MessageVariant{assistant}).status);
 
     const auto persisted = read_all(path);
     CHECK(persisted.find(R"("api":"openai-completions")") != std::string::npos);
@@ -380,7 +380,7 @@ TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session
         std::ofstream output(path, std::ios::app);
         output << "{\"type\":\"future\",\"payload\":42}\n";
     }
-    REQUIRE(store->append(user_message("known")));
+    REQUIRE(store->append(user_message("known")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
 
@@ -434,7 +434,7 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     CHECK(opened->metadata().session_id == "sess-v3");
     // After U4 (resume gate removal), sessions with tree entries can be resumed.
     // Append a message to verify linear appends still work on a resumed tree session.
-    REQUIRE(opened->append(user_message("resumed after tree entries")));
+    REQUIRE(opened->append(user_message("resumed after tree entries")).status);
     auto reloaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(reloaded);
     CHECK(reloaded->entries.size() == 4);  // header + model_change + thinking_level_change + message
@@ -514,8 +514,8 @@ TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness
 
     auto appended = store->append(user_message("must not escape"));
 
-    REQUIRE_FALSE(appended);
-    CHECK((appended.error().message + appended.error().detail).find("symlink") != std::string::npos);
+    REQUIRE_FALSE(appended.status);
+    CHECK((appended.status.error().message + appended.status.error().detail).find("symlink") != std::string::npos);
     CHECK(read_all(outside_file) == "outside");
 }
 
@@ -638,7 +638,7 @@ TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9]") {
     auto path = workspace.path() / "id-format.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_message("test")));
+    REQUIRE(store->append(user_message("test")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -937,14 +937,14 @@ TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][sess
     // Simulate a session: model_change → thinking_level_change → user message → assistant message
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
     REQUIRE(store->append_thinking_level_change("mc-id", "high"));
-    REQUIRE(store->append(user_message("hello")));
+    REQUIRE(store->append(user_message("hello")).status);
     ai::AssistantMessage assistant;
     assistant.content.emplace_back(ai::TextContent{"hi there", std::nullopt});
     assistant.api = "openai-completions";
     assistant.provider = "openai";
     assistant.model = "gpt-4o";
     assistant.timestamp = 1718000000123;
-    REQUIRE(store->append(ai::MessageVariant{assistant}));
+    REQUIRE(store->append(ai::MessageVariant{assistant}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -963,12 +963,12 @@ TEST_CASE("open_existing succeeds and allows append on session with tree entries
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
-    REQUIRE(store->append(user_message("first message")));
+    REQUIRE(store->append(user_message("first message")).status);
 
     // Resume the session
     auto resumed = harness::session::JsonlSessionStore::open_existing(path);
     REQUIRE(resumed);
-    REQUIRE(resumed->append(user_message("second message")));
+    REQUIRE(resumed->append(user_message("second message")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -983,9 +983,9 @@ TEST_CASE("open_existing appends after stale latest leaf marker at last navigabl
     auto path = workspace.path() / "stale-leaf-append.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_message("first")));
-    REQUIRE(store->append(user_message("second")));
-    REQUIRE(store->append(user_message("third")));
+    REQUIRE(store->append(user_message("first")).status);
+    REQUIRE(store->append(user_message("second")).status);
+    REQUIRE(store->append(user_message("third")).status);
 
     auto pre = harness::session::JsonlSessionStore::load(path);
     REQUIRE(pre);
@@ -1000,7 +1000,7 @@ TEST_CASE("open_existing appends after stale latest leaf marker at last navigabl
 
     auto reopened = harness::session::JsonlSessionStore::open_existing(path);
     REQUIRE(reopened);
-    REQUIRE(reopened->append(user_message("after stale leaf")));
+    REQUIRE(reopened->append(user_message("after stale leaf")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -1038,14 +1038,14 @@ TEST_CASE("extended message types survive session append and load", "[harness][s
     compaction.summary = "Compacted 5 messages";
     compaction.tokens_before = 2000;
     compaction.timestamp = 1718000000001;
-    REQUIRE(store->append(ai::MessageVariant{compaction}));
+    REQUIRE(store->append(ai::MessageVariant{compaction}).status);
 
     // Append branch summary
     ai::BranchSummaryMessage branch;
     branch.summary = "Branch resolved";
     branch.from_id = "abc12345";
     branch.timestamp = 1718000000002;
-    REQUIRE(store->append(ai::MessageVariant{branch}));
+    REQUIRE(store->append(ai::MessageVariant{branch}).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);

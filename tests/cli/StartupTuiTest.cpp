@@ -14,7 +14,7 @@
 
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -85,7 +85,7 @@ void drain_ready(boost::asio::io_context& io) {
         coding_agent::session_paths::encode_workspace_key(workspace);
     std::filesystem::create_directories(directory);
     const auto path = directory / (id + ".jsonl");
-    auto created = harness::session::JsonlSessionStore::create_new(
+    auto created = harness::session::SessionStore::create_new(
         path,
         {
             .session_id = id,

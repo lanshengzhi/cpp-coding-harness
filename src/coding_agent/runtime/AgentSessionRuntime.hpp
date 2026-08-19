@@ -422,14 +422,6 @@ public:
     /// an admitted callback returns without waiting on that callback.
     void close() noexcept;
 
-    /// The current session's tree, or an empty optional when the session has
-    /// no persisted entry surface (in-memory sessions keep no entries); a
-    /// persisted file that cannot be opened is an error. Reused by
-    /// `session_name`, `set_session_name`, and `session_stats`.
-    [[nodiscard]] support::Expected<
-        std::optional<harness::session::SessionTree>>
-    open_session_tree() const;
-
 private:
     /// Session lifecycle, tracked independently from the active-work facts so
     /// User Bash may overlap an Agent run (ADR 0026).

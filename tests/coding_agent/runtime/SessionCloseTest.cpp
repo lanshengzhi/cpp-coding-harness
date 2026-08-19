@@ -11,7 +11,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include <cch/support/Error.hpp>
 #include "ai/providers/FakeProvider.hpp"
@@ -96,7 +96,7 @@ struct CloseFixture {
     }
 
     [[nodiscard]] std::vector<std::string> persisted_texts() const {
-        auto loaded = harness::session::JsonlSessionStore::load(session_path);
+        auto loaded = harness::session::SessionStore::load(session_path);
         REQUIRE(loaded.has_value());
         std::vector<std::string> texts;
         for (const auto& message : loaded->messages) {
@@ -341,7 +341,7 @@ TEST_CASE(
     // message and the aborted terminal assistant message (Close's
     // cancellation request resolved through pi's ordinary `aborted`
     // lifecycle, not a second error channel).
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_path);
+    auto loaded = harness::session::SessionStore::load(fixture.session_path);
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->messages.size() == 2);
     CHECK(
@@ -408,7 +408,7 @@ TEST_CASE(
 
     // The CompactionEntry landed in the session file before the store was
     // released.
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_path);
+    auto loaded = harness::session::SessionStore::load(fixture.session_path);
     REQUIRE(loaded.has_value());
     bool found_compaction = false;
     for (const auto& entry : loaded->entries) {

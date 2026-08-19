@@ -1,7 +1,7 @@
 #include "coding_agent/AgentSession.hpp"
 
 #include "ai/ModelStreamBridge.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "ai/providers/FakeProvider.hpp"
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/GatedChatProvider.hpp"
@@ -53,7 +53,7 @@ struct PersistentSession {
     }
 
     [[nodiscard]] std::vector<std::string> persisted_texts() const {
-        auto loaded = harness::session::JsonlSessionStore::load(session_path);
+        auto loaded = harness::session::SessionStore::load(session_path);
         REQUIRE(loaded.has_value());
         std::vector<std::string> texts;
         for (const auto& message : loaded->messages) {

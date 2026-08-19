@@ -10,7 +10,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Model.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include "agent/harness/session/JsonlSessionStore.hpp"
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/support/Error.hpp>
@@ -948,12 +948,10 @@ TEST_CASE(
     line_object.at("id") = support::JsonValue("<compaction-entry-id>");
     line_object.at("timestamp") = support::JsonValue("<compaction-entry-timestamp>");
     expect_json_equal(*line_json, "compaction-persistence.jsonl");
-
     // Rebuild golden: the rebuilt context is compactionSummary + retained
     // tail (the compactionSummary timestamp follows the normalized entry).
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
-    REQUIRE(tree.has_value());
-    auto context = tree->buildSessionContext();
+    harness::session::SessionTree tree(std::move(*loaded));
+    auto context = tree.buildSessionContext();
     REQUIRE(context.messages.size() == 5);
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(context.messages[0]));
     support::JsonValue rebuild{support::JsonValue::array_t{}};

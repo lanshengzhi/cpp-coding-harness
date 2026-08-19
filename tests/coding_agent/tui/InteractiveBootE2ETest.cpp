@@ -20,7 +20,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
@@ -136,7 +136,7 @@ struct E2eSession {
     }
 
     const auto session_file = fixture->workspace / "e2e-session.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "e2e-session",

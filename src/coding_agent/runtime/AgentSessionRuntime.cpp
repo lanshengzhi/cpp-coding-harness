@@ -4,7 +4,7 @@
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include "agent/harness/WorkspaceFileSystem.hpp"
 
@@ -1503,16 +1503,6 @@ struct TreeLeafDecision {
 
 [[nodiscard]] TreeLeafDecision tree_leaf_decision(
     std::optional<std::string> effective_parent,
-    const harness::session::SessionEntry& entry);
-
-[[nodiscard]] TreeLeafDecision tree_leaf_decision(
-    const harness::session::SessionTree& tree,
-    const harness::session::SessionEntry& entry) {
-    return tree_leaf_decision(tree.effective_parent_id(entry.entry_id), entry);
-}
-
-[[nodiscard]] TreeLeafDecision tree_leaf_decision(
-    std::optional<std::string> effective_parent,
     const harness::session::SessionEntry& entry) {
     if (entry.kind == harness::session::SessionEntryKind::Message &&
         entry.message.has_value()) {
@@ -1679,13 +1669,11 @@ AgentSessionRuntime::session_tree() const {
     }
     const auto store_path = session_.store ? session_.store->path() : std::nullopt;
     if (store_path) {
-        auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
-        if (!tree) {
-            return std::unexpected(tree.error());
-        }
+        // The store's live tree answers from memory; the session file is
+        // never re-read for topology queries.
         return coding_agent::SessionTreeTopology{
-            .roots = tree->get_tree(),
-            .leaf_id = tree->leaf_id(),
+            .roots = session_.store->tree(),
+            .leaf_id = session_.store->leaf_id(),
         };
     }
     // In-memory: derive a linear tree from the live context (synthetic ids).
@@ -1723,45 +1711,35 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
 
     const auto store_path = session_.store ? session_.store->path() : std::nullopt;
     if (store_path) {
-        auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
-        if (!tree) {
-            return std::unexpected(tree.error());
-        }
-
+        auto& store = *session_.store;
         // pi: no-op when already at the target.
-        if (target_id == tree->leaf_id()) {
+        if (target_id == store.leaf_id()) {
             return coding_agent::TreeNavigationResult{};
         }
-        const auto* target = tree->getEntry(target_id);
-        if (target == nullptr) {
+        const auto target = store.get_entry(target_id);
+        if (!target.has_value()) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Session,
                 std::format("Entry {} not found", target_id)));
         }
 
-        const auto decision = tree_leaf_decision(*tree, *target);
+        const auto decision = tree_leaf_decision(
+            store.effective_parent_id(target->entry_id), *target);
 
-        // Switch the leaf: branch (non-root) or reset (root position).
-        if (decision.new_leaf_id.has_value()) {
-            if (auto branched = tree->branch(*decision.new_leaf_id); !branched) {
-                return std::unexpected(branched.error());
-            }
-        } else {
-            tree->reset_leaf();
-        }
-
-        // Persist the leaf marker first; on failure nothing durable changed
-        // and the live context keeps the old path (Session Event Commitment
-        // ordering: the durable mutation precedes the live-state advance).
+        // Persist the leaf marker; a successful marker append also moves
+        // the live tree's leaf to the same position, while a failure
+        // changes nothing — durable and live state never drift (Session
+        // Event Commitment ordering: the durable mutation precedes the
+        // live-state advance below).
         if (auto persisted =
-                persist_leaf_marker(*session_.store, decision.new_leaf_id);
+                persist_leaf_marker(store, decision.new_leaf_id);
             !persisted) {
             return std::unexpected(persisted.error());
         }
 
         // Rebuild the live Agent context from the new path (pi
         // `agent.state.messages = sessionContext.messages`).
-        const auto context = tree->buildSessionContext();
+        const auto context = store.build_context();
         if (auto replaced =
                 agent::detail::AgentMessageAccess::replace_messages(
                     *agent_, context.messages);
@@ -1845,11 +1823,7 @@ support::ExpectedVoid AgentSessionRuntime::set_entry_label(
         // for the session's lifetime).
         return {};
     }
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
-    if (!tree) {
-        return std::unexpected(tree.error());
-    }
-    if (tree->getEntry(entry_id) == nullptr) {
+    if (!session_.store->get_entry(entry_id).has_value()) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Session,
             std::format("Entry {} not found", entry_id)));
@@ -1857,8 +1831,8 @@ support::ExpectedVoid AgentSessionRuntime::set_entry_label(
     // pi `appendLabelChange`: the label entry hangs under the current leaf
     // (null at the root position).
     std::optional<std::string> parent_id;
-    if (!tree->leaf_id().empty()) {
-        parent_id = tree->leaf_id();
+    if (auto leaf = session_.store->leaf_id(); !leaf.empty()) {
+        parent_id = std::move(leaf);
     }
     return session_.store->append_label_change(
         std::move(parent_id), std::string{entry_id}, std::move(label));
@@ -1966,14 +1940,17 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     const auto session_path = *store_path;
 
     const auto settings = effective_compaction_settings();
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
-    if (!tree) {
-        co_return std::unexpected(tree.error());
-    }
-    auto branch = tree->getBranch();
+    // The store's live tree answers the branch query from memory (pi
+    // `SessionManager.getBranch`); the session file is not re-read.
+    auto branch_entries = session_.store->get_branch();
     // pi SessionManager.getBranch is root-to-leaf with the leaf last; the C++
     // tree walks leaf-to-root, so reverse for the machinery.
-    std::reverse(branch.begin(), branch.end());
+    std::reverse(branch_entries.begin(), branch_entries.end());
+    std::vector<const harness::session::SessionEntry*> branch;
+    branch.reserve(branch_entries.size());
+    for (const auto& entry : branch_entries) {
+        branch.push_back(&entry);
+    }
 
     auto preparation = harness::session::prepare_compaction(branch, settings);
     if (!preparation) {
@@ -2070,14 +2047,12 @@ AgentSessionRuntime::execute_compaction(
         co_return std::unexpected(appended.error());
     }
 
-    // Rebuild the live context from the persisted tree exactly like pi
+    // Rebuild the live context from the store's live tree exactly like pi
     // (`this.agent.state.messages = sessionContext.messages`): the next
-    // prompt's model context is compactionSummary + retained tail.
-    auto rebuilt = harness::session::JsonlSessionStore::open_as_tree(session_path);
-    if (!rebuilt) {
-        co_return std::unexpected(rebuilt.error());
-    }
-    auto context = rebuilt->buildSessionContext();
+    // prompt's model context is compactionSummary + retained tail. The
+    // compaction append above already advanced the cached tree, so there is
+    // nothing to re-read.
+    auto context = session_.store->build_context();
     if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(
             *agent_, context.messages);
         !replaced) {
@@ -2116,14 +2091,14 @@ boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
         // the manual trigger): auto-compaction is skipped silently.
         co_return false;
     }
-    const auto session_path = *store_path;
 
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
-    if (!tree) {
-        co_return false;
+    auto branch_entries = session_.store->get_branch();
+    std::reverse(branch_entries.begin(), branch_entries.end());
+    std::vector<const harness::session::SessionEntry*> branch;
+    branch.reserve(branch_entries.size());
+    for (const auto& entry : branch_entries) {
+        branch.push_back(&entry);
     }
-    auto branch = tree->getBranch();
-    std::reverse(branch.begin(), branch.end());
 
     auto preparation = harness::session::prepare_compaction(branch, settings);
     if (!preparation || !*preparation) {
@@ -2420,15 +2395,11 @@ AgentSessionRuntime::latest_compaction_timestamp() const {
     if (!store_path) {
         return std::nullopt;
     }
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
-    if (!tree) {
-        return std::nullopt;
-    }
-    // getBranch is leaf-to-root; the first compaction encountered is the
+    // get_branch is leaf-to-root; the first compaction encountered is the
     // latest on the active path (pi `getLatestCompactionEntry`).
-    for (const auto* entry : tree->getBranch()) {
-        if (entry->kind == harness::session::SessionEntryKind::Compaction) {
-            return entry->timestamp;
+    for (const auto& entry : session_.store->get_branch()) {
+        if (entry.kind == harness::session::SessionEntryKind::Compaction) {
+            return entry.timestamp;
         }
     }
     return std::nullopt;
@@ -2453,29 +2424,14 @@ std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
     return agent_ ? last_assistant_text_from(agent_->state().messages) : std::nullopt;
 }
 
-support::Expected<std::optional<harness::session::SessionTree>>
-AgentSessionRuntime::open_session_tree() const {
-    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
-    if (!store_path) {
-        // In-memory sessions keep no entry surface.
-        return std::optional<harness::session::SessionTree>{};
-    }
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
-    if (!tree) {
-        return std::unexpected(tree.error());
-    }
-    return std::optional<harness::session::SessionTree>{std::move(*tree)};
-}
-
 std::optional<std::string> AgentSessionRuntime::session_name() const {
-    auto tree = open_session_tree();
-    if (!tree || !*tree) {
+    if (!session_.store || !session_.store->path()) {
         // In-memory sessions have no `session_info` surface (pi
         // `getSessionName` walks the entries; the in-memory store keeps
-        // none); an unreadable persisted file also reports none.
+        // none).
         return std::nullopt;
     }
-    return (*tree)->get_session_name();
+    return session_.store->get_session_name();
 }
 
 support::Expected<std::optional<std::string>>
@@ -2483,18 +2439,14 @@ AgentSessionRuntime::set_session_name(std::string name) {
     // pi `appendSessionInfo` sanitization: CR/LF runs become one space,
     // then the result is trimmed.
     auto sanitized = runtime::sanitize_session_name(name);
-    auto tree = open_session_tree();
-    if (!tree) {
-        return std::unexpected(tree.error());
-    }
-    if (!*tree) {
+    if (!session_.store || !session_.store->path()) {
         // In-memory sessions keep no `session_info` entry surface; the
         // change is dropped like every in-memory store write.
         return std::nullopt;
     }
     std::optional<std::string> parent_id;
-    if (!(*tree)->leaf_id().empty()) {
-        parent_id = (*tree)->leaf_id();
+    if (auto leaf = session_.store->leaf_id(); !leaf.empty()) {
+        parent_id = std::move(leaf);
     }
     if (auto appended = session_.store->append_session_info(
             std::move(parent_id), sanitized);
@@ -2506,13 +2458,12 @@ AgentSessionRuntime::set_session_name(std::string name) {
 
 SessionStats AgentSessionRuntime::session_stats() const {
     SessionStats stats;
-    // Persisted sessions aggregate over the file's entries (pi
+    // Persisted sessions aggregate over the store's entries (pi
     // `getEntries()`, so compacted-away history still counts); in-memory
     // sessions derive from the live context.
     std::vector<ai::MessageVariant> messages;
-    auto tree = open_session_tree();
-    if (tree && *tree) {
-        for (const auto& entry : (*tree)->entries()) {
+    if (session_.store && session_.store->path()) {
+        for (const auto& entry : session_.store->entries()) {
             if (entry.kind != harness::session::SessionEntryKind::Message ||
                 !entry.message) {
                 continue;

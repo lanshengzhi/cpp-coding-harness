@@ -1,7 +1,6 @@
 #include "SessionLifecycle.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
@@ -159,7 +158,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     session.workspace = std::move(workspace);
     session.metadata = std::move(metadata);
 
-    auto created = harness::session::JsonlSessionStore::create_new(session_path, session.metadata);
+    auto created = harness::session::SessionStore::create_new(session_path, session.metadata);
     if (!created) {
         return std::unexpected(publication_error(session_path, created.error()));
     }
@@ -224,7 +223,7 @@ support::Expected<OpenSession> publish_session(
             std::move(provider),
             std::move(model));
         session.store = std::make_shared<harness::session::SessionStore>(
-            harness::session::SessionStore::in_memory());
+            harness::session::SessionStore::in_memory(session.metadata));
         return session;
     }
 
@@ -358,7 +357,7 @@ support::Expected<OpenSession> publish_resume_session(
     session.stored_provider = session.metadata.provider;
     session.stored_model = session.metadata.model;
 
-    auto opened = harness::session::JsonlSessionStore::open_existing(target.resume_path);
+    auto opened = harness::session::SessionStore::open_existing(target.resume_path);
     if (!opened) {
         return std::unexpected(opened.error());
     }
@@ -380,7 +379,7 @@ support::Expected<PreparedResumeTarget> prepare_fork_target(
             source_path.string()));
     }
 
-    auto loaded = harness::session::JsonlSessionStore::load(resolved_source);
+    auto loaded = harness::session::SessionStore::load(resolved_source);
     if (!loaded) {
         return std::unexpected(session_error(
             "Cannot fork: source session file is empty or invalid: " +

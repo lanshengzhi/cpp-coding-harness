@@ -7,7 +7,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
@@ -96,7 +96,7 @@ struct RichThinkingSession {
 
     void create() {
         session_file = workspace.path() / "rich-session.jsonl";
-        auto store = harness::session::JsonlSessionStore::create_new(
+        auto store = harness::session::SessionStore::create_new(
             session_file,
             {
                 .session_id = "rich-session",
@@ -1068,7 +1068,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "image-session.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "image-session",
@@ -1323,7 +1323,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
     const auto session_file = workspace.path() / "viewport-images.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "viewport-images",
@@ -1601,7 +1601,7 @@ TEST_CASE(
         "keybindings.json",
         R"({"app.thinking.toggle":"f8","app.tools.expand":[]})");
     const auto session_file = workspace.path() / "rich-session.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "rich-session",
@@ -1615,7 +1615,7 @@ TEST_CASE(
         ai::user_text_message("before compaction", 1'700'000'000'000)}));
     REQUIRE(store->append(ai::MessageVariant{
         ai::user_text_message("resume request", 1'700'000'000'001)}));
-    auto loaded = harness::session::JsonlSessionStore::load(session_file);
+    auto loaded = harness::session::SessionStore::load(session_file);
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() >= 3);
     const auto kept_entry_id = loaded->entries[2].entry_id;

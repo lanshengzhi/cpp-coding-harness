@@ -8,7 +8,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
@@ -180,7 +180,7 @@ TEST_CASE(
     CHECK(result->session->snapshot().agent_state.model.id == "alpha-1");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_model_change_entry(*loaded);
     REQUIRE(entry != nullptr);
@@ -211,7 +211,7 @@ TEST_CASE(
     result->session->close();
 
     // The durable session file carries the new `model_change` entry.
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_model_change_entry(*loaded);
     REQUIRE(entry != nullptr);
@@ -306,7 +306,7 @@ TEST_CASE(
     CHECK(result->session->snapshot().agent_state.thinking_level == "off");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);
@@ -350,7 +350,7 @@ TEST_CASE(
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
     result->session->close();
 
-    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);

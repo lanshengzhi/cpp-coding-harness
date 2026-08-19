@@ -1,7 +1,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 
@@ -155,7 +155,7 @@ TEST_CASE("automatic session publication correlates path header and identity", "
     CHECK(published->metadata.workspace == workspace);
     CHECK(published->store->path() == session_path);
 
-    auto loaded = harness::session::JsonlSessionStore::load(session_path);
+    auto loaded = harness::session::SessionStore::load(session_path);
     REQUIRE(loaded);
     CHECK(loaded->metadata.session_id == published->metadata.session_id);
     CHECK(loaded->metadata.created_at == published->metadata.created_at);
@@ -235,7 +235,7 @@ TEST_CASE("custom automatic publication creates a missing override directory pri
     CHECK(published->metadata.workspace == workspace);
     CHECK(permission_bits(directory) == 0700);
     CHECK(permission_bits(*published->store->path()) == 0600);
-    auto loaded = harness::session::JsonlSessionStore::load(*published->store->path());
+    auto loaded = harness::session::SessionStore::load(*published->store->path());
     REQUIRE(loaded);
     CHECK(loaded->metadata.session_id == published->metadata.session_id);
 }

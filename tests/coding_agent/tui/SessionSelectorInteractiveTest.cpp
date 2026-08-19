@@ -12,7 +12,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -74,7 +74,7 @@ struct Fixture {
         std::vector<std::string> user_messages,
         std::optional<std::string> header_cwd = std::nullopt,
         std::string session_id = "other-session") {
-        auto created = harness::session::JsonlSessionStore::create_new(
+        auto created = harness::session::SessionStore::create_new(
             path,
             {
                 .session_id = session_id,
@@ -311,7 +311,7 @@ TEST_CASE(
     drain_ready(running.io);
 
     // The session_info entry landed in the file.
-    auto loaded = harness::session::JsonlSessionStore::load(other);
+    auto loaded = harness::session::SessionStore::load(other);
     REQUIRE(loaded.has_value());
     harness::session::SessionTree tree(std::move(*loaded));
     const auto name = tree.get_session_name();
@@ -412,7 +412,7 @@ TEST_CASE(
         if (entry.path() != fixture.session_file) branched = entry.path();
     }
     REQUIRE(!branched.empty());
-    auto loaded = harness::session::JsonlSessionStore::load(branched);
+    auto loaded = harness::session::SessionStore::load(branched);
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->metadata.parent_session.has_value());
     CHECK(*loaded->metadata.parent_session == fixture.session_file);

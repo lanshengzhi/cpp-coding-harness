@@ -19,7 +19,6 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/ExecutionEnv.hpp>
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
@@ -260,9 +259,6 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(!std::is_copy_constructible_v<harness::AsyncLocalExecutionEnv>);
     static_assert(!std::is_copy_assignable_v<harness::AsyncLocalExecutionEnv>);
     static_assert(std::is_move_constructible_v<harness::AsyncLocalExecutionEnv>);
-    static_assert(!std::is_base_of_v<
-                  harness::session::SessionStore,
-                  harness::session::JsonlSessionStore>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const harness::session::SessionStore&>().path()),
                   std::optional<std::filesystem::path>>);

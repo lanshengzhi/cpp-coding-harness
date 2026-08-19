@@ -3,7 +3,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionResume.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include "coding_agent/BoundedText.hpp"
@@ -1520,7 +1520,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "bash-resume.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         session_file,
         {
             .session_id = "bash-resume",

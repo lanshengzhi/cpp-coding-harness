@@ -9,7 +9,6 @@
 // the fake-ModelRuntime seam so the model sees exactly what pi's model sees.
 
 #include <cch/agent/Agent.hpp>
-#include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
