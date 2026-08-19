@@ -296,10 +296,14 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "a session with no entries reports No entries in session",
-    "[coding_agent][tui][tree-selector][e2e][issue410]") {
+    "a fresh in-memory session opens the tree on its initial thinking entry",
+    "[coding_agent][tui][tree-selector][e2e][issue491]") {
     Fixture fixture;
-    // An empty in-memory session (no file, no messages).
+    // An in-memory session (no file, no messages). pi's createAgentSession
+    // appends the initial thinking-level change to every new session, so the
+    // tree is never entry-less for a created session; the selector opens on
+    // that one entry (hidden by the default filter) instead of reporting an
+    // empty session.
     Running running;
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.no_skills = true;
@@ -334,9 +338,15 @@ TEST_CASE(
 
     double_escape(running);
     const auto screen = visible_screen(running.terminal);
-    CHECK(screen.find("No entries in session") != std::string::npos);
-    CHECK(screen.find("Session Tree") == std::string::npos);
+    CHECK(screen.find("Session Tree") != std::string::npos);
+    CHECK(screen.find("No entries in session") == std::string::npos);
 
+    // Dismiss the selector (Escape + the decoder flush the lone-ESC path
+    // needs), then Ctrl-D quits.
+    REQUIRE(running.terminal.inject_input("\x1b"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input(""));
+    drain_ready(running.io);
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
     REQUIRE(running.run_result);

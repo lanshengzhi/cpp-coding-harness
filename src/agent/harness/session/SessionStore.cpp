@@ -209,6 +209,11 @@ std::vector<SessionTreeNode> SessionStore::tree() const {
     return impl_->tree.get_tree();
 }
 
+SessionTreeSnapshot SessionStore::tree_snapshot() const {
+    std::lock_guard lock(impl_->mutex);
+    return impl_->tree.topology();
+}
+
 SessionContext SessionStore::build_context() const {
     std::lock_guard lock(impl_->mutex);
     return impl_->tree.buildSessionContext();

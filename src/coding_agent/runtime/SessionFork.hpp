@@ -2,12 +2,15 @@
 
 #include "AgentSessionCreationRequest.hpp"
 
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/support/Error.hpp>
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace cch::coding_agent::runtime {
@@ -18,10 +21,8 @@ enum class ForkPosition { Before, At };
 
 /// One fork-selectable user message (pi `getUserMessagesForForking`).
 struct UserForkMessage {
-    /// Session entry id (persisted sources) or the synthetic in-memory id
-    /// (pi in-memory SessionManagers still assign entry ids; the C++
-    /// in-memory store keeps none, so fork ids derive from the live message
-    /// index and never surface outside the fork flow).
+    /// The session entry id: the store's real entry ids for both
+    /// alternatives (pi in-memory SessionManagers assign entry ids too).
     std::string entry_id;
     std::string text;
 };
@@ -42,21 +43,35 @@ struct ForkPreparation {
     std::optional<InMemoryBranchSeed> in_memory_seed;
 };
 
+/// Persisted fork source facts: the authoritative session file; the branch
+/// writes into its parent directory (pi `getSessionDir()`).
+struct PersistedForkSource {
+    std::filesystem::path session_path;
+};
+
+/// In-memory fork source facts: the session's store; its live tree is the
+/// entry surface (pi in-memory SessionManager entries; the branch travels
+/// as a seed).
+struct InMemoryForkSource {
+    std::shared_ptr<harness::session::SessionStore> store;
+};
+
+/// The closed set of fork-source alternatives (CODING_STANDARDS.md §4.2).
+using ForkSourceVariant = std::variant<PersistedForkSource, InMemoryForkSource>;
+
 /// Source facts for one in-session fork (the current Agent Session).
 struct ForkSource {
-    /// Persisted source: the authoritative session file; the branch writes
-    /// into its parent directory (pi `getSessionDir()`).
-    std::optional<std::filesystem::path> session_path;
     /// The workspace the source session binds to (the branch header cwd).
     std::filesystem::path workspace;
-    /// In-memory source: the live session context (pi in-memory
-    /// SessionManager entries; the branch travels as a seed).
-    std::optional<harness::session::SessionContext> live_context;
+    /// The source alternative; a default-constructed (empty-path) persisted
+    /// alternative is the absent-source state and fails like an invalid
+    /// entry.
+    ForkSourceVariant source{PersistedForkSource{}};
 };
 
 /// pi `getUserMessagesForForking`: every user message with non-blank text in
-/// session order, from the file's entries (persisted) or the live context
-/// (in-memory). Tool-result-echoed and blank messages are skipped.
+/// session order, from the file's entries (persisted) or the store's live
+/// tree (in-memory). Tool-result-echoed and blank messages are skipped.
 [[nodiscard]] std::vector<UserForkMessage> user_messages_for_forking(
     const ForkSource& source);
 

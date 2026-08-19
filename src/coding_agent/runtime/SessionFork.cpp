@@ -5,29 +5,26 @@
 #include "agent/harness/session/SessionJournal.hpp"
 #include "support/Json.hpp"
 
-#include <fstream>
-#include <iterator>
 #include <cch/ai/Message.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
 #include <algorithm>
-#include <charconv>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cch::coding_agent::runtime {
 namespace {
 
-/// pi `createBranchedSession` failure mapping: the runtime wraps every
-/// session-file failure in pi's verbatim "Failed to create forked session"
-/// with the underlying reason as detail.
 /// pi `createBranchedSession` failure mapping: the runtime wraps every
 /// session-file failure in pi's verbatim "Failed to create forked session"
 /// with the underlying reason as detail.
@@ -133,13 +130,14 @@ namespace {
     return ai::text_from_user_message(message);
 }
 
-/// The user messages with text from one parsed session file's entries, in
-/// store order (pi `getUserMessagesForForking` over the SessionManager
-/// entries; the C++ file is authoritative for persisted sessions).
-[[nodiscard]] std::vector<UserForkMessage> file_user_messages(
-    const harness::session::SessionTree& tree) {
+/// The user messages with text from one entry sequence, in store order (pi
+/// `getUserMessagesForForking` over the SessionManager entries): the
+/// persisted file's parsed entries or the in-memory store's live tree
+/// snapshot.
+[[nodiscard]] std::vector<UserForkMessage> user_messages_from_entries(
+    const std::vector<harness::session::SessionEntry>& entries) {
     std::vector<UserForkMessage> messages;
-    for (const auto& entry : tree.entries()) {
+    for (const auto& entry : entries) {
         if (entry.kind != harness::session::SessionEntryKind::Message ||
             !entry.message) {
             continue;
@@ -156,28 +154,6 @@ namespace {
             .entry_id = entry.entry_id,
             .text = std::move(text),
         });
-    }
-    return messages;
-}
-
-/// The user messages with text from the live in-memory context, with
-/// synthetic index-based ids (the C++ in-memory store keeps no entries).
-[[nodiscard]] std::vector<UserForkMessage> live_user_messages(
-    const harness::session::SessionContext& context) {
-    std::vector<UserForkMessage> messages;
-    std::size_t message_index = 0;
-    for (const auto& message : context.messages) {
-        const auto* user = std::get_if<ai::UserMessage>(&message);
-        if (user != nullptr) {
-            auto text = fork_message_text(*user);
-            if (!text.empty()) {
-                messages.push_back(UserForkMessage{
-                    .entry_id = "mem-" + std::to_string(message_index),
-                    .text = std::move(text),
-                });
-            }
-        }
-        ++message_index;
     }
     return messages;
 }
@@ -395,69 +371,69 @@ struct LabelFacts {
     return session_path;
 }
 
-/// pi `createBranchedSession` in-memory path: the branch context projection
-/// (root-to-leaf messages with derived model/thinking) plus the parent
-/// pointer and the chosen message's text; the empty context covers the
+/// pi `createBranchedSession` in-memory path: the branch context projected
+/// from the source store's live tree (root-to-leaf path, labels and all,
+/// through `buildSessionContext`) plus the parent pointer and, for position
+/// "before", the chosen message's text; the empty context covers the
 /// no-target-leaf in-memory case.
 struct InMemoryBranchResult {
     InMemoryBranchSeed seed;
-    std::string selected_text;
+    std::optional<std::string> selected_text;
 };
 
 [[nodiscard]] support::Expected<InMemoryBranchResult> in_memory_branch_seed(
-    const ForkSource& source,
+    const InMemoryForkSource& source,
     std::string_view entry_id,
     ForkPosition position) {
-    const auto& context = source.live_context.value();
-    std::optional<std::size_t> target_index;
-    if (entry_id.starts_with("mem-")) {
-        const auto index_text = std::string{entry_id.substr(4)};
-        std::size_t index = 0;
-        bool numeric = !index_text.empty() &&
-            std::all_of(index_text.begin(), index_text.end(), [](unsigned char character) {
-                return std::isdigit(character) != 0;
-            });
-        if (numeric) {
-            // Explicit non-throwing conversion: the digit check above already
-            // rejects every malformed spelling, and from_chars can never throw.
-            const auto parsed = std::from_chars(
-                index_text.data(),
-                index_text.data() + index_text.size(),
-                index);
-            if (parsed.ec == std::errc{} && index < context.messages.size()) {
-                target_index = index;
-            }
-        }
-    }
-    if (!target_index) {
-        return std::unexpected(invalid_entry_error());
-    }
-    const auto& selected = context.messages[*target_index];
-    const auto* user = std::get_if<ai::UserMessage>(&selected);
-    if (user == nullptr || fork_message_text(*user).empty()) {
+    auto& store = *source.store;
+    const auto selected = store.get_entry(entry_id);
+    if (!selected.has_value()) {
         return std::unexpected(invalid_entry_error());
     }
 
+    std::optional<std::string> target_leaf;
+    std::optional<std::string> selected_text;
+    if (position == ForkPosition::At) {
+        // Branch at the entry itself (same contract as the persisted path).
+        target_leaf = selected->entry_id;
+    } else {
+        // pi: position "before" requires a user message with non-blank text;
+        // `targetLeafId = selectedEntry.parentId` over the effective parent
+        // chain (nullopt at the root), and the text pre-fills the editor.
+        const auto* user = selected->message
+            ? std::get_if<ai::UserMessage>(&*selected->message)
+            : nullptr;
+        if (selected->kind != harness::session::SessionEntryKind::Message ||
+            user == nullptr) {
+            return std::unexpected(invalid_entry_error());
+        }
+        auto text = fork_message_text(*user);
+        if (text.empty()) {
+            return std::unexpected(invalid_entry_error());
+        }
+        selected_text = std::move(text);
+        target_leaf = store.effective_parent_id(entry_id);
+    }
+
+    // An in-memory source has no session file, so the seed's parent pointer
+    // stays absent (pi header `parentSession` is unset for in-memory
+    // sources).
     InMemoryBranchSeed seed;
-    seed.parent_session = source.session_path;
-    seed.context.thinking_level = context.thinking_level;
-    seed.context.has_thinking_level_entry = context.has_thinking_level_entry;
-    seed.context.provider = context.provider;
-    seed.context.model = context.model;
-    seed.context.active_tool_names = context.active_tool_names;
-    // Branch = the messages up to the chosen one: position "before" copies
-    // the path up to (excluding) the user message whose text pre-fills the
-    // editor (pi `targetLeafId = selectedEntry.parentId`); position "at"
-    // includes the entry itself. The C++ in-memory history is linear, so the
-    // root-to-leaf projection is the message prefix.
-    const std::size_t branch_count =
-        position == ForkPosition::At ? *target_index + 1 : *target_index;
-    seed.context.messages.assign(
-        context.messages.begin(),
-        context.messages.begin() + static_cast<std::ptrdiff_t>(branch_count));
+    if (target_leaf.has_value()) {
+        // The retained path (leaf-to-root from the store, reversed),
+        // projected exactly like pi's buildSessionContext over the branch.
+        auto path_entries = store.get_branch(*target_leaf);
+        std::reverse(path_entries.begin(), path_entries.end());
+        std::vector<const harness::session::SessionEntry*> path;
+        path.reserve(path_entries.size());
+        for (const auto& entry : path_entries) {
+            path.push_back(&entry);
+        }
+        seed.context = harness::session::buildSessionContext(path);
+    }
     return InMemoryBranchResult{
         .seed = std::move(seed),
-        .selected_text = fork_message_text(*user),
+        .selected_text = std::move(selected_text),
     };
 }
 
@@ -465,16 +441,20 @@ struct InMemoryBranchResult {
 
 std::vector<UserForkMessage> user_messages_for_forking(
     const ForkSource& source) {
-    if (source.session_path) {
-        auto loaded = harness::session::SessionStore::load(*source.session_path);
+    if (const auto* persisted =
+            std::get_if<PersistedForkSource>(&source.source);
+        persisted != nullptr && !persisted->session_path.empty()) {
+        auto loaded =
+            harness::session::SessionStore::load(persisted->session_path);
         if (!loaded) {
             return {};
         }
         harness::session::SessionTree tree(std::move(*loaded));
-        return file_user_messages(tree);
+        return user_messages_from_entries(tree.entries());
     }
-    if (source.live_context) {
-        return live_user_messages(*source.live_context);
+    if (const auto* memory = std::get_if<InMemoryForkSource>(&source.source);
+        memory != nullptr && memory->store) {
+        return user_messages_from_entries(memory->store->entries());
     }
     return {};
 }
@@ -484,7 +464,10 @@ support::Expected<ForkPreparation> prepare_fork(
     std::string_view entry_id,
     ForkPosition position) {
     ForkPreparation result;
-    if (source.session_path) {
+    if (const auto* persisted =
+            std::get_if<PersistedForkSource>(&source.source);
+        persisted != nullptr && !persisted->session_path.empty()) {
+        const auto& session_path = persisted->session_path;
         // pi fork: a persisted session whose file has not been written yet
         // (or was removed) cannot be branched. The C++ publishes session
         // files at creation (the #331 new-session initial-entries contract),
@@ -492,13 +475,13 @@ support::Expected<ForkPreparation> prepare_fork(
         // entry-before-file precedence is unreachable here for the same
         // reason (pi reads live manager entries, the C++ re-reads the file).
         std::error_code exists_ec;
-        if (!std::filesystem::exists(*source.session_path, exists_ec)) {
+        if (!std::filesystem::exists(session_path, exists_ec)) {
             return std::unexpected(unsaved_session_error());
         }
-        auto loaded = harness::session::SessionStore::load(*source.session_path);
+        auto loaded = harness::session::SessionStore::load(session_path);
         if (!loaded) {
             // G3 verbatim source classification (pi forkFrom strings).
-            return std::unexpected(fork_source_load_error(*source.session_path));
+            return std::unexpected(fork_source_load_error(session_path));
         }
         harness::session::SessionTree tree(std::move(*loaded));
         const auto* selected = tree.getEntry(entry_id);
@@ -533,9 +516,9 @@ support::Expected<ForkPreparation> prepare_fork(
             // pi: a fork before a root user message has no target leaf — a
             // fresh session with the parent pointer.
             auto created = create_empty_branch_session(
-                source.session_path->parent_path(),
+                session_path.parent_path(),
                 source.workspace,
-                *source.session_path);
+                session_path);
             if (!created) {
                 return std::unexpected(created.error());
             }
@@ -543,8 +526,8 @@ support::Expected<ForkPreparation> prepare_fork(
             return result;
         }
         auto branched = create_branched_session_file(
-            *source.session_path,
-            source.session_path->parent_path(),
+            session_path,
+            session_path.parent_path(),
             source.workspace,
             *target_leaf);
         if (!branched) {
@@ -554,10 +537,11 @@ support::Expected<ForkPreparation> prepare_fork(
         return result;
     }
 
-    if (!source.live_context) {
+    const auto* memory = std::get_if<InMemoryForkSource>(&source.source);
+    if (memory == nullptr || !memory->store) {
         return std::unexpected(invalid_entry_error());
     }
-    auto seed = in_memory_branch_seed(source, entry_id, position);
+    auto seed = in_memory_branch_seed(*memory, entry_id, position);
     if (!seed) {
         return std::unexpected(seed.error());
     }

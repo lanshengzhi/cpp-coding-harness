@@ -341,9 +341,9 @@ public:
     // ── Session fork (pi `AgentSessionRuntime.fork` preparation) ──────────
 
     /// pi `getUserMessagesForForking`: every user message with non-blank text
-    /// in session order. Persisted sessions read the file's entries (real
-    /// entry ids); in-memory sessions derive messages from the live history
-    /// with synthetic ids that only the fork flow understands.
+    /// in session order. Persisted sessions read the file's entries;
+    /// in-memory sessions read the store's live tree — both carry the
+    /// store's real entry ids.
     [[nodiscard]] std::vector<runtime::UserForkMessage>
     get_user_messages_for_forking() const;
 
@@ -372,19 +372,18 @@ public:
 
     /// The session tree topology for the tree selector (pi
     /// `sessionManager.getTree()` + `getLeafId()`): root nodes with resolved
-    /// labels and the current active leaf. Persisted sessions read the
-    /// file's entries; in-memory sessions derive a linear tree from the live
-    /// context with synthetic ids that only the tree surface understands
-    /// (the C++ in-memory store keeps no entries, #409).
+    /// labels and the current active leaf. Both persistence alternatives
+    /// answer from the store's live tree.
     [[nodiscard]] support::Expected<SessionTreeTopology> session_tree() const;
 
     /// pi `AgentSession.navigateTree` subset: switch the active path to
     /// `target_id` with the leaf/active-path semantics of the pi v3 Session
     /// Format — a user or custom-message target moves the leaf to its parent
     /// (null at the root) and returns the message text for the editor; any
-    /// other target becomes the leaf. Persisted sessions persist a `leaf`
-    /// marker and rebuild the live Agent context from the new path; the
-    /// in-memory path truncates the live context to the target. Branch
+    /// other target becomes the leaf. The leaf marker append moves the live
+    /// tree's leaf (persisted sessions also durably record it) and the live
+    /// Agent context rebuilds from the new path — identical for both
+    /// persistence alternatives. Branch
     /// summarization generation stays Deferred (G2): no `branch_summary` is
     /// ever produced, and `branch_summary` entries from pi-created sessions
     /// render unchanged. Rejects an active Agent run with pi's verbatim
@@ -395,8 +394,8 @@ public:
 
     /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
     /// append a `label` entry targeting `entry_id` under the current leaf.
-    /// Persisted sessions write the entry; in-memory sessions keep no entry
-    /// surface and the change is dropped like every in-memory store write.
+    /// Both persistence alternatives mirror the entry into the store's live
+    /// tree; persisted sessions also write it durably.
     [[nodiscard]] support::ExpectedVoid set_entry_label(
         std::string_view entry_id,
         std::optional<std::string> label);
@@ -456,8 +455,8 @@ public:
 
     /// pi `AgentSession.setSessionName`: sanitize the name (CR/LF runs become
     /// one space, then trimmed) and append a `session_info` entry under the
-    /// current leaf. In-memory sessions keep no entry surface and the change
-    /// is dropped like every in-memory store write. Returns the stored
+    /// current leaf. The `session_info` surface stays scoped to persisted
+    /// sessions; the in-memory change is dropped. Returns the stored
     /// (sanitized) name.
     [[nodiscard]] support::Expected<std::optional<std::string>> set_session_name(
         std::string name);

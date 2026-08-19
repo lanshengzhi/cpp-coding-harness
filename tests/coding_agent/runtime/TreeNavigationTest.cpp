@@ -4,7 +4,8 @@
 // targets move the leaf to the parent and return the editor text; other
 // targets become the leaf), the persisted `leaf` marker, the live Agent
 // context rebuild, the verbatim streaming guard, the `label`-entry creation
-// (editLabel), the tree topology access, and the in-memory truncation path.
+// (editLabel), the tree topology access, and the store-backed in-memory
+// tree surface.
 // Branch summarization generation stays absent with no placeholder.
 
 #include "ai/ModelStreamBridge.hpp"
@@ -473,14 +474,33 @@ TEST_CASE(
     REQUIRE(session.prompt_blocking("second").has_value());
     REQUIRE(live_user_texts(session).size() == 2);
 
-    // Navigate back to the first user message (in-memory truncation: the
-    // live context ends before it and its text returns to the editor).
+    // Navigate back to the first user message: the leaf moves to its
+    // effective parent (the creation-time thinking entry), the live context
+    // rebuilds from the new path, and its text returns to the editor. The
+    // in-memory tree surface is the store's live tree: the creation entries
+    // (model/thinking changes) sit above the message chain, so walk the
+    // single-child chain to the first user message entry.
     auto topology = session.session_tree();
     REQUIRE(topology.has_value());
     REQUIRE(topology->roots.size() == 1);
-    const auto& first_user = topology->roots.front().entry;
-    CHECK(first_user.entry_id.rfind("mem-", 0) == 0);
-    auto result = session.navigate_tree(first_user.entry_id);
+    const harness::session::SessionTreeNode* node = &topology->roots.front();
+    const harness::session::SessionTreeNode* first_user = nullptr;
+    const ai::UserMessage* first_user_message = nullptr;
+    while (node != nullptr) {
+        if (node->entry.kind == harness::session::SessionEntryKind::Message &&
+            node->entry.message.has_value()) {
+            if (const auto* user =
+                    std::get_if<ai::UserMessage>(&*node->entry.message)) {
+                first_user = node;
+                first_user_message = user;
+                break;
+            }
+        }
+        node = node->children.empty() ? nullptr : &node->children.front();
+    }
+    REQUIRE(first_user != nullptr);
+    CHECK(ai::text_from_user_message(*first_user_message) == "first");
+    auto result = session.navigate_tree(first_user->entry.entry_id);
     REQUIRE(result.has_value());
     REQUIRE(result->editor_text.has_value());
     CHECK(*result->editor_text == "first");
@@ -492,6 +512,126 @@ TEST_CASE(
     const auto users = live_user_texts(session);
     REQUIRE(users.size() == 1);
     CHECK(users[0] == "branch prompt");
+}
+
+TEST_CASE(
+    "an in-memory fork seed mirrors into the new session's live tree",
+    "[coding_agent][runtime][tree-navigation][issue491]") {
+    Fixture fixture;
+    std::deque<ai::AssistantMessage> replies;
+    replies.push_back(scripted_reply("first reply"));
+    replies.push_back(scripted_reply("second reply"));
+    replies.push_back(scripted_reply("branch reply"));
+    auto scripted = std::make_shared<ReplyProvider>(std::move(replies));
+
+    // Source in-memory session with two completed turns.
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
+    request.workspace = fixture.workspace.path();
+    request.session_target = coding_agent::InMemorySessionTarget{};
+    request.request_model = tests::scripted_request_model("fake", "fake-model");
+    auto created = coding_agent::create_agent_session_for_testing(
+        std::move(request), tests::models_from_provider(scripted));
+    REQUIRE(created.has_value());
+    auto& source_session = *created->session;
+    REQUIRE(source_session.prompt_blocking("first").has_value());
+    REQUIRE(source_session.prompt_blocking("second").has_value());
+
+    // Fork before the second user message: the seed carries the first turn.
+    const auto fork_messages = source_session.get_user_messages_for_forking();
+    REQUIRE(fork_messages.size() == 2);
+    auto prepared = source_session.prepare_fork(
+        fork_messages[1].entry_id, runtime::ForkPosition::Before);
+    REQUIRE(prepared.has_value());
+    REQUIRE(prepared->in_memory_seed.has_value());
+    REQUIRE(prepared->in_memory_seed->context.messages.size() == 2);
+
+    // The replacement in-memory session commits the seed to its store, so
+    // the tree surface and navigation work on the seeded entries directly.
+    coding_agent::runtime::AgentSessionCreationRequest fork_request;
+    fork_request.no_skills = true;
+    fork_request.no_prompt_templates = true;
+    fork_request.workspace = fixture.workspace.path();
+    fork_request.session_target = coding_agent::InMemorySessionTarget{};
+    fork_request.request_model = tests::scripted_request_model("fake", "fake-model");
+    fork_request.in_memory_branch_seed = std::move(*prepared->in_memory_seed);
+    auto forked = coding_agent::create_agent_session_for_testing(
+        std::move(fork_request), tests::models_from_provider(scripted));
+    REQUIRE(forked.has_value());
+    auto& forked_session = *forked->session;
+    CHECK(live_user_texts(forked_session) == std::vector<std::string>{"first"});
+
+    auto topology = forked_session.session_tree();
+    REQUIRE(topology.has_value());
+    REQUIRE(topology->roots.size() == 1);
+    // The seed's first message is the tree root (the store's real entry id).
+    const auto& root = topology->roots.front();
+    REQUIRE(root.entry.kind == harness::session::SessionEntryKind::Message);
+    REQUIRE(root.entry.message.has_value());
+    CHECK(ai::text_from_user_message(
+              std::get<ai::UserMessage>(*root.entry.message)) == "first");
+
+    // Navigation on the seeded tree: the root user message moves the leaf to
+    // the root position and returns its text.
+    auto navigated = forked_session.navigate_tree(root.entry.entry_id);
+    REQUIRE(navigated.has_value());
+    REQUIRE(navigated->editor_text.has_value());
+    CHECK(*navigated->editor_text == "first");
+    CHECK(live_user_texts(forked_session).empty());
+
+    // The next prompt starts a fresh branch off the root position.
+    REQUIRE(forked_session.prompt_blocking("branch prompt").has_value());
+    CHECK(
+        live_user_texts(forked_session) ==
+        std::vector<std::string>{"branch prompt"});
+}
+
+TEST_CASE(
+    "a branch seed's thinking level wins over the settings default in the new session",
+    "[coding_agent][runtime][tree-navigation][issue491]") {
+    Fixture fixture;
+    // A seed whose branch path carries a thinking-level entry at "off"; the
+    // settings default ("medium") must not leak into the new session's
+    // live state or store tree.
+    runtime::InMemoryBranchSeed seed;
+    seed.context.messages = {user_msg("seeded")};
+    seed.context.thinking_level = "off";
+    seed.context.has_thinking_level_entry = true;
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
+    request.workspace = fixture.workspace.path();
+    request.session_target = coding_agent::InMemorySessionTarget{};
+    request.request_model = tests::scripted_request_model("fake", "fake-model");
+    request.in_memory_branch_seed = std::move(seed);
+    auto created = coding_agent::create_agent_session_for_testing(
+        std::move(request),
+        tests::models_from_provider(std::make_shared<QuietProvider>()));
+    REQUIRE(created.has_value());
+    auto& session = *created->session;
+
+    // Live Agent state carries the seeded level, not the settings default.
+    CHECK(session.snapshot().agent_state.thinking_level == "off");
+
+    // The store tree agrees: the seeded level is the appended thinking
+    // entry (the leaf of the seeded chain), so context projection and later
+    // forks derive the same level.
+    auto topology = session.session_tree();
+    REQUIRE(topology.has_value());
+    REQUIRE(topology->roots.size() == 1);
+    const harness::session::SessionTreeNode* node = &topology->roots.front();
+    while (node != nullptr && node->entry.entry_id != topology->leaf_id) {
+        node = node->children.empty() ? nullptr : &node->children.front();
+    }
+    REQUIRE(node != nullptr);
+    REQUIRE(
+        node->entry.kind ==
+        harness::session::SessionEntryKind::ThinkingLevelChange);
+    CHECK(
+        std::get<harness::session::ThinkingLevelChangeValue>(node->entry.value)
+            .thinking_level == "off");
 }
 
 TEST_CASE(

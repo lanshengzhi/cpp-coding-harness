@@ -266,6 +266,52 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Session Event Commitment appends completed messages to an in-memory store's live tree",
+    "[coding_agent][runtime][commitment][issue491]") {
+    // In-memory sessions have no off-loop channel; the sink commits straight
+    // into the store's live tree (pi's non-persisting SessionManager keeps
+    // the same in-memory entries).
+    tests::TempWorkspace workspace;
+    harness::session::SessionMetadata metadata{
+        .session_id = "commitment-memory",
+        .created_at = "2026-07-05T00:00:00Z",
+        .workspace = workspace.path(),
+        .provider = "fake",
+        .model = "fake-model",
+    };
+    auto store = std::make_shared<harness::session::SessionStore>(
+        harness::session::SessionStore::in_memory(metadata));
+    runtime::SessionEventCommitment commitment{nullptr, store};
+    auto sink = commitment.sink();
+
+    REQUIRE(sink(agent::AgentStartEvent{}).has_value());
+    REQUIRE(sink(agent::MessageStartEvent{user_msg("draft")}).has_value());
+    ai::BashExecutionMessage bash;
+    bash.command = "ls";
+    REQUIRE(sink(agent::MessageEndEvent{std::move(bash)}).has_value());
+    REQUIRE(sink(agent::MessageEndEvent{user_msg("one")}).has_value());
+    REQUIRE(sink(agent::MessageEndEvent{user_msg("two")}).has_value());
+
+    const auto entries = store->entries();
+    REQUIRE(entries.size() == 2);
+    CHECK(
+        entries.front().kind == harness::session::SessionEntryKind::Message);
+    CHECK(store->leaf_id() == entries.back().entry_id);
+    const auto context = store->build_context();
+    REQUIRE(context.messages.size() == 2);
+    CHECK(
+        ai::text_from_user_message(
+            std::get<ai::UserMessage>(context.messages[0])) == "one");
+    CHECK(
+        ai::text_from_user_message(
+            std::get<ai::UserMessage>(context.messages[1])) == "two");
+
+    boost::asio::io_context io;
+    CHECK(run_awaitable(io, commitment.conclude(support::ExpectedVoid{}))
+              .has_value());
+}
+
+TEST_CASE(
     "persistence control work is admitted while the ordinary runtime budget is saturated",
     "[coding_agent][runtime][commitment][issue465]") {
     // A small ordinary budget, a full reserved control lane (defaults).

@@ -189,6 +189,32 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "tree_snapshot returns a self-consistent roots and leaf pair",
+    "[harness][session][store][issue491]") {
+    tests::TempWorkspace workspace;
+    auto store = harness::session::SessionStore::in_memory(metadata_for(workspace));
+    REQUIRE(store.append(user_message("first")).has_value());
+    REQUIRE(store.append(user_message("second")).has_value());
+
+    // The snapshot's leaf is reachable in its own roots (one linear chain).
+    auto snapshot = store.tree_snapshot();
+    REQUIRE(snapshot.roots.size() == 1);
+    CHECK(snapshot.leaf_id == store.leaf_id());
+    bool found_leaf = false;
+    std::vector<const harness::session::SessionTreeNode*> stack;
+    for (const auto& root : snapshot.roots) stack.push_back(&root);
+    while (!stack.empty()) {
+        const auto* node = stack.back();
+        stack.pop_back();
+        if (node->entry.entry_id == snapshot.leaf_id) {
+            found_leaf = true;
+        }
+        for (const auto& child : node->children) stack.push_back(&child);
+    }
+    CHECK(found_leaf);
+}
+
+TEST_CASE(
     "branch and reset_leaf move the live leaf",
     "[harness][session][store][issue490]") {
     tests::TempWorkspace workspace;

@@ -251,9 +251,10 @@ public:
     /// The session tree topology for the tree selector (pi
     /// `sessionManager.getTree()` + `getLeafId()`): root nodes with resolved
     /// labels and the current active leaf id (empty at the root position).
-    /// Persisted sessions read the file's entries; in-memory sessions derive
-    /// a linear tree from the live context with synthetic ids that only the
-    /// tree surface understands (the in-memory store keeps no entries).
+    /// Both persistence alternatives answer from the store's live tree —
+    /// the in-memory store keeps the same entries pi's non-persisting
+    /// SessionManager keeps, so no tree surface synthesizes topology from
+    /// the live context.
     [[nodiscard]] support::Expected<coding_agent::SessionTreeTopology>
     session_tree() const;
 
@@ -261,19 +262,20 @@ public:
     /// active path to `target_id` with the leaf/active-path semantics of the
     /// pi v3 Session Format — user/custom-message targets move the leaf to
     /// the parent (null at the root) and return the message text; other
-    /// targets become the leaf. Persisted sessions persist a `leaf` marker
-    /// and rebuild the live Agent context from the new path; in-memory
-    /// sessions truncate the live context. Branch summarization generation
-    /// stays Deferred: no `branch_summary` is ever produced. Rejects an
-    /// active Agent run with pi's verbatim error.
+    /// targets become the leaf. The leaf marker append moves the live tree's
+    /// leaf (persisted sessions also durably record it), and the live Agent
+    /// context rebuilds from the new path — identical for both persistence
+    /// alternatives. Branch summarization generation stays Deferred: no
+    /// `branch_summary` is ever produced. Rejects an active Agent run with
+    /// pi's verbatim error.
     [[nodiscard]] support::Expected<coding_agent::TreeNavigationResult>
     navigate_tree(std::string_view target_id);
 
     /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
     /// append a `label` entry targeting `entry_id` under the current leaf.
-    /// Persisted sessions write the entry; in-memory sessions keep no entry
-    /// surface and the change is dropped like every in-memory store write.
-    /// Verbatim pi errors: `Entry <id> not found` for an unknown target.
+    /// Both persistence alternatives mirror the entry into the store's live
+    /// tree; persisted sessions also write it durably. Verbatim pi errors:
+    /// `Entry <id> not found` for an unknown target.
     [[nodiscard]] support::ExpectedVoid set_entry_label(
         std::string_view entry_id,
         std::optional<std::string> label);
@@ -333,8 +335,8 @@ public:
 
     /// pi `AgentSession.setSessionName`: sanitize the name (CR/LF runs become
     /// one space, then trimmed) and append a `session_info` entry under the
-    /// current leaf. In-memory sessions keep no entry surface and the change
-    /// is dropped like every in-memory store write. Returns the stored
+    /// current leaf. The `session_info` surface stays scoped to persisted
+    /// sessions; the in-memory change is dropped. Returns the stored
     /// (sanitized) name.
     [[nodiscard]] support::Expected<std::optional<std::string>> set_session_name(
         std::string name);
@@ -345,6 +347,11 @@ public:
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
     [[nodiscard]] std::optional<std::filesystem::path> session_path() const {
         return session_.store ? session_.store->path() : std::nullopt;
+    }
+    /// The session's store (shared ownership; the in-session fork flow reads
+    /// an in-memory session's live tree through it).
+    [[nodiscard]] std::shared_ptr<harness::session::SessionStore> session_store() const {
+        return session_.store;
     }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }

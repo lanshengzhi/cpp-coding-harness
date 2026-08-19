@@ -22,9 +22,11 @@ class RuntimeTarget;
 namespace cch::coding_agent::runtime {
 
 /// pi in-memory `createBranchedSession`: the derived branch facts seeded into
-/// a newly created in-memory session. The C++ in-memory store is a no-op, so
-/// the branch's message projection and derived state travel as a seed; the
-/// in-session fork flow carries it through `in_memory_branch_seed`.
+/// a newly created in-memory session. The branch's context projection and
+/// derived state travel as a seed (projected from the source store's live
+/// tree); the new session's store commits the seed messages so its live tree
+/// mirrors the seeded live context. The in-session fork flow carries it
+/// through `in_memory_branch_seed`.
 struct InMemoryBranchSeed {
     /// Branch context projection: messages, model, thinking level (pi
     /// `createBranchedSession` fileEntries minus the header, projected like

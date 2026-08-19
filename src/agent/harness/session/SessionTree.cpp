@@ -301,6 +301,13 @@ std::vector<SessionTreeNode> SessionTree::get_tree() const {
     return roots;
 }
 
+SessionTreeSnapshot SessionTree::topology() const {
+    return SessionTreeSnapshot{
+        .roots = get_tree(),
+        .leaf_id = leaf_id_,
+    };
+}
+
 std::vector<const SessionEntry*> SessionTree::getBranch(std::string_view from_id) const {
     const SessionEntry* start = nullptr;
 

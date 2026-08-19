@@ -1403,14 +1403,19 @@ struct SessionTargetNormalizationOptions {
     // pi sdk.ts `createAgentSession` thinking restore: the effective
     // pre-clamp level is the resumed `thinking_level_change` entry (when the
     // session has one), else the settings `defaultThinkingLevel`, else pi's
-    // DEFAULT_THINKING_LEVEL ("medium"). The Agent clamps the request at
-    // construction (ADR 0034 / #352), so the persisted initial entries below
-    // carry the same clamped value.
+    // DEFAULT_THINKING_LEVEL ("medium"). An in-memory branch seed restores
+    // like a resume: the branch path's level wins over the settings default,
+    // so the appended entry and the Agent's live state never diverge. The
+    // Agent clamps the request at construction (ADR 0034 / #352), so the
+    // persisted initial entries below carry the same clamped value.
     const std::string effective_thinking_level = ai::clamp_thinking_level_string(
         request_model,
         is_resume && prepared_resume.resume.has_thinking_level_entry
             ? prepared_resume.resume.thinking_level
-            : settings.default_thinking_level.value_or("medium"));
+            : plan.in_memory_branch_seed &&
+                    plan.in_memory_branch_seed->context.has_thinking_level_entry
+                ? plan.in_memory_branch_seed->context.thinking_level
+                : settings.default_thinking_level.value_or("medium"));
 
     // 9. Publish the session only after all fallible prerequisites succeeded.
     OpenSession open;
@@ -1444,7 +1449,9 @@ struct SessionTargetNormalizationOptions {
         open = std::move(*published);
         // Private in-session seam: pi in-memory `createBranchedSession` — the
         // branch's message projection and derived state seed the new
-        // in-memory session (the C++ in-memory store keeps no entries). The
+        // in-memory session. The seed messages are also committed to the
+        // store so its live tree mirrors the live context exactly (pi's
+        // non-persisting SessionManager keeps the branch's entries). The
         // header parent pointer comes from the seed; the model/thinking
         // restore rides the branch context like a resumed session.
         if (plan.in_memory_branch_seed) {
@@ -1458,6 +1465,12 @@ struct SessionTargetNormalizationOptions {
                 ? std::nullopt
                 : std::optional<std::string>{seed.context.thinking_level};
             open.topology = harness::session::SessionTopology::Branched;
+            for (const auto& message : open.history) {
+                if (auto appended = open.store->append(message); !appended) {
+                    cleanup_on_failure();
+                    return std::unexpected(appended.error());
+                }
+            }
         }
         // Persist the session's `model_change {provider, modelId}` as the first
         // content entry (pi `setModel` → `appendModelChange`) — skipped for the
@@ -1478,8 +1491,9 @@ struct SessionTargetNormalizationOptions {
             }
         }
         // pi sdk.ts: new sessions persist the initial thinking level as
-        // the second entry so a later resume restores it. The facade drops
-        // both entries for in-memory sessions (no resumable entry surface).
+        // the second entry so a later resume restores it. In-memory sessions
+        // keep both entries in the store's live tree only (nothing durable
+        // to resume from).
         if (auto appended = open.store->append_thinking_level_change(
                 std::nullopt, effective_thinking_level);
             !appended) {

@@ -111,6 +111,10 @@ public:
     /// pi `getTree`: root nodes with children sorted by timestamp (oldest
     /// first, newest at bottom) and resolved labels/label timestamps.
     [[nodiscard]] std::vector<SessionTreeNode> tree() const;
+    /// One self-consistent topology snapshot: the root nodes and the active
+    /// leaf id under the same append lock, so a concurrent append can never
+    /// yield a roots/leaf pair from two different points in time.
+    [[nodiscard]] SessionTreeSnapshot tree_snapshot() const;
     /// pi `buildSessionContext`: the compaction-aware LLM context of the
     /// active leaf path.
     [[nodiscard]] SessionContext build_context() const;

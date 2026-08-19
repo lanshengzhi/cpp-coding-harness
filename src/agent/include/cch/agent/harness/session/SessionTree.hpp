@@ -27,6 +27,15 @@ struct SessionTreeNode {
     std::optional<ai::TimestampMs> label_timestamp{std::nullopt};
 };
 
+/// One self-consistent topology snapshot: the root nodes and the active leaf
+/// id taken together, so a caller never observes a roots/leaf pair from two
+/// different points in time (the C++ store mirrors appends under one lock;
+/// pi is single-threaded and needs no such combined read).
+struct SessionTreeSnapshot {
+    std::vector<SessionTreeNode> roots;
+    std::string leaf_id;
+};
+
 /// Result of context reconstruction from a session tree path.
 struct SessionContext {
     /// Messages ready for LLM consumption, in chronological order.
@@ -124,6 +133,10 @@ public:
     /// path; an unresolvable effective parent makes an orphan root (pi's
     /// orphan rule).
     [[nodiscard]] std::vector<SessionTreeNode> get_tree() const;
+    /// The tree topology as one self-consistent snapshot: `get_tree()` plus
+    /// the active leaf id under the same read, so the pair never straddles
+    /// a concurrent append.
+    [[nodiscard]] SessionTreeSnapshot topology() const;
 
     /// The effective parent id for leaf-to-root traversal: the explicit wire
     /// parent, or the inferred linear-chain parent when the entry carries

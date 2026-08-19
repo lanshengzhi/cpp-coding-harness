@@ -8,6 +8,10 @@
 #include <memory>
 #include <optional>
 
+namespace cch::harness::session {
+class SessionStore;
+} // namespace cch::harness::session
+
 namespace cch::coding_agent::runtime {
 
 class SessionPersistence;
@@ -20,12 +24,19 @@ class SessionPersistence;
 /// return through the Session's serialized mailbox in FIFO order (ADR 0040
 /// §Session Event Commitment and Close). An admission failure vetoes the run
 /// through the returned verdict; the first recorded persistence failure is
-/// reported unwrapped by conclude() after the channel drains.
+/// reported unwrapped by conclude() after the channel drains. In-memory
+/// sessions have no channel: the sink commits the same message kinds straight
+/// into the store's live tree (bounded in-memory work, ADR 0040), exactly
+/// like pi's non-persisting SessionManager, which keeps the same in-memory
+/// entries.
 class SessionEventCommitment final {
 public:
-    /// A null persistence keeps the sink a successful no-op (in-memory
-    /// sessions and sessions without a store need no channel).
-    explicit SessionEventCommitment(std::shared_ptr<SessionPersistence> persistence);
+    /// A null persistence with a null (or persisted) store keeps the sink a
+    /// successful no-op; a null persistence with an in-memory store commits
+    /// directly into the store's live tree.
+    explicit SessionEventCommitment(
+        std::shared_ptr<SessionPersistence> persistence,
+        std::shared_ptr<harness::session::SessionStore> store = nullptr);
 
     SessionEventCommitment(const SessionEventCommitment&) = delete;
     SessionEventCommitment& operator=(const SessionEventCommitment&) = delete;
@@ -44,6 +55,9 @@ public:
 
 private:
     std::shared_ptr<SessionPersistence> persistence_;
+    /// The in-memory session's store (null or persisted-path stores keep the
+    /// no-op sink); appends land in its live tree without disk I/O.
+    std::shared_ptr<harness::session::SessionStore> store_;
 };
 
 } // namespace cch::coding_agent::runtime

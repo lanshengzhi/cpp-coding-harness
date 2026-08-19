@@ -168,8 +168,9 @@ AgentSessionRuntime::AgentSessionRuntime(
       templates_(std::move(templates)),
       config_(std::move(config)) {
     // The Session Event Commitment channel exists only for persistent
-    // sessions with a Runtime mailbox; in-memory sessions need no channel
-    // and their sink stays a successful no-op (ADR 0040).
+    // sessions with a Runtime mailbox; in-memory sessions commit the same
+    // message kinds straight into the store's live tree (pi's non-persisting
+    // SessionManager keeps the same in-memory entries; ADR 0040).
     if (session_.store && session_.store->path() && services_.runtime_target) {
         persistence_ = std::make_shared<SessionPersistence>(
             session_.store, services_.runtime_target);
@@ -870,7 +871,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_agent_loo
             "session Agent is unavailable"));
     }
 
-    SessionEventCommitment commitment{persistence_};
+    SessionEventCommitment commitment{persistence_, session_.store};
     // The commitment sink also observes assistant message endings so the turn
     // auto-retry success event fires at the first non-error assistant message
     // (pi `_handleAgentEvent` message_end handler resets `_retryAttempt` and
@@ -1534,116 +1535,6 @@ struct TreeLeafDecision {
     return store.append_leaf(std::nullopt, new_leaf_id);
 }
 
-/// In-memory entries derived from the live context (the C++ in-memory store
-/// keeps no entries, so the tree surface synthesizes ids like the fork
-/// flow's `mem-<index>` ids, which never surface outside the tree surface).
-/// Each entry remembers its live-message index so in-memory navigation can
-/// truncate the live context exactly at the chosen point.
-struct LiveContextEntry {
-    harness::session::SessionEntry entry;
-    std::size_t message_index{0};
-};
-
-[[nodiscard]] std::vector<LiveContextEntry>
-live_context_entries(const std::vector<ai::MessageVariant>& messages) {
-    std::vector<LiveContextEntry> result;
-    std::optional<std::string> previous_id;
-    std::size_t entry_index = 0;
-    for (std::size_t message_index = 0; message_index < messages.size();
-         ++message_index) {
-        const auto& message = messages[message_index];
-        // The live context never carries SystemMessages (the session system
-        // prompt is delivered per run through `AgentContext.system_prompt`);
-        // skip defensively so the id-to-message mapping stays exact.
-        if (std::holds_alternative<ai::SystemMessage>(message)) {
-            continue;
-        }
-        harness::session::SessionEntry entry;
-        entry.kind = harness::session::SessionEntryKind::Message;
-        entry.message = message;
-        entry.entry_id = "mem-" + std::to_string(entry_index);
-        entry.parent_id = previous_id;
-        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-            entry.timestamp = user->timestamp;
-        } else if (const auto* assistant =
-                       std::get_if<ai::AssistantMessage>(&message)) {
-            entry.timestamp = assistant->timestamp;
-        } else if (const auto* tool =
-                       std::get_if<ai::ToolResultMessage>(&message)) {
-            entry.timestamp = tool->timestamp;
-        } else if (const auto* bash =
-                       std::get_if<ai::BashExecutionMessage>(&message)) {
-            entry.timestamp = bash->timestamp;
-        } else if (const auto* custom =
-                       std::get_if<ai::CustomMessage>(&message)) {
-            entry.timestamp = custom->timestamp;
-            entry.kind = harness::session::SessionEntryKind::CustomMessage;
-            harness::session::CustomMessageEntryValue value;
-            value.custom_type = custom->custom_type;
-            std::vector<harness::session::CustomMessageEntryContentBlock> blocks;
-            for (const auto& content : custom->content) {
-                // The custom-message wire content carries text/image blocks
-                // only (pi CustomMessageEntryContent); thinking blocks do
-                // not project onto it.
-                if (std::holds_alternative<ai::TextContent>(content)) {
-                    blocks.push_back(std::get<ai::TextContent>(content));
-                } else if (std::holds_alternative<ai::ImageContent>(content)) {
-                    blocks.push_back(std::get<ai::ImageContent>(content));
-                }
-            }
-            value.content = std::move(blocks);
-            value.display = custom->display;
-            value.details = custom->details;
-            entry.value = std::move(value);
-        } else if (const auto* summary =
-                       std::get_if<ai::BranchSummaryMessage>(&message)) {
-            entry.timestamp = summary->timestamp;
-            entry.kind = harness::session::SessionEntryKind::BranchSummary;
-            harness::session::BranchSummaryEntryValue value;
-            value.from_id = summary->from_id;
-            value.summary = summary->summary;
-            entry.value = std::move(value);
-        } else if (const auto* compaction =
-                       std::get_if<ai::CompactionSummaryMessage>(&message)) {
-            entry.timestamp = compaction->timestamp;
-            entry.kind = harness::session::SessionEntryKind::Compaction;
-            harness::session::CompactionEntryValue value;
-            value.summary = compaction->summary;
-            value.tokens_before =
-                static_cast<std::size_t>(compaction->tokens_before);
-            entry.value = std::move(value);
-        }
-        previous_id = entry.entry_id;
-        result.push_back(LiveContextEntry{
-            .entry = std::move(entry),
-            .message_index = message_index,
-        });
-        ++entry_index;
-    }
-    return result;
-}
-
-/// Build the tree roots for the in-memory surface: a linear chain with the
-/// live messages' timestamps, no labels (the in-memory store keeps none).
-[[nodiscard]] std::vector<harness::session::SessionTreeNode>
-build_linear_tree(const std::vector<LiveContextEntry>& entries) {
-    std::vector<harness::session::SessionTreeNode> nodes;
-    nodes.reserve(entries.size());
-    for (const auto& live : entries) {
-        harness::session::SessionTreeNode node;
-        node.entry = live.entry;
-        nodes.push_back(std::move(node));
-    }
-    if (nodes.empty()) {
-        return {};
-    }
-    for (std::size_t index = 0; index + 1 < nodes.size(); ++index) {
-        nodes[index].children.push_back(std::move(nodes[index + 1]));
-    }
-    nodes.resize(1);
-    return nodes;
-}
-
 } // namespace
 
 boost::asio::awaitable<support::ExpectedVoid>
@@ -1667,26 +1558,18 @@ AgentSessionRuntime::session_tree() const {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
-    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
-    if (store_path) {
-        // The store's live tree answers from memory; the session file is
-        // never re-read for topology queries.
-        return coding_agent::SessionTreeTopology{
-            .roots = session_.store->tree(),
-            .leaf_id = session_.store->leaf_id(),
-        };
+    if (!session_.store) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session store is unavailable"));
     }
-    // In-memory: derive a linear tree from the live context (synthetic ids).
-    const auto entries =
-        agent_ ? live_context_entries(agent_->state().messages)
-               : std::vector<LiveContextEntry>{};
-    std::string leaf_id;
-    if (!entries.empty()) {
-        leaf_id = entries.back().entry.entry_id;
-    }
+    // The store's live tree answers from memory for both persistence
+    // alternatives; the session file is never re-read for topology queries.
+    // The snapshot takes roots and leaf under the same lock, so a concurrent
+    // append can never split the pair.
+    const auto snapshot = session_.store->tree_snapshot();
     return coding_agent::SessionTreeTopology{
-        .roots = build_linear_tree(entries),
-        .leaf_id = std::move(leaf_id),
+        .roots = snapshot.roots,
+        .leaf_id = snapshot.leaf_id,
     };
 }
 
@@ -1708,104 +1591,53 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation, "session is closed"));
     }
-
-    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
-    if (store_path) {
-        auto& store = *session_.store;
-        // pi: no-op when already at the target.
-        if (target_id == store.leaf_id()) {
-            return coding_agent::TreeNavigationResult{};
-        }
-        const auto target = store.get_entry(target_id);
-        if (!target.has_value()) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                std::format("Entry {} not found", target_id)));
-        }
-
-        const auto decision = tree_leaf_decision(
-            store.effective_parent_id(target->entry_id), *target);
-
-        // Persist the leaf marker; a successful marker append also moves
-        // the live tree's leaf to the same position, while a failure
-        // changes nothing — durable and live state never drift (Session
-        // Event Commitment ordering: the durable mutation precedes the
-        // live-state advance below).
-        if (auto persisted =
-                persist_leaf_marker(store, decision.new_leaf_id);
-            !persisted) {
-            return std::unexpected(persisted.error());
-        }
-
-        // Rebuild the live Agent context from the new path (pi
-        // `agent.state.messages = sessionContext.messages`).
-        const auto context = store.build_context();
-        if (auto replaced =
-                agent::detail::AgentMessageAccess::replace_messages(
-                    *agent_, context.messages);
-            !replaced) {
-            return std::unexpected(replaced.error());
-        }
-        return coding_agent::TreeNavigationResult{
-            .editor_text = decision.editor_text,
-            .cancelled = false,
-        };
+    if (!session_.store) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session store is unavailable"));
     }
 
-    // In-memory: navigate over the live context (synthetic ids, linear). The
-    // leaf semantics mirror the persisted path: a user message moves the
-    // leaf before it (its text returns to the editor); any other target
-    // becomes the leaf. There is no store, so nothing persists.
-    const auto entries =
-        live_context_entries(agent_->state().messages);
-    const LiveContextEntry* target = nullptr;
-    for (const auto& live : entries) {
-        if (live.entry.entry_id == target_id) {
-            target = &live;
-            break;
-        }
+    // One path for both persistence alternatives: the store's live tree
+    // carries the in-memory session's entries exactly like a persisted
+    // session's (pi's non-persisting SessionManager keeps the same
+    // in-memory entries).
+    auto& store = *session_.store;
+    // pi: no-op when already at the target.
+    if (target_id == store.leaf_id()) {
+        return coding_agent::TreeNavigationResult{};
     }
-    if (target == nullptr) {
+    const auto target = store.get_entry(target_id);
+    if (!target.has_value()) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Session,
             std::format("Entry {} not found", target_id)));
     }
-    // pi: no-op when already at the target (the in-memory leaf is the last
-    // live-context entry).
-    if (target->entry.entry_id == entries.back().entry.entry_id) {
-        return coding_agent::TreeNavigationResult{};
+
+    const auto decision = tree_leaf_decision(
+        store.effective_parent_id(target->entry_id), *target);
+
+    // Append the leaf marker; a successful marker append also moves the
+    // live tree's leaf to the same position, while a failure changes
+    // nothing — durable and live state never drift (Session Event
+    // Commitment ordering: the durable mutation precedes the live-state
+    // advance below). In-memory sessions mirror the same marker into the
+    // live tree without disk I/O; at the root position the marker also
+    // carries the linear-chain break (pi `resetLeaf`).
+    if (auto persisted = persist_leaf_marker(store, decision.new_leaf_id);
+        !persisted) {
+        return std::unexpected(persisted.error());
     }
-    const auto decision = tree_leaf_decision(target->entry.parent_id, target->entry);
-    auto messages = agent_->state().messages;
-    std::optional<std::string> editor_text = decision.editor_text;
-    if (decision.new_leaf_id.has_value()) {
-        // The new leaf is the target's parent: keep live messages through
-        // the new leaf, dropping the target message and everything after it
-        // (pi: the live context becomes the path to the new leaf).
-        std::optional<std::size_t> keep_through_message;
-        for (const auto& live : entries) {
-            if (live.entry.entry_id == *decision.new_leaf_id) {
-                keep_through_message = live.message_index;
-                break;
-            }
-        }
-        if (keep_through_message &&
-            *keep_through_message + 1 <= messages.size()) {
-            messages.resize(*keep_through_message + 1);
-        }
-    } else {
-        // Root position: live context ends before the first entry (pi
-        // `resetLeaf`).
-        messages.clear();
-    }
+
+    // Rebuild the live Agent context from the new path (pi
+    // `agent.state.messages = sessionContext.messages`).
+    const auto context = store.build_context();
     if (auto replaced =
             agent::detail::AgentMessageAccess::replace_messages(
-                *agent_, std::move(messages));
+                *agent_, context.messages);
         !replaced) {
         return std::unexpected(replaced.error());
     }
     return coding_agent::TreeNavigationResult{
-        .editor_text = std::move(editor_text),
+        .editor_text = decision.editor_text,
         .cancelled = false,
     };
 }
@@ -1816,12 +1648,9 @@ support::ExpectedVoid AgentSessionRuntime::set_entry_label(
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
-    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
-    if (!store_path) {
-        // In-memory sessions keep no entry surface; the change is dropped
-        // like every in-memory store write (the tree's own display keeps it
-        // for the session's lifetime).
-        return {};
+    if (!session_.store) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "session store is unavailable"));
     }
     if (!session_.store->get_entry(entry_id).has_value()) {
         return std::unexpected(support::make_error(
@@ -2440,8 +2269,8 @@ AgentSessionRuntime::set_session_name(std::string name) {
     // then the result is trimmed.
     auto sanitized = runtime::sanitize_session_name(name);
     if (!session_.store || !session_.store->path()) {
-        // In-memory sessions keep no `session_info` entry surface; the
-        // change is dropped like every in-memory store write.
+        // The `session_info` surface stays scoped to persisted sessions;
+        // the in-memory change is dropped.
         return std::nullopt;
     }
     std::optional<std::string> parent_id;

@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <filesystem>
 #include <fstream>
@@ -148,7 +149,7 @@ TEST_CASE("user messages for forking list user texts in order", "[coding_agent][
     REQUIRE(created->append(user_msg("second")).has_value());
 
     runtime::ForkSource source;
-    source.session_path = path;
+    source.source = runtime::PersistedForkSource{.session_path = path};
     source.workspace = workspace.path();
     const auto messages = runtime::user_messages_for_forking(source);
     // pi keeps whitespace-only texts (JS truthiness); tool results and
@@ -168,7 +169,7 @@ TEST_CASE("fork before a middle user message writes the prefix branch with selec
     REQUIRE(store.has_value());
 
     runtime::ForkSource source;
-    source.session_path = path;
+    source.source = runtime::PersistedForkSource{.session_path = path};
     source.workspace = workspace.path();
     const auto messages = runtime::user_messages_for_forking(source);
     REQUIRE(messages.size() == 3);
@@ -202,7 +203,7 @@ TEST_CASE("fork at the current position duplicates the branch to the entry", "[c
     REQUIRE(store.has_value());
 
     runtime::ForkSource source;
-    source.session_path = path;
+    source.source = runtime::PersistedForkSource{.session_path = path};
     source.workspace = workspace.path();
     const auto messages = runtime::user_messages_for_forking(source);
     REQUIRE(messages.size() == 3);
@@ -228,7 +229,7 @@ TEST_CASE("fork before a root user message creates an empty parented session", "
     REQUIRE(store.has_value());
 
     runtime::ForkSource source;
-    source.session_path = path;
+    source.source = runtime::PersistedForkSource{.session_path = path};
     source.workspace = workspace.path();
     const auto messages = runtime::user_messages_for_forking(source);
     REQUIRE(messages.size() == 3);
@@ -255,7 +256,7 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
     REQUIRE(store.has_value());
 
     runtime::ForkSource source;
-    source.session_path = path;
+    source.source = runtime::PersistedForkSource{.session_path = path};
     source.workspace = workspace.path();
 
     // Unknown entry id.
@@ -282,7 +283,7 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
 
     // A missing source file: the unsaved-session error.
     runtime::ForkSource missing_source;
-    missing_source.session_path = workspace.path() / "missing.jsonl";
+    missing_source.source = runtime::PersistedForkSource{.session_path = workspace.path() / "missing.jsonl"};
     missing_source.workspace = workspace.path();
     const auto unsaved = runtime::prepare_fork(missing_source, "deadbeef", runtime::ForkPosition::At);
     REQUIRE_FALSE(unsaved.has_value());
@@ -302,7 +303,7 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
         empty_source, std::filesystem::perms::owner_all,
         std::filesystem::perm_options::replace);
     runtime::ForkSource empty_fork;
-    empty_fork.session_path = empty_source;
+    empty_fork.source = runtime::PersistedForkSource{.session_path = empty_source};
     empty_fork.workspace = workspace.path();
     const auto empty_result = runtime::prepare_fork(
         empty_fork, "deadbeef", runtime::ForkPosition::At);
@@ -322,7 +323,7 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
         headerless_source, std::filesystem::perms::owner_all,
         std::filesystem::perm_options::replace);
     runtime::ForkSource headerless_fork;
-    headerless_fork.session_path = headerless_source;
+    headerless_fork.source = runtime::PersistedForkSource{.session_path = headerless_source};
     headerless_fork.workspace = workspace.path();
     const auto headerless_result = runtime::prepare_fork(
         headerless_fork, "deadbeef", runtime::ForkPosition::At);
@@ -340,7 +341,7 @@ TEST_CASE("fork re-chains parents past labels and re-creates retained labels", "
     REQUIRE(store.has_value());
 
     runtime::ForkSource source;
-    source.session_path = path;
+    source.source = runtime::PersistedForkSource{.session_path = path};
     source.workspace = workspace.path();
     const auto messages = runtime::user_messages_for_forking(source);
     REQUIRE(messages.size() == 2);
@@ -392,24 +393,27 @@ TEST_CASE("fork re-chains parents past labels and re-creates retained labels", "
     CHECK(ai::text_from_user_message(*parent_user) == "user-0");
 }
 
-TEST_CASE("in-memory fork produces the branch seed with the prefix messages", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE("in-memory fork produces the branch seed from the live store tree", "[coding_agent][runtime][session-fork][issue409][issue491]") {
     tests::TempWorkspace workspace;
-    harness::session::SessionContext context;
-    context.messages = {
-        user_msg("in-mem-0"),
-        assistant_msg("in-mem-reply-0"),
-        user_msg("in-mem-1"),
-    };
-    context.thinking_level = "high";
+    // The in-memory source is the session store's live tree (pi's
+    // non-persisting SessionManager entries): a thinking-level change above
+    // a linear user/assistant chain.
+    auto store = std::make_shared<harness::session::SessionStore>(
+        harness::session::SessionStore::in_memory(test_metadata(workspace)));
+    REQUIRE(store->append_thinking_level_change(std::nullopt, "high").has_value());
+    REQUIRE(store->append(user_msg("in-mem-0")).has_value());
+    REQUIRE(store->append(assistant_msg("in-mem-reply-0")).has_value());
+    REQUIRE(store->append(user_msg("in-mem-1")).has_value());
 
     runtime::ForkSource source;
     source.workspace = workspace.path();
-    source.live_context = context;
+    source.source = runtime::InMemoryForkSource{.store = store};
 
     const auto messages = runtime::user_messages_for_forking(source);
     REQUIRE(messages.size() == 2);
     CHECK(messages[0].text == "in-mem-0");
     CHECK(messages[1].text == "in-mem-1");
+    CHECK(messages[1].entry_id == store->leaf_id());
 
     // Fork before the second message: the branch carries only the first
     // pair, the selected text pre-fills the editor.
@@ -423,14 +427,16 @@ TEST_CASE("in-memory fork produces the branch seed with the prefix messages", "[
     CHECK(prepared->in_memory_seed->context.thinking_level == "high");
     CHECK_FALSE(prepared->in_memory_seed->parent_session.has_value());
 
-    // Position "at" includes the chosen message itself.
+    // Position "at" includes the chosen message itself and carries no editor
+    // pre-fill (same contract as the persisted path).
     const auto at = runtime::prepare_fork(source, messages[1].entry_id, runtime::ForkPosition::At);
     REQUIRE(at.has_value());
     REQUIRE(at->in_memory_seed.has_value());
     CHECK(at->in_memory_seed->context.messages.size() == 3);
+    CHECK_FALSE(at->selected_text.has_value());
 
-    // Unknown synthetic id.
-    const auto unknown = runtime::prepare_fork(source, "mem-99", runtime::ForkPosition::Before);
+    // Unknown entry id.
+    const auto unknown = runtime::prepare_fork(source, "deadbeef", runtime::ForkPosition::Before);
     REQUIRE_FALSE(unknown.has_value());
     CHECK(unknown.error().message == "Invalid entry ID for forking");
 }
