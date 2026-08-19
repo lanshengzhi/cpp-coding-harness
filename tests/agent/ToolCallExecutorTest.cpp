@@ -2401,3 +2401,36 @@ TEST_CASE(
     REQUIRE(run.result->results.size() == 2);
     CHECK_FALSE(run.result->terminate_batch);
 }
+
+TEST_CASE(
+    "unified single tool call lifecycle preserves execution semantics across execution policies",
+    "[agent][tool-executor][issue489]") {
+    agent::ToolRegistry registry;
+    auto echo_tool = make_recording_tool(
+        ai::Tool{"echo", "Echo", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        "echoed");
+    REQUIRE(registry.add(std::move(echo_tool.tool)));
+
+    agent::ToolCallExecutorOptions options{
+        .before_tool_call = nullptr,
+        .after_tool_call = nullptr,
+        .stop_token = {},
+        .execution = agent::BoundedParallelToolExecution{.max_in_flight = 2},
+    };
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "echo", R"({"msg":"hello"})"),
+        make_call("call-2", "nonexistent"),
+    });
+
+    auto run = run_executor(executor, assistant);
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(run.result->results[1].is_error);
+    CHECK_FALSE(run.result->terminate_batch);
+}
+
+

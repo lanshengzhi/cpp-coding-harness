@@ -9,6 +9,8 @@
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
+#include <boost/system/error_code.hpp>
 
 #include <stop_token>
 #include <vector>
@@ -34,6 +36,20 @@ struct ToolCallBatchResult {
     bool terminate_batch{false};
 };
 
+struct FinalizedToolCallResult {
+    ai::ToolResultMessage result;
+    bool call_terminate{false};
+};
+
+using ExecutionPermitChannel = boost::asio::experimental::concurrent_channel<
+    void(boost::system::error_code)>;
+
+struct ToolExecutionPermits {
+    ExecutionPermitChannel* preparation{nullptr}; // non-owning; must outlive coroutine
+    ExecutionPermitChannel* concurrency{nullptr}; // non-owning; must outlive coroutine
+    ExecutionPermitChannel* after_hook{nullptr};  // non-owning; must outlive coroutine
+};
+
 class ToolCallExecutor {
 public:
     ToolCallExecutor(ToolRegistry& registry, ToolCallExecutorOptions options);
@@ -44,10 +60,24 @@ public:
     ToolCallExecutor& operator=(const ToolCallExecutor&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<support::Expected<ToolCallBatchResult>> execute(
-        ToolCallBatchRequest request,
+        ToolCallBatchRequest request, // referenced values must outlive the execute coroutine
         AgentEventSink& sink);
 
 private:
+    [[nodiscard]] boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> execute_single_call(
+        ToolCallBatchRequest request,       // referenced values must outlive the coroutine
+        const ai::ToolCallContent& call,    // must outlive the coroutine
+        AgentEventSink& sink,               // must outlive the coroutine
+        ToolExecutionPermits permits = {}); // non-owning channels must outlive the coroutine
+
+    [[nodiscard]] boost::asio::awaitable<void> execute_parallel_task(
+        ToolCallBatchRequest request,       // referenced values must outlive the coroutine
+        const ai::ToolCallContent& call,    // must outlive the coroutine
+        std::size_t index,
+        std::shared_ptr<struct ParallelExecutionState> state,
+        AgentEventSink parallel_sink,
+        ToolExecutionPermits permits);      // non-owning channels must outlive the coroutine
+
     [[nodiscard]] boost::asio::awaitable<support::Expected<ToolCallBatchResult>> execute_sequential(
         ToolCallBatchRequest request,
         const std::vector<ai::ToolCallContent>& calls,

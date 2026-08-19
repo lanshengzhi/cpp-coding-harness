@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <format>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -67,11 +68,6 @@ execute_with_update_lifetime(
     return result;
 }
 
-struct FinalizedToolCall {
-    ai::ToolResultMessage result;
-    bool call_terminate{false};
-};
-
 [[nodiscard]] AsyncToolExecutionResult execution_result_from(
     const ai::ToolResultMessage& tool_result,
     bool terminate = false) {
@@ -85,9 +81,6 @@ struct FinalizedToolCall {
 
 constexpr std::size_t kMaxToolFailureDiagnosticBytes = 4096;
 
-/// Failure text for a per-call error result: pi isolates a failed tool or
-/// hook as the call's error result (ADR 0008). Redact before bounding the
-/// diagnostic that is shown to the model.
 [[nodiscard]] std::string bounded_failure_text(const support::Error& error) {
     std::string diagnostic = error.detail.empty() ? error.message : error.detail;
     return ai::bounded_redacted_text(
@@ -114,13 +107,9 @@ void apply_after_result(
 }
 
 [[nodiscard]] ToolCallBatchResult make_batch_result(
-    std::vector<FinalizedToolCall> finalized) {
-    // pi shouldTerminateToolBatch: every finalized result carries an explicit
-    // terminate hint. Error results carry no implicit ban (ADR 0008): a result
-    // finalizes as terminate only through the tool result or the after hook,
-    // never through failure handling.
+    std::vector<FinalizedToolCallResult> finalized) {
     const bool terminate = !finalized.empty() &&
-                           std::all_of(finalized.begin(), finalized.end(), [](const FinalizedToolCall& call) {
+                           std::all_of(finalized.begin(), finalized.end(), [](const FinalizedToolCallResult& call) {
                                return call.call_terminate;
                            });
 
@@ -135,6 +124,57 @@ void apply_after_result(
     };
 }
 
+template <typename Hook, typename Context, typename Result>
+[[nodiscard]] boost::asio::awaitable<support::Expected<Result>> invoke_serialized_hook(
+    std::string_view name,
+    Hook& hook,                        // non-owning; must outlive coroutine
+    Context context,
+    std::stop_token stop_token,
+    ExecutionPermitChannel* permits) { // non-owning; must outlive coroutine
+    if (permits != nullptr) {
+        const auto [permit_error] = co_await permits->async_receive(
+            boost::asio::as_tuple(boost::asio::use_awaitable));
+        if (permit_error) {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                std::format("{} hook serialization failed", name),
+                permit_error.message()));
+        }
+        auto result = co_await invoke_agent_hook(
+            name,
+            hook,
+            std::move(context),
+            stop_token);
+        if (!permits->try_send(boost::system::error_code{})) {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                std::format("{} hook serialization release failed", name)));
+        }
+        co_return result;
+    }
+    co_return co_await invoke_agent_hook(
+        name,
+        hook,
+        std::move(context),
+        stop_token);
+}
+
+template <typename Executor>
+[[nodiscard]] support::Expected<std::unique_ptr<ExecutionPermitChannel>> make_permit_channel(
+    const Executor& executor,
+    std::size_t capacity,
+    std::string_view failure_message) {
+    auto channel = std::make_unique<ExecutionPermitChannel>(executor, capacity);
+    for (std::size_t i = 0; i < capacity; ++i) {
+        if (!channel->try_send(boost::system::error_code{})) {
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                std::string(failure_message)));
+        }
+    }
+    return channel;
+}
+
 } // namespace
 
 ToolCallExecutor::ToolCallExecutor(
@@ -142,107 +182,130 @@ ToolCallExecutor::ToolCallExecutor(
     ToolCallExecutorOptions options)
     : registry_(registry), options_(std::move(options)) {}
 
-boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute(
+boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecutor::execute_single_call(
     ToolCallBatchRequest request,
-    AgentEventSink& sink) {
-    const auto calls = tool_calls_from(request.assistant_message);
-    if (calls.empty()) {
-        co_return ToolCallBatchResult{};
-    }
-
-    const auto* parallel = std::get_if<BoundedParallelToolExecution>(&options_.execution);
-
-    // pi executeToolCalls: the whole batch runs through the sequential path
-    // when the policy is sequential or when any tool call references a tool
-    // whose execution mode is sequential (C++: an adapter declaring
-    // `ToolConcurrency::Exclusive`). A bounded-parallel cap of one is
-    // effectively sequential and shares that path.
-    const bool any_sequential_tool = std::any_of(
-        calls.begin(), calls.end(), [&](const ai::ToolCallContent& call) {
-            const auto* tool = registry_.find(call.name);
-            return tool != nullptr && tool->concurrency == ToolConcurrency::Exclusive;
-        });
-    if (parallel == nullptr || any_sequential_tool || parallel->max_in_flight == 1) {
-        co_return co_await execute_sequential(request, calls, sink);
-    }
-
-    co_return co_await execute_parallel(request, calls, parallel->max_in_flight, sink);
-}
-
-boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_sequential(
-    ToolCallBatchRequest request,
-    const std::vector<ai::ToolCallContent>& calls,
-    AgentEventSink& sink) {
-    std::vector<FinalizedToolCall> finalized;
-    finalized.reserve(calls.size());
-
-    for (const auto& call : calls) {
-        if (options_.stop_token.stop_requested()) {
-            break;
+    const ai::ToolCallContent& call,
+    AgentEventSink& sink,
+    ToolExecutionPermits permits) {
+    if (permits.preparation != nullptr) {
+        const auto [permit_error] = co_await permits.preparation->async_receive(
+            boost::asio::as_tuple(boost::asio::use_awaitable));
+        if (permit_error) {
+            co_return std::unexpected(support::make_error(
+                support::ErrorCode::Tool,
+                "tool call preparation serialization failed",
+                permit_error.message()));
         }
-        CCH_TRY_VOID(emit_agent_event(
+    }
+
+    auto release_preparation = [&]() {
+        if (permits.preparation != nullptr) {
+            (void)permits.preparation->try_send(boost::system::error_code{});
+            permits.preparation = nullptr;
+        }
+    };
+
+    if (options_.stop_token.stop_requested()) {
+        release_preparation();
+        auto aborted_result = error_tool_result(call, "Operation aborted");
+        (void)emit_agent_event(
+            sink,
+            ToolExecutionEndEvent{
+                .tool_call_id = call.id,
+                .tool_name = call.name,
+                .result = execution_result_from(aborted_result),
+                .is_error = true,
+            });
+        co_return FinalizedToolCallResult{
+            .result = std::move(aborted_result),
+            .call_terminate = false,
+        };
+    }
+
+    if (auto start_emit = emit_agent_event(
             sink,
             ToolExecutionStartEvent{
                 .tool_call_id = call.id,
                 .tool_name = call.name,
                 .args = call.arguments.value_or(support::JsonValue{}),
-            }));
+            });
+        !start_emit) {
+        release_preparation();
+        co_return std::unexpected(start_emit.error());
+    }
 
-        ai::ToolResultMessage tool_result;
-        bool call_terminate = false;
-        auto* tool = registry_.find(call.name);
-        if (tool == nullptr) {
-            tool_result = error_tool_result(
-                call,
-                bounded_tool_argument_diagnostic(
-                    "unknown tool: " +
-                    bounded_tool_argument_component(call.name, 512) +
-                    " (argument location: root)"));
+    ai::ToolResultMessage tool_result;
+    bool call_terminate = false;
+    auto* tool = registry_.find(call.name);
+    if (tool == nullptr) {
+        tool_result = error_tool_result(
+            call,
+            bounded_tool_argument_diagnostic(
+                "unknown tool: " +
+                bounded_tool_argument_component(call.name, 512) +
+                " (argument location: root)"));
+    } else {
+        auto arguments = prepare_tool_arguments(tool->definition, call);
+        if (!arguments) {
+            tool_result = error_tool_result(call, arguments.error().detail);
         } else {
-            auto arguments = prepare_tool_arguments(tool->definition, call);
-            if (!arguments) {
-                tool_result = error_tool_result(call, arguments.error().detail);
-            } else {
-                ToolInvocation invocation{
-                    .call_id = call.id,
-                    .name = call.name,
-                    .arguments = std::move(*arguments),
-                    .raw_arguments = call.raw_arguments,
-                };
-                bool blocked = false;
+            ToolInvocation invocation{
+                .call_id = call.id,
+                .name = call.name,
+                .arguments = std::move(*arguments),
+                .raw_arguments = call.raw_arguments,
+            };
+            bool blocked = false;
 
-                if (options_.before_tool_call) {
-                    BeforeToolCallContext hook_context{
-                        .assistant_message = request.assistant_message,
-                        .tool_call = call,
-                        .args = invocation.arguments,
-                        .context = request.context,
-                    };
-                    auto before_result = co_await invoke_agent_hook(
-                        "beforeToolCall",
-                        *options_.before_tool_call,
-                        std::move(hook_context),
-                        options_.stop_token);
-                    if (!before_result) {
-                        // pi prepareToolCall: a failing before hook finalizes
-                        // only this call's outcome; it never aborts the run
-                        // (ADR 0008).
-                        blocked = true;
-                        tool_result = error_tool_result(
-                            call, bounded_failure_text(before_result.error()));
-                    } else if (before_result->block) {
-                        blocked = true;
-                        tool_result = error_tool_result(
-                            call, before_result->reason.value_or("Tool execution was blocked"));
+            if (options_.before_tool_call) {
+                BeforeToolCallContext hook_context{
+                    .assistant_message = request.assistant_message,
+                    .tool_call = call,
+                    .args = invocation.arguments,
+                    .context = request.context,
+                };
+                auto before_result = co_await invoke_agent_hook(
+                    "beforeToolCall",
+                    *options_.before_tool_call,
+                    std::move(hook_context),
+                    options_.stop_token);
+                if (!before_result) {
+                    blocked = true;
+                    tool_result = error_tool_result(
+                        call, bounded_failure_text(before_result.error()));
+                } else if (before_result->block) {
+                    blocked = true;
+                    tool_result = error_tool_result(
+                        call, before_result->reason.value_or("Tool execution was blocked"));
+                }
+            }
+
+            if (!blocked && options_.stop_token.stop_requested()) {
+                blocked = true;
+                tool_result = error_tool_result(call, "Operation aborted");
+            }
+
+            if (!blocked) {
+                release_preparation();
+
+                if (permits.concurrency != nullptr) {
+                    const auto [permit_error] = co_await permits.concurrency->async_receive(
+                        boost::asio::as_tuple(boost::asio::use_awaitable));
+                    if (permit_error) {
+                        co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Tool,
+                            "tool concurrency permit acquisition failed",
+                            permit_error.message()));
                     }
                 }
 
-                if (!blocked && options_.stop_token.stop_requested()) {
-                    blocked = true;
+                if (options_.stop_token.stop_requested()) {
+                    if (permits.concurrency != nullptr) {
+                        (void)permits.concurrency->try_send(boost::system::error_code{});
+                    }
                     tool_result = error_tool_result(call, "Operation aborted");
-                }
-
-                if (!blocked) {
+                    call_terminate = false;
+                } else {
                     AsyncToolExecutionResult outcome;
                     auto update_gate = std::make_shared<ToolUpdateGate>();
                     ToolUpdateSink update_sink = [
@@ -253,7 +316,9 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
                         args = call.arguments.value_or(support::JsonValue{})](
                             const AsyncToolExecutionResult& partial_result) {
                         std::lock_guard lock(update_gate->mutex);
-                        if (!update_gate->active) return support::ExpectedVoid{};
+                        if (!update_gate->active) {
+                            return support::ExpectedVoid{};
+                        }
                         return emit_agent_event(sink, ToolExecutionUpdateEvent{
                             .tool_call_id = call_id,
                             .tool_name = tool_name,
@@ -267,9 +332,12 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
                         options_.stop_token,
                         std::move(update_sink),
                         update_gate);
+
+                    if (permits.concurrency != nullptr) {
+                        (void)permits.concurrency->try_send(boost::system::error_code{});
+                    }
+
                     if (!executed) {
-                        // A failed tool becomes an error outcome, never a run
-                        // failure. Preserve the returned diagnostic.
                         outcome = AsyncToolExecutionResult{
                             .content = std::vector<ai::Content>{ai::text_content(
                                 bounded_failure_text(executed.error()))},
@@ -289,8 +357,6 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
                     call_terminate = outcome.terminate;
 
                     if (options_.after_tool_call) {
-                        // pi finalizeExecutedToolCall: the after hook runs for
-                        // every executed outcome, success or error (ADR 0008).
                         AfterToolCallContext hook_context{
                             .assistant_message = request.assistant_message,
                             .tool_call = call,
@@ -299,15 +365,16 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
                             .is_error = outcome.is_error,
                             .context = request.context,
                         };
-                        auto after_result = co_await invoke_agent_hook(
+                        auto after_result = co_await invoke_serialized_hook<
+                            AfterToolCallHook,
+                            AfterToolCallContext,
+                            AfterToolCallResult>(
                             "afterToolCall",
                             *options_.after_tool_call,
                             std::move(hook_context),
-                            options_.stop_token);
+                            options_.stop_token,
+                            permits.after_hook);
                         if (!after_result) {
-                            // A failing after hook finalizes this call's
-                            // outcome as an error result; the run keeps going
-                            // (ADR 0008).
                             tool_result = error_tool_result(
                                 call, bounded_failure_text(after_result.error()));
                             call_terminate = false;
@@ -322,20 +389,70 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
                 }
             }
         }
+    }
 
-        CCH_TRY_VOID(emit_agent_event(
-            sink,
-            ToolExecutionEndEvent{
-                .tool_call_id = call.id,
-                .tool_name = call.name,
-                .result = execution_result_from(tool_result, call_terminate),
-                .is_error = tool_result.is_error,
-            }));
-        CCH_TRY_VOID(emit_tool_result_message(sink, tool_result));
-        finalized.push_back(FinalizedToolCall{
-            .result = std::move(tool_result),
-            .call_terminate = call_terminate,
+    auto end_emit = emit_agent_event(
+        sink,
+        ToolExecutionEndEvent{
+            .tool_call_id = call.id,
+            .tool_name = call.name,
+            .result = execution_result_from(tool_result, call_terminate),
+            .is_error = tool_result.is_error,
         });
+    release_preparation();
+    if (!end_emit) {
+        co_return std::unexpected(end_emit.error());
+    }
+
+    co_return FinalizedToolCallResult{
+        .result = std::move(tool_result),
+        .call_terminate = call_terminate,
+    };
+}
+
+boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute(
+    ToolCallBatchRequest request,
+    AgentEventSink& sink) {
+    const auto calls = tool_calls_from(request.assistant_message);
+    if (calls.empty()) {
+        co_return ToolCallBatchResult{};
+    }
+
+    const auto* parallel = std::get_if<BoundedParallelToolExecution>(&options_.execution);
+
+    const bool any_sequential_tool = std::any_of(
+        calls.begin(), calls.end(), [&](const ai::ToolCallContent& call) {
+            const auto* tool = registry_.find(call.name);
+            return tool != nullptr && tool->concurrency == ToolConcurrency::Exclusive;
+        });
+    if (parallel == nullptr || any_sequential_tool || parallel->max_in_flight == 1) {
+        co_return co_await execute_sequential(request, calls, sink);
+    }
+
+    co_return co_await execute_parallel(request, calls, parallel->max_in_flight, sink);
+}
+
+boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_sequential(
+    ToolCallBatchRequest request,
+    const std::vector<ai::ToolCallContent>& calls,
+    AgentEventSink& sink) {
+    std::vector<FinalizedToolCallResult> finalized;
+    finalized.reserve(calls.size());
+
+    for (const auto& call : calls) {
+        if (options_.stop_token.stop_requested()) {
+            break;
+        }
+        auto call_result = co_await execute_single_call(
+            request,
+            call,
+            sink,
+            ToolExecutionPermits{});
+        if (!call_result) {
+            co_return std::unexpected(call_result.error());
+        }
+        CCH_TRY_VOID(emit_tool_result_message(sink, call_result->result));
+        finalized.push_back(std::move(*call_result));
         if (options_.stop_token.stop_requested()) {
             break;
         }
@@ -344,167 +461,78 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
     co_return make_batch_result(std::move(finalized));
 }
 
+struct ParallelExecutionState {
+    std::mutex callback_mutex;
+    std::mutex error_mutex;
+    std::optional<support::Error> emit_error;
+    std::optional<support::Error> fatal_error;
+    std::vector<std::optional<FinalizedToolCallResult>> finalized;
+
+    explicit ParallelExecutionState(std::size_t size) : finalized(size) {}
+};
+
+boost::asio::awaitable<void> ToolCallExecutor::execute_parallel_task(
+    ToolCallBatchRequest request,
+    const ai::ToolCallContent& call,
+    std::size_t index,
+    std::shared_ptr<ParallelExecutionState> state,
+    AgentEventSink parallel_sink,
+    ToolExecutionPermits permits) {
+    auto call_result = co_await execute_single_call(
+        request,
+        call,
+        parallel_sink,
+        permits);
+
+    if (!call_result) {
+        std::lock_guard error_lock(state->error_mutex);
+        if (!state->fatal_error) {
+            state->fatal_error = call_result.error();
+        }
+        co_return;
+    }
+
+    state->finalized[index] = std::move(*call_result);
+}
+
 boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor::execute_parallel(
     ToolCallBatchRequest request,
     const std::vector<ai::ToolCallContent>& calls,
     std::size_t max_in_flight,
     AgentEventSink& sink) {
-    struct PreparedToolCall {
-        std::size_t source_index{};
-        ai::ToolCallContent tool_call;
-        Tool* tool{};
-        support::JsonValue arguments;
-    };
-
-    std::vector<PreparedToolCall> prepared;
-    prepared.reserve(calls.size());
-    std::vector<std::optional<FinalizedToolCall>> finalized_calls(calls.size());
-
-    auto complete_immediate = [&](std::size_t source_index,
-                                  const ai::ToolCallContent& call,
-                                  ai::ToolResultMessage result) -> support::ExpectedVoid {
-        auto emitted = emit_agent_event(
-            sink,
-            ToolExecutionEndEvent{
-                .tool_call_id = call.id,
-                .tool_name = call.name,
-                .result = execution_result_from(result),
-                .is_error = result.is_error,
-            });
-        if (!emitted) {
-            return emitted;
-        }
-        finalized_calls[source_index] = FinalizedToolCall{
-            .result = std::move(result),
-            .call_terminate = false,
-        };
-        return {};
-    };
-
-    for (std::size_t source_index = 0; source_index < calls.size(); ++source_index) {
-        if (options_.stop_token.stop_requested()) {
-            break;
-        }
-        const auto& call = calls[source_index];
-        CCH_TRY_VOID(emit_agent_event(
-            sink,
-            ToolExecutionStartEvent{
-                .tool_call_id = call.id,
-                .tool_name = call.name,
-                .args = call.arguments.value_or(support::JsonValue{}),
-            }));
-
-        auto* tool = registry_.find(call.name);
-        if (tool == nullptr) {
-            CCH_TRY_VOID(complete_immediate(
-                source_index,
-                call,
-                error_tool_result(
-                    call,
-                    bounded_tool_argument_diagnostic(
-                        "unknown tool: " +
-                        bounded_tool_argument_component(call.name, 512) +
-                        " (argument location: root)"))));
-            continue;
-        }
-
-        auto arguments = prepare_tool_arguments(tool->definition, call);
-        if (!arguments) {
-            CCH_TRY_VOID(complete_immediate(
-                source_index,
-                call,
-                error_tool_result(call, arguments.error().detail)));
-            continue;
-        }
-
-        if (options_.before_tool_call) {
-            BeforeToolCallContext hook_context{
-                .assistant_message = request.assistant_message,
-                .tool_call = call,
-                .args = *arguments,
-                .context = request.context,
-            };
-            auto before_result = co_await invoke_agent_hook(
-                "beforeToolCall",
-                *options_.before_tool_call,
-                std::move(hook_context),
-                options_.stop_token);
-            if (!before_result) {
-                // pi prepareToolCall: a failing before hook finalizes only
-                // this call's outcome (ADR 0008).
-                CCH_TRY_VOID(complete_immediate(
-                    source_index,
-                    call,
-                    error_tool_result(call, bounded_failure_text(before_result.error()))));
-                continue;
-            }
-            if (before_result->block) {
-                CCH_TRY_VOID(complete_immediate(
-                    source_index,
-                    call,
-                    error_tool_result(
-                        call, before_result->reason.value_or("Tool execution was blocked"))));
-                continue;
-            }
-        }
-
-        if (options_.stop_token.stop_requested()) {
-            CCH_TRY_VOID(complete_immediate(
-                source_index,
-                call,
-                error_tool_result(call, "Operation aborted")));
-            continue;
-        }
-
-        prepared.push_back(PreparedToolCall{
-            .source_index = source_index,
-            .tool_call = call,
-            .tool = tool,
-            .arguments = std::move(*arguments),
-        });
-    }
-
-    struct ParallelState {
-        std::mutex callback_mutex;
-        std::mutex error_mutex;
-        std::optional<support::Error> emit_error;
-        std::optional<support::Error> fatal_error;
-    };
-
     auto executor = co_await boost::asio::this_coro::executor;
-    using HookPermitChannel = boost::asio::experimental::concurrent_channel<
-        void(boost::system::error_code)>;
-    std::shared_ptr<HookPermitChannel> after_hook_permits;
-    if (options_.after_tool_call) {
-        after_hook_permits = std::make_shared<HookPermitChannel>(executor, 1);
-        if (!after_hook_permits->try_send(boost::system::error_code{})) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                "afterToolCall hook serialization failed"));
-        }
+
+    auto preparation_permits = make_permit_channel(
+        executor, 1, "tool preparation serialization failed");
+    if (!preparation_permits) {
+        co_return std::unexpected(preparation_permits.error());
     }
 
-    auto state = std::make_shared<ParallelState>();
-    auto prepared_calls = std::make_shared<std::vector<PreparedToolCall>>(std::move(prepared));
-    auto assistant_snapshot = std::make_shared<ai::AssistantMessage>(request.assistant_message);
-    auto context_snapshot = std::make_shared<ai::AiContext>(request.context);
-    auto next_index = std::make_shared<std::atomic_size_t>(0);
-    auto finalized = std::make_shared<std::vector<std::optional<FinalizedToolCall>>>(
-        std::move(finalized_calls));
-
-    // Every prepared tool here is ParallelSafe: execute() routes any batch
-    // containing an Exclusive (pi "sequential") tool through the sequential
-    // path, so this worker pool never observes one. A cap of zero (the policy
-    // default) dispatches every prepared call concurrently, matching pi's
-    // unbounded parallel default (ADR 0034).
     const std::size_t execution_limit =
-        max_in_flight == 0 ? prepared_calls->size() : max_in_flight;
-    const std::size_t worker_count = std::min(execution_limit, prepared_calls->size());
+        max_in_flight == 0 ? calls.size() : max_in_flight;
 
-    // Tool-update delivery is part of the executing call. Its failure must
-    // return through ToolUpdateSink so that the worker can finalize that call
-    // as an isolated error outcome; other lifecycle publication failures still
-    // fail the batch.
+    std::unique_ptr<ExecutionPermitChannel> concurrency_permits;
+    if (execution_limit > 0) {
+        auto channel = make_permit_channel(
+            executor, execution_limit, "tool concurrency permit initialization failed");
+        if (!channel) {
+            co_return std::unexpected(channel.error());
+        }
+        concurrency_permits = std::move(*channel);
+    }
+
+    std::unique_ptr<ExecutionPermitChannel> after_hook_permits;
+    if (options_.after_tool_call) {
+        auto channel = make_permit_channel(
+            executor, 1, "afterToolCall hook serialization failed");
+        if (!channel) {
+            co_return std::unexpected(channel.error());
+        }
+        after_hook_permits = std::move(*channel);
+    }
+
+    auto state = std::make_shared<ParallelExecutionState>(calls.size());
+
     auto parallel_emit = [state, sink_ptr = &sink](
         const AgentLifecycleEvent& event) -> support::ExpectedVoid {
         std::lock_guard callback_lock(state->callback_mutex);
@@ -518,182 +546,69 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
         return result;
     };
 
-    AfterToolCallHook* const after_hook = options_.after_tool_call;
-    const std::stop_token stop_token = options_.stop_token;
+    ToolExecutionPermits permits{
+        .preparation = preparation_permits->get(),
+        .concurrency = concurrency_permits.get(),
+        .after_hook = after_hook_permits.get(),
+    };
 
-    auto worker_body = [after_hook,
-                        after_hook_permits,
-                        stop_token,
-                        prepared_calls,
-                        assistant_snapshot,
-                        context_snapshot,
-                        next_index,
-                        finalized,
-                        parallel_emit,
-                        state]() -> boost::asio::awaitable<void> {
-        while (true) {
-            if (stop_token.stop_requested()) {
-                break;
-            }
-            const auto index = next_index->fetch_add(1);
-            if (index >= prepared_calls->size()) {
-                break;
-            }
-            if (stop_token.stop_requested()) {
-                break;
-            }
-
-            auto& prepared_call = (*prepared_calls)[index];
-            FinalizedToolCall outcome;
-
-            auto update_gate = std::make_shared<ToolUpdateGate>();
-            ToolInvocation invocation{
-                .call_id = prepared_call.tool_call.id,
-                .name = prepared_call.tool_call.name,
-                .arguments = std::move(prepared_call.arguments),
-                .raw_arguments = prepared_call.tool_call.raw_arguments,
-            };
-            ToolUpdateSink update_sink = [
+    auto make_task = [this,
+                      call_request = ToolCallBatchRequest{
+                          .assistant_message = request.assistant_message,
+                          .context = request.context,
+                      },
+                      &calls,
+                      state,
+                      parallel_emit,
+                      permits,
+                      executor](std::size_t index) {
+        return [this,
+                call_request,
+                &call = calls[index],
+                index,
+                state,
                 parallel_emit,
-                update_gate,
-                call_id = prepared_call.tool_call.id,
-                tool_name = prepared_call.tool_call.name,
-                args = prepared_call.tool_call.arguments.value_or(support::JsonValue{})](
-                    const AsyncToolExecutionResult& partial_result) {
-                std::lock_guard lock(update_gate->mutex);
-                if (!update_gate->active) return support::ExpectedVoid{};
-                return parallel_emit(ToolExecutionUpdateEvent{
-                    .tool_call_id = call_id,
-                    .tool_name = tool_name,
-                    .args = args,
-                    .partial_result = partial_result,
-                });
-            };
-            AsyncToolExecutionResult executed_outcome;
-            auto executed = co_await execute_with_update_lifetime(
-                *prepared_call.tool,
-                invocation,
-                stop_token,
-                std::move(update_sink),
-                update_gate);
-            if (!executed) {
-                // A failed tool becomes an error outcome, never a run
-                // failure. Preserve the returned diagnostic.
-                executed_outcome = AsyncToolExecutionResult{
-                    .content = std::vector<ai::Content>{ai::text_content(
-                        bounded_failure_text(executed.error()))},
-                    .details = std::nullopt,
-                    .is_error = true,
-                    .terminate = false,
-                };
-            } else {
-                executed_outcome = std::move(*executed);
-            }
+                permits,
+                executor](auto token) mutable {
+            AgentEventSink parallel_sink{parallel_emit};
+            return boost::asio::co_spawn(
+                executor,
+                execute_parallel_task(
+                    call_request,
+                    call,
+                    index,
+                    state,
+                    std::move(parallel_sink),
+                    permits),
+                std::move(token));
+        };
+    };
 
-            outcome.result.tool_call_id = prepared_call.tool_call.id;
-            outcome.result.tool_name = prepared_call.tool_call.name;
-            outcome.result.content = executed_outcome.content;
-            outcome.result.details = executed_outcome.details;
-            outcome.result.is_error = executed_outcome.is_error;
-            outcome.call_terminate = executed_outcome.terminate;
-
-            if (after_hook) {
-                // pi finalizeExecutedToolCall: the after hook runs for
-                // every executed outcome, success or error (ADR 0008).
-                // Hook invocations stay serialized so the move-only
-                // contract never overlaps.
-                const auto [permit_error] = co_await after_hook_permits->async_receive(
-                    boost::asio::as_tuple(boost::asio::use_awaitable));
-                if (permit_error) {
-                    std::lock_guard error_lock(state->error_mutex);
-                    if (!state->fatal_error) {
-                        state->fatal_error = support::make_error(
-                            support::ErrorCode::Tool,
-                            "afterToolCall hook serialization failed",
-                            permit_error.message());
-                    }
-                    outcome.result = error_tool_result(
-                        prepared_call.tool_call,
-                        "afterToolCall hook failed");
-                    outcome.call_terminate = false;
-                } else {
-                    AfterToolCallContext hook_context{
-                        .assistant_message = *assistant_snapshot,
-                        .tool_call = prepared_call.tool_call,
-                        .args = invocation.arguments,
-                        .result = executed_outcome,
-                        .is_error = executed_outcome.is_error,
-                        .context = *context_snapshot,
-                    };
-                    auto after_result = co_await invoke_agent_hook(
-                        "afterToolCall",
-                        *after_hook,
-                        std::move(hook_context),
-                        stop_token);
-                    const bool released = after_hook_permits->try_send(
-                        boost::system::error_code{});
-                    if (!released) {
-                        std::lock_guard error_lock(state->error_mutex);
-                        if (!state->fatal_error) {
-                            state->fatal_error = support::make_error(
-                                support::ErrorCode::Tool,
-                                "afterToolCall hook serialization failed");
-                        }
-                        outcome.result = error_tool_result(
-                            prepared_call.tool_call,
-                            "afterToolCall hook failed");
-                        outcome.call_terminate = false;
-                    } else if (!after_result) {
-                        // A failing after hook finalizes this call's
-                        // outcome as an error result; the run keeps going.
-                        outcome.result = error_tool_result(
-                            prepared_call.tool_call,
-                            bounded_failure_text(after_result.error()));
-                        outcome.call_terminate = false;
-                    } else {
-                        apply_after_result(
-                            outcome.result,
-                            outcome.call_terminate,
-                            std::move(*after_result),
-                            executed_outcome.terminate);
-                    }
-                }
-            }
-
-            (void)parallel_emit(ToolExecutionEndEvent{
-                .tool_call_id = prepared_call.tool_call.id,
-                .tool_name = prepared_call.tool_call.name,
-                .result = execution_result_from(outcome.result, outcome.call_terminate),
-                .is_error = outcome.result.is_error,
-            });
-            (*finalized)[prepared_call.source_index] = std::move(outcome);
+    if (!calls.empty()) {
+        using TaskOp = decltype(make_task(0));
+        std::vector<TaskOp> tasks;
+        tasks.reserve(calls.size());
+        for (std::size_t i = 0; i < calls.size(); ++i) {
+            tasks.push_back(make_task(i));
         }
-        co_return;
-    };
-
-    auto worker_operation = [executor, worker_body](auto token) mutable {
-        return boost::asio::co_spawn(executor, worker_body(), std::move(token));
-    };
-    if (worker_count > 0) {
-        std::vector<decltype(worker_operation)> workers(worker_count, worker_operation);
-        co_await boost::asio::experimental::make_parallel_group(workers).async_wait(
+        co_await boost::asio::experimental::make_parallel_group(tasks).async_wait(
             boost::asio::experimental::wait_for_all(),
             boost::asio::use_awaitable);
     }
 
-    for (const auto& prepared_call : *prepared_calls) {
-        auto& finalized_call = (*finalized)[prepared_call.source_index];
+    for (std::size_t index = 0; index < calls.size(); ++index) {
+        auto& finalized_call = state->finalized[index];
         if (finalized_call) {
             continue;
         }
-        auto result = error_tool_result(prepared_call.tool_call, "Operation aborted");
+        auto result = error_tool_result(calls[index], "Operation aborted");
         (void)parallel_emit(ToolExecutionEndEvent{
-            .tool_call_id = prepared_call.tool_call.id,
-            .tool_name = prepared_call.tool_call.name,
+            .tool_call_id = calls[index].id,
+            .tool_name = calls[index].name,
             .result = execution_result_from(result),
             .is_error = true,
         });
-        finalized_call = FinalizedToolCall{
+        finalized_call = FinalizedToolCallResult{
             .result = std::move(result),
             .call_terminate = false,
         };
@@ -709,9 +624,9 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
         }
     }
 
-    std::vector<FinalizedToolCall> completed;
-    completed.reserve(finalized->size());
-    for (auto& finalized_call : *finalized) {
+    std::vector<FinalizedToolCallResult> completed;
+    completed.reserve(state->finalized.size());
+    for (auto& finalized_call : state->finalized) {
         if (!finalized_call) {
             continue;
         }
@@ -723,3 +638,4 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
 }
 
 } // namespace cch::agent
+
