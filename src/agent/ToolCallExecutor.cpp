@@ -79,6 +79,24 @@ execute_with_update_lifetime(
     };
 }
 
+[[nodiscard]] FinalizedToolCallResult abort_tool_call(
+    const ai::ToolCallContent& call,
+    AgentEventSink& sink) {
+    auto aborted_result = error_tool_result(call, "Operation aborted");
+    (void)emit_agent_event(
+        sink,
+        ToolExecutionEndEvent{
+            .tool_call_id = call.id,
+            .tool_name = call.name,
+            .result = execution_result_from(aborted_result),
+            .is_error = true,
+        });
+    return FinalizedToolCallResult{
+        .result = std::move(aborted_result),
+        .call_terminate = false,
+    };
+}
+
 constexpr std::size_t kMaxToolFailureDiagnosticBytes = 4096;
 
 [[nodiscard]] std::string bounded_failure_text(const support::Error& error) {
@@ -207,19 +225,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
 
     if (options_.stop_token.stop_requested()) {
         release_preparation();
-        auto aborted_result = error_tool_result(call, "Operation aborted");
-        (void)emit_agent_event(
-            sink,
-            ToolExecutionEndEvent{
-                .tool_call_id = call.id,
-                .tool_name = call.name,
-                .result = execution_result_from(aborted_result),
-                .is_error = true,
-            });
-        co_return FinalizedToolCallResult{
-            .result = std::move(aborted_result),
-            .call_terminate = false,
-        };
+        co_return abort_tool_call(call, sink);
     }
 
     if (auto start_emit = emit_agent_event(
@@ -596,22 +602,13 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
             boost::asio::use_awaitable);
     }
 
+    AgentEventSink drain_sink{parallel_emit};
     for (std::size_t index = 0; index < calls.size(); ++index) {
         auto& finalized_call = state->finalized[index];
         if (finalized_call) {
             continue;
         }
-        auto result = error_tool_result(calls[index], "Operation aborted");
-        (void)parallel_emit(ToolExecutionEndEvent{
-            .tool_call_id = calls[index].id,
-            .tool_name = calls[index].name,
-            .result = execution_result_from(result),
-            .is_error = true,
-        });
-        finalized_call = FinalizedToolCallResult{
-            .result = std::move(result),
-            .call_terminate = false,
-        };
+        finalized_call = abort_tool_call(calls[index], drain_sink);
     }
 
     {
