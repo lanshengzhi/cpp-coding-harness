@@ -124,11 +124,11 @@ TEST_CASE(
     CHECK(store
               .append_compaction(
                   std::nullopt,
-                  "summary",
-                  "first-kept",
-                  1000,
-                  std::nullopt,
-                  std::nullopt)
+                  harness::session::CompactionEntryValue{
+                      .summary = "summary",
+                      .first_kept_entry_id = "first-kept",
+                      .tokens_before = 1000,
+                  })
               .has_value());
 
     // A root leaf marker moves the live leaf to the root position; the next

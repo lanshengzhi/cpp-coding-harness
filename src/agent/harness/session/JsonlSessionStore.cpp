@@ -217,23 +217,10 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_label_cha
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_compaction(
     std::optional<std::string> parent_id,
-    std::string summary,
-    std::string first_kept_entry_id,
-    std::size_t tokens_before,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook,
-    std::vector<ai::MessageVariant> retained_tail,
-    std::optional<ai::Usage> usage) {
+    CompactionEntryValue value) {
     EntrySerializer serializer;
     return append_mirrored_line(impl_->journal, serializer.serialize_compaction(
-        std::move(parent_id),
-        std::move(summary),
-        std::move(first_kept_entry_id),
-        tokens_before,
-        std::move(details),
-        from_hook,
-        std::move(retained_tail),
-        std::move(usage)));
+        std::move(parent_id), std::move(value)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_branch_summary(

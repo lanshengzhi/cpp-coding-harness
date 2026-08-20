@@ -374,7 +374,13 @@ TEST_CASE(
     // (pi `deriveSessionContextState`). The assistant message lands after the
     // `model_change`, so its provider/model override the earlier entry.
     REQUIRE(store->append(user_msg("root")).status);
-    REQUIRE(store->append_compaction(std::nullopt, "minimal summary", "", 1234, std::nullopt, std::nullopt));
+    REQUIRE(store->append_compaction(
+        std::nullopt,
+        harness::session::CompactionEntryValue{
+            .summary = "minimal summary",
+            .first_kept_entry_id = "",
+            .tokens_before = 1234,
+        }));
     REQUIRE(store->append_label_change(std::nullopt, "", "checkpoint"));
     REQUIRE(store->append_custom_entry(std::nullopt, "extension.meta", support::JsonValue{42}));
     REQUIRE(store->append_custom_message_entry(
@@ -479,7 +485,13 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     // Now write the compaction entry via open_existing
     auto resumed = harness::session::JsonlSessionStore::open_existing(path);
     REQUIRE(resumed);
-    REQUIRE(resumed->append_compaction(std::nullopt, "summary of msg1-2", msg3_id, 1000, std::nullopt, std::nullopt));
+    REQUIRE(resumed->append_compaction(
+        std::nullopt,
+        harness::session::CompactionEntryValue{
+            .summary = "summary of msg1-2",
+            .first_kept_entry_id = msg3_id,
+            .tokens_before = 1000,
+        }));
     REQUIRE(resumed->append(user_msg("msg4")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);

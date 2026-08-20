@@ -87,15 +87,12 @@ public:
         std::optional<std::string> parent_id,
         std::string target_id,
         std::optional<std::string> label);
+    /// Append one Compaction entry (pi `appendCompaction`); the entry value
+    /// carries pi's full field set (`summary`, `firstKeptEntryId`,
+    /// `tokensBefore`, `retainedTail`, `details`, `usage`, `fromHook`).
     [[nodiscard]] support::ExpectedVoid append_compaction(
         std::optional<std::string> parent_id,
-        std::string summary,
-        std::string first_kept_entry_id,
-        std::size_t tokens_before,
-        std::optional<support::JsonValue> details,
-        std::optional<bool> from_hook,
-        std::vector<ai::MessageVariant> retained_tail = {},
-        std::optional<ai::Usage> usage = std::nullopt);
+        CompactionEntryValue value);
     /// pi `appendBranchSummary`: record the summary of an abandoned branch
     /// (`from_id` is the abandoned leaf).
     [[nodiscard]] support::ExpectedVoid append_branch_summary(

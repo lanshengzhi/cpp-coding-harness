@@ -613,7 +613,14 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", support::JsonValue{nullptr}));
     REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "context", true, std::nullopt));
     REQUIRE(store->append_label_change(std::nullopt, "target-entry", std::string{"checkpoint"}));
-    REQUIRE(store->append_compaction(std::nullopt, "summary", "first-kept", 123, std::nullopt, true));
+    REQUIRE(store->append_compaction(
+        std::nullopt,
+        harness::session::CompactionEntryValue{
+            .summary = "summary",
+            .first_kept_entry_id = "first-kept",
+            .tokens_before = 123,
+            .from_hook = true,
+        }));
     REQUIRE(store->append_branch_summary(std::nullopt, "from-entry", "branch summary", std::nullopt, false));
     REQUIRE(store->append_session_info(std::nullopt, "Session name"));
     REQUIRE(store->append_leaf(std::nullopt, "leaf-target"));
@@ -849,7 +856,15 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
     auto details = support::JsonValue{support::JsonValue::object_t{{"readFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"a.txt"}}}}}};
-    REQUIRE(store->append_compaction(std::nullopt, "summary text", "first-kept", 50000, std::move(details), true));
+    REQUIRE(store->append_compaction(
+        std::nullopt,
+        harness::session::CompactionEntryValue{
+            .summary = "summary text",
+            .first_kept_entry_id = "first-kept",
+            .tokens_before = 50000,
+            .details = std::move(details),
+            .from_hook = true,
+        }));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);

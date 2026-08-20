@@ -1621,11 +1621,11 @@ TEST_CASE(
     const auto kept_entry_id = loaded->entries[2].entry_id;
     REQUIRE(store->append_compaction(
         std::nullopt,
-        "compacted persisted context",
-        kept_entry_id,
-        1200,
-        std::nullopt,
-        std::nullopt));
+        harness::session::CompactionEntryValue{
+            .summary = "compacted persisted context",
+            .first_kept_entry_id = kept_entry_id,
+            .tokens_before = 1200,
+        }));
 
     ai::AssistantMessage assistant;
     assistant.provider = "fake";

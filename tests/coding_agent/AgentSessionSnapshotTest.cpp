@@ -331,11 +331,11 @@ TEST_CASE(
     REQUIRE(resumed_store.has_value());
     REQUIRE(resumed_store->append_compaction(
         std::nullopt,
-        "summary of prior work",
-        kept_id,
-        1000,
-        std::nullopt,
-        std::nullopt));
+        harness::session::CompactionEntryValue{
+            .summary = "summary of prior work",
+            .first_kept_entry_id = kept_id,
+            .tokens_before = 1000,
+        }));
     REQUIRE(resumed_store->append(user_message("after compaction")).has_value());
 
     auto resumed = resume_for_frontend(paths);

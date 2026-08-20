@@ -83,10 +83,10 @@ struct CompactionEntryValue {
     std::size_t tokens_before{0};
     /// pi `retainedTail?: AgentMessage[]` — recent messages kept on the entry
     /// itself; context rebuild projects compactionSummary + retained tail.
-    std::optional<std::vector<ai::MessageVariant>> retained_tail;
-    std::optional<support::JsonValue> details;
-    std::optional<ai::Usage> usage;
-    std::optional<bool> from_hook;
+    std::optional<std::vector<ai::MessageVariant>> retained_tail{};
+    std::optional<support::JsonValue> details{};
+    std::optional<ai::Usage> usage{};
+    std::optional<bool> from_hook{};
 };
 
 struct BranchSummaryEntryValue {

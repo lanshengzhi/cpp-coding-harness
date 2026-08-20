@@ -74,13 +74,7 @@ public:
 
     [[nodiscard]] support::Expected<SerializationResult> serialize_compaction(
         std::optional<std::string> parent_id,
-        std::string summary,
-        std::optional<std::string> first_kept_entry_id,
-        std::size_t tokens_before,
-        std::optional<support::JsonValue> details,
-        std::optional<bool> from_hook,
-        std::vector<ai::MessageVariant> retained_tail = {},
-        std::optional<ai::Usage> usage = std::nullopt) const;
+        CompactionEntryValue value) const;
 
     [[nodiscard]] support::Expected<SerializationResult> serialize_branch_summary(
         std::optional<std::string> parent_id,

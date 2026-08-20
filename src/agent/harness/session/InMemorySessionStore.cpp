@@ -72,27 +72,14 @@ support::Expected<std::vector<SessionEntry>> InMemorySessionStore::append_label_
 
 support::Expected<std::vector<SessionEntry>> InMemorySessionStore::append_compaction(
     std::optional<std::string> parent_id,
-    std::string summary,
-    std::string first_kept_entry_id,
-    std::size_t tokens_before,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook,
-    std::vector<ai::MessageVariant> retained_tail,
-    std::optional<ai::Usage> usage) {
+    CompactionEntryValue value) {
     auto entry = make_entry(SessionEntryKind::Compaction, std::move(parent_id));
-    entry.value = CompactionEntryValue{
-        .summary = std::move(summary),
-        .first_kept_entry_id = std::move(first_kept_entry_id),
-        .tokens_before = tokens_before,
-        // Match the wire shape: an empty retained tail is omitted (nullopt),
-        // which keeps context rebuild on the firstKeptEntryId path.
-        .retained_tail = retained_tail.empty()
-            ? std::nullopt
-            : std::optional<std::vector<ai::MessageVariant>>{std::move(retained_tail)},
-        .details = std::move(details),
-        .usage = std::move(usage),
-        .from_hook = from_hook,
-    };
+    // Match the wire shape: an empty retained tail is omitted (nullopt),
+    // which keeps context rebuild on the firstKeptEntryId path.
+    if (value.retained_tail && value.retained_tail->empty()) {
+        value.retained_tail.reset();
+    }
+    entry.value = std::move(value);
     return single(std::move(entry));
 }
 

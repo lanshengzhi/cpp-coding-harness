@@ -93,7 +93,13 @@ TEST_CASE("resumed session uses compaction tree context", "[coding-agent][runtim
 
     auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
-    REQUIRE(resumed->append_compaction(std::nullopt, "summary of msg1-2", msg3_id, 1000, std::nullopt, std::nullopt));
+    REQUIRE(resumed->append_compaction(
+        std::nullopt,
+        harness::session::CompactionEntryValue{
+            .summary = "summary of msg1-2",
+            .first_kept_entry_id = msg3_id,
+            .tokens_before = 1000,
+        }));
     REQUIRE(resumed->append(user_msg("msg4")).has_value());
 
     auto opened = open_resumed_session(path, workspace);
@@ -283,7 +289,13 @@ TEST_CASE("resumed session topology follows active path only", "[coding-agent][r
     auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
     REQUIRE(resumed->append_branch_summary(first_id, third_id, "inactive branch", std::nullopt, std::nullopt));
-    REQUIRE(resumed->append_compaction(first_id, "inactive compaction", third_id, 1000, std::nullopt, std::nullopt));
+    REQUIRE(resumed->append_compaction(
+        first_id,
+        harness::session::CompactionEntryValue{
+            .summary = "inactive compaction",
+            .first_kept_entry_id = third_id,
+            .tokens_before = 1000,
+        }));
     REQUIRE(resumed->append_leaf(std::nullopt, third_id));
 
     auto opened = open_resumed_session(path, workspace);

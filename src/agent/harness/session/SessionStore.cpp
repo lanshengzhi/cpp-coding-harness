@@ -154,25 +154,11 @@ support::ExpectedVoid SessionStore::append_label_change(
 
 support::ExpectedVoid SessionStore::append_compaction(
     std::optional<std::string> parent_id,
-    std::string summary,
-    std::string first_kept_entry_id,
-    std::size_t tokens_before,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook,
-    std::vector<ai::MessageVariant> retained_tail,
-    std::optional<ai::Usage> usage) {
+    CompactionEntryValue value) {
     return dispatch_append([&](StorageVariant& store) {
         return std::visit(
             [&](auto& active) {
-                return active.append_compaction(
-                    std::move(parent_id),
-                    std::move(summary),
-                    std::move(first_kept_entry_id),
-                    tokens_before,
-                    std::move(details),
-                    from_hook,
-                    std::move(retained_tail),
-                    std::move(usage));
+                return active.append_compaction(std::move(parent_id), std::move(value));
             },
             store);
     });

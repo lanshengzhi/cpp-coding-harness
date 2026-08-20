@@ -1869,13 +1869,15 @@ AgentSessionRuntime::execute_compaction(
     }
     if (auto appended = session_.store->append_compaction(
             std::nullopt,
-            result->summary,
-            result->first_kept_entry_id,
-            result->tokens_before,
-            result->details,
-            /*from_hook=*/false,
-            result->retained_tail,
-            result->usage);
+            harness::session::CompactionEntryValue{
+                .summary = result->summary,
+                .first_kept_entry_id = result->first_kept_entry_id,
+                .tokens_before = result->tokens_before,
+                .retained_tail = std::move(result->retained_tail),
+                .details = result->details,
+                .usage = result->usage,
+                .from_hook = false,
+            });
         !appended) {
         co_return std::unexpected(appended.error());
     }

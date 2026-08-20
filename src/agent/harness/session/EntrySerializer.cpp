@@ -1162,60 +1162,45 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_compaction(
     std::optional<std::string> parent_id,
-    std::string summary,
-    std::optional<std::string> first_kept_entry_id,
-    std::size_t tokens_before,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook,
-    std::vector<ai::MessageVariant> retained_tail,
-    std::optional<ai::Usage> usage) const {
+    CompactionEntryValue value) const {
     auto base = fresh_entry_base(parent_id);
+    // The wire omits an empty retained tail; the mirrored entry does the
+    // same so live-tree and reload reads agree.
+    if (value.retained_tail && value.retained_tail->empty()) {
+        value.retained_tail.reset();
+    }
     detail::CompactionDto dto;
     dto.id = base.id;
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = base.timestamp_text;
-    dto.summary = summary;
-    dto.firstKeptEntryId = first_kept_entry_id;
-    dto.tokensBefore = tokens_before;
-    if (!retained_tail.empty()) {
+    dto.summary = value.summary;
+    dto.firstKeptEntryId = value.first_kept_entry_id;
+    dto.tokensBefore = value.tokens_before;
+    if (value.retained_tail) {
         std::vector<ai::glaze::MessageDto> tail;
-        tail.reserve(retained_tail.size());
-        for (const auto& message : retained_tail) {
+        tail.reserve(value.retained_tail->size());
+        for (const auto& message : *value.retained_tail) {
             tail.push_back(ai::glaze::to_message_dto(message));
         }
         dto.retainedTail = std::move(tail);
     }
-    if (details) {
-        auto details_json = support::write_json(*details);
+    if (value.details) {
+        auto details_json = support::write_json(*value.details);
         if (!details_json) {
             return std::unexpected(session_error("failed to serialize compaction details"));
         }
         dto.details = glz::raw_json{std::move(*details_json)};
     }
-    if (usage) {
-        dto.usage = ai::glaze::detail::to_dto(*usage);
+    if (value.usage) {
+        dto.usage = ai::glaze::detail::to_dto(*value.usage);
     }
-    dto.fromHook = from_hook;
-    // The wire omits an empty retained tail; the mirrored entry does the
-    // same so live-tree and reload reads agree.
-    std::optional<std::vector<ai::MessageVariant>> entry_tail;
-    if (!retained_tail.empty()) {
-        entry_tail = std::move(retained_tail);
-    }
+    dto.fromHook = value.from_hook;
     return finish_entry(
         serialize_tree_entry(dto),
         make_entry(
             std::move(base),
             SessionEntryKind::Compaction,
-            CompactionEntryValue{
-                .summary = std::move(summary),
-                .first_kept_entry_id = std::move(first_kept_entry_id),
-                .tokens_before = tokens_before,
-                .retained_tail = std::move(entry_tail),
-                .details = std::move(details),
-                .usage = std::move(usage),
-                .from_hook = from_hook,
-            }));
+            std::move(value)));
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_branch_summary(

@@ -926,13 +926,16 @@ TEST_CASE(
     REQUIRE(store.has_value());
     REQUIRE(store->append_compaction(
         std::nullopt,
-        result->summary,
-        result->first_kept_entry_id,
-        result->tokens_before,
-        result->details,
-        /*from_hook=*/false,
-        result->retained_tail,
-        result->usage).has_value());
+        harness::session::CompactionEntryValue{
+            .summary = std::move(result->summary),
+            .first_kept_entry_id = std::move(result->first_kept_entry_id),
+            .tokens_before = result->tokens_before,
+            .retained_tail = std::move(result->retained_tail),
+            .details = std::move(result->details),
+            .usage = std::move(result->usage),
+            .from_hook = false,
+        })
+                .has_value());
 
     // Persistence golden: the appended compaction line with pi's field set,
     // entry id/timestamp normalized (generated values, like the
