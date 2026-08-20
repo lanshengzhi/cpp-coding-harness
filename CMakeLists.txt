@@ -330,6 +330,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp
+        src/coding_agent/tui/ModelFlowController.cpp
         src/coding_agent/tui/ModelSelector.cpp
         src/coding_agent/tui/OAuthSelector.cpp
         src/coding_agent/tui/OpenBrowser.cpp
@@ -937,6 +938,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/LoadedResourcesTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/ModelFlowControllerTest.cpp
         tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
         tests/coding_agent/tui/ModelSelectorTest.cpp
         tests/coding_agent/tui/OAuthSelectorTest.cpp

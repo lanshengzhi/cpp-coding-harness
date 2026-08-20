@@ -9,7 +9,6 @@
 #include "ai/ModelThinkingLevel.hpp"
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -34,6 +33,7 @@
 #include "coding_agent/tui/BashExecutionComponent.hpp"
 #include "coding_agent/tui/ChatContainer.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
+#include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/ExternalEditor.hpp"
 #include "coding_agent/tui/Footer.hpp"
 #include "coding_agent/tui/FooterDataProvider.hpp"
@@ -47,12 +47,12 @@
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/LoginDialog.hpp"
 #include "coding_agent/tui/LoginPresentation.hpp"
+#include "coding_agent/tui/ModalPresenter.hpp"
+#include "coding_agent/tui/ModelFlowController.hpp"
 #include "coding_agent/tui/ModelSearch.hpp"
-#include "coding_agent/tui/ModelSelector.hpp"
 #include "coding_agent/tui/OAuthSelector.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/PromptSlot.hpp"
-#include "coding_agent/tui/ScopedModelsSelector.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 #include "coding_agent/tui/SettingsSelector.hpp"
@@ -185,17 +185,6 @@ struct InteractiveStartupDiagnostics {
     /// discovery (pi `resource-loader.ts` `getThemes` diagnostics).
     std::vector<ResourceDiagnostic> themes;
 };
-
-[[nodiscard]] std::string combined_error_text(const support::Error& error) {
-    std::string text = error.message;
-    if (!error.detail.empty() && error.detail != error.message) {
-        text = std::format("{}: {}", text, error.detail);
-    }
-    if (error.context && !error.context->empty()) {
-        text = std::format("{} ({})", text, *error.context);
-    }
-    return text;
-}
 
 [[nodiscard]] support::Error presentation_error(
     const support::Error& error,
@@ -418,17 +407,6 @@ private:
             combined_error_text(restoration))));
 }
 
-/// One immutable model-completion candidate. The `/model` argument
-/// completion reads a shared immutable snapshot so the autocomplete request
-/// thread never races the executor-confined session state (the snapshot is
-/// replaced on the executor whenever the candidate set changes).
-struct ModelCompletionItem {
-    std::string id;
-    std::string provider;
-    std::string name;
-};
-using ModelCompletionSnapshot = std::vector<ModelCompletionItem>;
-
 /// pi `prefixAutocompleteDescription` subset (`core/source-info.ts` + the
 /// interactive-mode `getAutocompleteSourceTag`): the scope-prefixed
 /// description for discovered prompt templates and skills. The loader subset
@@ -552,35 +530,6 @@ command_autocomplete_commands(
         return label(left) < label(right);
     });
     return items;
-}
-
-/// pi `showModelsSelector` initial enabled ids: the session scope when one
-/// exists, else the configured scope's resolved ids, with `no-match` pattern
-/// ids appended as unavailable entries (pi's `currentEnabledIds` assembly).
-[[nodiscard]] std::optional<std::vector<std::string>> initial_selector_enabled_ids(
-    const std::vector<cch::coding_agent::ScopedModel>& session_scoped_models,
-    const std::optional<ModelScopeResolution>& configured_scope) {
-    std::optional<std::vector<std::string>> ids;
-    if (!session_scoped_models.empty()) {
-        ids = std::vector<std::string>{};
-        for (const auto& entry : session_scoped_models) {
-            ids->push_back(entry.model.provider + "/" + entry.model.id);
-        }
-    } else if (configured_scope) {
-        ids = std::vector<std::string>{};
-        for (const auto& scoped : configured_scope->scoped_models) {
-            ids->push_back(scoped.model.provider + "/" + scoped.model.id);
-        }
-    }
-    for (const auto& diagnostic : configured_scope ? configured_scope->diagnostics
-                                                   : std::vector<ModelScopeDiagnostic>{}) {
-        if (diagnostic.code != "no-match") continue;
-        if (!ids) ids = std::vector<std::string>{};
-        if (std::find(ids->begin(), ids->end(), diagnostic.pattern) == ids->end()) {
-            ids->push_back(diagnostic.pattern);
-        }
-    }
-    return ids;
 }
 
 /// Resolve an executable on PATH (pi's `ensureTool`); nullopt when absent so
@@ -769,7 +718,9 @@ private:
 };
 
 /// The pi main-screen composition: header (keybinding hints only, no logo),
-class InteractiveState final : public std::enable_shared_from_this<InteractiveState> {
+class InteractiveState final
+    : public std::enable_shared_from_this<InteractiveState>,
+      public ModalPresenter {
 public:
     InteractiveState(
         AgentSession* session,
@@ -784,7 +735,7 @@ public:
     }
     InteractiveState(InteractiveState&&) = delete;
     InteractiveState& operator=(InteractiveState&&) = delete;
-    ~InteractiveState() = default;
+    ~InteractiveState() override = default;
     InteractiveState(const InteractiveState&) = delete;
     InteractiveState& operator=(const InteractiveState&) = delete;
 
@@ -795,15 +746,21 @@ public:
         session_facts_ = std::move(config.session_facts);
         boot_request_ = std::move(config.boot_request);
         const bool booting = boot_request_.has_value();
-        if (!booting) {
-            update_model_completion();
-        }
 
         InteractiveStartupDiagnostics diagnostics;
         if (auto loaded = load_startup_resources(config); !loaded) {
             return fail_start(loaded.error());
         } else {
             diagnostics = std::move(*loaded);
+        }
+
+        // The model flows need the startup resources (live theme, settings,
+        // keybindings), so the controller is created right after they load;
+        // the initial `/model` completion snapshot follows (nothing reads it
+        // before view composition).
+        model_flows_ = make_model_flow_controller();
+        if (!booting) {
+            model_flows_->update_model_completion();
         }
 
         const auto weak = weak_from_this();
@@ -933,7 +890,7 @@ public:
         //    `renderInitialMessages`.
         owned_session_ = std::move(created->session);
         session_ = owned_session_.get();
-        update_model_completion();
+        model_flows_->update_model_completion();
         rebuild_autocomplete_provider();
         const auto weak = weak_from_this();
         if (auto subscribed = subscribe_to_session(weak); !subscribed) {
@@ -1038,7 +995,7 @@ public:
                 if (const auto self = weak.lock()) {
                     self->post_from_view(
                         [slot, label = std::move(label)](InteractiveState& self) mutable {
-                            self.restore_editor_slot();
+                            self.restore_prompt_slot();
                             slot->resolve(std::move(label));
                         });
                 }
@@ -1046,12 +1003,12 @@ public:
             [weak, slot] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([slot](InteractiveState& self) {
-                        self.restore_editor_slot();
+                        self.restore_prompt_slot();
                         slot->resolve(std::unexpected(prompt_cancelled_error()));
                     });
                 }
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
         auto selected = co_await slot->channel.async_receive(
             boost::asio::use_awaitable);
         if (!selected) {
@@ -1367,7 +1324,7 @@ private:
             command_autocomplete_commands(
                 templates,
                 skills,
-                model_completion_,
+                model_flows_->model_completion(),
                 include_skill_commands),
             workspace,
             find_executable_on_path("fd"));
@@ -1611,15 +1568,8 @@ private:
     }
 
     void dispatch(CycleModelAction action) {
-        const auto direction = action.direction == ModelCycleDirection::Forward
-            ? "forward"
-            : "backward";
-        const auto self = shared_from_this();
-        spawn_flow(
-            [self, direction]() mutable -> boost::asio::awaitable<void> {
-                co_await self->cycle_model(std::move(direction));
-            },
-            "Native TUI model cycle failed");
+        model_flows_->cycle_model(
+            action.direction == ModelCycleDirection::Forward ? "forward" : "backward");
     }
 
     void dispatch(CycleThinkingAction) {
@@ -1631,7 +1581,7 @@ private:
     }
 
     void dispatch(SelectModelAction) {
-        show_model_selector(std::nullopt);
+        model_flows_->show_model_selector(std::nullopt);
     }
 
     void dispatch(ResumeSessionAction) {
@@ -1792,7 +1742,7 @@ private:
         return {};
     }
 
-    void close_overlay() {
+    void close_overlay() override {
         if (!running_ || active_overlay_ == nullptr) return;
         if (auto removed = tui_.remove_overlay(active_overlay_); !removed) {
             append_command_error(removed.error());
@@ -1897,7 +1847,7 @@ private:
         };
         callbacks.on_cancel = [weak] {
             if (const auto self = weak.lock()) {
-                self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                self->post_from_view([](InteractiveState& state) { state.restore_prompt_slot(); });
             }
         };
         callbacks.on_theme_change = [weak](std::string theme_setting) {
@@ -1932,7 +1882,7 @@ private:
             keybindings_->get(),
             std::move(config),
             std::move(callbacks));
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi `setHideThinkingBlock` + live chat rebuild: persist the global
@@ -2023,9 +1973,7 @@ private:
             append_command_error(attached.error());
             return;
         }
-        if (auto attached = attach_overlay(std::move(overlay)); !attached) {
-            append_command_error(attached.error());
-        }
+        show_overlay(std::move(overlay));
     }
 
     // ── Login presentation (pi interactive-mode.ts login flows, #328) ────
@@ -2070,93 +2018,101 @@ private:
             });
     }
 
-    void place_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
+    // ── ModalPresenter seam (#503): the interactive state is the
+    // production presenter — overlays, prompt-slot swaps, and status text
+    // land on the view/terminal it owns. ───────────────────────────────────
+
+    void show_overlay(std::unique_ptr<cch::tui::Overlay> overlay) override {
+        if (auto attached = attach_overlay(std::move(overlay)); !attached) {
+            append_command_error(attached.error());
+        }
+    }
+
+    /// pi `showSelector` editorContainer swap: a modal component replaces
+    /// the editor slot.
+    void replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) override {
         if (view_ == nullptr) return;
         view_->set_editor_replacement(std::move(component));
         tui_.invalidate();
     }
 
-    void restore_editor_slot() {
+    void restore_prompt_slot() override {
         if (view_ == nullptr) return;
         view_->restore_editor();
         tui_.invalidate();
     }
 
     /// pi `showStatus`: one dim status line in the chat.
-    void show_status(std::string text) {
+    void show_status(std::string text) override {
         if (view_ == nullptr) return;
         view_->append_status_message(std::move(text));
         tui_.invalidate();
     }
 
     /// pi `showError`: one `Error: <text>` chat line.
-    void show_error(std::string text) {
+    void show_error(std::string text) override {
         if (view_ == nullptr) return;
         view_->append_diagnostic(std::move(text));
         tui_.invalidate();
     }
 
-    // ── Model selector / cycling (pi interactive-mode.ts, #407) ───────────
-
-    /// Rebuild the shared immutable `/model` completion snapshot on the
-    /// executor (pi's candidate set: session scoped models when a scope
-    /// exists, else the availability snapshot). The snapshot is only ever
-    /// replaced here, so autocomplete readers see one consistent list.
-    void update_model_completion() {
-        auto runtime = session_->model_runtime();
-        if (!runtime) {
-            model_completion_ = std::make_shared<const ModelCompletionSnapshot>();
-            return;
-        }
-        auto snapshot = std::make_shared<ModelCompletionSnapshot>();
-        const auto scoped = session_->scoped_models();
-        if (!scoped.empty()) {
-            snapshot->reserve(scoped.size());
-            for (const auto& entry : scoped) {
-                snapshot->push_back(ModelCompletionItem{
-                    .id = entry.model.id,
-                    .provider = entry.model.provider,
-                    .name = entry.model.name,
-                });
-            }
-        } else {
-            for (const auto& model : runtime->get_available_snapshot()) {
-                snapshot->push_back(ModelCompletionItem{
-                    .id = model.id,
-                    .provider = model.provider,
-                    .name = model.name,
-                });
-            }
-        }
-        model_completion_ = std::move(snapshot);
+    /// pi `ui.requestRender`: one coalescible re-render request, safe from
+    /// any thread (posts the render to the executor).
+    void request_render() override {
+        post_invalidate();
     }
 
-    /// Post one model/thinking action to the executor from the input thread.
-    void post_open_model_selector(std::string search_term) {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak, search_term = std::move(search_term)]() mutable {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->spawn_flow(
-                    [self, search_term = std::move(search_term)]() mutable
-                    -> boost::asio::awaitable<void> {
-                        co_await self->handle_model_command(std::move(search_term));
-                    },
-                    "Native TUI model command failed");
-            }
-        });
+    /// Mark the frame dirty without rendering immediately.
+    void invalidate() override {
+        tui_.invalidate();
     }
 
-    void post_open_scoped_models_selector() {
+    // ── Model flows (pi interactive-mode.ts, #407; extraction #503) ──────
+    // The `/model`, `/models`, and Ctrl+P flows live in ModelFlowController;
+    // the state is its ModalPresenter and wires the host hooks here.
+
+    /// Wire the production host hooks for the model flows: gates read this
+    /// state's running/view facts, executor hops reuse post_from_view and
+    /// spawn_flow, and the current session resolves at execution time so
+    /// session replacement applies to flows in flight. All hooks capture the
+    /// state weakly; nothing here extends the state's lifetime.
+    [[nodiscard]] std::shared_ptr<ModelFlowController> make_model_flow_controller() {
         const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->spawn_flow(
-                    [self]() -> boost::asio::awaitable<void> {
-                        co_await self->show_scoped_models_selector();
-                    },
-                    "Native TUI scoped-models selector failed");
+        ModelFlowHostHooks hooks;
+        hooks.is_live = [weak] {
+            const auto self = weak.lock();
+            return self && self->running_ && self->view_ != nullptr;
+        };
+        hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
+            if (const auto self = weak.lock()) {
+                self->post_from_view(
+                    [action = std::move(action)](InteractiveState&) mutable { action(); });
             }
-        });
+        };
+        hooks.spawn_flow =
+            [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
+                   std::string failure_label) mutable {
+                if (const auto self = weak.lock()) {
+                    self->spawn_flow(std::move(start), std::move(failure_label));
+                }
+            };
+        hooks.current_session = [weak]() -> AgentSession* {
+            const auto self = weak.lock();
+            return self != nullptr ? self->session_ : nullptr;
+        };
+        // The controller is created after `theme_controller_` is emplaced and
+        // the optional is never reset, so the pointer stays valid for the
+        // state's lifetime (flows reach it only under the gates above).
+        hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& {
+            return theme->live_theme();
+        };
+        return std::make_shared<ModelFlowController>(
+            executor_,
+            *this,
+            std::weak_ptr<void>{weak_from_this()},
+            std::move(hooks),
+            keybindings_,
+            settings_manager_ ? &*settings_manager_ : nullptr);
     }
 
     // ── Session selector and fork flows (pi interactive-mode.ts G3) ──────
@@ -2482,7 +2438,7 @@ private:
                 if (const auto self = weak.lock()) {
                     self->post_from_view(
                         [slot, label = std::move(label)](InteractiveState& self) mutable {
-                            self.restore_editor_slot();
+                            self.restore_prompt_slot();
                             slot->resolve(std::move(label));
                         });
                 }
@@ -2490,12 +2446,12 @@ private:
             [weak, slot] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([slot](InteractiveState& self) {
-                        self.restore_editor_slot();
+                        self.restore_prompt_slot();
                         slot->resolve(std::unexpected(prompt_cancelled_error()));
                     });
                 }
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
 
         boost::system::error_code error;
         auto selected = co_await slot->channel.async_receive(
@@ -2503,7 +2459,7 @@ private:
         if (error) {
             co_return;
         }
-        restore_editor_slot();
+        restore_prompt_slot();
         if (!selected) {
             co_return;
         }
@@ -2682,8 +2638,7 @@ private:
         }
         owned_session_ = std::move(next);
         session_ = owned_session_.get();
-        model_completion_ = nullptr;
-        update_model_completion();
+        model_flows_->update_model_completion();
         auto subscribed = subscribe_to_session(weak_from_this());
         if (!subscribed) {
             return std::unexpected(subscribed.error());
@@ -2812,7 +2767,7 @@ private:
                 if (const auto self = weak.lock()) {
                     self->post_from_view(
                         [entry_id = std::move(entry_id)](InteractiveState& state) mutable {
-                            state.restore_editor_slot();
+                            state.restore_prompt_slot();
                             const auto shared = state.shared_from_this();
                             state.spawn_flow(
                                 [shared, entry_id = std::move(entry_id)]() mutable
@@ -2826,13 +2781,13 @@ private:
             },
             [weak] {
                 if (const auto self = weak.lock()) {
-                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                    self->post_from_view([](InteractiveState& state) { state.restore_prompt_slot(); });
                 }
             },
             [weak] {
                 if (const auto self = weak.lock()) self->post_invalidate();
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi `AgentSessionRuntime.fork` presentation: prepare the branch, create
@@ -2909,16 +2864,16 @@ private:
                     : std::unexpected(prompt_cancelled_error()));
             },
             [slot] { slot->resolve(std::unexpected(prompt_cancelled_error())); });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
 
         boost::system::error_code error;
         auto result = co_await slot->channel.async_receive(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
         if (error) {
-            restore_editor_slot();
+            restore_prompt_slot();
             co_return std::nullopt;
         }
-        restore_editor_slot();
+        restore_prompt_slot();
         if (!result) {
             co_return std::nullopt;
         }
@@ -2973,7 +2928,7 @@ private:
                 if (const auto self = weak.lock()) {
                     self->post_from_view(
                         [session_path = std::move(session_path)](InteractiveState& state) mutable {
-                            state.restore_editor_slot();
+                            state.restore_prompt_slot();
                             const auto shared = state.shared_from_this();
                             state.spawn_flow(
                                 [shared, session_path = std::move(session_path)]() mutable
@@ -2987,7 +2942,7 @@ private:
             },
             [weak] {
                 if (const auto self = weak.lock()) {
-                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                    self->post_from_view([](InteractiveState& state) { state.restore_prompt_slot(); });
                 }
             },
             [weak] {
@@ -3006,7 +2961,7 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_invalidate();
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi `showTreeSelector`: the session tree overlay in the editor slot
@@ -3043,7 +2998,7 @@ private:
                             // pi: selecting the current leaf is a no-op
                             // (nothing can move the leaf while the selector
                             // is open, so the open-time leaf is live).
-                            state.restore_editor_slot();
+                            state.restore_prompt_slot();
                             if (entry_id == leaf_id) {
                                 state.show_status("Already at this point");
                                 return;
@@ -3061,7 +3016,7 @@ private:
             },
             [weak] {
                 if (const auto self = weak.lock()) {
-                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                    self->post_from_view([](InteractiveState& state) { state.restore_prompt_slot(); });
                 }
             },
             [weak](std::string entry_id, std::optional<std::string> label) {
@@ -3091,7 +3046,7 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_invalidate();
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi tree `onCopy`: copy the selected entry's text with the pi statuses.
@@ -3150,32 +3105,6 @@ private:
         });
     }
 
-    /// pi `cycleModel` presentation: `Only one model in scope` / `Only one
-    /// model available` when the cycle cannot move, otherwise the
-    /// `Switched to <name> (thinking: <level>)` status; errors surface as
-    /// `Error: <text>` lines.
-    [[nodiscard]] boost::asio::awaitable<void> cycle_model(std::string direction) {
-        auto result = co_await session_->cycle_model(std::move(direction));
-        if (!result) {
-            show_error(combined_error_text(result.error()));
-            co_return;
-        }
-        if (!*result) {
-            show_status(
-                session_->scoped_models().empty() ? "Only one model available"
-                                                 : "Only one model in scope");
-            co_return;
-        }
-        const auto& cycle = **result;
-        update_model_completion();
-        const auto thinking_str =
-            cycle.model.reasoning && cycle.thinking_level != "off"
-            ? " (thinking: " + cycle.thinking_level + ")"
-            : "";
-        const auto label = cycle.model.name.empty() ? cycle.model.id : cycle.model.name;
-        show_status("Switched to " + label + thinking_str);
-    }
-
     /// pi `cycleThinkingLevel` presentation: `Current model does not support
     /// thinking` when the model has no reasoning, else
     /// `Thinking level: <level>`.
@@ -3190,237 +3119,6 @@ private:
             return;
         }
         show_status("Thinking level: " + **level);
-    }
-
-    /// pi `showModelSelector`: the model selector renders in the editor slot
-    /// (pi's `showSelector` editorContainer swap). Selecting a model runs
-    /// `session.setModel` on the executor and reports `Model: <id>`; the
-    /// settings default write rides the session path.
-    void show_model_selector(std::optional<std::string> initial_search_input) {
-        if (!running_ || view_ == nullptr || !session_->is_open() || !theme_controller_) return;
-        const auto current_model = session_->snapshot().agent_state.model;
-        const auto weak = weak_from_this();
-        auto selector = std::make_shared<ModelSelectorComponent>(
-            theme_controller_->live_theme(),
-            keybindings_->get(),
-            &current_model,
-            session_->model_runtime(),
-            executor_,
-            session_->scoped_models(),
-            [weak](ai::Model model) {
-                // Input-thread sink: post the session switch to the executor.
-                if (const auto self = weak.lock()) {
-                    self->post_from_view([model = std::move(model)](InteractiveState& state) mutable {
-                        state.spawn_flow(
-                            [state_self = state.shared_from_this(), model = std::move(model)]() mutable
-                            -> boost::asio::awaitable<void> {
-                                auto switched = co_await state_self->session_->set_model(std::move(model));
-                                if (!switched) {
-                                    state_self->show_error(combined_error_text(switched.error()));
-                                    co_return;
-                                }
-                                state_self->update_model_completion();
-                                state_self->restore_editor_slot();
-                                state_self->show_status("Model: " + state_self->session_->snapshot().agent_state.model.id);
-                            },
-                            "Native TUI model selection failed");
-                    });
-                }
-            },
-            [weak] {
-                if (const auto self = weak.lock()) {
-                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
-                }
-            },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_invalidate();
-            },
-            std::move(initial_search_input));
-        place_editor_replacement(std::move(selector));
-    }
-
-    /// pi `handleModelCommand`: no search term opens the selector; an exact
-    /// provider/model reference switches immediately (`Model: <id>`); anything
-    /// else opens the selector pre-filtered with the term.
-    [[nodiscard]] boost::asio::awaitable<void> handle_model_command(
-        std::string search_term) {
-        const auto term = trim_editor_submission(std::move(search_term));
-        if (term.empty()) {
-            show_model_selector(std::nullopt);
-            co_return;
-        }
-
-        // pi `getModelCandidates`: the scoped set when present, else a live
-        // availability refresh.
-        std::vector<ai::Model> candidates;
-        const auto scoped = session_->scoped_models();
-        if (!scoped.empty()) {
-            candidates.reserve(scoped.size());
-            for (const auto& entry : scoped) candidates.push_back(entry.model);
-        } else {
-            auto runtime = session_->model_runtime();
-            if (!runtime) co_return;
-            (void)runtime->refresh();
-            auto available = co_await runtime->get_available();
-            if (!available) {
-                show_error(combined_error_text(available.error()));
-                co_return;
-            }
-            candidates = std::move(*available);
-        }
-
-        if (const auto matched = find_exact_model_reference_match(term, candidates)) {
-            const auto model = *matched;
-            auto switched = co_await session_->set_model(model);
-            if (!switched) {
-                show_error(combined_error_text(switched.error()));
-                co_return;
-            }
-            update_model_completion();
-            show_status("Model: " + model.id);
-            co_return;
-        }
-        show_model_selector(term);
-    }
-
-    /// pi `showModelsSelector` / `updateSessionModels`/`onPersist`: the
-    /// scoped-models selector starts from the session scope, else the
-    /// settings `enabledModels` patterns resolved over the live availability
-    /// (no-match diagnostics become unavailable ids); changes stay
-    /// session-only until `app.models.save` persists them.
-    [[nodiscard]] boost::asio::awaitable<void> show_scoped_models_selector() {
-        if (!running_ || view_ == nullptr || !session_->is_open() || !theme_controller_) co_return;
-        auto runtime = session_->model_runtime();
-        if (!runtime) co_return;
-        // pi: refresh() then getAvailable().
-        (void)runtime->refresh();
-        auto available = co_await runtime->get_available();
-        if (!available) {
-            show_error(combined_error_text(available.error()));
-            co_return;
-        }
-        const auto all_models = std::move(*available);
-        std::set<std::string, std::less<>> all_model_ids;
-        for (const auto& model : all_models) {
-            all_model_ids.insert(model.provider + "/" + model.id);
-        }
-        const std::vector<std::string>* configured_patterns =
-            settings_manager_ && settings_manager_->settings().enabled_models
-            ? &*settings_manager_->settings().enabled_models
-            : nullptr;
-        const auto& session_scoped_models = session_->scoped_models();
-        if (all_models.empty() &&
-            (configured_patterns == nullptr || configured_patterns->empty()) &&
-            session_scoped_models.empty()) {
-            show_status("No models available");
-            co_return;
-        }
-
-        std::optional<ModelScopeResolution> configured_scope;
-        if (configured_patterns != nullptr && !configured_patterns->empty()) {
-            configured_scope =
-                resolve_model_scope_with_diagnostics(*configured_patterns, all_models);
-        }
-        auto current_enabled_ids = initial_selector_enabled_ids(
-            session_scoped_models, configured_scope);
-
-        const auto weak = weak_from_this();
-        const auto all_models_shared = std::make_shared<const std::vector<ai::Model>>(all_models);
-        const auto all_model_ids_shared = std::make_shared<const std::set<std::string, std::less<>>>(all_model_ids);
-        auto selector = std::make_shared<ScopedModelsSelectorComponent>(
-            theme_controller_->live_theme(),
-            keybindings_->get(),
-            all_models,
-            std::move(current_enabled_ids),
-            [weak, all_models = all_models_shared, ids = all_model_ids_shared](
-                std::optional<std::vector<std::string>> enabled_ids) {
-                // Input-thread sink: apply session-only scope changes on the
-                // executor (pi `updateSessionModels`).
-                if (const auto self = weak.lock()) {
-                    self->post_from_view(
-                        [enabled_ids = std::move(enabled_ids),
-                         all_models = std::move(all_models),
-                         ids = std::move(ids)](InteractiveState& state) mutable {
-                            state.apply_scoped_model_change(
-                                std::move(enabled_ids), *all_models, *ids);
-                        });
-                }
-            },
-            [weak, all_models = all_models_shared, ids = all_model_ids_shared](
-                std::optional<std::vector<std::string>> enabled_ids) {
-                // Input-thread sink: persist to settings on the executor (pi
-                // `onPersist`).
-                if (const auto self = weak.lock()) {
-                    self->post_from_view(
-                        [enabled_ids = std::move(enabled_ids),
-                         all_models = std::move(all_models),
-                         ids = std::move(ids)](InteractiveState& state) mutable {
-                            state.persist_scoped_models(
-                                std::move(enabled_ids), *all_models, *ids);
-                        });
-                }
-            },
-            [weak] {
-                if (const auto self = weak.lock()) {
-                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
-                }
-            });
-        place_editor_replacement(std::move(selector));
-    }
-
-    /// pi `updateSessionModels` (executor): session-only scope changes from
-    /// the scoped-models selector. An explicit list with at least one
-    /// available model and not every available model enabled resolves to the
-    /// session scope; otherwise the scope clears (all enabled / none enabled
-    /// = no filter).
-    void apply_scoped_model_change(
-        std::optional<std::vector<std::string>> enabled_ids,
-        const std::vector<ai::Model>& all_models,
-        const std::set<std::string, std::less<>>& all_model_ids) {
-        const bool has_enabled_available =
-            enabled_ids && std::any_of(
-                               enabled_ids->begin(),
-                               enabled_ids->end(),
-                               [&](const std::string& id) { return all_model_ids.contains(id); });
-        const bool all_available_enabled =
-            enabled_ids && std::all_of(
-                               all_model_ids.begin(),
-                               all_model_ids.end(),
-                               [&](const std::string& id) {
-                                   return std::find(
-                                              enabled_ids->begin(),
-                                              enabled_ids->end(),
-                                              id) != enabled_ids->end();
-                               });
-        if (enabled_ids && has_enabled_available && !all_available_enabled) {
-            session_->set_scoped_models(
-                resolve_model_scope(*enabled_ids, all_models));
-        } else {
-            session_->set_scoped_models({});
-        }
-        update_model_completion();
-        tui_.invalidate();
-    }
-
-    /// pi `onPersist` (executor): persist the current selection to the global
-    /// `enabledModels` settings field; an all-enabled selection clears the
-    /// field (pi writes `undefined`).
-    void persist_scoped_models(
-        std::optional<std::vector<std::string>> enabled_ids,
-        const std::vector<ai::Model>& all_models,
-        const std::set<std::string, std::less<>>& all_model_ids) {
-        const bool all_enabled =
-            enabled_ids && enabled_ids->size() == all_models.size() &&
-            std::all_of(
-                enabled_ids->begin(),
-                enabled_ids->end(),
-                [&](const std::string& id) { return all_model_ids.contains(id); });
-        const auto new_patterns =
-            !enabled_ids || all_enabled ? std::nullopt : std::move(enabled_ids);
-        if (settings_manager_) {
-            (void)settings_manager_->set_enabled_models(std::move(new_patterns));
-        }
-        show_status("Model selection saved to settings");
     }
 
     /// One captured open-browser delivery for the login dialog's auth-URL
@@ -3547,7 +3245,7 @@ private:
                     self->post_from_view(
                         [provider_options, subscription_label, selected = std::move(selected)](
                             InteractiveState& self) mutable {
-                            self.restore_editor_slot();
+                            self.restore_prompt_slot();
                             const auto type = selected == subscription_label
                                 ? AuthSelectorType::OAuth
                                 : AuthSelectorType::ApiKey;
@@ -3575,11 +3273,11 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([](InteractiveState& self) {
-                        self.restore_editor_slot();
+                        self.restore_prompt_slot();
                     });
                 }
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi `showLoginProviderSelector` over the OAuth selector.
@@ -3604,7 +3302,7 @@ private:
                     self->post_from_view(
                         [options, provider_id = std::move(provider_id), type](
                             InteractiveState& self) mutable {
-                            self.restore_editor_slot();
+                            self.restore_prompt_slot();
                             const auto found = std::find_if(
                                 options.begin(), options.end(), [&](const auto& option) {
                                     return option.id == provider_id && option.auth_type == type;
@@ -3623,7 +3321,7 @@ private:
             [weak, filter] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([filter](InteractiveState& self) {
-                        self.restore_editor_slot();
+                        self.restore_prompt_slot();
                         // pi: cancelling a filtered picker returns to the
                         // auth-type picker.
                         if (filter) self.show_login_auth_type_selector(std::nullopt);
@@ -3631,7 +3329,7 @@ private:
                 }
             },
             std::move(initial_search));
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi `startProviderLogin`: OAuth takes the OAuth dialog branch; an
@@ -3663,7 +3361,7 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([](InteractiveState& self) {
-                        self.restore_editor_slot();
+                        self.restore_prompt_slot();
                     });
                 }
             });
@@ -3672,7 +3370,7 @@ private:
                 " is configured outside cch.",
             {},
             true);
-        place_editor_replacement(std::move(dialog));
+        replace_prompt_slot(std::move(dialog));
     }
 
     /// pi `showLoginDialog` / `showApiKeyLoginDialog`: run the provider login
@@ -3690,7 +3388,7 @@ private:
             "Login to " + provider_name,
             dialog_invalidate_hook(),
             open_browser_hook());
-        place_editor_replacement(dialog);
+        replace_prompt_slot(dialog);
 
         ai::AuthInteraction interaction;
         interaction.stop_token = dialog->stop_token();
@@ -3709,7 +3407,7 @@ private:
         const auto completion_provider_id = provider_id;
         auto result = co_await runtime->login(
             std::move(provider_id), type, std::move(interaction));
-        restore_editor_slot();
+        restore_prompt_slot();
         if (result) {
             co_await complete_provider_authentication(
                 completion_provider_id, provider_name, type, previous_model);
@@ -3809,7 +3507,7 @@ private:
                         [slot, dialog, label = std::move(label), options = std::move(options)](
                             InteractiveState& self) mutable {
                             // pi restoreDialog, then resolve the option id.
-                            self.place_editor_replacement(dialog);
+                            self.replace_prompt_slot(dialog);
                             const auto found = std::find_if(
                                 options.begin(), options.end(), [&](const auto& option) {
                                     return option.label == label;
@@ -3825,12 +3523,12 @@ private:
             [weak, slot, dialog] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([slot, dialog](InteractiveState& self) mutable {
-                        self.place_editor_replacement(dialog);
+                        self.replace_prompt_slot(dialog);
                         slot->resolve(std::unexpected(prompt_cancelled_error()));
                     });
                 }
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
 
         // pi's per-prompt race: an aborted per-prompt token rejects without
         // touching the slot's UI (the flow's unwind restores the editor).
@@ -3945,7 +3643,7 @@ private:
                     self->post_from_view(
                         [options, provider_id = std::move(provider_id)](
                             InteractiveState& self) mutable {
-                            self.restore_editor_slot();
+                            self.restore_prompt_slot();
                             const auto found = std::find_if(
                                 options.begin(), options.end(), [&](const auto& option) {
                                     return option.id == provider_id;
@@ -3964,11 +3662,11 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) {
                     self->post_from_view([](InteractiveState& self) {
-                        self.restore_editor_slot();
+                        self.restore_prompt_slot();
                     });
                 }
             });
-        place_editor_replacement(std::move(selector));
+        replace_prompt_slot(std::move(selector));
     }
 
     /// pi's logout selection handler: local removal, availability refresh,
@@ -4071,14 +3769,14 @@ private:
             co_return;
         }
 
-        place_editor_replacement(make_reload_box(theme_controller_->live_theme()));
+        replace_prompt_slot(make_reload_box(theme_controller_->live_theme()));
         bool dismissed = false;
         const auto dismiss = [this, &dismissed] {
             if (dismissed) {
                 return;
             }
             dismissed = true;
-            restore_editor_slot();
+            restore_prompt_slot();
         };
 
         // 1. pi `session.reload()`: settings + resources re-read, System
@@ -4241,10 +3939,10 @@ private:
     void dispatch_modal_slash_command(SlashCommandInvocation invocation) {
         switch (invocation.command) {
         case SlashCommandId::Model:
-            post_open_model_selector(std::move(invocation.argument));
+            model_flows_->open_model_selector(std::move(invocation.argument));
             return;
         case SlashCommandId::Models:
-            post_open_scoped_models_selector();
+            model_flows_->open_scoped_models_selector();
             return;
         case SlashCommandId::Thinking:
             if (!invocation.argument.empty()) {
@@ -4993,9 +4691,9 @@ private:
     /// the settings selector. The view's chat renders with these values.
     bool hide_thinking_block_{false};
     std::size_t output_pad_{1};
-    /// Immutable `/model` completion snapshot, replaced on the executor by
-    /// `update_model_completion()` whenever the candidate set changes.
-    std::shared_ptr<const ModelCompletionSnapshot> model_completion_{};
+    /// The `/model`, `/models`, and Ctrl+P flows (#503), created once the
+    /// startup resources (live theme, settings manager, keybindings) exist.
+    std::shared_ptr<ModelFlowController> model_flows_;
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
     /// One move-only sink carrying closed application-level actions to the
