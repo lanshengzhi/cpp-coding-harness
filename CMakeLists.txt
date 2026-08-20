@@ -525,6 +525,13 @@ if(CCH_BUILD_TESTS)
         LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480")
 
     add_test(
+        NAME cch_warning_gate_unit
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/WarningGateTest.py
+    )
+    set_tests_properties(cch_warning_gate_unit PROPERTIES
+        LABELS "architecture;parity-gate;issue499")
+
+    add_test(
         NAME cch_parity_gate_fixture
         COMMAND
             ${CMAKE_COMMAND}

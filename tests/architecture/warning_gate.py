@@ -37,11 +37,50 @@ def load_compile_commands(path: str) -> list[dict]:
     return data
 
 
+def source_path(entry: dict) -> str:
+    """Return the compilation database source path resolved from its directory."""
+    file = entry.get("file", "")
+    directory = entry.get("directory", "")
+    if not isinstance(file, str) or not file:
+        return ""
+    if not isinstance(directory, str):
+        return ""
+    if os.path.isabs(file):
+        return file
+    return os.path.join(directory, file)
+
+
+def compile_arguments(entry: dict) -> list[str]:
+    """Extract compiler arguments from either spelling in the Clang format."""
+    if "arguments" in entry:
+        arguments = entry["arguments"]
+        if not isinstance(arguments, list) or not all(
+            isinstance(argument, str) for argument in arguments
+        ):
+            raise ValueError("arguments must be a list of strings")
+        if not arguments:
+            raise ValueError("arguments must not be empty")
+        return list(arguments)
+
+    command = entry.get("command")
+    if not isinstance(command, str) or not command:
+        raise ValueError("entry must contain command or arguments")
+    try:
+        arguments = shlex.split(command)
+    except ValueError as exc:
+        raise ValueError(f"command is not valid shell-escaped text: {exc}") from exc
+    if not arguments:
+        raise ValueError("command must not be empty")
+    return arguments
+
+
 def is_project_source(entry: dict, project_root: str, exclude_roots: list[str]) -> bool:
     """True when the entry's source file lives under the project root and not
     under an excluded root (for example the vcpkg installed include dir)."""
-    file = entry.get("file", "")
-    real = os.path.realpath(file)
+    source = source_path(entry)
+    if not source:
+        return False
+    real = os.path.realpath(source)
     root = os.path.realpath(project_root)
     if real != root and not real.startswith(root + os.sep):
         return False
@@ -54,24 +93,29 @@ def is_project_source(entry: dict, project_root: str, exclude_roots: list[str]) 
 
 def check_entry(entry: dict, ccache: bool) -> tuple[str, str]:
     """Recompile one entry with -Werror; return (source, diagnostic-or-empty)."""
-    command = entry.get("command", "")
+    source = source_path(entry)
     directory = entry.get("directory", "")
-    file = entry.get("file", "")
+    try:
+        invocation = compile_arguments(entry)
+    except ValueError as exc:
+        return source, f"invalid compile command: {exc}"
     # -Werror turns the project's -Wall -Wextra -Wpedantic profile into
     # errors; -fsyntax-only prevents any output from being written. ccache
-    # (when available) keeps repeat runs fast.
-    compiler = "ccache " if ccache else ""
-    invocation = f"{compiler}{command} -Werror -fsyntax-only"
+    # (when available) keeps repeat runs fast. Passing argv directly avoids
+    # reparsing arguments-list entries through a shell.
+    if ccache:
+        invocation.insert(0, "ccache")
+    invocation.extend(("-Werror", "-fsyntax-only"))
     try:
         result = subprocess.run(
-            invocation, shell=True, cwd=directory, capture_output=True, text=True
+            invocation, cwd=directory, capture_output=True, text=True
         )
-    except OSError as exc:
-        return file, f"could not run compile command: {exc}"
+    except (OSError, TypeError) as exc:
+        return source, f"could not run compile command: {exc}"
     if result.returncode != 0:
         diagnostic = result.stderr.strip() or result.stdout.strip()
-        return file, diagnostic or "compile command failed"
-    return file, ""
+        return source, diagnostic or "compile command failed"
+    return source, ""
 
 
 def main(argv: list[str] | None = None) -> int:
