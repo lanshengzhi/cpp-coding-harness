@@ -18,7 +18,13 @@ using namespace cch;
 namespace {
 
 harness::session::SessionMetadata metadata_for(const tests::TempWorkspace& workspace) {
-    return {"session-store-test", "2026-07-05T00:00:00Z", workspace.path(), "fake", "fake-model"};
+    return harness::session::SessionMetadata{
+        .session_id = "session-store-test",
+        .created_at = "2026-07-05T00:00:00Z",
+        .workspace = workspace.path(),
+        .provider = "fake",
+        .model = "fake-model",
+    };
 }
 
 ai::MessageVariant user_message(std::string content) {

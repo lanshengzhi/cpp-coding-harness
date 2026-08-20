@@ -2,7 +2,7 @@
 
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
-#include "SessionLeaf.hpp"
+#include "agent/harness/session/SessionLeaf.hpp"
 
 #include <algorithm>
 #include <set>

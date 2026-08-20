@@ -448,7 +448,13 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
         if (!calls.empty() && assistant->stop_reason == ai::AssistantStopReason::Length) {
             tool_results.reserve(calls.size());
             for (const auto& call : calls) {
-                CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(support::JsonValue{})}));
+                CCH_TRY_VOID(emit_agent_event(
+                    sink,
+                    ToolExecutionStartEvent{
+                        .tool_call_id = call.id,
+                        .tool_name = call.name,
+                        .args = call.arguments.value_or(support::JsonValue{}),
+                    }));
 
                 ai::ToolResultMessage result;
                 result.tool_call_id = call.id;
@@ -462,8 +468,14 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
                 AsyncToolExecutionResult execution_result;
                 execution_result.content = result.content;
                 execution_result.is_error = true;
-                CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionEndEvent{
-                    call.id, call.name, std::move(execution_result), true}));
+                CCH_TRY_VOID(emit_agent_event(
+                    sink,
+                    ToolExecutionEndEvent{
+                        .tool_call_id = call.id,
+                        .tool_name = call.name,
+                        .result = std::move(execution_result),
+                        .is_error = true,
+                    }));
                 CCH_TRY_VOID(emit_tool_result_message(sink, result));
                 tool_results.push_back(std::move(result));
             }
