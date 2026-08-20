@@ -24,6 +24,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -54,6 +56,8 @@ execute_with_update_lifetime(
     co_return result;
 }
 
+constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
+
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
     std::string message) {
@@ -79,20 +83,13 @@ execute_with_update_lifetime(
     };
 }
 
-[[nodiscard]] FinalizedToolCallResult abort_tool_call(
-    const ai::ToolCallContent& call,
-    AgentEventSink& sink) {
-    auto aborted_result = error_tool_result(call, "Operation aborted");
-    (void)emit_agent_event(
-        sink,
-        ToolExecutionEndEvent{
-            .tool_call_id = call.id,
-            .tool_name = call.name,
-            .result = execution_result_from(aborted_result),
-            .is_error = true,
-        });
+/// Build the aborted outcome for a call that never emitted a
+/// ToolExecutionStartEvent. No ToolExecutionEndEvent is emitted here:
+/// lifecycle events stay strictly paired, so an unstarted call produces only
+/// the aborted tool result.
+[[nodiscard]] FinalizedToolCallResult abort_tool_call(const ai::ToolCallContent& call) {
     return FinalizedToolCallResult{
-        .result = std::move(aborted_result),
+        .result = error_tool_result(call, std::string{kOperationAbortedMessage}),
         .call_terminate = false,
     };
 }
@@ -225,7 +222,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
 
     if (options_.stop_token.stop_requested()) {
         release_preparation();
-        co_return abort_tool_call(call, sink);
+        co_return abort_tool_call(call);
     }
 
     if (auto start_emit = emit_agent_event(
@@ -288,7 +285,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
 
             if (!blocked && options_.stop_token.stop_requested()) {
                 blocked = true;
-                tool_result = error_tool_result(call, "Operation aborted");
+                tool_result = error_tool_result(call, std::string{kOperationAbortedMessage});
             }
 
             if (!blocked) {
@@ -298,10 +295,22 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
                     const auto [permit_error] = co_await permits.concurrency->async_receive(
                         boost::asio::as_tuple(boost::asio::use_awaitable));
                     if (permit_error) {
-                        co_return std::unexpected(support::make_error(
+                        auto error = support::make_error(
                             support::ErrorCode::Tool,
                             "tool concurrency permit acquisition failed",
-                            permit_error.message()));
+                            permit_error.message());
+                        // A start event was already dispatched for this call;
+                        // close the lifecycle pair before failing the batch.
+                        (void)emit_agent_event(
+                            sink,
+                            ToolExecutionEndEvent{
+                                .tool_call_id = call.id,
+                                .tool_name = call.name,
+                                .result = execution_result_from(
+                                    error_tool_result(call, error.message)),
+                                .is_error = true,
+                            });
+                        co_return std::unexpected(std::move(error));
                     }
                 }
 
@@ -309,7 +318,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
                     if (permits.concurrency != nullptr) {
                         (void)permits.concurrency->try_send(boost::system::error_code{});
                     }
-                    tool_result = error_tool_result(call, "Operation aborted");
+                    tool_result = error_tool_result(call, std::string{kOperationAbortedMessage});
                     call_terminate = false;
                 } else {
                     AsyncToolExecutionResult outcome;
@@ -602,13 +611,15 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
             boost::asio::use_awaitable);
     }
 
-    AgentEventSink drain_sink{parallel_emit};
     for (std::size_t index = 0; index < calls.size(); ++index) {
         auto& finalized_call = state->finalized[index];
         if (finalized_call) {
             continue;
         }
-        finalized_call = abort_tool_call(calls[index], drain_sink);
+        // The batch wait finished without this task running, so no
+        // ToolExecutionStartEvent was dispatched for it; produce only the
+        // aborted result to keep lifecycle events strictly paired.
+        finalized_call = abort_tool_call(calls[index]);
     }
 
     {

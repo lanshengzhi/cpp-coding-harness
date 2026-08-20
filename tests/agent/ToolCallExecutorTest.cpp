@@ -254,6 +254,31 @@ std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) 
     return count;
 }
 
+/// Verify the issue #497 lifecycle pairing invariant: every
+/// ToolExecutionEndEvent is preceded by exactly one ToolExecutionStartEvent
+/// for the same tool call, and every started call is eventually ended.
+void check_tool_execution_events_strictly_paired(
+    const std::vector<agent::AgentLifecycleEvent>& events) {
+    std::vector<std::string> started_ids;
+    std::vector<std::string> ended_ids;
+    for (const auto& event : events) {
+        if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            CHECK(std::ranges::find(started_ids, start->tool_call_id) == started_ids.end());
+            CHECK(std::ranges::find(ended_ids, start->tool_call_id) == ended_ids.end());
+            started_ids.push_back(start->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            CHECK(std::ranges::find(started_ids, end->tool_call_id) != started_ids.end());
+            CHECK(std::ranges::find(ended_ids, end->tool_call_id) == ended_ids.end());
+            ended_ids.push_back(end->tool_call_id);
+        }
+    }
+    auto sorted_started = started_ids;
+    auto sorted_ended = ended_ids;
+    std::ranges::sort(sorted_started);
+    std::ranges::sort(sorted_ended);
+    CHECK(sorted_started == sorted_ended);
+}
+
 ai::ToolCallContent make_call(
     std::string id,
     std::string name,
@@ -1289,7 +1314,7 @@ TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[age
 
 TEST_CASE(
     "sequential cancellation during a hook does not start later calls",
-    "[agent][tool-executor][issue40]") {
+    "[agent][tool-executor][issue40][issue497]") {
     std::stop_source stop_source;
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(ai::Tool{
@@ -1329,11 +1354,12 @@ TEST_CASE(
     CHECK(execution.result->results[0].is_error);
     CHECK(count_events<agent::ToolExecutionStartEvent>(execution.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(execution.events) == 1);
+    check_tool_execution_events_strictly_paired(execution.events);
 }
 
 TEST_CASE(
     "bounded parallel cancellation leaves queued tool capabilities unstarted",
-    "[agent][tool-executor][issue40]") {
+    "[agent][tool-executor][issue40][issue497]") {
     std::stop_source stop_source;
     agent::ToolRegistry registry;
     auto tool = make_cancelling_parallel_tool(
@@ -1369,6 +1395,85 @@ TEST_CASE(
               "call-" + std::to_string(index + 1));
         CHECK(execution.result->results[index].is_error);
     }
+    check_tool_execution_events_strictly_paired(execution.events);
+}
+
+TEST_CASE(
+    "pre-aborted parallel batch produces aborted results without tool execution events",
+    "[agent][tool-executor][issue497]") {
+    std::stop_source stop_source;
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(
+        ai::Tool{
+            .name = "work",
+            .description = "Work",
+            .parameters = test::permissive_object_tool_argument_contract(),
+        },
+        agent::ToolConcurrency::ParallelSafe);
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    (void)stop_source.request_stop();
+    agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
+        .stop_token = stop_source.get_token(),
+        .execution = agent::BoundedParallelToolExecution{.max_in_flight = 2},
+    });
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "work"),
+        make_call("call-2", "work"),
+        make_call("call-3", "work"),
+    });
+
+    auto execution = run_executor(executor, assistant);
+
+    REQUIRE(execution.result);
+    CHECK(tool_ptr->invocation_count() == 0);
+    REQUIRE(execution.result->results.size() == 3);
+    for (std::size_t index = 0; index < execution.result->results.size(); ++index) {
+        const auto& result = execution.result->results[index];
+        CHECK(result.tool_call_id == "call-" + std::to_string(index + 1));
+        CHECK(result.is_error);
+        REQUIRE(result.content.size() == 1);
+        const auto* text = std::get_if<ai::TextContent>(&result.content.front());
+        REQUIRE(text != nullptr);
+        CHECK(text->text == "Operation aborted");
+    }
+    CHECK(count_events<agent::ToolExecutionStartEvent>(execution.events) == 0);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(execution.events) == 0);
+    check_tool_execution_events_strictly_paired(execution.events);
+}
+
+TEST_CASE(
+    "pre-aborted sequential batch emits no tool execution events",
+    "[agent][tool-executor][issue497]") {
+    std::stop_source stop_source;
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
+        .name = "work",
+        .description = "Work",
+        .parameters = test::permissive_object_tool_argument_contract(),
+    });
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    (void)stop_source.request_stop();
+    agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
+        .stop_token = stop_source.get_token(),
+        .execution = agent::SequentialToolExecution{},
+    });
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "work"),
+        make_call("call-2", "work"),
+    });
+
+    auto execution = run_executor(executor, assistant);
+
+    REQUIRE(execution.result);
+    CHECK(tool_ptr->invocation_count() == 0);
+    CHECK(execution.result->results.empty());
+    CHECK(count_events<agent::ToolExecutionStartEvent>(execution.events) == 0);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(execution.events) == 0);
+    check_tool_execution_events_strictly_paired(execution.events);
 }
 
 TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-executor]") {
