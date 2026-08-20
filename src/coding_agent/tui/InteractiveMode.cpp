@@ -54,6 +54,7 @@
 #include "coding_agent/tui/PromptSlot.hpp"
 #include "coding_agent/tui/ScopedModelsSelector.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
+#include "coding_agent/tui/SlashCommandRouter.hpp"
 #include "coding_agent/tui/SettingsSelector.hpp"
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
@@ -127,13 +128,6 @@ using interactive_view_detail::user_bash_editor_mode;
 using interactive_view_detail::editor_text_after_interrupt;
 using interactive_view_detail::thinking_border_token_for;
 using interactive_view_detail::queued_editor_text;
-
-/// The argument after an exact slash prefix (pi `text.slice(N).trim()` for
-/// the space-delimited `startsWith("/x ")` branch): `"/name  foo"` with
-/// `"/name "` yields `"foo"`.
-[[nodiscard]] std::string slash_argument(std::string_view text, std::string_view prefix) {
-    return trim_editor_submission(std::string{text.substr(prefix.size())});
-}
 
 /// `JSON.stringify`-shaped quoting for the `/name` normalization warning
 /// (pi `JSON.stringify(name)`): a double-quoted literal with the JSON
@@ -1816,8 +1810,9 @@ private:
     /// in-memory preview, a global-scope settings commit on confirm, and
     /// cancel-does-not-revert.
     void show_settings_selector() {
-        if (!running_ || view_ == nullptr || !session_->is_open() ||
-            !theme_controller_ || !keybindings_ || !settings_manager_) {
+        if (!running_ || view_ == nullptr || session_ == nullptr ||
+            !session_->is_open() || !theme_controller_ || !keybindings_ ||
+            !settings_manager_) {
             return;
         }
         if (active_overlay_ != nullptr) return;
@@ -1996,6 +1991,16 @@ private:
         const auto snapshot = session_->snapshot();
         view_->initialize(snapshot);
         view_->set_pending_input(snapshot.agent_state.input_queues);
+        tui_.invalidate();
+    }
+
+    void show_help_command() {
+        if (view_ == nullptr) return;
+        view_->append_frontend_message(
+            "Available commands:\n"
+            "/clear /quit /copy /session /hotkeys /settings /help\n"
+            "/model /models /thinking /login /logout /resume /fork\n"
+            "/tree /reload /compact");
         tui_.invalidate();
     }
 
@@ -2191,16 +2196,6 @@ private:
         });
     }
 
-    /// Post the main-editor `app.message.copy` flow (pi `handleCopyCommand`).
-    void post_copy_last_message() {
-        const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) {
-                self->handle_copy_last_message();
-            }
-        });
-    }
-
     /// pi `handleCtrlZ`: stop the TUI (restore the terminal), ignore SIGINT
     /// while suspended, keep the process alive, and stop the process group
     /// with SIGTSTP; the SIGCONT handler restarts the TUI and forces a
@@ -2333,11 +2328,7 @@ private:
     /// pi `handleNameCommand`: `/name <name>` sanitizes and persists the
     /// `session_info` entry and reports pi's statuses; a bare `/name` shows
     /// the current name or the usage warning.
-    void handle_name_command(std::string_view text) {
-        // pi `text.replace(/^\/name\s*/, "").trim()`.
-        const auto name = text.starts_with("/name ")
-            ? slash_argument(text, "/name ")
-            : std::string{};
+    void handle_name_command(std::string name) {
         if (name.empty()) {
             const auto current = session_->session_name();
             if (current && !current->empty()) {
@@ -4155,102 +4146,195 @@ private:
         dismiss();
     }
 
-    /// pi `setupEditorSubmitHandler` slash dispatch: the if-chain over the
-    /// 17 Supported builtins (ADR 0036 G4), each binding to its component or
-    /// runtime capability with pi's verbatim strings. `/export` `/import`
-    /// `/share` `/changelog` `/clone`, `/debug`, the easter eggs, and any
-    /// other unrecognized slash text return false and pass through as an
-    /// ordinary Agent Prompt (pi has no general slash parser). The editor has
-    /// already cleared on submit, so no branch clears it (pi's
-    /// `editor.setText("")` is the editor's own submit behavior).
-    [[nodiscard]] bool dispatch_command(std::string_view text) {
-        if (!running_ || view_ == nullptr) return false;
-        if (text == "/settings") {
-            show_settings_selector();
-            return true;
+    /// Dynamic prompt-template and skill invocations remain ordinary Agent
+    /// Prompt submissions after built-in routing. Built-in names win over
+    /// resources with the same spelling, matching the autocomplete collision
+    /// rule.
+    [[nodiscard]] bool is_dynamic_slash_command(std::string_view command) const {
+        if (session_ == nullptr) return false;
+        for (const auto& prompt_template : session_->templates()) {
+            if (prompt_template.name == command) return true;
         }
-        if (text == "/scoped-models") {
-            post_open_scoped_models_selector();
-            return true;
+        if (!settings_manager_ || !settings_manager_->get_enable_skill_commands() ||
+            !command.starts_with("skill:")) {
+            return false;
         }
-        if (text == "/model" || text.starts_with("/model ")) {
-            const auto search_term =
-                text.starts_with("/model ") ? slash_argument(text, "/model ") : std::string{};
-            post_open_model_selector(std::move(search_term));
-            return true;
+        const auto skill_name = command.substr(std::string_view{"skill:"}.size());
+        if (skill_name.empty()) return false;
+        for (const auto& skill : session_->skills()) {
+            if (skill.name == skill_name) return true;
         }
-        if (text == "/copy") {
-            post_copy_last_message();
-            return true;
-        }
-        if (text == "/name" || text.starts_with("/name ")) {
-            handle_name_command(text);
-            return true;
-        }
-        if (text == "/session") {
-            handle_session_command();
-            return true;
-        }
-        if (text == "/hotkeys") {
-            open_hotkeys();
-            return true;
-        }
-        if (text == "/fork") {
-            post_fork_session();
-            return true;
-        }
-        if (text == "/tree") {
-            post_open_tree_selector();
-            return true;
-        }
-        if (text == "/trust") {
-            show_trust_selector();
-            return true;
-        }
-        if (text == "/login" || text.starts_with("/login ")) {
-            const auto provider_ref =
-                text.starts_with("/login ") ? slash_argument(text, "/login ") : std::string{};
-            open_login(std::move(provider_ref));
-            return true;
-        }
-        if (text == "/logout") {
-            open_logout();
-            return true;
-        }
-        if (text == "/new") {
+        return false;
+    }
+
+    [[nodiscard]] support::ExpectedVoid execute_immediate_slash_command(
+        const SlashCommandInvocation& invocation) {
+        switch (invocation.command) {
+        case SlashCommandId::Clear:
+            if (session_ == nullptr) {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
+                    "No active session for /clear"));
+            }
             post_new_session();
-            return true;
+            return {};
+        case SlashCommandId::Quit:
+            if (view_ != nullptr) {
+                tui_.invalidate();
+                render();
+            }
+            request_exit();
+            return {};
+        case SlashCommandId::Copy:
+            if (session_ == nullptr) {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
+                    "No active session for /copy"));
+            }
+            handle_copy_last_message();
+            return {};
+        case SlashCommandId::Session:
+            if (session_ == nullptr) {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
+                    "No active session for /session"));
+            }
+            handle_session_command();
+            return {};
+        case SlashCommandId::Hotkeys:
+            open_hotkeys();
+            return {};
+        case SlashCommandId::Settings:
+            show_settings_selector();
+            return {};
+        case SlashCommandId::Help:
+            show_help_command();
+            return {};
+        case SlashCommandId::Name:
+            if (session_ == nullptr) {
+                return std::unexpected(support::make_error(
+                    support::ErrorCode::Session,
+                    "No active session for /name"));
+            }
+            handle_name_command(invocation.argument);
+            return {};
+        case SlashCommandId::Model:
+        case SlashCommandId::Models:
+        case SlashCommandId::Thinking:
+        case SlashCommandId::Login:
+        case SlashCommandId::Logout:
+        case SlashCommandId::Resume:
+        case SlashCommandId::Fork:
+        case SlashCommandId::Tree:
+        case SlashCommandId::Reload:
+        case SlashCommandId::Compact:
+        case SlashCommandId::Trust:
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Validation,
+                "Command is not an immediate slash command"));
         }
-        if (text == "/compact" || text.starts_with("/compact ")) {
-            const auto custom_instructions =
-                text.starts_with("/compact ")
-                ? slash_argument(text, "/compact ")
-                : std::string{};
-            post_compact(std::move(custom_instructions));
-            return true;
-        }
-        if (text == "/resume") {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Unknown immediate slash command"));
+    }
+
+    void dispatch_modal_slash_command(SlashCommandInvocation invocation) {
+        switch (invocation.command) {
+        case SlashCommandId::Model:
+            post_open_model_selector(std::move(invocation.argument));
+            return;
+        case SlashCommandId::Models:
+            post_open_scoped_models_selector();
+            return;
+        case SlashCommandId::Thinking:
+            if (!invocation.argument.empty()) {
+                if (session_ == nullptr) {
+                    show_error("No active session for /thinking");
+                    return;
+                }
+                if (auto applied = session_->set_thinking_level(invocation.argument);
+                    !applied) {
+                    show_error(combined_error_text(applied.error()));
+                    return;
+                }
+            }
+            show_settings_selector();
+            return;
+        case SlashCommandId::Login:
+            open_login(std::move(invocation.argument));
+            return;
+        case SlashCommandId::Logout:
+            open_logout();
+            return;
+        case SlashCommandId::Resume:
             post_resume_session();
-            return true;
-        }
-        if (text == "/reload") {
+            return;
+        case SlashCommandId::Fork:
+            post_fork_session();
+            return;
+        case SlashCommandId::Tree:
+            post_open_tree_selector();
+            return;
+        case SlashCommandId::Reload: {
             const auto shared = shared_from_this();
             spawn_flow(
                 [shared]() -> boost::asio::awaitable<void> {
                     co_await shared->handle_reload();
                 },
                 "Native TUI reload flow failed");
+            return;
+        }
+        case SlashCommandId::Compact:
+            post_compact(std::move(invocation.argument));
+            return;
+        case SlashCommandId::Trust:
+            show_trust_selector();
+            return;
+        case SlashCommandId::Clear:
+        case SlashCommandId::Quit:
+        case SlashCommandId::Copy:
+        case SlashCommandId::Session:
+        case SlashCommandId::Hotkeys:
+        case SlashCommandId::Settings:
+        case SlashCommandId::Help:
+        case SlashCommandId::Name:
+            show_error(
+                "Immediate slash command was routed as a modal command");
+            return;
+        }
+    }
+
+    /// Route built-in slash commands through the deep SlashCommandRouter. The
+    /// router executes in-place commands through one small context seam and
+    /// returns modal requests as passive values; this method only binds those
+    /// values to the existing Native TUI flows.
+    [[nodiscard]] bool dispatch_command(std::string_view text) {
+        if (!running_ || view_ == nullptr) return false;
+
+        SlashCommandExecutionContext context;
+        context.execute_immediate = [this](const SlashCommandInvocation& invocation) {
+            return execute_immediate_slash_command(invocation);
+        };
+        context.allow_unrecognized = [this](std::string_view command) {
+            // Absolute paths such as the clipboard image paths inserted into
+            // the editor contain a second slash and are ordinary prompt
+            // text, not command tokens.
+            return command.find('/') != std::string_view::npos ||
+                is_dynamic_slash_command(command);
+        };
+
+        auto routed = slash_command_router_.route(text, context);
+        if (std::holds_alternative<SlashCommandPassThrough>(routed)) {
+            return false;
+        }
+        if (auto* error = std::get_if<SlashCommandRouteError>(&routed)) {
+            show_error(std::move(error->message));
             return true;
         }
-        if (text == "/quit") {
-            if (view_ != nullptr) {
-                tui_.invalidate();
-                render();
-            }
-            request_exit();
-            return true;
+        if (auto* modal = std::get_if<SlashCommandModalResult>(&routed)) {
+            dispatch_modal_slash_command(std::move(modal->invocation));
         }
-        return false;
+        return true;
     }
 
     // ── Interrupt admission (pi onEscape precedence, folded from the
@@ -4859,7 +4943,7 @@ private:
     void request_exit() {
         if (!running_ || exit_requested_) return;
         exit_requested_ = true;
-        session_->close();
+        if (session_ != nullptr) session_->close();
         if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
             signal_exit();
         }
@@ -5000,6 +5084,7 @@ private:
     FooterDataProvider footer_data_provider_{std::filesystem::path{}};
     InteractiveView* view_{nullptr}; // aliases the child owned by tui_.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
+    SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
     std::atomic<bool> user_bash_active_{false};

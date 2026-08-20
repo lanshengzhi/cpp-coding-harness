@@ -335,6 +335,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/OpenBrowser.cpp
         src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp
+        src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
         src/coding_agent/tui/SettingsSelector.cpp
@@ -941,6 +942,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/OAuthSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
+        tests/coding_agent/tui/SlashCommandRouterTest.cpp
         tests/coding_agent/tui/SessionSelectorComponentTest.cpp
         tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp
         tests/coding_agent/tui/SessionSelectorSearchTest.cpp

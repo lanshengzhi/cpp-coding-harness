@@ -3209,8 +3209,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Native TUI dispatches pi's if-chain over the 17 Supported builtins without changing Agent Session history",
-    "[coding_agent][tui][commands][issue60][issue419]") {
+    "Native TUI routes slash commands without submitting builtins as Agent Prompts",
+    "[coding_agent][tui][commands][issue502]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
@@ -3268,31 +3268,31 @@ TEST_CASE(
     REQUIRE(terminal.flush_input());
     drain_ready(io);
 
-    // The Deleted slashes (`/help` `/commands` `/clear` `/exit`) and unknown
-    // slash text pass through as an ordinary Agent Prompt (ADR 0036 G4).
+    // Builtins execute in place: help renders its command summary, malformed
+    // arguments are rejected, clear invokes the session action seam, and an
+    // unknown slash command produces a user-visible routing error.
     REQUIRE(terminal.inject_input("/help\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 0);
     screen = visible_screen(terminal);
-    CHECK(screen.find("fake: /help") != std::string::npos);
-    CHECK(screen.find("Available commands:") == std::string::npos);
+    CHECK(screen.find("Available commands:") != std::string::npos);
 
     REQUIRE(terminal.inject_input("/commands session\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 4);
-    CHECK(visible_screen(terminal).find("Command: /session") == std::string::npos);
+    CHECK(created->session->message_count() == 0);
+    CHECK(visible_screen(terminal).find("does not accept arguments") != std::string::npos);
 
     (void)terminal.check_clear_screen_called();
     REQUIRE(terminal.inject_input("/clear\r"));
     drain_ready(io);
     CHECK_FALSE(terminal.check_clear_screen_called());
-    CHECK(created->session->message_count() == 6);
+    CHECK(created->session->message_count() == 0);
 
     REQUIRE(terminal.inject_input("/missing\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 8);
+    CHECK(created->session->message_count() == 0);
     screen = visible_screen(terminal);
-    CHECK(screen.find("fake: /missing") != std::string::npos);
+    CHECK(screen.find("Unknown slash command '/missing'") != std::string::npos);
     CHECK(screen.find("Session Info") == std::string::npos);
 
     REQUIRE(terminal.inject_input("/quit\r"));
