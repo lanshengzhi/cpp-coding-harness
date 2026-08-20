@@ -2,7 +2,7 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "ai/providers/FakeProvider.hpp"
 
-#include "agent/harness/session/JsonlSessionStore.hpp"
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -58,10 +58,10 @@ support::Expected<runtime::OpenSession> open_resumed_session(
 TEST_CASE("resumed session uses tree context for linear sessions", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "linear.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")).status);
-    REQUIRE(store->append(user_msg("second")).status);
+    REQUIRE(store->append(user_msg("first")).has_value());
+    REQUIRE(store->append(user_msg("second")).has_value());
 
     auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
@@ -80,21 +80,21 @@ TEST_CASE("resumed session uses tree context for linear sessions", "[coding-agen
 TEST_CASE("resumed session uses compaction tree context", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "compact.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("msg1")).status);
-    REQUIRE(store->append(user_msg("msg2")).status);
-    REQUIRE(store->append(user_msg("msg3")).status);
+    REQUIRE(store->append(user_msg("msg1")).has_value());
+    REQUIRE(store->append(user_msg("msg2")).has_value());
+    REQUIRE(store->append(user_msg("msg3")).has_value());
 
-    auto pre = harness::session::JsonlSessionStore::load(path);
+    auto pre = harness::session::SessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 4);
     const auto msg3_id = pre->entries[3].entry_id;
 
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
     REQUIRE(resumed->append_compaction(std::nullopt, "summary of msg1-2", msg3_id, 1000, std::nullopt, std::nullopt));
-    REQUIRE(resumed->append(user_msg("msg4")).status);
+    REQUIRE(resumed->append(user_msg("msg4")).has_value());
 
     auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
@@ -109,18 +109,18 @@ TEST_CASE("resumed session uses compaction tree context", "[coding-agent][runtim
 TEST_CASE("resumed session uses active leaf path", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "active-leaf.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")).status);
-    REQUIRE(store->append(user_msg("second")).status);
-    REQUIRE(store->append(user_msg("third")).status);
+    REQUIRE(store->append(user_msg("first")).has_value());
+    REQUIRE(store->append(user_msg("second")).has_value());
+    REQUIRE(store->append(user_msg("third")).has_value());
 
-    auto pre = harness::session::JsonlSessionStore::load(path);
+    auto pre = harness::session::SessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 4);
     const auto first_id = pre->entries[1].entry_id;
 
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
     REQUIRE(resumed->append_leaf(std::nullopt, first_id));
 
@@ -134,18 +134,18 @@ TEST_CASE("resumed session uses active leaf path", "[coding-agent][runtime][sess
 TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-continuation.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")).status);
-    REQUIRE(store->append(user_msg("second")).status);
-    REQUIRE(store->append(user_msg("third")).status);
+    REQUIRE(store->append(user_msg("first")).has_value());
+    REQUIRE(store->append(user_msg("second")).has_value());
+    REQUIRE(store->append(user_msg("third")).has_value());
 
-    auto pre = harness::session::JsonlSessionStore::load(path);
+    auto pre = harness::session::SessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 4);
     const auto first_id = pre->entries[1].entry_id;
 
-    auto resumed_store = harness::session::JsonlSessionStore::open_existing(path);
+    auto resumed_store = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed_store);
     REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
 
@@ -179,18 +179,18 @@ TEST_CASE(
     "[coding-agent][runtime][session][persistence-failure]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-partial-append.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")).status);
-    REQUIRE(store->append(user_msg("inactive second")).status);
-    REQUIRE(store->append(user_msg("inactive third")).status);
+    REQUIRE(store->append(user_msg("first")).has_value());
+    REQUIRE(store->append(user_msg("inactive second")).has_value());
+    REQUIRE(store->append(user_msg("inactive third")).has_value());
 
-    auto loaded_before_resume = harness::session::JsonlSessionStore::load(path);
+    auto loaded_before_resume = harness::session::SessionStore::load(path);
     REQUIRE(loaded_before_resume);
     REQUIRE(loaded_before_resume->entries.size() >= 4);
     const auto first_id = loaded_before_resume->entries[1].entry_id;
 
-    auto resumed_store = harness::session::JsonlSessionStore::open_existing(path);
+    auto resumed_store = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed_store);
     REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
 
@@ -248,12 +248,12 @@ TEST_CASE(
 TEST_CASE("resumed session ignores invalid leaf target", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "invalid-leaf.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")).status);
-    REQUIRE(store->append(user_msg("second")).status);
+    REQUIRE(store->append(user_msg("first")).has_value());
+    REQUIRE(store->append(user_msg("second")).has_value());
 
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
     REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
 
@@ -268,19 +268,19 @@ TEST_CASE("resumed session ignores invalid leaf target", "[coding-agent][runtime
 TEST_CASE("resumed session topology follows active path only", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "inactive-tree-data.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
-    REQUIRE(store->append(user_msg("first")).status);
-    REQUIRE(store->append(user_msg("second")).status);
-    REQUIRE(store->append(user_msg("third")).status);
+    REQUIRE(store->append(user_msg("first")).has_value());
+    REQUIRE(store->append(user_msg("second")).has_value());
+    REQUIRE(store->append(user_msg("third")).has_value());
 
-    auto pre = harness::session::JsonlSessionStore::load(path);
+    auto pre = harness::session::SessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 4);
     const auto first_id = pre->entries[1].entry_id;
     const auto third_id = pre->entries[3].entry_id;
 
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
     REQUIRE(resumed->append_branch_summary(first_id, third_id, "inactive branch", std::nullopt, std::nullopt));
     REQUIRE(resumed->append_compaction(first_id, "inactive compaction", third_id, 1000, std::nullopt, std::nullopt));
@@ -298,11 +298,11 @@ TEST_CASE("resumed session topology follows active path only", "[coding-agent][r
 TEST_CASE("resumed session carries effective model and thinking level", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "context-state.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
     REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
-    REQUIRE(store->append(user_msg("hello")).status);
+    REQUIRE(store->append(user_msg("hello")).has_value());
 
     auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);

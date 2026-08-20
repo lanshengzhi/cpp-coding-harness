@@ -5,7 +5,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include "agent/harness/session/JsonlSessionStore.hpp"
+#include <cch/agent/harness/session/SessionStore.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -305,7 +305,7 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[0]));
     CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[1]));
 
-    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    auto durable = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
     CHECK(durable->messages.size() == 1);
     created->session->close();
@@ -315,19 +315,19 @@ TEST_CASE(
     "Frontend resumed snapshot reflects compacted active-path context",
     "[sdk][snapshot][resume][issue42]") {
     TestPaths paths;
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         paths.session_file,
         test_metadata(paths));
     REQUIRE(store.has_value());
-    REQUIRE(store->append(user_message("before compaction")).status);
-    REQUIRE(store->append(user_message("kept")).status);
+    REQUIRE(store->append(user_message("before compaction")).has_value());
+    REQUIRE(store->append(user_message("kept")).has_value());
 
-    auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->entries.size() >= 3);
     const auto kept_id = loaded->entries[2].entry_id;
 
-    auto resumed_store = harness::session::JsonlSessionStore::open_existing(paths.session_file);
+    auto resumed_store = harness::session::SessionStore::open_existing(paths.session_file);
     REQUIRE(resumed_store.has_value());
     REQUIRE(resumed_store->append_compaction(
         std::nullopt,
@@ -336,7 +336,7 @@ TEST_CASE(
         1000,
         std::nullopt,
         std::nullopt));
-    REQUIRE(resumed_store->append(user_message("after compaction")).status);
+    REQUIRE(resumed_store->append(user_message("after compaction")).has_value());
 
     auto resumed = resume_for_frontend(paths);
     REQUIRE(resumed.has_value());
@@ -357,11 +357,11 @@ TEST_CASE(
     "Frontend resumed snapshot preserves branch-summary active-path meaning",
     "[sdk][snapshot][resume][issue42]") {
     TestPaths paths;
-    auto store = harness::session::JsonlSessionStore::create_new(
+    auto store = harness::session::SessionStore::create_new(
         paths.session_file,
         test_metadata(paths));
     REQUIRE(store.has_value());
-    REQUIRE(store->append(user_message("branch root")).status);
+    REQUIRE(store->append(user_message("branch root")).has_value());
     REQUIRE(store->append_branch_summary(
         std::nullopt,
         "abandoned-leaf",

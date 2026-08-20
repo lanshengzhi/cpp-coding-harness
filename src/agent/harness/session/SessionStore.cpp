@@ -178,6 +178,26 @@ support::ExpectedVoid SessionStore::append_compaction(
     });
 }
 
+support::ExpectedVoid SessionStore::append_branch_summary(
+    std::optional<std::string> parent_id,
+    std::string from_id,
+    std::string summary,
+    std::optional<support::JsonValue> details,
+    std::optional<bool> from_hook) {
+    return dispatch_append([&](StorageVariant& store) {
+        return std::visit(
+            [&](auto& active) {
+                return active.append_branch_summary(
+                    std::move(parent_id),
+                    std::move(from_id),
+                    std::move(summary),
+                    std::move(details),
+                    from_hook);
+            },
+            store);
+    });
+}
+
 support::ExpectedVoid SessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
@@ -278,6 +298,12 @@ std::optional<std::filesystem::path> SessionStore::path() const {
         return jsonl->path();
     }
     return std::nullopt;
+}
+
+const SessionMetadata& SessionStore::metadata() const {
+    // The metadata is fixed at construction (the live tree owns the header
+    // copy), so this read does not need the append lock.
+    return impl_->tree.metadata();
 }
 
 } // namespace cch::harness::session

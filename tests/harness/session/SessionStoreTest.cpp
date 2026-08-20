@@ -45,6 +45,50 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "in-memory Session Store defaults the session metadata",
+    "[harness][session][store][issue494]") {
+    // The zero-argument form mints an empty SessionMetadata header.
+    auto store = harness::session::SessionStore::in_memory();
+    CHECK(store.metadata().session_id.empty());
+    CHECK(store.metadata().created_at.empty());
+    CHECK(store.metadata().workspace.empty());
+    CHECK(store.metadata().provider.empty());
+    CHECK(store.metadata().model.empty());
+    CHECK_FALSE(store.metadata().parent_session.has_value());
+
+    // The accessor contract is a borrowed const reference (spec #493).
+    static_assert(std::is_same_v<
+                  decltype(std::declval<const harness::session::SessionStore&>().metadata()),
+                  const harness::session::SessionMetadata&>);
+}
+
+TEST_CASE(
+    "Session Store metadata returns the construction header for both alternatives",
+    "[harness][session][store][issue494]") {
+    tests::TempWorkspace workspace;
+
+    auto memory = harness::session::SessionStore::in_memory(metadata_for(workspace));
+    CHECK(memory.metadata().session_id == "session-store-test");
+    CHECK(memory.metadata().created_at == "2026-07-05T00:00:00Z");
+    CHECK(memory.metadata().workspace == workspace.path());
+    CHECK(memory.metadata().provider == "fake");
+    CHECK(memory.metadata().model == "fake-model");
+
+    const auto path = workspace.path() / "meta.jsonl";
+    auto created = harness::session::SessionStore::create_new(
+        path, metadata_for(workspace));
+    REQUIRE(created.has_value());
+    CHECK(created->metadata().session_id == "session-store-test");
+    CHECK(created->metadata().model == "fake-model");
+
+    // An opened store reports the persisted header.
+    auto opened = harness::session::SessionStore::open_existing(path);
+    REQUIRE(opened.has_value());
+    CHECK(opened->metadata().session_id == "session-store-test");
+    CHECK(opened->metadata().workspace == workspace.path());
+}
+
+TEST_CASE(
     "in-memory Session Store maintains a live tree without a session file",
     "[harness][session][store][issue464][issue490]") {
     tests::TempWorkspace workspace;
@@ -212,6 +256,71 @@ TEST_CASE(
         for (const auto& child : node->children) stack.push_back(&child);
     }
     CHECK(found_leaf);
+}
+
+TEST_CASE(
+    "Session Store branch summary persists and joins the active-path context",
+    "[harness][session][store][issue494]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "branch-summary.jsonl";
+    auto created = harness::session::SessionStore::create_new(
+        path, metadata_for(workspace));
+    REQUIRE(created.has_value());
+    auto store = std::move(*created);
+
+    REQUIRE(store.append(user_message("branch root")).has_value());
+    // pi `appendBranchSummary`: the summary of the abandoned branch hangs
+    // on the active path and becomes the leaf.
+    REQUIRE(store
+                .append_branch_summary(
+                    std::nullopt,
+                    "abandoned-leaf",
+                    "summary of abandoned branch",
+                    std::nullopt,
+                    std::nullopt)
+                .has_value());
+
+    // The live tree mirrors the append without re-reading the file.
+    const auto context = store.build_context();
+    REQUIRE(context.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::UserMessage>(context.messages[0]));
+    const auto* summary = std::get_if<ai::BranchSummaryMessage>(&context.messages[1]);
+    REQUIRE(summary != nullptr);
+    CHECK(summary->summary == "summary of abandoned branch");
+
+    // The summary entry is durable: a fresh load parses it back.
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->entries.size() == 3);
+    const auto& persisted = loaded->entries[2];
+    CHECK(persisted.kind == harness::session::SessionEntryKind::BranchSummary);
+    const auto* value =
+        std::get_if<harness::session::BranchSummaryEntryValue>(&persisted.value);
+    REQUIRE(value != nullptr);
+    CHECK(value->from_id == "abandoned-leaf");
+    CHECK(value->summary == "summary of abandoned branch");
+}
+
+TEST_CASE(
+    "in-memory Session Store branch summary joins the live tree without disk I/O",
+    "[harness][session][store][issue494]") {
+    auto store = harness::session::SessionStore::in_memory();
+    REQUIRE(store.append(user_message("branch root")).has_value());
+    REQUIRE(store
+                .append_branch_summary(
+                    std::nullopt,
+                    "abandoned-leaf",
+                    "in-memory branch summary",
+                    std::nullopt,
+                    std::nullopt)
+                .has_value());
+
+    CHECK_FALSE(store.path().has_value());
+    const auto context = store.build_context();
+    REQUIRE(context.messages.size() == 2);
+    const auto* summary = std::get_if<ai::BranchSummaryMessage>(&context.messages[1]);
+    REQUIRE(summary != nullptr);
+    CHECK(summary->summary == "in-memory branch summary");
 }
 
 TEST_CASE(

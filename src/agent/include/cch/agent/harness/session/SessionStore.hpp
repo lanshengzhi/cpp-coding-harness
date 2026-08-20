@@ -57,7 +57,7 @@ public:
         const std::filesystem::path& path);
     /// The in-memory alternative: appends update the live tree without disk
     /// I/O and path() is empty (in-memory sessions are not resumable, #409).
-    [[nodiscard]] static SessionStore in_memory(SessionMetadata metadata);
+    [[nodiscard]] static SessionStore in_memory(SessionMetadata metadata = {});
     /// One-shot read of a session file that is NOT the live session (the
     /// fork flows parse foreign files). Never use it to query the live
     /// session — the cached tree already answers those queries.
@@ -96,6 +96,14 @@ public:
         std::optional<bool> from_hook,
         std::vector<ai::MessageVariant> retained_tail = {},
         std::optional<ai::Usage> usage = std::nullopt);
+    /// pi `appendBranchSummary`: record the summary of an abandoned branch
+    /// (`from_id` is the abandoned leaf).
+    [[nodiscard]] support::ExpectedVoid append_branch_summary(
+        std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook);
     [[nodiscard]] support::ExpectedVoid append_session_info(
         std::optional<std::string> parent_id,
         std::string name);
@@ -151,6 +159,8 @@ public:
 
     /// The JSONL session file path; empty for in-memory sessions.
     [[nodiscard]] std::optional<std::filesystem::path> path() const;
+    /// The session header metadata, fixed at create/open time.
+    [[nodiscard]] const SessionMetadata& metadata() const;
 
 private:
     struct Impl;

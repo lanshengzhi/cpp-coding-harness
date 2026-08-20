@@ -52,6 +52,12 @@ public:
         std::optional<bool> from_hook,
         std::vector<ai::MessageVariant> retained_tail = {},
         std::optional<ai::Usage> usage = std::nullopt);
+    [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_branch_summary(
+        std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_session_info(
         std::optional<std::string> parent_id,
         std::string name);
