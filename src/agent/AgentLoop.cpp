@@ -359,42 +359,87 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
                 }
                 if (const auto* start = std::get_if<ai::TextStartEvent>(&event)) {
                     state.streaming_message = start->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{start->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* delta = std::get_if<ai::TextDeltaEvent>(&event)) {
                     state.streaming_message = delta->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{delta->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* end = std::get_if<ai::TextEndEvent>(&event)) {
                     state.streaming_message = end->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{end->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* start = std::get_if<ai::ThinkingStartEvent>(&event)) {
                     state.streaming_message = start->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{start->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* delta = std::get_if<ai::ThinkingDeltaEvent>(&event)) {
                     state.streaming_message = delta->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{delta->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* end = std::get_if<ai::ThinkingEndEvent>(&event)) {
                     state.streaming_message = end->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{end->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* start = std::get_if<ai::ToolCallStartEvent>(&event)) {
                     state.streaming_message = start->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{start->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* delta = std::get_if<ai::ToolCallDeltaEvent>(&event)) {
                     state.streaming_message = delta->partial;
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{delta->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* end = std::get_if<ai::ToolCallEndEvent>(&event)) {
                     state.streaming_message = end->partial;
                     if (!end->tool_call.id.empty()) {
                         state.pending_tool_call_ids.push_back(end->tool_call.id);
                     }
-                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
+                    return emit_agent_event(
+                        sink,
+                        MessageUpdateEvent{
+                            .message = ai::MessageVariant{end->partial},
+                            .assistant_event = event,
+                        });
                 }
                 if (const auto* done = std::get_if<ai::AssistantDoneEvent>(&event)) {
                     state.streaming_message = done->message;
@@ -428,11 +473,20 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
         if (assistant->stop_reason == ai::AssistantStopReason::Error ||
             assistant->stop_reason == ai::AssistantStopReason::Aborted) {
             state.pending_tool_call_ids.clear();
-            CCH_TRY_VOID(emit_agent_event(sink, TurnEndEvent{ai::MessageVariant{*assistant}, {}}));
+            CCH_TRY_VOID(emit_agent_event(
+                sink,
+                TurnEndEvent{
+                    .message = ai::MessageVariant{*assistant},
+                    .tool_results = {},
+                }));
             state.streaming_message.reset();
             CCH_TRY_VOID(emit_agent_end());
             co_return AsyncAgentRunResult{
-                std::move(context), assistant->stop_reason, turn, std::move(state)};
+                .context = std::move(context),
+                .stop_reason = assistant->stop_reason,
+                .turns = turn,
+                .state = std::move(state),
+            };
         }
 
         auto calls = tool_calls_from(*assistant);
@@ -511,7 +565,12 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
             sync_state(state, context);
         }
 
-        CCH_TRY_VOID(emit_agent_event(sink, TurnEndEvent{ai::MessageVariant{*assistant}, tool_results}));
+        CCH_TRY_VOID(emit_agent_event(
+            sink,
+            TurnEndEvent{
+                .message = ai::MessageVariant{*assistant},
+                .tool_results = tool_results,
+            }));
 
         const bool has_more_tool_calls =
             !calls.empty() && (!terminate_batch || stop_token.stop_requested());
@@ -568,7 +627,11 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
                 CCH_TRY_VOID(emit_agent_end());
                 sync_state(state, context);
                 co_return AsyncAgentRunResult{
-                    std::move(context), assistant->stop_reason, turn, std::move(state)};
+                    .context = std::move(context),
+                    .stop_reason = assistant->stop_reason,
+                    .turns = turn,
+                    .state = std::move(state),
+                };
             }
         }
 
@@ -587,7 +650,12 @@ boost::asio::awaitable<support::Expected<AsyncAgentRunResult>> AsyncAgentLoop::c
             state.streaming_message.reset();
             CCH_TRY_VOID(emit_agent_end());
             sync_state(state, context);
-            co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn, std::move(state)};
+            co_return AsyncAgentRunResult{
+                .context = std::move(context),
+                .stop_reason = assistant->stop_reason,
+                .turns = turn,
+                .state = std::move(state),
+            };
         }
     }
 
