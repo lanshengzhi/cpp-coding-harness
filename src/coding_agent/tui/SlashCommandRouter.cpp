@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -15,37 +16,122 @@ enum class SlashArgumentMode {
     Optional,
 };
 
+struct SlashCommandDefinition {
+    SlashCommandId command;
+    std::string_view canonical_name;
+    SlashArgumentMode argument_mode;
+    bool immediate;
+};
+
+constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
+    {.command = SlashCommandId::Clear,
+     .canonical_name = "clear",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Quit,
+     .canonical_name = "quit",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Copy,
+     .canonical_name = "copy",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Session,
+     .canonical_name = "session",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Hotkeys,
+     .canonical_name = "hotkeys",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Settings,
+     .canonical_name = "settings",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Help,
+     .canonical_name = "help",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
+    {.command = SlashCommandId::Model,
+     .canonical_name = "model",
+     .argument_mode = SlashArgumentMode::Optional,
+     .immediate = false},
+    {.command = SlashCommandId::Models,
+     .canonical_name = "models",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+    {.command = SlashCommandId::Thinking,
+     .canonical_name = "thinking",
+     .argument_mode = SlashArgumentMode::Optional,
+     .immediate = false},
+    {.command = SlashCommandId::Login,
+     .canonical_name = "login",
+     .argument_mode = SlashArgumentMode::Optional,
+     .immediate = false},
+    {.command = SlashCommandId::Logout,
+     .canonical_name = "logout",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+    {.command = SlashCommandId::Resume,
+     .canonical_name = "resume",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+    {.command = SlashCommandId::Fork,
+     .canonical_name = "fork",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+    {.command = SlashCommandId::Tree,
+     .canonical_name = "tree",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+    {.command = SlashCommandId::Reload,
+     .canonical_name = "reload",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+    {.command = SlashCommandId::Compact,
+     .canonical_name = "compact",
+     .argument_mode = SlashArgumentMode::Optional,
+     .immediate = false},
+    {.command = SlashCommandId::Name,
+     .canonical_name = "name",
+     .argument_mode = SlashArgumentMode::Optional,
+     .immediate = true},
+    {.command = SlashCommandId::Trust,
+     .canonical_name = "trust",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = false},
+}};
+
 struct SlashCommandAlias {
     std::string_view spelling;
     SlashCommandId command;
-    SlashArgumentMode argument_mode;
 };
 
 constexpr std::array<SlashCommandAlias, 24> kCommandAliases{{
-    {"clear", SlashCommandId::Clear, SlashArgumentMode::None},
-    {"new", SlashCommandId::Clear, SlashArgumentMode::None},
-    {"quit", SlashCommandId::Quit, SlashArgumentMode::None},
-    {"exit", SlashCommandId::Quit, SlashArgumentMode::None},
-    {"q", SlashCommandId::Quit, SlashArgumentMode::None},
-    {"copy", SlashCommandId::Copy, SlashArgumentMode::None},
-    {"session", SlashCommandId::Session, SlashArgumentMode::None},
-    {"hotkeys", SlashCommandId::Hotkeys, SlashArgumentMode::None},
-    {"settings", SlashCommandId::Settings, SlashArgumentMode::None},
-    {"help", SlashCommandId::Help, SlashArgumentMode::None},
-    {"commands", SlashCommandId::Help, SlashArgumentMode::None},
-    {"model", SlashCommandId::Model, SlashArgumentMode::Optional},
-    {"models", SlashCommandId::Models, SlashArgumentMode::None},
-    {"scoped-models", SlashCommandId::Models, SlashArgumentMode::None},
-    {"thinking", SlashCommandId::Thinking, SlashArgumentMode::Optional},
-    {"login", SlashCommandId::Login, SlashArgumentMode::Optional},
-    {"logout", SlashCommandId::Logout, SlashArgumentMode::None},
-    {"resume", SlashCommandId::Resume, SlashArgumentMode::None},
-    {"fork", SlashCommandId::Fork, SlashArgumentMode::None},
-    {"tree", SlashCommandId::Tree, SlashArgumentMode::None},
-    {"reload", SlashCommandId::Reload, SlashArgumentMode::None},
-    {"compact", SlashCommandId::Compact, SlashArgumentMode::Optional},
-    {"name", SlashCommandId::Name, SlashArgumentMode::Optional},
-    {"trust", SlashCommandId::Trust, SlashArgumentMode::None},
+    {.spelling = "clear", .command = SlashCommandId::Clear},
+    {.spelling = "new", .command = SlashCommandId::Clear},
+    {.spelling = "quit", .command = SlashCommandId::Quit},
+    {.spelling = "exit", .command = SlashCommandId::Quit},
+    {.spelling = "q", .command = SlashCommandId::Quit},
+    {.spelling = "copy", .command = SlashCommandId::Copy},
+    {.spelling = "session", .command = SlashCommandId::Session},
+    {.spelling = "hotkeys", .command = SlashCommandId::Hotkeys},
+    {.spelling = "settings", .command = SlashCommandId::Settings},
+    {.spelling = "help", .command = SlashCommandId::Help},
+    {.spelling = "commands", .command = SlashCommandId::Help},
+    {.spelling = "model", .command = SlashCommandId::Model},
+    {.spelling = "models", .command = SlashCommandId::Models},
+    {.spelling = "scoped-models", .command = SlashCommandId::Models},
+    {.spelling = "thinking", .command = SlashCommandId::Thinking},
+    {.spelling = "login", .command = SlashCommandId::Login},
+    {.spelling = "logout", .command = SlashCommandId::Logout},
+    {.spelling = "resume", .command = SlashCommandId::Resume},
+    {.spelling = "fork", .command = SlashCommandId::Fork},
+    {.spelling = "tree", .command = SlashCommandId::Tree},
+    {.spelling = "reload", .command = SlashCommandId::Reload},
+    {.spelling = "compact", .command = SlashCommandId::Compact},
+    {.spelling = "name", .command = SlashCommandId::Name},
+    {.spelling = "trust", .command = SlashCommandId::Trust},
 }};
 
 constexpr std::array<std::string_view, 7> kThinkingLevels{
@@ -75,6 +161,35 @@ constexpr std::array<std::string_view, 7> kThinkingLevels{
     return match == kCommandAliases.end() ? nullptr : &*match;
 }
 
+[[nodiscard]] const SlashCommandDefinition* find_definition(
+    SlashCommandId command) noexcept {
+    const auto match = std::find_if(
+        kCommandDefinitions.begin(),
+        kCommandDefinitions.end(),
+        [command](const SlashCommandDefinition& definition) {
+            return definition.command == command;
+        });
+    return match == kCommandDefinitions.end() ? nullptr : &*match;
+}
+
+struct SlashCommandParts {
+    std::string_view spelling;
+    std::string_view argument;
+};
+
+/// Split a trimmed slash submission into its command token and argument.
+/// Callers only use this after confirming the submission begins with `/`.
+[[nodiscard]] SlashCommandParts split_slash_command(std::string_view text) noexcept {
+    const auto body = trim_ascii(trim_ascii(text).substr(1));
+    const auto separator = body.find_first_of(" \t\n\r\f\v");
+    return SlashCommandParts{
+        .spelling = body.substr(0, separator),
+        .argument = separator == std::string_view::npos
+            ? std::string_view{}
+            : trim_ascii(body.substr(separator + 1)),
+    };
+}
+
 [[nodiscard]] bool is_valid_thinking_level(std::string_view level) noexcept {
     return std::find(kThinkingLevels.begin(), kThinkingLevels.end(), level) !=
         kThinkingLevels.end();
@@ -83,26 +198,28 @@ constexpr std::array<std::string_view, 7> kThinkingLevels{
 [[nodiscard]] SlashCommandRouteError unknown_command_error(
     std::string_view spelling) {
     return SlashCommandRouteError{
-        .message = "Unknown slash command '/" + std::string{spelling} + "'",
-        .unknown_command = true,
+        .message = std::format("Unknown slash command '/{}'", spelling),
+        .kind = SlashCommandRouteErrorKind::UnknownCommand,
     };
 }
 
 [[nodiscard]] SlashCommandRouteError invalid_arguments_error(
     std::string_view spelling) {
     return SlashCommandRouteError{
-        .message = "Slash command '/" + std::string{spelling} +
-            "' does not accept arguments",
-        .unknown_command = false,
+        .message = std::format(
+            "Slash command '/{}' does not accept arguments",
+            spelling),
+        .kind = SlashCommandRouteErrorKind::Invalid,
     };
 }
 
 [[nodiscard]] SlashCommandRouteError invalid_thinking_level_error(
     std::string_view level) {
     return SlashCommandRouteError{
-        .message = "Invalid thinking level '" + std::string{level} +
-            "' (expected off, minimal, low, medium, high, xhigh, or max)",
-        .unknown_command = false,
+        .message = std::format(
+            "Invalid thinking level '{}' (expected off, minimal, low, medium, high, xhigh, or max)",
+            level),
+        .kind = SlashCommandRouteErrorKind::Invalid,
     };
 }
 
@@ -111,133 +228,77 @@ constexpr std::array<std::string_view, 7> kThinkingLevels{
     const support::Error& error) {
     const auto detail = error.message.empty() ? "unknown error" : error.message;
     return SlashCommandRouteError{
-        .message = "Could not execute /" + std::string{slash_command_name(command)} +
-            ": " + detail,
-        .unknown_command = false,
+        .message = std::format(
+            "Could not execute /{}: {}",
+            slash_command_name(command),
+            detail),
+        .kind = SlashCommandRouteErrorKind::Invalid,
     };
 }
 
 } // namespace
 
 std::string_view slash_command_name(SlashCommandId command) noexcept {
-    switch (command) {
-    case SlashCommandId::Clear:
-        return "clear";
-    case SlashCommandId::Quit:
-        return "quit";
-    case SlashCommandId::Copy:
-        return "copy";
-    case SlashCommandId::Session:
-        return "session";
-    case SlashCommandId::Hotkeys:
-        return "hotkeys";
-    case SlashCommandId::Settings:
-        return "settings";
-    case SlashCommandId::Help:
-        return "help";
-    case SlashCommandId::Model:
-        return "model";
-    case SlashCommandId::Models:
-        return "models";
-    case SlashCommandId::Thinking:
-        return "thinking";
-    case SlashCommandId::Login:
-        return "login";
-    case SlashCommandId::Logout:
-        return "logout";
-    case SlashCommandId::Resume:
-        return "resume";
-    case SlashCommandId::Fork:
-        return "fork";
-    case SlashCommandId::Tree:
-        return "tree";
-    case SlashCommandId::Reload:
-        return "reload";
-    case SlashCommandId::Compact:
-        return "compact";
-    case SlashCommandId::Name:
-        return "name";
-    case SlashCommandId::Trust:
-        return "trust";
+    if (const auto* definition = find_definition(command)) {
+        return definition->canonical_name;
     }
     return "unknown";
 }
 
 bool is_immediate_slash_command(SlashCommandId command) noexcept {
-    switch (command) {
-    case SlashCommandId::Clear:
-    case SlashCommandId::Quit:
-    case SlashCommandId::Copy:
-    case SlashCommandId::Session:
-    case SlashCommandId::Hotkeys:
-    case SlashCommandId::Settings:
-    case SlashCommandId::Help:
-    case SlashCommandId::Name:
-        return true;
-    case SlashCommandId::Model:
-    case SlashCommandId::Models:
-    case SlashCommandId::Thinking:
-    case SlashCommandId::Login:
-    case SlashCommandId::Logout:
-    case SlashCommandId::Resume:
-    case SlashCommandId::Fork:
-    case SlashCommandId::Tree:
-    case SlashCommandId::Reload:
-    case SlashCommandId::Compact:
-    case SlashCommandId::Trust:
-        return false;
-    }
-    return false;
+    const auto* definition = find_definition(command);
+    return definition != nullptr && definition->immediate;
 }
 
-SlashCommandParseResult SlashCommandRouter::parse(std::string_view text) {
+SlashCommandParseResultVariant SlashCommandRouter::parse(std::string_view text) {
     const auto trimmed = trim_ascii(text);
     if (!trimmed.starts_with('/')) {
         return SlashCommandPassThrough{};
     }
 
-    const auto body = trim_ascii(trimmed.substr(1));
-    if (body.empty()) {
+    const auto parts = split_slash_command(text);
+    if (parts.spelling.empty()) {
         return SlashCommandRouteError{
             .message = "A slash command must include a command name",
-            .unknown_command = false,
+            .kind = SlashCommandRouteErrorKind::Invalid,
         };
     }
 
-    const auto separator = body.find_first_of(" \t\n\r\f\v");
-    const auto spelling = body.substr(0, separator);
-    const auto argument = separator == std::string_view::npos
-        ? std::string_view{}
-        : trim_ascii(body.substr(separator + 1));
-    const auto* alias = find_alias(spelling);
+    const auto* alias = find_alias(parts.spelling);
     if (alias == nullptr) {
-        return unknown_command_error(spelling);
+        return unknown_command_error(parts.spelling);
     }
-    if (alias->argument_mode == SlashArgumentMode::None && !argument.empty()) {
-        return invalid_arguments_error(spelling);
+    const auto* definition = find_definition(alias->command);
+    if (definition == nullptr) {
+        return SlashCommandRouteError{
+            .message = "Slash command metadata is unavailable",
+            .kind = SlashCommandRouteErrorKind::Invalid,
+        };
+    }
+    if (definition->argument_mode == SlashArgumentMode::None &&
+        !parts.argument.empty()) {
+        return invalid_arguments_error(parts.spelling);
     }
     if (alias->command == SlashCommandId::Thinking &&
-        !argument.empty() && !is_valid_thinking_level(argument)) {
-        return invalid_thinking_level_error(argument);
+        !parts.argument.empty() && !is_valid_thinking_level(parts.argument)) {
+        return invalid_thinking_level_error(parts.argument);
     }
 
     return SlashCommandInvocation{
         .command = alias->command,
-        .argument = std::string{argument},
+        .argument = std::string{parts.argument},
     };
 }
 
-SlashCommandRoute SlashCommandRouter::route(
+SlashCommandRouteVariant SlashCommandRouter::route(
     std::string_view text,
     SlashCommandExecutionContext& context) const {
     auto parsed = parse(text);
     if (auto* error = std::get_if<SlashCommandRouteError>(&parsed)) {
-        if (error->unknown_command && context.allow_unrecognized) {
-            const auto trimmed = trim_ascii(text);
-            const auto body = trim_ascii(trimmed.substr(1));
-            const auto separator = body.find_first_of(" \t\n\r\f\v");
-            const auto spelling = body.substr(0, separator);
-            if (context.allow_unrecognized(spelling)) {
+        if (error->kind == SlashCommandRouteErrorKind::UnknownCommand &&
+            context.allow_unrecognized) {
+            const auto parts = split_slash_command(text);
+            if (context.allow_unrecognized(parts.spelling)) {
                 return SlashCommandPassThrough{};
             }
         }
@@ -252,7 +313,7 @@ SlashCommandRoute SlashCommandRouter::route(
         if (!context.execute_immediate) {
             return SlashCommandRouteError{
                 .message = "Immediate slash command execution is unavailable",
-                .unknown_command = false,
+                .kind = SlashCommandRouteErrorKind::Invalid,
             };
         }
         if (auto executed = context.execute_immediate(invocation); !executed) {

@@ -8,11 +8,11 @@
 using namespace cch;
 
 TEST_CASE(
-    "builtin slash commands carry the 17 Supported entries with pi's verbatim strings",
+    "builtin slash autocomplete carries pi's 17 verbatim entries",
     "[coding_agent][slash-commands][issue419]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
 
-    // Exactly the 17 Supported builtins of pi's 22-command catalog.
+    // Exactly the 17 autocomplete entries of pi's 22-command catalog.
     const std::vector<std::string_view> expected_names{
         "settings", "model",       "scoped-models", "copy",  "name", "session",
         "hotkeys",  "fork",        "tree",          "trust", "login", "logout",
@@ -61,7 +61,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "deferred slashes and deleted commands are absent from the builtin catalog",
+    "deferred and router-only commands are absent from the autocomplete catalog",
     "[coding_agent][slash-commands][issue419]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
     for (const auto& command : commands) {
@@ -79,4 +79,7 @@ TEST_CASE(
         CHECK(name != "arminsayshi");
         CHECK(name != "dementedelves");
     }
+
+    // `/help`, `/commands`, `/clear`, and `/exit` are router-only commands;
+    // they are intentionally not part of pi's autocomplete catalog.
 }

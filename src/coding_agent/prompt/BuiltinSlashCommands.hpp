@@ -19,10 +19,12 @@ struct BuiltinSlashCommand {
 /// (`pi:packages/coding-agent/src/core/slash-commands.ts` at `83114817`, ADR
 /// 0036 G4) with pi's verbatim names/descriptions/argument hints. The
 /// Deferred slashes (`/export` `/import` `/share` `/changelog` `/clone`),
-/// `/debug`, and the easter eggs are absent: typed text passes through as an
-/// ordinary Agent Prompt. The `/reload` description drops "extensions" (no
-/// extensions surface), and `/quit` uses the C++ binary's own ("cch")
-/// identity for pi's `Quit ${APP_NAME}`.
+/// `/debug`, and the easter eggs are absent from autocomplete. The Native TUI
+/// router reports typed Deferred names as unknown-command errors; only
+/// host-recognized dynamic resources or compatible absolute paths are
+/// preserved as Agent Prompt submissions. The `/reload` description drops "extensions" (no extensions
+/// surface), and `/quit` uses the C++ binary's own ("cch") identity for pi's
+/// `Quit ${APP_NAME}`.
 [[nodiscard]] const std::vector<BuiltinSlashCommand>& builtin_slash_commands();
 
 } // namespace cch::coding_agent::prompt

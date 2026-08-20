@@ -1998,9 +1998,9 @@ private:
         if (view_ == nullptr) return;
         view_->append_frontend_message(
             "Available commands:\n"
-            "/clear /quit /copy /session /hotkeys /settings /help\n"
-            "/model /models /thinking /login /logout /resume /fork\n"
-            "/tree /reload /compact");
+            "/clear /new /quit /exit /q /copy /session /hotkeys /settings\n"
+            "/help /commands /name /model /models /scoped-models /thinking\n"
+            "/login /logout /resume /fork /tree /reload /compact /trust");
         tui_.invalidate();
     }
 
@@ -4316,9 +4316,10 @@ private:
             return execute_immediate_slash_command(invocation);
         };
         context.allow_unrecognized = [this](std::string_view command) {
-            // Absolute paths such as the clipboard image paths inserted into
-            // the editor contain a second slash and are ordinary prompt
-            // text, not command tokens.
+            // The router removes only the command prefix. Absolute paths such
+            // as clipboard image paths inserted into the editor retain an
+            // internal slash in the token and are ordinary prompt text, not
+            // command tokens.
             return command.find('/') != std::string_view::npos ||
                 is_dynamic_slash_command(command);
         };

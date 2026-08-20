@@ -293,7 +293,7 @@ A Native TUI operation that runs a user-entered shell command without treating i
 _Avoid_: Bash tool, prompt processing
 
 **Slash Command**:
-A user input beginning with `/` that the Native TUI interprets before the Agent Prompt path: a builtin command, a Prompt Template invocation, or a Skill invocation; unrecognized slash text passes through as an ordinary Agent Prompt.
+A user input beginning with `/` that the Native TUI routes before the Agent Prompt path: a builtin command, a Prompt Template invocation, or a Skill invocation. Built-in names and arguments are validated; unknown slash text produces a routing error unless the host explicitly recognizes it as a dynamic resource or compatible absolute-path submission.
 _Avoid_: Command registry, dispatch table
 
 **Resource Reload**:

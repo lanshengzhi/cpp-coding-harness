@@ -3276,6 +3276,8 @@ TEST_CASE(
     CHECK(created->session->message_count() == 0);
     screen = visible_screen(terminal);
     CHECK(screen.find("Available commands:") != std::string::npos);
+    CHECK(screen.find("/name") != std::string::npos);
+    CHECK(screen.find("/trust") != std::string::npos);
 
     REQUIRE(terminal.inject_input("/commands session\r"));
     drain_ready(io);

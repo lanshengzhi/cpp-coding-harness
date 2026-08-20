@@ -93,6 +93,7 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 
 | Command | Action |
 | --- | --- |
+| `/help` | Show available commands (alias `/commands`). |
 | `/settings` | Open settings. |
 | `/model [search]` | Select a model. |
 | `/scoped-models` | Configure models used for cycling. |
@@ -105,13 +106,14 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 | `/trust` | Change the project trust decision. |
 | `/login [provider]` | Authenticate a provider. |
 | `/logout` | Remove an OAuth login. |
-| `/new` | Start a new session. |
+| `/new` | Start a new session (alias `/clear`). |
+| `/clear` | Start a new session (alias `/new`). |
 | `/compact [instructions]` | Compact context, optionally with instructions. |
 | `/resume` | Select a session to resume. |
 | `/reload` | Reload settings, bindings, skills, prompts, themes, and context files. |
-| `/quit` | Shut down cleanly. |
+| `/quit` | Shut down cleanly (aliases `/exit` and `/q`). |
 
-Loaded skills are invoked as `/skill:<name> [instructions]` while Skill Commands are enabled. Unknown slash text passes through as an ordinary prompt. `/clear` is a keybinding rather than a slash command; use `/hotkeys` to see its effective key. Print mode does not dispatch slash commands.
+Built-in slash submissions are parsed and validated by the Native TUI router. Unknown slash commands produce a visible routing error instead of being sent as ordinary prompts; registered Prompt Templates, enabled `/skill:<name>` resources, and compatible absolute-path submissions may be explicitly preserved by the host. Print mode does not dispatch slash commands.
 
 ## User Bash
 

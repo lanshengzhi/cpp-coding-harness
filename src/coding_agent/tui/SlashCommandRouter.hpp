@@ -43,22 +43,29 @@ struct SlashCommandInvocation {
 };
 
 /// A non-slash submission, or an unrecognized slash submission explicitly
-/// allowed through by the host for a dynamic prompt or skill command.
+/// allowed through by the host for a dynamic resource or compatible
+/// absolute-path prompt.
 struct SlashCommandPassThrough {};
+
+/// The reason a slash submission could not be routed.
+enum class SlashCommandRouteErrorKind {
+    Invalid,
+    UnknownCommand,
+};
 
 /// A parse or routing failure that the host can present without throwing or
 /// converting the submission into an Agent Prompt.
 struct SlashCommandRouteError {
     std::string message;
-    /// True only when the command token itself was not a built-in. Hosts may
-    /// use this to preserve dynamic prompt/skill commands while still
-    /// rejecting malformed arguments for known built-ins.
-    bool unknown_command{false};
+    /// UnknownCommand is set only when the command token itself was not a
+    /// built-in. Hosts may use it to preserve dynamic prompt/skill commands
+    /// while still rejecting malformed arguments for known built-ins.
+    SlashCommandRouteErrorKind kind{SlashCommandRouteErrorKind::Invalid};
 };
 
 /// Result of parsing one submission. Parsing is deliberately independent of
 /// TUI rendering and immediate-command side effects.
-using SlashCommandParseResult = std::variant<
+using SlashCommandParseResultVariant = std::variant<
     SlashCommandPassThrough,
     SlashCommandInvocation,
     SlashCommandRouteError>;
@@ -74,7 +81,7 @@ struct SlashCommandModalResult {
     SlashCommandInvocation invocation;
 };
 
-using SlashCommandRoute = std::variant<
+using SlashCommandRouteVariant = std::variant<
     SlashCommandPassThrough,
     SlashCommandImmediateResult,
     SlashCommandModalResult,
@@ -87,10 +94,11 @@ using SlashCommandRoute = std::variant<
 struct SlashCommandExecutionContext {
     std::move_only_function<support::ExpectedVoid(const SlashCommandInvocation&)>
         execute_immediate{nullptr};
-    /// Optional predicate for dynamic slash resources (prompt templates and
-    /// enabled `/skill:` commands). It receives the trimmed command token
-    /// without the leading slash. A false or empty predicate makes unknown
-    /// slash commands user-visible routing errors.
+    /// Optional predicate for host-recognized dynamic slash resources
+    /// (prompt templates and enabled `/skill:` commands) or compatible
+    /// absolute-path prompt submissions. It receives the trimmed command
+    /// token without the leading slash. A false or empty predicate makes
+    /// unknown slash commands user-visible routing errors.
     std::move_only_function<bool(std::string_view)> allow_unrecognized{nullptr};
 };
 
@@ -107,16 +115,9 @@ struct SlashCommandExecutionContext {
 /// value.
 class SlashCommandRouter final {
 public:
-    SlashCommandRouter() = default;
-    SlashCommandRouter(SlashCommandRouter&&) = delete;
-    SlashCommandRouter& operator=(SlashCommandRouter&&) = delete;
-    ~SlashCommandRouter() = default;
-    SlashCommandRouter(const SlashCommandRouter&) = delete;
-    SlashCommandRouter& operator=(const SlashCommandRouter&) = delete;
+    [[nodiscard]] static SlashCommandParseResultVariant parse(std::string_view text);
 
-    [[nodiscard]] static SlashCommandParseResult parse(std::string_view text);
-
-    [[nodiscard]] SlashCommandRoute route(
+    [[nodiscard]] SlashCommandRouteVariant route(
         std::string_view text,
         SlashCommandExecutionContext& context) const;
 };
