@@ -85,6 +85,17 @@ struct SuspendProcessAction {};
 /// closure): create the next Agent Session for `switchSession`/`newSession`/
 /// `fork`, and the boot path's deferred boot-session creation. The host
 /// applies the CLI-owned facts and returns the created session for binding.
+///
+/// Field ownership seam (issue #507): session trust is engine-authoritative —
+/// `project_trust_override` arrives resolved (the CLI `--approve`/
+/// `--no-approve` override, the boot prompt decision, or the boot-workspace
+/// inheritance, pi `projectTrustByCwd`) and the host only fills it in when
+/// the engine left it unset. The pure CLI-owned resource and model facts are
+/// host-authoritative (the host re-application is load-bearing for the fields
+/// `make_session_request` deliberately omits — `no_themes`, `theme_paths`,
+/// `no_context_files`, `system_prompt`, `append_system_prompt`); host-only
+/// capabilities (User Shell, Runtime target, shared Models runtime) are
+/// always host-set. See `cli/SessionReplacementHost.hpp`.
 struct ReplaceSessionAction {
     runtime::AgentSessionCreationRequest request;
 };

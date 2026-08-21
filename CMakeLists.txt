@@ -367,6 +367,7 @@ cch_parity_declare_target(
         src/cli/ListModels.cpp
         src/cli/PrintMode.cpp
         src/cli/SessionFamily.cpp
+        src/cli/SessionReplacementHost.cpp
         src/cli/StartupTui.cpp
     DEPENDS
         cch_agent_core
@@ -998,6 +999,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/ListModelsTest.cpp
         tests/cli/PrintModeTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
+        tests/cli/SessionReplacementHostTest.cpp
         tests/cli/StartupTuiTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp

@@ -5,6 +5,7 @@
 #include "cli/ListModels.hpp"
 #include "cli/PrintMode.hpp"
 #include "cli/SessionFamily.hpp"
+#include "cli/SessionReplacementHost.hpp"
 #include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionCwd.hpp"
@@ -240,31 +241,16 @@ void print_session_diagnostics(
                         return coding_agent::tui::TuiActionResultVariant{
                             std::monostate{}};
                     } else if constexpr (std::is_same_v<T, coding_agent::tui::ReplaceSessionAction>) {
-                        auto request = std::move(payload.request);
-                        request.provide_user_shell = true;
-                        request.execution_runtime_target = runtime_root->make_target();
-                        request.project_trust_override = facts.project_trust_override;
-                        request.no_skills = facts.no_skills;
-                        request.no_prompt_templates = facts.no_prompt_templates;
-                        request.prompt_template_paths = facts.prompt_template_paths;
-                        request.skill_paths = facts.skill_paths;
-                        request.no_themes = facts.no_themes;
-                        request.theme_paths = facts.theme_paths;
-                        request.no_context_files = facts.no_context_files;
-                        request.system_prompt = facts.system_prompt;
-                        request.append_system_prompt = facts.append_system_prompt;
-                        request.provider = facts.provider;
-                        request.model = facts.model;
-                        request.models = facts.models;
-                        request.api_key = facts.api_key;
-                        if (shared_runtime) {
-                            // The replacement Session reuses the host-shared
-                            // Models runtime instead of reconstructing one
-                            // (issue #466); the factory never owns or releases
-                            // it, so closing a Session keeps the resources the
-                            // replacement needs.
-                            request.model_runtime = shared_runtime;
-                        }
+                        // The host finalizes the engine-built request (issue
+                        // #507): engine-resolved session trust wins, the pure
+                        // CLI-owned facts are re-applied, and the host-only
+                        // capabilities (User Shell, Runtime target, shared
+                        // Models runtime) are installed.
+                        auto request = finalize_replacement_session_request(
+                            std::move(payload.request),
+                            facts,
+                            runtime_root->make_target(),
+                            shared_runtime);
                         auto created = models
                             ? coding_agent::create_agent_session_for_testing(
                                   std::move(request), models)
