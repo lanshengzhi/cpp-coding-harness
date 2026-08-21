@@ -905,7 +905,7 @@ struct SessionTargetNormalizationOptions {
         }));
 }
 
-[[nodiscard]] support::Expected<CreateAgentSessionResult> run_assembly(
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> run_assembly(
     AssemblyPlan plan,
     SettingsSnapshot& snapshot,
     std::unique_ptr<AsyncUserShell> user_shell) {
@@ -1580,24 +1580,27 @@ struct SessionTargetNormalizationOptions {
         std::move(templates),
         std::move(runtime_config));
 
-    CreateAgentSessionResult result;
-    result.runtime = std::move(runtime_handle);
-    result.diagnostics = std::move(diagnostics);
-    result.model_fallback_message = std::move(model_fallback_message);
-    result.theme_resources = std::move(theme_documents);
-    result.session_id = metadata.session_id;
-    result.provider = resolved_provider;
-    result.model = resolved_model;
-    result.session_path = session_path;
-    result.workspace = workspace;
-    result.metadata = metadata;
-    return result;
+    coding_agent::ResolvedSessionIdentity identity{
+        .provider = resolved_provider,
+        .model = resolved_model,
+        .session_id = metadata.session_id,
+        .session_path = session_path,
+        .workspace = workspace,
+        .metadata = metadata,
+    };
+    return SessionFactory::publish(
+        std::move(runtime_handle),
+        std::move(session_path),
+        std::move(diagnostics),
+        std::move(model_fallback_message),
+        std::move(theme_documents),
+        std::move(identity));
 }
 
 /// Shared creation tail: normalize produced a plan (or the attempt's first
 /// error), assembly runs against the same snapshot, and any failure carries
 /// the settings load warnings through the error context field.
-[[nodiscard]] support::Expected<CreateAgentSessionResult> finish_creation(
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> finish_creation(
     support::Expected<AssemblyPlan> plan,
     SettingsSnapshot& snapshot,
     std::unique_ptr<AsyncUserShell> user_shell = {}) {
@@ -1614,72 +1617,56 @@ struct SessionTargetNormalizationOptions {
 
 } // namespace
 
-support::Expected<CreateAgentSessionResult> SessionFactory::create(
-    AgentSessionCreationRequest request) {
-    auto snapshot = load_settings_snapshot(request.workspace);
-    return finish_creation(normalize_cli(std::move(request), snapshot.manager), snapshot);
+coding_agent::CreateAgentSessionResult SessionFactory::publish(
+    std::unique_ptr<AgentSessionRuntime> runtime,
+    std::optional<std::filesystem::path> session_path,
+    std::vector<coding_agent::SessionDiagnostic> diagnostics,
+    std::optional<std::string> model_fallback_message,
+    std::vector<coding_agent::LoadedThemeResource> theme_resources,
+    coding_agent::ResolvedSessionIdentity identity) {
+    return coding_agent::CreateAgentSessionResult{
+        .session = coding_agent::AgentSession::bind_runtime(
+            std::move(runtime), std::move(session_path)),
+        .diagnostics = std::move(diagnostics),
+        .model_fallback_message = std::move(model_fallback_message),
+        .theme_resources = std::move(theme_resources),
+        .resolved_identity = std::move(identity),
+    };
 }
 
-support::Expected<CreateAgentSessionResult> SessionFactory::create(
-    AgentSessionCreationRequest request,
-    std::shared_ptr<ai::Models> models) {
+support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create(
+    AgentSessionCreationRequest request, AssemblyOverrides overrides) {
     auto snapshot = load_settings_snapshot(request.workspace);
-    if (!models) {
-        return finish_creation(normalize_cli(std::move(request), snapshot.manager), snapshot);
-    }
-    ModelRuntimeOptions wrap_options;
-    auto wrapped = ModelRuntime::create_from_models_for_testing(
-        std::move(models), std::move(wrap_options));
-    if (!wrapped) {
-        return std::unexpected(with_settings_fallback_context(wrapped.error(), snapshot));
-    }
-    auto plan = normalize_cli(std::move(request), snapshot.manager);
-    if (!plan) {
-        return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
-    }
-    // A host-injected runtime (the private E2E seam, already marked as
-    // never-owned by normalize_cli) wins; otherwise the injected Models is
-    // the runtime's catalog: its scripted fake provider serves streams, and
-    // the request model is fabricated from it (the deterministic provider
-    // surface the deleted fake-provider CLI flag used to drive).
-    if (!plan->model_runtime) {
-        plan->model_runtime = std::move(*wrapped);
-        plan->model_runtime_owned = true;
-        plan->cli_fake = true;
-    }
-    return finish_creation(std::move(plan), snapshot);
-}
-
-support::Expected<CreateAgentSessionResult> SessionFactory::create(
-    AgentSessionCreationRequest request,
-    std::shared_ptr<ai::Models> models,
-    std::unique_ptr<AsyncUserShell> user_shell) {
-    auto snapshot = load_settings_snapshot(request.workspace);
-    if (!models) {
+    if (overrides.models) {
+        ModelRuntimeOptions wrap_options;
+        auto wrapped = ModelRuntime::create_from_models_for_testing(
+            std::move(overrides.models), std::move(wrap_options));
+        if (!wrapped) {
+            return std::unexpected(
+                with_settings_fallback_context(wrapped.error(), snapshot));
+        }
+        auto plan = normalize_cli(std::move(request), snapshot.manager);
+        if (!plan) {
+            return std::unexpected(
+                with_settings_fallback_context(plan.error(), snapshot));
+        }
+        // A host-injected runtime (the private E2E seam, already marked as
+        // never-owned by normalize_cli) wins; otherwise the injected Models is
+        // the runtime's catalog: its scripted fake provider serves streams,
+        // and the request model is fabricated from it (the deterministic
+        // provider surface the deleted fake-provider CLI flag used to drive).
+        if (!plan->model_runtime) {
+            plan->model_runtime = std::move(*wrapped);
+            plan->model_runtime_owned = true;
+            plan->cli_fake = true;
+        }
         return finish_creation(
-            normalize_cli(std::move(request), snapshot.manager),
-            snapshot,
-            std::move(user_shell));
+            std::move(plan), snapshot, std::move(overrides.user_shell));
     }
-    ModelRuntimeOptions wrap_options;
-    auto wrapped = ModelRuntime::create_from_models_for_testing(
-        std::move(models), std::move(wrap_options));
-    if (!wrapped) {
-        return std::unexpected(with_settings_fallback_context(wrapped.error(), snapshot));
-    }
-    auto plan = normalize_cli(std::move(request), snapshot.manager);
-    if (!plan) {
-        return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
-    }
-    // A host-injected runtime (the private E2E seam, already marked as
-    // never-owned by normalize_cli) wins; otherwise the injected Models is
-    // the runtime's catalog (see the two-argument seam).
-    if (!plan->model_runtime) {
-        plan->model_runtime = std::move(*wrapped);
-        plan->model_runtime_owned = true;
-        plan->cli_fake = true;
-    }
-    return finish_creation(std::move(plan), snapshot, std::move(user_shell));
+    return finish_creation(
+        normalize_cli(std::move(request), snapshot.manager),
+        snapshot,
+        std::move(overrides.user_shell));
 }
 
 } // namespace cch::coding_agent::runtime

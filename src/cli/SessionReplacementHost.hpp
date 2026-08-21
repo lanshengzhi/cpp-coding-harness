@@ -10,9 +10,9 @@ namespace cch::coding_agent::runtime {
 struct AgentSessionCreationRequest;
 } // namespace cch::coding_agent::runtime
 
-namespace cch::coding_agent::tui {
+namespace cch::coding_agent::runtime {
 struct InteractiveSessionFacts;
-} // namespace cch::coding_agent::tui
+} // namespace cch::coding_agent::runtime
 
 namespace cch::harness {
 class RuntimeTarget;
@@ -46,7 +46,7 @@ namespace cch::cli {
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest
 finalize_replacement_session_request(
     coding_agent::runtime::AgentSessionCreationRequest request,
-    const coding_agent::tui::InteractiveSessionFacts& facts,
+    const coding_agent::runtime::InteractiveSessionFacts& facts,
     std::shared_ptr<harness::RuntimeTarget> execution_runtime_target,
     std::shared_ptr<coding_agent::ModelRuntime> model_runtime);
 

@@ -170,7 +170,7 @@ TEST_CASE(
     CHECK(snapshot.agent_state.model.id == "fake-model");
     CHECK(snapshot.agent_state.thinking_level == "off");
     CHECK(snapshot.agent_state.active_tool_names.size() == 4);
-    CHECK(snapshot.metadata.session_id == created->session_id);
+    CHECK(snapshot.metadata.session_id == created->resolved_identity.session_id);
     CHECK(snapshot.metadata.workspace == paths.workspace.path());
     CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
     REQUIRE(snapshot.session_path.has_value());
@@ -184,7 +184,7 @@ TEST_CASE(
     const auto unchanged = created->session->snapshot();
     CHECK(unchanged.agent_state.messages.empty());
     CHECK(unchanged.agent_state.active_tool_names.size() == 4);
-    CHECK(unchanged.metadata.session_id == created->session_id);
+    CHECK(unchanged.metadata.session_id == created->resolved_identity.session_id);
     CHECK(unchanged.session_path.has_value());
     created->session->close();
 }
@@ -199,7 +199,7 @@ TEST_CASE(
     REQUIRE(created.has_value());
 
     const auto snapshot = created->session->snapshot();
-    CHECK(snapshot.metadata.session_id == created->session_id);
+    CHECK(snapshot.metadata.session_id == created->resolved_identity.session_id);
     CHECK(snapshot.metadata.provider == "fake");
     CHECK(snapshot.metadata.model == "fake-model");
     CHECK(snapshot.metadata.workspace == paths.workspace.path());

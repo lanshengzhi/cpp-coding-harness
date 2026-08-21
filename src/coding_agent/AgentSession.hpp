@@ -49,7 +49,10 @@ class AgentSessionRuntimeAccess;
 }
 namespace runtime {
 class AsyncUserShell;
+class AgentSessionRuntime;
 struct AgentSessionReloadResult;
+class SessionFactory;
+struct AssemblyOverrides;
 }
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────
@@ -72,7 +75,25 @@ struct SessionDiagnostic {
 
 class AgentSession;
 
-/// Result of a successful session creation.
+/// Observation of the identity one creation attempt resolved (Resume Model
+/// Resolution, session paths, metadata). Carried for host introspection and
+/// assertion surfaces; no interactive consumer drives behavior from it.
+struct ResolvedSessionIdentity {
+    std::string provider;
+    std::string model;
+    std::string session_id;
+    /// Actual persisted session path. This remains optional so the contract
+    /// can represent session targets without a physical file.
+    std::optional<std::filesystem::path> session_path;
+    std::filesystem::path workspace;
+    /// Full session metadata captured at creation/resume time.
+    harness::session::SessionMetadata metadata;
+};
+
+/// Result of a successful session creation: the publication bundle returned
+/// by the one Session Assembly boundary (`create_agent_session`). Behavior-
+/// bearing fields sit at the top level; `resolved_identity` is observation
+/// only.
 struct CreateAgentSessionResult {
     /// The created/resumed session handle. Move-only.
     std::unique_ptr<AgentSession> session;
@@ -92,16 +113,8 @@ struct CreateAgentSessionResult {
     /// `applyFromSettings`). Parsing stays in the TUI layer.
     std::vector<LoadedThemeResource> theme_resources;
 
-    /// Resolved session metadata (for host introspection).
-    std::string session_id;
-    std::string provider;
-    std::string model;
-    /// Actual persisted session path. This remains optional so the contract
-    /// can represent session targets without a physical file.
-    std::optional<std::filesystem::path> session_path;
-    std::filesystem::path workspace;
-    /// Full session metadata captured at creation/resume time.
-    harness::session::SessionMetadata metadata;
+    /// Resolved identity observation (provider/model/session paths/metadata).
+    ResolvedSessionIdentity resolved_identity;
 };
 
 // ── PromptOptions ────────────────────────────────────────────────────────────
@@ -556,22 +569,21 @@ public:
     [[nodiscard]] const std::vector<ResourceDiagnostic>& theme_diagnostics() const;
 
 private:
-    friend support::Expected<CreateAgentSessionResult> create_agent_session(
-        runtime::AgentSessionCreationRequest request);
-    friend support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-        runtime::AgentSessionCreationRequest request,
-        std::shared_ptr<ai::Models> models);
-    friend support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-        runtime::AgentSessionCreationRequest request,
-        std::shared_ptr<ai::Models> models,
-        std::unique_ptr<runtime::AsyncUserShell> user_shell);
     friend class detail::AgentSessionInteractiveAccess;
     friend class detail::AgentSessionPromptAccess;
     friend class detail::AgentSessionRuntimeAccess;
+    friend class runtime::SessionFactory;
 
     // Shared only with an active prompt frame so reentrant close/destruction
     // cannot invalidate runtime capabilities before callbacks quiesce.
     std::shared_ptr<Impl> impl_;
+
+    /// Session Assembly's publication step: bind one assembled runtime into a
+    /// session handle. Friend-owned (runtime::SessionFactory); defined in the
+    /// implementation where Impl is complete.
+    [[nodiscard]] static std::unique_ptr<AgentSession> bind_runtime(
+        std::unique_ptr<runtime::AgentSessionRuntime> runtime,
+        std::optional<std::filesystem::path> session_path);
 };
 
 // ── Factory ──────────────────────────────────────────────────────────────────
@@ -586,6 +598,13 @@ private:
 /// Does not write to stdout/stderr or read RPC stdin.
 [[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request);
+
+/// Owner-internal assembly-overrides seam: injects a deterministic Models
+/// catalog and/or a Session-owned User Shell (test assembly). Production
+/// callers use the single-argument door.
+[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
+    runtime::AgentSessionCreationRequest request,
+    runtime::AssemblyOverrides overrides);
 
 /// Private test-support wrapper around SessionFactory's Models assembly seam
 /// (the deterministic provider surface the deleted fake-provider CLI flag

@@ -147,4 +147,32 @@ struct AgentSessionCreationRequest {
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
 };
 
+/// CLI-owned facts reused for in-session session replacement requests (pi's
+/// `createRuntime` closure captures the CLI model selection and resource
+/// flags; the workspace and session target change per flow). Lives beside the
+/// creation request it re-applies onto (issue #507 ownership rules).
+struct InteractiveSessionFacts {
+    std::optional<bool> project_trust_override;
+    bool no_skills{false};
+    bool no_prompt_templates{false};
+    std::vector<std::string> prompt_template_paths;
+    /// Repeatable pi `--skill` paths: explicit skills load even when
+    /// `--no-skills` drops discovery.
+    std::vector<std::string> skill_paths;
+    /// pi `--no-themes` and repeatable `--theme` paths (file or directory,
+    /// workspace-relative), used by in-session session replacement.
+    bool no_themes{false};
+    std::vector<std::string> theme_paths;
+    /// pi `--no-context-files`, `--system-prompt`, and repeatable
+    /// `--append-system-prompt`, used by in-session session replacement
+    /// (P20).
+    bool no_context_files{false};
+    std::optional<std::string> system_prompt;
+    std::vector<std::string> append_system_prompt;
+    std::optional<std::string> provider;
+    std::optional<std::string> model;
+    std::vector<std::string> models;
+    std::optional<std::string> api_key;
+};
+
 } // namespace cch::coding_agent::runtime

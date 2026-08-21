@@ -512,7 +512,7 @@ private:
     TuiActionSink action_sink_{nullptr};
     std::optional<std::string> model_fallback_message_;
     /// CLI-owned facts reused for in-session session replacement requests.
-    InteractiveSessionFacts session_facts_;
+    runtime::InteractiveSessionFacts session_facts_;
     /// Boot path (pi main.ts `createRuntime` + `resolveProjectTrust`): the
     /// base creation request the interactive host supplies; the boot creates
     /// the session after the boot trust prompt resolves. Empty outside the

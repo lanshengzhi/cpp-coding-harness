@@ -181,7 +181,7 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
     REQUIRE(result->session->scoped_models().empty());
 
     // Forward: alpha-1 → beta-1.
@@ -258,7 +258,7 @@ TEST_CASE(
     request.models = {"alpha*", "beta*"};
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
 
     REQUIRE(result->session->scoped_models().size() == 1);
     CHECK(result->session->scoped_models()[0].model.id == "alpha-1");
@@ -304,7 +304,7 @@ TEST_CASE(
     REQUIRE(result->session->scoped_models().size() == 1);
     REQUIRE(result->session->scoped_models()[0].thinking_level.has_value());
     CHECK(*result->session->scoped_models()[0].thinking_level == "high");
-    CHECK(result->model == "alpha-2");
+    CHECK(result->resolved_identity.model == "alpha-2");
 
     // Seed a different current preference.
     auto raised = result->session->set_thinking_level("low");
@@ -393,7 +393,7 @@ TEST_CASE(
     REQUIRE(result.has_value());
     // The scoped initial model carries the explicit :level as the initial
     // thinking level (pi main.ts `scopedModels[0].thinkingLevel`).
-    REQUIRE(result->model == "alpha-2");
+    REQUIRE(result->resolved_identity.model == "alpha-2");
     REQUIRE(result->session->scoped_models().size() == 1);
     CHECK(result->session->scoped_models()[0].model.id == "alpha-2");
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");

@@ -292,8 +292,8 @@ TEST_CASE(
     request.model = "alpha-1";
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "alpha");
-    CHECK(result->model == "alpha-1");
+    CHECK(result->resolved_identity.provider == "alpha");
+    CHECK(result->resolved_identity.model == "alpha-1");
 
     // A real model whose provider resolves no auth fails at preflight, before
     // any stream: pi's verbatim no-key branch through the auth category of the
@@ -319,7 +319,7 @@ TEST_CASE(
     request.model = "kimi-for-coding";
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "kimi-coding");
+    CHECK(result->resolved_identity.provider == "kimi-coding");
 
     auto prompted = result->session->prompt_blocking("hello");
     REQUIRE_FALSE(prompted.has_value());

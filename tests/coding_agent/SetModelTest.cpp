@@ -168,7 +168,7 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
 
     const auto target = result->session->model_runtime()->model("beta", "beta-1");
     REQUIRE(target.has_value());
@@ -197,7 +197,7 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
 
     const auto target = result->session->model_runtime()->model("beta", "beta-1");
     REQUIRE(target.has_value());
@@ -252,12 +252,12 @@ TEST_CASE(
     request.bash_session_environment = bash_environment;
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
 
     // At session construction the holder carries the live session facts (pi
     // `resolveSpawnContext`: session id always, session file for persisted
     // sessions, model and clamped thinking level).
-    CHECK(bash_environment->session_id == result->session_id);
+    CHECK(bash_environment->session_id == result->resolved_identity.session_id);
     REQUIRE(bash_environment->session_file.has_value());
     CHECK(*bash_environment->session_file == fixture.session_file.string());
     CHECK(bash_environment->provider == "alpha");
@@ -291,7 +291,7 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
     auto raised = result->session->set_thinking_level("high");
     REQUIRE(raised.has_value());
     REQUIRE(*raised == "high");
@@ -336,7 +336,7 @@ TEST_CASE(
     REQUIRE(result.has_value());
     // The settings default resolves beta-1 (non-reasoning); the creation
     // clamp lands the level at "off".
-    REQUIRE(result->model == "beta-1");
+    REQUIRE(result->resolved_identity.model == "beta-1");
     REQUIRE(result->session->snapshot().agent_state.thinking_level == "off");
 
     const auto target = result->session->model_runtime()->model("alpha", "alpha-1");
@@ -373,7 +373,7 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    REQUIRE(result->model == "alpha-1");
+    REQUIRE(result->resolved_identity.model == "alpha-1");
 
     const auto target = result->session->model_runtime()->model("beta", "beta-1");
     REQUIRE(target.has_value());

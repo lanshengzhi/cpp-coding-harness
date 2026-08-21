@@ -38,8 +38,8 @@ namespace {
     return request;
 }
 
-[[nodiscard]] coding_agent::tui::InteractiveSessionFacts empty_facts() {
-    return coding_agent::tui::InteractiveSessionFacts{};
+[[nodiscard]] coding_agent::runtime::InteractiveSessionFacts empty_facts() {
+    return coding_agent::runtime::InteractiveSessionFacts{};
 }
 
 } // namespace

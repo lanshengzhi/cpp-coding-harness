@@ -285,7 +285,8 @@ TEST_CASE("session targets remain one passive variant with optional path results
                   std::variant_alternative_t<5, coding_agent::SessionTarget>,
                   coding_agent::InMemorySessionTarget>);
     static_assert(std::is_same_v<
-                  decltype(coding_agent::CreateAgentSessionResult::session_path),
+                  decltype(coding_agent::CreateAgentSessionResult::resolved_identity
+                               .session_path),
                   std::optional<std::filesystem::path>>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const coding_agent::AgentSession&>().session_path()),

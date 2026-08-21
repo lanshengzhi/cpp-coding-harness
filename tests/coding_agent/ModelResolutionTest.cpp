@@ -210,8 +210,8 @@ TEST_CASE("CLI model resolution: --model wins over settings defaults", "[coding_
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "beta");
-    CHECK(result->model == "beta-1");
+    CHECK(result->resolved_identity.provider == "beta");
+    CHECK(result->resolved_identity.model == "beta-1");
     CHECK(result->session->provider() == "beta");
     CHECK(result->session->model() == "beta-1");
     result->session->close();
@@ -224,8 +224,8 @@ TEST_CASE("CLI model resolution: settings default wins with configured auth", "[
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "beta");
-    CHECK(result->model == "beta-1");
+    CHECK(result->resolved_identity.provider == "beta");
+    CHECK(result->resolved_identity.model == "beta-1");
     result->session->close();
 }
 
@@ -241,8 +241,8 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "beta");
-    CHECK(result->model == "beta-1");
+    CHECK(result->resolved_identity.provider == "beta");
+    CHECK(result->resolved_identity.model == "beta-1");
     result->session->close();
 }
 
@@ -255,8 +255,8 @@ TEST_CASE("CLI model resolution: scoped models select the first scoped model for
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "alpha");
-    CHECK(result->model == "alpha-1");
+    CHECK(result->resolved_identity.provider == "alpha");
+    CHECK(result->resolved_identity.model == "alpha-1");
     result->session->close();
 }
 
@@ -274,8 +274,8 @@ TEST_CASE(
     REQUIRE(result.has_value());
     // beta-1 is in scope and is the saved default, so it wins over the first
     // scoped model (alpha-1).
-    CHECK(result->provider == "beta");
-    CHECK(result->model == "beta-1");
+    CHECK(result->resolved_identity.provider == "beta");
+    CHECK(result->resolved_identity.model == "beta-1");
     result->session->close();
 }
 
@@ -296,8 +296,8 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", 
     // re-resolves against the live runtime catalog.
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->provider == "beta");
-    CHECK(resumed->model == "beta-1");
+    CHECK(resumed->resolved_identity.provider == "beta");
+    CHECK(resumed->resolved_identity.model == "beta-1");
     CHECK_FALSE(resumed->model_fallback_message.has_value());
     resumed->session->close();
 }
@@ -327,8 +327,8 @@ TEST_CASE(
 
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->provider == "alpha");
-    CHECK(resumed->model == "alpha-1");
+    CHECK(resumed->resolved_identity.provider == "alpha");
+    CHECK(resumed->resolved_identity.model == "alpha-1");
     REQUIRE(resumed->model_fallback_message.has_value());
     CHECK(*resumed->model_fallback_message ==
           "Could not restore model beta/beta-1. Using alpha/alpha-1");
@@ -357,8 +357,8 @@ TEST_CASE(
 
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->provider == "unknown");
-    CHECK(resumed->model == "unknown");
+    CHECK(resumed->resolved_identity.provider == "unknown");
+    CHECK(resumed->resolved_identity.model == "unknown");
     REQUIRE(resumed->model_fallback_message.has_value());
     CHECK(resumed->model_fallback_message->starts_with(
         "No models available. Use /login to log into a provider via OAuth or API key. See:"));
@@ -398,8 +398,8 @@ TEST_CASE(
 
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->provider == "gamma");
-    CHECK(resumed->model == "gamma-1");
+    CHECK(resumed->resolved_identity.provider == "gamma");
+    CHECK(resumed->resolved_identity.model == "gamma-1");
     REQUIRE(resumed->model_fallback_message.has_value());
     CHECK(*resumed->model_fallback_message ==
           "Could not restore model beta/beta-1. Using gamma/gamma-1");
@@ -461,8 +461,8 @@ TEST_CASE(
     REQUIRE(result.has_value());
     // The concrete unknown kDefaultModel is the resolved identity, with no
     // construction-time default silently winning.
-    CHECK(result->provider == "unknown");
-    CHECK(result->model == "unknown");
+    CHECK(result->resolved_identity.provider == "unknown");
+    CHECK(result->resolved_identity.model == "unknown");
     const auto state = result->session->snapshot().agent_state;
     CHECK(state.model.id == "unknown");
     CHECK(state.model.provider == "unknown");
@@ -526,8 +526,8 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "beta");
-    CHECK(result->model == "beta-1");
+    CHECK(result->resolved_identity.provider == "beta");
+    CHECK(result->resolved_identity.model == "beta-1");
     result->session->close();
 }
 
@@ -541,8 +541,8 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    CHECK(result->provider == "beta");
-    CHECK(result->model == "beta-1");
+    CHECK(result->resolved_identity.provider == "beta");
+    CHECK(result->resolved_identity.model == "beta-1");
     result->session->close();
 }
 
@@ -555,14 +555,14 @@ TEST_CASE(
     {
         auto created = coding_agent::create_agent_session(cli_request(fixture));
         REQUIRE(created.has_value());
-        CHECK(created->provider == "alpha");
+        CHECK(created->resolved_identity.provider == "alpha");
         created->session->close();
     }
 
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->provider == "alpha");
-    CHECK(resumed->model == "alpha-1");
+    CHECK(resumed->resolved_identity.provider == "alpha");
+    CHECK(resumed->resolved_identity.model == "alpha-1");
     CHECK_FALSE(resumed->model_fallback_message.has_value());
     resumed->session->close();
 }
@@ -582,15 +582,15 @@ TEST_CASE(
         request.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
-        CHECK(created->provider == "beta");
-        CHECK(created->model == "beta-1");
+        CHECK(created->resolved_identity.provider == "beta");
+        CHECK(created->resolved_identity.model == "beta-1");
         created->session->close();
     }
 
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->provider == "beta");
-    CHECK(resumed->model == "beta-1");
+    CHECK(resumed->resolved_identity.provider == "beta");
+    CHECK(resumed->resolved_identity.model == "beta-1");
     CHECK_FALSE(resumed->model_fallback_message.has_value());
     resumed->session->close();
 }
@@ -609,7 +609,7 @@ TEST_CASE(
     REQUIRE(result.has_value());
     // The resolution chain landed the first available model with configured
     // auth; the session's model supports reasoning so a level change is real.
-    CHECK(result->model == "deepseek-v4-flash");
+    CHECK(result->resolved_identity.model == "deepseek-v4-flash");
 
     auto changed = result->session->set_thinking_level("high");
     REQUIRE(changed.has_value());
@@ -795,7 +795,7 @@ TEST_CASE(
 
     auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
-    CHECK(result->model == "deepseek-v4-flash");
+    CHECK(result->resolved_identity.model == "deepseek-v4-flash");
     result->session->close();
 
     // pi sdk.ts: a new session appends `model_change {provider, modelId}` and

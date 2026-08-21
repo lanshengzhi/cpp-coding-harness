@@ -10,7 +10,7 @@ namespace cch::cli {
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest
 finalize_replacement_session_request(
     coding_agent::runtime::AgentSessionCreationRequest request,
-    const coding_agent::tui::InteractiveSessionFacts& facts,
+    const coding_agent::runtime::InteractiveSessionFacts& facts,
     std::shared_ptr<harness::RuntimeTarget> execution_runtime_target,
     std::shared_ptr<coding_agent::ModelRuntime> model_runtime) {
     request.provide_user_shell = true;

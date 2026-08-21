@@ -869,31 +869,6 @@ public:
 #endif
     }
 
-    [[nodiscard]] static support::Expected<CreateAgentSessionResult> wrap_factory_result(
-        support::Expected<runtime::CreateAgentSessionResult> factory_result) {
-        if (!factory_result) {
-            return std::unexpected(factory_result.error());
-        }
-
-        auto session = std::make_unique<AgentSession>();
-        session->impl_ = std::make_shared<AgentSession::Impl>();
-        session->impl_->session_path = factory_result->session_path;
-        session->impl_->runtime = std::move(factory_result->runtime);
-
-        CreateAgentSessionResult result;
-        result.session = std::move(session);
-        result.diagnostics = std::move(factory_result->diagnostics);
-        result.model_fallback_message =
-            std::move(factory_result->model_fallback_message);
-        result.theme_resources = std::move(factory_result->theme_resources);
-        result.session_id = factory_result->session_id;
-        result.provider = factory_result->provider;
-        result.model = factory_result->model;
-        result.session_path = std::move(factory_result->session_path);
-        result.workspace = factory_result->workspace;
-        result.metadata = factory_result->metadata;
-        return result;
-    }
 };
 
 } // namespace detail
@@ -907,27 +882,46 @@ AgentSession::reload() {
     return detail::AgentSessionRuntimeAccess::reload(*this);
 }
 
+std::unique_ptr<AgentSession> AgentSession::bind_runtime(
+    std::unique_ptr<runtime::AgentSessionRuntime> runtime,
+    std::optional<std::filesystem::path> session_path) {
+    auto session = std::make_unique<AgentSession>();
+    session->impl_ = std::make_shared<AgentSession::Impl>();
+    session->impl_->session_path = std::move(session_path);
+    session->impl_->runtime = std::move(runtime);
+    return session;
+}
+
 support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
-        runtime::SessionFactory::create(std::move(request)));
+    return runtime::SessionFactory::create(std::move(request));
+}
+
+support::Expected<CreateAgentSessionResult> create_agent_session(
+    runtime::AgentSessionCreationRequest request,
+    runtime::AssemblyOverrides overrides) {
+    return runtime::SessionFactory::create(std::move(request), std::move(overrides));
 }
 
 support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
-        runtime::SessionFactory::create(
-            std::move(request), std::move(models)));
+    return runtime::SessionFactory::create(
+        std::move(request),
+        runtime::AssemblyOverrides{
+            .models = std::move(models),
+            .user_shell = nullptr});
 }
 
 support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models,
     std::unique_ptr<runtime::AsyncUserShell> user_shell) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
-        runtime::SessionFactory::create(
-            std::move(request), std::move(models), std::move(user_shell)));
+    return runtime::SessionFactory::create(
+        std::move(request),
+        runtime::AssemblyOverrides{
+            .models = std::move(models),
+            .user_shell = std::move(user_shell)});
 }
 
 } // namespace cch::coding_agent

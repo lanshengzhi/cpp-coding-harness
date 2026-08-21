@@ -243,11 +243,11 @@ inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_se
     if (!request.execution_runtime_target) {
         request.execution_runtime_target = detail::fixture_runtime_target();
     }
-    if (models) {
-        return coding_agent::create_agent_session_for_testing(
-            std::move(request), std::move(models));
-    }
-    return coding_agent::create_agent_session(std::move(request));
+    return coding_agent::create_agent_session(
+        std::move(request),
+        coding_agent::runtime::AssemblyOverrides{
+            .models = std::move(models),
+            .user_shell = nullptr});
 }
 
 inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
@@ -258,8 +258,11 @@ inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_se
     if (!request.execution_runtime_target) {
         request.execution_runtime_target = detail::fixture_runtime_target();
     }
-    return coding_agent::create_agent_session_for_testing(
-        std::move(request), std::move(models), std::move(user_shell));
+    return coding_agent::create_agent_session(
+        std::move(request),
+        coding_agent::runtime::AssemblyOverrides{
+            .models = std::move(models),
+            .user_shell = std::move(user_shell)});
 }
 
 } // namespace cch::tests

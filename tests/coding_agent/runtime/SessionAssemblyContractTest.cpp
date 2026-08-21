@@ -214,15 +214,15 @@ TEST_CASE(
     // Trusted: the project settings default wins over first-available.
     auto trusted = fix.create(fix.make_request(/*trust_override=*/true));
     REQUIRE(trusted);
-    CHECK(trusted->provider == "beta");
-    CHECK(trusted->model == "beta-2");
+    CHECK(trusted->resolved_identity.provider == "beta");
+    CHECK(trusted->resolved_identity.model == "beta-2");
 
     // Untrusted: the project scope never loads, so the project default is
     // invisible to the resolution chain.
     auto untrusted = fix.create(fix.make_request(/*trust_override=*/false));
     REQUIRE(untrusted);
-    CHECK(untrusted->provider != "beta");
-    CHECK(untrusted->model != "beta-2");
+    CHECK(untrusted->resolved_identity.provider != "beta");
+    CHECK(untrusted->resolved_identity.model != "beta-2");
 }
 
 TEST_CASE(

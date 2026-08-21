@@ -8,6 +8,7 @@
 #include "cli/SessionReplacementHost.hpp"
 #include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
@@ -190,7 +191,7 @@ void print_session_diagnostics(
     // CLI-owned facts (model selection, resource flags); the factory applies
     // them to each replacement request, and the state keeps the same facts
     // for building them.
-    coding_agent::tui::InteractiveSessionFacts facts;
+    coding_agent::runtime::InteractiveSessionFacts facts;
     facts.project_trust_override = config.project_trust_override;
     facts.no_skills = config.no_skills;
     facts.no_prompt_templates = config.no_prompt_templates;
@@ -251,11 +252,10 @@ void print_session_diagnostics(
                             facts,
                             runtime_root->make_target(),
                             shared_runtime);
-                        auto created = models
-                            ? coding_agent::create_agent_session_for_testing(
-                                  std::move(request), models)
-                            : coding_agent::create_agent_session(
-                                  std::move(request));
+                        auto created = coding_agent::create_agent_session(
+                            std::move(request),
+                            coding_agent::runtime::AssemblyOverrides{
+                                .models = models, .user_shell = nullptr});
                         return coding_agent::tui::TuiActionResultVariant{
                             std::move(created)};
                     } else if constexpr (std::is_same_v<T, coding_agent::tui::ReportBootDiagnosticsAction>) {
@@ -478,10 +478,10 @@ void print_session_diagnostics(
     // one of the two call sites below executes per run, so moving `models`
     // here is safe.
     const auto create_session = [&]() {
-        return models
-            ? coding_agent::create_agent_session_for_testing(
-                  std::move(request), std::move(models))
-            : coding_agent::create_agent_session(std::move(request));
+        return coding_agent::create_agent_session(
+            std::move(request),
+            coding_agent::runtime::AssemblyOverrides{
+                .models = std::move(models), .user_shell = nullptr});
     };
 
     // pi main.ts: `--list-models` runs post-runtime pre-stdin and exits 0
