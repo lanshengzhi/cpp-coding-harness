@@ -5,7 +5,6 @@
 #include "cli/ListModels.hpp"
 #include "cli/PrintMode.hpp"
 #include "cli/SessionFamily.hpp"
-#include "cli/SessionReplacementHost.hpp"
 #include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -242,18 +241,26 @@ void print_session_diagnostics(
                         return coding_agent::tui::TuiActionResultVariant{
                             std::monostate{}};
                     } else if constexpr (std::is_same_v<T, coding_agent::tui::ReplaceSessionAction>) {
-                        // The host finalizes the engine-built request (issue
-                        // #507): engine-resolved session trust wins, the pure
-                        // CLI-owned facts are re-applied, and the host-only
-                        // capabilities (User Shell, Runtime target, shared
-                        // Models runtime) are installed.
-                        auto request = finalize_replacement_session_request(
-                            std::move(payload.request),
-                            facts,
-                            runtime_root->make_target(),
-                            shared_runtime);
+                        // The host installs its host-only capabilities on the
+                        // engine-built request (issue #507): the interactive
+                        // Session's independent User Shell (ADR 0026), the CLI
+                        // Runtime root's target, and the host-shared Models
+                        // runtime when one was created (issue #466; a null
+                        // shared runtime leaves the request's model_runtime
+                        // untouched so the factory default-creates a
+                        // Session-owned one). The CLI-owned facts cross with
+                        // the request; the Session Assembly boundary
+                        // re-applies them.
+                        auto request = std::move(payload.request);
+                        request.provide_user_shell = true;
+                        request.execution_runtime_target =
+                            runtime_root->make_target();
+                        if (shared_runtime) {
+                            request.model_runtime = shared_runtime;
+                        }
                         auto created = coding_agent::create_agent_session(
                             std::move(request),
+                            facts,
                             coding_agent::runtime::AssemblyOverrides{
                                 .models = models, .user_shell = nullptr});
                         return coding_agent::tui::TuiActionResultVariant{
@@ -480,6 +487,7 @@ void print_session_diagnostics(
     const auto create_session = [&]() {
         return coding_agent::create_agent_session(
             std::move(request),
+            std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
                 .models = std::move(models), .user_shell = nullptr});
     };

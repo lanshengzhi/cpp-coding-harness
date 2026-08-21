@@ -168,6 +168,10 @@ _Avoid_: Event handler, callback chain
 Reopening an Agent Session from its durable history at the selected active point.
 _Avoid_: Reload, replay
 
+**Session Assembly**:
+The one authoritative act that turns an Agent Session creation request into an assembled Agent Session — request validation, Provider/Model resolution against the live Models Runtime, resource loading, and Session Publication — consumed by CLI boot, in-session session replacement, and tests through one boundary.
+_Avoid_: session factory, creation wrapper
+
 **Session Publication**:
 The single mutation point that makes an assembled Agent Session's storage real — creating required directories under their privacy policy and writing the session header after all fallible prerequisites have succeeded.
 _Avoid_: Save, file write, flush

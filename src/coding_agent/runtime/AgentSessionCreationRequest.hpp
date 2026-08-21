@@ -150,7 +150,8 @@ struct AgentSessionCreationRequest {
 /// CLI-owned facts reused for in-session session replacement requests (pi's
 /// `createRuntime` closure captures the CLI model selection and resource
 /// flags; the workspace and session target change per flow). Lives beside the
-/// creation request it re-applies onto (issue #507 ownership rules).
+/// creation request the Session Assembly boundary re-applies it onto (issue
+/// #507 ownership rules).
 struct InteractiveSessionFacts {
     std::optional<bool> project_trust_override;
     bool no_skills{false};

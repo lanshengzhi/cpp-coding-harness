@@ -34,8 +34,26 @@ struct AssemblyOverrides {
 /// single snapshot; adapters never supply a settings snapshot.
 class SessionFactory {
 public:
+    /// The one Session Assembly door. A request accompanied by CLI-owned
+    /// `session_facts` (the in-session replacement flows, pi `createRuntime`)
+    /// has them re-applied under the issue #507 field-ownership rules before
+    /// any assembly step reads the request; a host-built request (boot, print
+    /// mode, list-models) arrives complete and passes no facts.
     [[nodiscard]] static support::Expected<coding_agent::CreateAgentSessionResult>
-    create(AgentSessionCreationRequest request, AssemblyOverrides overrides = {});
+    create(AgentSessionCreationRequest request,
+           std::optional<InteractiveSessionFacts> session_facts,
+           AssemblyOverrides overrides = {});
+
+    /// The CLI-facts merge the door performs (issue #507, absorbed from the
+    /// interactive composition host): engine-resolved session trust wins —
+    /// `project_trust_override` is filled from the facts only when the engine
+    /// left it unset; the pure CLI-owned resource and model facts are
+    /// re-applied unconditionally. The host-only capabilities (User Shell,
+    /// Runtime target, shared Models runtime) are not part of the merge; the
+    /// host sets them on the request.
+    static void apply_cli_facts(
+        AgentSessionCreationRequest& request,
+        const InteractiveSessionFacts& facts);
 
     /// Publication step used by the assembly implementation: bind the
     /// assembled runtime into the session handle and carry the bundle

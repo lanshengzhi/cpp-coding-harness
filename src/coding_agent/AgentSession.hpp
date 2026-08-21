@@ -588,7 +588,8 @@ private:
 
 // ── Factory ──────────────────────────────────────────────────────────────────
 
-/// Create or resume an agent session from the CLI creation request.
+/// Session Assembly: create or resume an agent session from the CLI creation
+/// request.
 ///
 /// Validates the request, resolves the workspace, opens or creates the
 /// selected persisted session, assembles the provider client, execution
@@ -599,11 +600,20 @@ private:
 [[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request);
 
+/// The full Session Assembly door. `session_facts` carries the CLI-owned
+/// facts beside an engine-built request (in-session session replacement, pi
+/// `createRuntime`): the boundary re-applies them under the issue #507
+/// field-ownership rules — engine-resolved session trust wins, the pure
+/// CLI-owned resource/model facts are re-applied unconditionally, and the
+/// host-only capabilities (User Shell, Runtime target, shared Models
+/// runtime) stay host-set on the request. Host-built requests (boot, print
+/// mode, list-models) arrive complete and pass no facts. `overrides` is the
 /// Owner-internal assembly-overrides seam: injects a deterministic Models
-/// catalog and/or a Session-owned User Shell (test assembly). Production
-/// callers use the single-argument door.
+/// catalog and/or a Session-owned User Shell (test assembly); production
+/// passes an empty value.
 [[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request,
+    std::optional<runtime::InteractiveSessionFacts> session_facts,
     runtime::AssemblyOverrides overrides);
 
 /// Private test-support wrapper around SessionFactory's Models assembly seam

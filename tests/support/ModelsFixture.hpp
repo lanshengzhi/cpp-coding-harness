@@ -245,6 +245,7 @@ inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_se
     }
     return coding_agent::create_agent_session(
         std::move(request),
+        std::nullopt,
         coding_agent::runtime::AssemblyOverrides{
             .models = std::move(models),
             .user_shell = nullptr});
@@ -260,6 +261,7 @@ inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_se
     }
     return coding_agent::create_agent_session(
         std::move(request),
+        std::nullopt,
         coding_agent::runtime::AssemblyOverrides{
             .models = std::move(models),
             .user_shell = std::move(user_shell)});

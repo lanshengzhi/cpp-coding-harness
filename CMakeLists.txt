@@ -367,7 +367,6 @@ cch_parity_declare_target(
         src/cli/ListModels.cpp
         src/cli/PrintMode.cpp
         src/cli/SessionFamily.cpp
-        src/cli/SessionReplacementHost.cpp
         src/cli/StartupTui.cpp
     DEPENDS
         cch_agent_core
@@ -915,6 +914,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/SessionAssemblyContractTest.cpp
         tests/coding_agent/runtime/SessionForkTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
+        tests/coding_agent/runtime/SessionReplacementFactsTest.cpp
         tests/coding_agent/runtime/SessionSharedRuntimeTest.cpp
         tests/coding_agent/runtime/SessionSuiteGoldenTest.cpp
         tests/coding_agent/runtime/TreeNavigationTest.cpp
@@ -1000,7 +1000,6 @@ if(CCH_BUILD_TESTS)
         tests/cli/ListModelsTest.cpp
         tests/cli/PrintModeTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
-        tests/cli/SessionReplacementHostTest.cpp
         tests/cli/StartupTuiTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
