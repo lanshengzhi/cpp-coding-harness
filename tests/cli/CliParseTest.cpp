@@ -29,10 +29,10 @@ TEST_CASE("parse_args leaves model selection empty when model flags omitted", "[
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK_FALSE(parsed->model.has_value());
-    CHECK_FALSE(parsed->provider.has_value());
-    CHECK(parsed->models.empty());
-    CHECK_FALSE(parsed->api_key.has_value());
+    CHECK_FALSE(parsed->session_facts.model.has_value());
+    CHECK_FALSE(parsed->session_facts.provider.has_value());
+    CHECK(parsed->session_facts.models.empty());
+    CHECK_FALSE(parsed->session_facts.api_key.has_value());
 }
 
 TEST_CASE("parse_args records the pi CLI model selection surface", "[cli][parse]") {
@@ -51,15 +51,15 @@ TEST_CASE("parse_args records the pi CLI model selection surface", "[cli][parse]
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->provider.has_value());
-    REQUIRE(parsed->model.has_value());
-    REQUIRE(parsed->api_key.has_value());
-    CHECK(*parsed->provider == "deepseek");
-    CHECK(*parsed->model == "deepseek-v4-flash");
-    CHECK(*parsed->api_key == "sk-demo");
-    REQUIRE(parsed->models.size() == 2);
-    CHECK(parsed->models[0] == "deepseek-v4-flash");
-    CHECK(parsed->models[1] == "deepseek-r1:high");
+    REQUIRE(parsed->session_facts.provider.has_value());
+    REQUIRE(parsed->session_facts.model.has_value());
+    REQUIRE(parsed->session_facts.api_key.has_value());
+    CHECK(*parsed->session_facts.provider == "deepseek");
+    CHECK(*parsed->session_facts.model == "deepseek-v4-flash");
+    CHECK(*parsed->session_facts.api_key == "sk-demo");
+    REQUIRE(parsed->session_facts.models.size() == 2);
+    CHECK(parsed->session_facts.models[0] == "deepseek-v4-flash");
+    CHECK(parsed->session_facts.models[1] == "deepseek-r1:high");
 }
 
 TEST_CASE("parse_args trims --models patterns and tolerates empty entries", "[cli][parse]") {
@@ -68,9 +68,9 @@ TEST_CASE("parse_args trims --models patterns and tolerates empty entries", "[cl
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->models.size() == 2);
-    CHECK(parsed->models[0] == "sonnet");
-    CHECK(parsed->models[1] == "haiku");
+    REQUIRE(parsed->session_facts.models.size() == 2);
+    CHECK(parsed->session_facts.models[0] == "sonnet");
+    CHECK(parsed->session_facts.models[1] == "haiku");
 }
 
 TEST_CASE("parse_args rejects --api-key without an explicit model", "[cli][parse]") {
@@ -231,16 +231,16 @@ TEST_CASE("parse_args maps approve flags to project trust override", "[cli][pars
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->project_trust_override.has_value());
-        CHECK(*parsed->project_trust_override);
+        REQUIRE(parsed->session_facts.project_trust_override.has_value());
+        CHECK(*parsed->session_facts.project_trust_override);
     }
     {
         std::vector<std::string> args{"cpp-harness", "--no-approve", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->project_trust_override.has_value());
-        CHECK_FALSE(*parsed->project_trust_override);
+        REQUIRE(parsed->session_facts.project_trust_override.has_value());
+        CHECK_FALSE(*parsed->session_facts.project_trust_override);
     }
 }
 
@@ -250,16 +250,16 @@ TEST_CASE("parse_args accepts pi's shorts for approve and no-approve", "[cli][pa
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->project_trust_override.has_value());
-        CHECK(*parsed->project_trust_override);
+        REQUIRE(parsed->session_facts.project_trust_override.has_value());
+        CHECK(*parsed->session_facts.project_trust_override);
     }
     {
         std::vector<std::string> args{"cpp-harness", "-na", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->project_trust_override.has_value());
-        CHECK_FALSE(*parsed->project_trust_override);
+        REQUIRE(parsed->session_facts.project_trust_override.has_value());
+        CHECK_FALSE(*parsed->session_facts.project_trust_override);
     }
 }
 
@@ -276,9 +276,9 @@ TEST_CASE("parse_args treats prompt-template as one repeatable path", "[cli][par
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->prompt_template_paths.size() == 2);
-    CHECK(parsed->prompt_template_paths[0] == "custom.md");
-    CHECK(parsed->prompt_template_paths[1] == "more.md");
+    REQUIRE(parsed->session_facts.prompt_template_paths.size() == 2);
+    CHECK(parsed->session_facts.prompt_template_paths[0] == "custom.md");
+    CHECK(parsed->session_facts.prompt_template_paths[1] == "more.md");
     // pi keeps every positional as its own message: the first merges into
     // the initial prompt, the rest prompt sequentially in print mode.
     REQUIRE(parsed->messages.size() == 2);
@@ -609,23 +609,23 @@ TEST_CASE("parse_args records the pi prompt/theme/skill flags", "[cli][parse]") 
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->system_prompt.has_value());
-    CHECK(*parsed->system_prompt == "custom system prompt");
-    REQUIRE(parsed->append_system_prompt.size() == 2);
-    CHECK(parsed->append_system_prompt[0] == "first append");
-    CHECK(parsed->append_system_prompt[1] == "second append");
+    REQUIRE(parsed->session_facts.system_prompt.has_value());
+    CHECK(*parsed->session_facts.system_prompt == "custom system prompt");
+    REQUIRE(parsed->session_facts.append_system_prompt.size() == 2);
+    CHECK(parsed->session_facts.append_system_prompt[0] == "first append");
+    CHECK(parsed->session_facts.append_system_prompt[1] == "second append");
     REQUIRE(parsed->thinking.has_value());
     CHECK(*parsed->thinking == "high");
-    REQUIRE(parsed->skills.size() == 2);
-    CHECK(parsed->skills[0] == "user-skill");
-    CHECK(parsed->skills[1] == "project-skill");
-    REQUIRE(parsed->themes.size() == 2);
-    CHECK(parsed->themes[0] == "dark.json");
-    CHECK(parsed->themes[1] == "custom-themes");
-    CHECK(parsed->no_context_files);
-    CHECK(parsed->no_themes);
-    CHECK(parsed->no_skills);
-    CHECK(parsed->no_prompt_templates);
+    REQUIRE(parsed->session_facts.skill_paths.size() == 2);
+    CHECK(parsed->session_facts.skill_paths[0] == "user-skill");
+    CHECK(parsed->session_facts.skill_paths[1] == "project-skill");
+    REQUIRE(parsed->session_facts.theme_paths.size() == 2);
+    CHECK(parsed->session_facts.theme_paths[0] == "dark.json");
+    CHECK(parsed->session_facts.theme_paths[1] == "custom-themes");
+    CHECK(parsed->session_facts.no_context_files);
+    CHECK(parsed->session_facts.no_themes);
+    CHECK(parsed->session_facts.no_skills);
+    CHECK(parsed->session_facts.no_prompt_templates);
     REQUIRE(parsed->messages.size() == 1);
     CHECK(parsed->messages[0] == "hello");
 }
@@ -636,16 +636,16 @@ TEST_CASE("parse_args honors explicit boolean values for trust flags", "[cli][pa
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->project_trust_override.has_value());
-        CHECK_FALSE(*parsed->project_trust_override);
+        REQUIRE(parsed->session_facts.project_trust_override.has_value());
+        CHECK_FALSE(*parsed->session_facts.project_trust_override);
     }
     {
         std::vector<std::string> args{"cpp-harness", "--no-approve=false", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->project_trust_override.has_value());
-        CHECK(*parsed->project_trust_override);
+        REQUIRE(parsed->session_facts.project_trust_override.has_value());
+        CHECK(*parsed->session_facts.project_trust_override);
     }
 }
 
@@ -655,23 +655,23 @@ TEST_CASE("parse_args accepts pi's multi-character shorts for the no-* flags", "
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        CHECK(parsed->no_skills);
-        CHECK_FALSE(parsed->no_prompt_templates);
-        CHECK_FALSE(parsed->no_context_files);
+        CHECK(parsed->session_facts.no_skills);
+        CHECK_FALSE(parsed->session_facts.no_prompt_templates);
+        CHECK_FALSE(parsed->session_facts.no_context_files);
     }
     {
         std::vector<std::string> args{"cpp-harness", "-np", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        CHECK(parsed->no_prompt_templates);
+        CHECK(parsed->session_facts.no_prompt_templates);
     }
     {
         std::vector<std::string> args{"cpp-harness", "-nc", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        CHECK(parsed->no_context_files);
+        CHECK(parsed->session_facts.no_context_files);
     }
 }
 
@@ -758,10 +758,10 @@ TEST_CASE("parse_args accepts equals-separated values", "[cli][parse]") {
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->provider.has_value());
-    REQUIRE(parsed->model.has_value());
-    CHECK(*parsed->provider == "deepseek");
-    CHECK(*parsed->model == "deepseek-v4-flash");
+    REQUIRE(parsed->session_facts.provider.has_value());
+    REQUIRE(parsed->session_facts.model.has_value());
+    CHECK(*parsed->session_facts.provider == "deepseek");
+    CHECK(*parsed->session_facts.model == "deepseek-v4-flash");
     REQUIRE(parsed->messages.size() == 1);
     CHECK(parsed->messages[0] == "hello");
 }
@@ -781,8 +781,8 @@ TEST_CASE("parse_args preserves explicit empty option values", "[cli][parse]") {
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->model.has_value());
-        CHECK(parsed->model->empty());
+        REQUIRE(parsed->session_facts.model.has_value());
+        CHECK(parsed->session_facts.model->empty());
         REQUIRE(parsed->messages.size() == 1);
         CHECK(parsed->messages[0] == "hello");
     }
@@ -793,8 +793,8 @@ TEST_CASE("parse_args consumes option-looking values for value options", "[cli][
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->model.has_value());
-    CHECK(*parsed->model == "--print");
+    REQUIRE(parsed->session_facts.model.has_value());
+    CHECK(*parsed->session_facts.model == "--print");
     CHECK_FALSE(parsed->print);
     REQUIRE(parsed->messages.size() == 1);
     CHECK(parsed->messages[0] == "hello");

@@ -190,21 +190,6 @@ void print_session_diagnostics(
     // CLI-owned facts (model selection, resource flags); the factory applies
     // them to each replacement request, and the state keeps the same facts
     // for building them.
-    coding_agent::runtime::InteractiveSessionFacts facts;
-    facts.project_trust_override = config.project_trust_override;
-    facts.no_skills = config.no_skills;
-    facts.no_prompt_templates = config.no_prompt_templates;
-    facts.prompt_template_paths = config.prompt_template_paths;
-    facts.skill_paths = config.skills;
-    facts.no_themes = config.no_themes;
-    facts.theme_paths = config.themes;
-    facts.no_context_files = config.no_context_files;
-    facts.system_prompt = config.system_prompt;
-    facts.append_system_prompt = config.append_system_prompt;
-    facts.provider = config.provider;
-    facts.model = config.model;
-    facts.models = config.models;
-    facts.api_key = config.api_key;
     const bool is_resume_target =
         std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
             request.session_target);
@@ -214,7 +199,7 @@ void print_session_diagnostics(
     // future completes and read after io.run(), so the future synchronizes.
     bool creation_failure_reported = false;
     coding_agent::tui::TuiActionSink action_sink =
-        [facts, models, shared_runtime, runtime_root, &streams,
+        [facts = config.session_facts, models, shared_runtime, runtime_root, &streams,
          &creation_failure_reported, is_resume_target](
             std::size_t /* action_generation */,
             coding_agent::tui::TuiActionVariant action)
@@ -301,7 +286,7 @@ void print_session_diagnostics(
                     .images = std::move(initial.initial_images),
                 },
                 .action_sink = std::move(action_sink),
-                .session_facts = std::move(facts),
+                .session_facts = config.session_facts,
                 .boot_request = std::move(request),
             }),
         boost::asio::use_future);
@@ -446,25 +431,25 @@ void print_session_diagnostics(
         std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
             assembly->target);
     request.provide_user_shell = frontend == Frontend::Interactive;
-    request.project_trust_override = config.project_trust_override;
-    request.no_skills = config.no_skills;
-    request.no_prompt_templates = config.no_prompt_templates;
-    request.prompt_template_paths = config.prompt_template_paths;
-    request.skill_paths = config.skills;
-    request.no_themes = config.no_themes;
-    request.theme_paths = config.themes;
-    request.no_context_files = config.no_context_files;
-    request.system_prompt = config.system_prompt;
-    request.append_system_prompt = config.append_system_prompt;
+    request.project_trust_override = config.session_facts.project_trust_override;
+    request.no_skills = config.session_facts.no_skills;
+    request.no_prompt_templates = config.session_facts.no_prompt_templates;
+    request.prompt_template_paths = config.session_facts.prompt_template_paths;
+    request.skill_paths = config.session_facts.skill_paths;
+    request.no_themes = config.session_facts.no_themes;
+    request.theme_paths = config.session_facts.theme_paths;
+    request.no_context_files = config.session_facts.no_context_files;
+    request.system_prompt = config.session_facts.system_prompt;
+    request.append_system_prompt = config.session_facts.append_system_prompt;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);
     request.resume_cwd_override = boot_cwd_override;
     request.session_name = config.name;
     request.session_dir = config.session_dir;
-    request.provider = config.provider;
-    request.model = config.model;
-    request.models = config.models;
-    request.api_key = config.api_key;
+    request.provider = config.session_facts.provider;
+    request.model = config.session_facts.model;
+    request.models = config.session_facts.models;
+    request.api_key = config.session_facts.api_key;
 
     const auto print_creation_failure = [&](const support::Error& error) {
         // pi `MissingSessionCwdError`: the resumed session's stored header

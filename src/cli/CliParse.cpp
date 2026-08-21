@@ -407,7 +407,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = parse_flag_value(token, option); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.no_skills = *value;
+                config.session_facts.no_skills = *value;
             }
             continue;
         }
@@ -415,7 +415,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = parse_flag_value(token, option); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.no_prompt_templates = *value;
+                config.session_facts.no_prompt_templates = *value;
             }
             continue;
         }
@@ -423,7 +423,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = parse_flag_value(token, option); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.no_context_files = *value;
+                config.session_facts.no_context_files = *value;
             }
             continue;
         }
@@ -431,7 +431,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = parse_flag_value(token, option); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.no_themes = *value;
+                config.session_facts.no_themes = *value;
             }
             continue;
         }
@@ -440,7 +440,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.prompt_template_paths.push_back(std::move(*value));
+                config.session_facts.prompt_template_paths.push_back(std::move(*value));
             }
             continue;
         }
@@ -448,7 +448,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.skills.push_back(std::move(*value));
+                config.session_facts.skill_paths.push_back(std::move(*value));
             }
             continue;
         }
@@ -456,7 +456,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.themes.push_back(std::move(*value));
+                config.session_facts.theme_paths.push_back(std::move(*value));
             }
             continue;
         }
@@ -587,7 +587,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
                 return std::unexpected(std::move(value.error()));
             } else {
-                config.append_system_prompt.push_back(std::move(*value));
+                config.session_facts.append_system_prompt.push_back(std::move(*value));
             }
             continue;
         }
@@ -629,16 +629,16 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.session_dir = std::move(session_dir_text);
     }
     if (model_seen) {
-        config.model = std::move(model_text);
+        config.session_facts.model = std::move(model_text);
     }
     if (provider_seen) {
-        config.provider = std::move(provider_text);
+        config.session_facts.provider = std::move(provider_text);
     }
     if (models_seen) {
-        config.models = split_model_patterns(models_text);
+        config.session_facts.models = split_model_patterns(models_text);
     }
     if (api_key_seen) {
-        config.api_key = std::move(api_key_text);
+        config.session_facts.api_key = std::move(api_key_text);
     }
     if (thinking_seen) {
         config.thinking = std::move(thinking_text);
@@ -656,12 +656,12 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.list_models = std::move(*normalized.list_models);
     }
     if (system_prompt_seen) {
-        config.system_prompt = std::move(system_prompt_text);
+        config.session_facts.system_prompt = std::move(system_prompt_text);
     }
     if (approve_seen) {
-        config.project_trust_override = approve_value;
+        config.session_facts.project_trust_override = approve_value;
     } else if (no_approve_seen) {
-        config.project_trust_override = !no_approve_value;
+        config.session_facts.project_trust_override = !no_approve_value;
     }
 
     if (mode_seen) {

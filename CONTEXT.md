@@ -16,6 +16,10 @@ _Avoid_: Missing contract, unsupported stub
 The harness-owned interactive terminal product surface, combining reusable terminal UI capabilities with coding-agent-specific interaction. A non-interactive programmatic frontend is not the Native TUI.
 _Avoid_: Text REPL, RPC frontend
 
+**Interactive Session Run**:
+One Native TUI execution from boot through exit: the assembled CLI-owned facts, session intent (bind an existing Agent Session or defer creation to the boot trust prompt), and host capabilities, packed once by the CLI adapter so the Native TUI consumes run intent and outcome rather than individual fields.
+_Avoid_: TUI config bag, boot options
+
 **Supported Platform**:
 Linux on x86-64 with glibc, the only platform on which this harness accepts build, runtime, and Semantic Parity obligations for Supported Capabilities. Ubuntu 24.04 is the reproducible baseline and blocking CI environment; Arch Linux is a formally supported development environment validated from a pinned snapshot. Windows, macOS, Linux on other architectures, and musl-based systems carry no best-effort or placeholder product surface.
 _Avoid_: Development host, portable source, rolling latest, best-effort platform
