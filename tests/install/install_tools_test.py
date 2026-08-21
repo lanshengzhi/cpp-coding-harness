@@ -6,7 +6,7 @@ rules) and the install freshness check (Gate evidence, depfile/Makefile
 parsing, and rebuild-required staleness detection) with synthetic fixtures.
 
 Run directly: `python3 tests/install/install_tools_test.py`, or through the
-CTest case `cch_install_tools_unit` registered in CMakeLists.txt.
+CTest case `cch_install_tools_unit` registered in `cmake/tests/InstallTests.cmake`.
 """
 
 from __future__ import annotations

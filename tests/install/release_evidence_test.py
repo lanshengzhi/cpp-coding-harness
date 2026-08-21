@@ -7,7 +7,7 @@ freshness against the qualification run window, toolchain contradiction rules,
 required PASS markers, and the artifact digest binding.
 
 Run directly: `python3 tests/install/release_evidence_test.py`, or through the
-CTest case `cch_release_evidence_unit` registered in CMakeLists.txt.
+CTest case `cch_release_evidence_unit` registered in `cmake/tests/InstallTests.cmake`.
 """
 
 from __future__ import annotations

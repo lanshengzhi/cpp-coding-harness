@@ -7,7 +7,7 @@ unknown producer), the Gate's cross-Owner edge policy, and deterministic
 human/JSON diagnostics with stable rule IDs.
 
 Run directly: `python3 tests/architecture/parity_gate_test.py`, or through the
-CTest case `cch_parity_gate_unit` registered in CMakeLists.txt.
+CTest case `cch_parity_gate_unit` registered in `cmake/tests/ArchitectureTests.cmake`.
 """
 
 from __future__ import annotations

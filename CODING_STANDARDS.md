@@ -190,6 +190,8 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 12.5. Every supported configure, build, test, install, release, and CI path runs or depends on the latest applicable Parity Architecture Gate phase, including tests-disabled configurations. CMake File API data, compile commands, direct-include evidence, and—after build—compiler depfiles are configured evidence; CMake source formatting is not the architecture seam (ADR 0039).
 
+12.6. `CMakeLists.txt` is pure orchestration: it brackets `project()` with supported-build validation and includes the orchestration modules. Production target declarations live in `cmake/targets/`; test registrations live in `cmake/tests/`. Each new orchestration include starts with `include_guard(GLOBAL)` and the comment `# Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).`
+
 ## 13. Function structure and local state
 
 13.1. Single Level of Abstraction (SLA): A high-level orchestrator expresses sequencing through module interfaces or cohesive private helpers. Flag it when the same function also performs line-by-line formatting, token- or regex-level parsing, or raw byte/buffer manipulation. A formatter or parser whose implementation is itself the function's purpose is not an orchestrator and is not a violation.
