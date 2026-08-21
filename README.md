@@ -17,7 +17,7 @@ scripts/bootstrap.sh --release --test
 Useful variants:
 
 ```bash
-scripts/bootstrap.sh --test                    # Debug build and tests
+scripts/bootstrap.sh --test                    # Fresh Validation (environment level): Debug bootstrap, --fresh configure, build, and tests
 scripts/bootstrap.sh --release --no-build      # Release configure only
 scripts/bootstrap.sh --vcpkg-root /path/to/vcpkg --release --test
 ```
@@ -32,6 +32,23 @@ ctest --preset vcpkg-release
 ```
 
 The Release executable is `build/release/cpp_harness`. Run the unfiltered CTest preset for final validation.
+
+## Debug development loop
+
+Day-to-day development uses the default `vcpkg` preset (Debug, `build/` tree). With an already bootstrapped checkout at the exact `vcpkg.json` baseline:
+
+```bash
+export VCPKG_ROOT=/path/to/vcpkg   # needed for the configure step
+cmake --preset vcpkg               # once per checkout; no --fresh for incremental work
+cmake --build --preset vcpkg       # incremental build
+ctest --preset vcpkg               # Full Validation: the complete unfiltered offline suite
+```
+
+For during-implementation Focused Validation, `scripts/check.sh` wraps this loop: incremental build, CTest name/label selection passed straight through (`-R`, `-L`, ...), the architecture-labeled whole-graph gate tests excluded by default, `--architecture` selecting them, and `--target <shard>` narrowing the build. See [docs/agents/validation.md](docs/agents/validation.md).
+
+`scripts/bootstrap.sh --test` is Fresh Validation, the environment-level tier (vcpkg bootstrap, `--fresh` configure, full build, unfiltered suite); reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit request.
+
+The `dev-fast` preset is an optional local accelerator for the Debug loop and requires ccache; the supported default remains the `vcpkg` preset.
 
 ## Sanitizer builds
 

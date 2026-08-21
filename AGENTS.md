@@ -8,9 +8,15 @@ This is an experimental C++23 coding-agent Runtime that preserves selected pi se
 2. Fetch any named GitHub issue or PRD, then read only the task-specific context linked below.
 3. Stop exploring once you can name the behavior, authoritative seam, constraints, and validation path.
 
-## Build entry point
+## Validation entry points
 
-Dependencies use the pinned vcpkg manifest; system packages are unsupported. Use `scripts/bootstrap.sh --test` for a fresh full Debug validation. Read [README.md](README.md) for Release and manual preset commands.
+Dependencies use the pinned vcpkg manifest; system packages are unsupported. Three tiers (see `CONTEXT.md`):
+
+- **Focused Validation** — during implementation: `scripts/check.sh -R '<name>'` or `-L '<label>'` for the smallest CTest selection that can fail, with `--target <owning-shard>` to narrow the build. Architecture-sensitive changes additionally run `scripts/check.sh --architecture`.
+- **Full Validation** — once before delivery: incremental `cmake --build --preset vcpkg` followed by the complete unfiltered `ctest --preset vcpkg` (see [README.md](README.md)).
+- **Fresh Validation** — environment level: `scripts/bootstrap.sh --test`, reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request.
+
+Do not run `scripts/bootstrap.sh --test` for ordinary code edits.
 
 ## Task-specific context
 

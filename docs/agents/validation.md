@@ -4,17 +4,34 @@ Read this for implementation, review, test selection, Git delivery, or issue clo
 
 ## Implementation
 
-Before editing, read the related code and tests plus the relevant build declarations. Follow `CODING_STANDARDS.md`. During implementation, run the smallest focused test that can fail; run the full required suite once at the end as required by `/implement`.
+Before editing, read the related code and tests plus the relevant build declarations. Follow `CODING_STANDARDS.md`.
 
-Use the build and test entry points in `README.md`. A fresh default validation is:
+The validation tiers are defined in `CONTEXT.md`: Focused Validation, Full Validation, and Fresh Validation.
+
+During implementation, run the smallest focused test that can fail through `scripts/check.sh`, which builds incrementally on the default Debug preset and passes selection arguments straight through to CTest (CTest names and labels are the sole selection authority, ADR 0039):
 
 ```bash
-scripts/bootstrap.sh --test
+scripts/check.sh --target cch_tests_coding_agent -R 'session assembly'  # owning shard, focused name
+scripts/check.sh -L coding_agent                                        # owning module label
+scripts/check.sh                                                        # suite minus the architecture label
 ```
+
+Full Validation is mandatory once before delivery, as required by `/implement`: an incremental build followed by the complete unfiltered offline CTest suite on the default Debug preset, including every architecture gate test:
+
+```bash
+cmake --build --preset vcpkg
+ctest --preset vcpkg
+```
+
+Fresh Validation (`scripts/bootstrap.sh --test`) is the environment-level tier: clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. Do not run it for ordinary code edits. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039), not the per-change default.
 
 ## Architecture-sensitive changes
 
-Run architecture tests when Owner Interface headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
+Run architecture tests when Owner Interface headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change:
+
+```bash
+scripts/check.sh --architecture
+```
 
 ## Strict no-exception validation
 

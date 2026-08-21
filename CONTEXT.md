@@ -64,6 +64,26 @@ _Avoid_: Advisory architecture test, source-format style check, optional CI job
 An observed difference between the Parity Baseline and another pi revision; it is advisory until an explicit baseline advance accepts or classifies it.
 _Avoid_: Contract failure, latest-pi obligation
 
+**Focused Validation**:
+The during-implementation validation tier: after a code edit, build the owning
+test shard and run the smallest CTest name/label selection that can fail,
+excluding the whole-graph architecture gate tests by default; architecture-
+sensitive changes additionally select the architecture label.
+_Avoid_: full suite after every edit, bootstrap run, default validation
+
+**Full Validation**:
+The pre-delivery validation tier: an incremental build followed by the complete
+unfiltered offline CTest suite on the default Debug preset, including every
+architecture gate test; required once before delivering any code change.
+_Avoid_: fresh bootstrap, per-edit validation, release qualification
+
+**Fresh Validation**:
+The environment-level validation tier: `scripts/bootstrap.sh --test`, a from-
+scratch vcpkg bootstrap, `--fresh` configure, full build, and unfiltered suite,
+reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-
+orchestration changes, or explicit user request.
+_Avoid_: daily check, default development loop, standard test run
+
 **AsyncResult**:
 The one lazy, move-only, single-consumption asynchronous operation contract (`cch::support::AsyncResult<T, E>`) returned by fallible asynchronous Owner operations: consumed exactly once by callback start or move-only `co_await`, with ordinary failure carried as `std::expected<T, E>` and cancellation supplied explicitly as `std::stop_token`.
 _Avoid_: Boost.Asio awaitable in an Owner Interface, exposed executor or scheduler, copyable operation
