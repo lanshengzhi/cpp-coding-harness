@@ -32,9 +32,7 @@
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/ExternalEditor.hpp"
 #include "coding_agent/tui/Footer.hpp"
-#include "coding_agent/tui/FooterDataProvider.hpp"
 #include "coding_agent/tui/KeybindingsManager.hpp"
-#include "coding_agent/tui/StatusIndicator.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/InteractiveViewActions.hpp"
@@ -43,6 +41,7 @@
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
 #include "coding_agent/tui/SessionFlowController.hpp"
+#include "coding_agent/tui/SessionUiBinding.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/ModelSearch.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
@@ -53,7 +52,6 @@
 #include "agent/tools/TerminalText.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include "agent/harness/compaction/Compaction.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 
 #include <cch/support/Error.hpp>
@@ -474,63 +472,6 @@ command_autocomplete_commands(
 /// Executor-bound one-shot debounce timer for the editor's autocomplete
 /// requests. All timer state is confined to the executor thread via posts;
 /// the shared state keeps the wait handler safe after the editor is gone.
-/// pi `CountdownTimer`: the retry indicator's one-second countdown over the
-/// backoff delay. Each tick delivers the remaining seconds; the timer stops
-/// itself at zero. Executor-driven like the autocomplete debounce so the
-/// countdown is observable on the interactive executor.
-class RetryCountdown final : public std::enable_shared_from_this<RetryCountdown> {
-public:
-    RetryCountdown(
-        boost::asio::any_io_executor executor,
-        int attempt,
-        int max_attempts)
-        : executor_(std::move(executor)),
-          attempt_(attempt),
-          max_attempts_(max_attempts) {}
-
-    /// Begin the countdown from `seconds` (pi's `remainingSeconds`), with
-    /// the first tick one second later.
-    void start(int seconds, std::move_only_function<void(int)> on_tick) {
-        const auto self = shared_from_this();
-        boost::asio::post(executor_, [self, seconds, on_tick = std::move(on_tick)]() mutable {
-            self->remaining_ = std::max(0, seconds);
-            self->on_tick_ = std::move(on_tick);
-            self->schedule_tick();
-        });
-    }
-
-    [[nodiscard]] int attempt() const { return attempt_; }
-    [[nodiscard]] int max_attempts() const { return max_attempts_; }
-
-    /// Stop the countdown: cancel the pending tick and drop the tick sink so
-    /// neither keeps the countdown alive past its use (ASan, issue #473).
-    /// Executor-confined like start().
-    void cancel() {
-        on_tick_ = nullptr;
-        // Executor-confined; cancelling a live timer does not fail.
-        (void)timer_.cancel();
-    }
-
-private:
-    void schedule_tick() {
-        const auto self = shared_from_this();
-        timer_.expires_after(std::chrono::seconds(1));
-        timer_.async_wait([self](const boost::system::error_code& error) {
-            if (error || self->remaining_ <= 0) return;
-            self->remaining_--;
-            if (self->on_tick_) self->on_tick_(self->remaining_);
-            if (self->remaining_ > 0) self->schedule_tick();
-        });
-    }
-
-    boost::asio::any_io_executor executor_;
-    boost::asio::steady_timer timer_{executor_};
-    std::move_only_function<void(int)> on_tick_;
-    int attempt_{0};
-    int max_attempts_{0};
-    int remaining_{0};
-};
-
 class AsioAutocompleteDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {
 public:
     explicit AsioAutocompleteDebounceTimer(boost::asio::any_io_executor executor)
@@ -681,6 +622,7 @@ public:
         model_flows_ = make_model_flow_controller();
         auth_flows_ = make_auth_flow_controller();
         session_flows_ = make_session_flow_controller();
+        session_ui_ = make_session_ui_binding();
         if (!booting) {
             model_flows_->update_model_completion();
         }
@@ -692,7 +634,7 @@ public:
             return fail_start(attached.error());
         }
         if (!booting) {
-            if (auto subscribed = subscribe_to_session(weak); !subscribed) {
+            if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
                 return fail_start(subscribed.error());
             }
         }
@@ -807,8 +749,7 @@ public:
         session_ = owned_session_.get();
         model_flows_->update_model_completion();
         rebuild_autocomplete_provider();
-        const auto weak = weak_from_this();
-        if (auto subscribed = subscribe_to_session(weak); !subscribed) {
+        if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
             co_return std::unexpected(subscribed.error());
         }
         initialize_view(startup_diagnostics_);
@@ -1109,7 +1050,7 @@ private:
         };
         options.footer_data_source = [weak] {
             if (const auto self = weak.lock(); self && self->running_) {
-                return self->compute_footer_data();
+                return self->session_ui_->compute_footer_data();
             }
             return FooterData{};
         };
@@ -1171,31 +1112,6 @@ private:
             return;
         }
         view_->set_autocomplete_provider(build_autocomplete_provider());
-    }
-
-    [[nodiscard]] support::ExpectedVoid subscribe_to_session(
-        std::weak_ptr<InteractiveState> weak) {
-        if (auto subscribed = session_->subscribe(
-                [weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
-                    if (const auto self = weak.lock()) self->on_event(event);
-                    return {};
-                });
-            !subscribed) {
-            return std::unexpected(subscribed.error());
-        } else {
-            subscription_.emplace(std::move(*subscribed));
-        }
-        if (auto subscribed = session_->subscribe_session(
-                [weak](const AgentSessionEvent& event) -> support::ExpectedVoid {
-                    if (const auto self = weak.lock()) self->on_session_event(event);
-                    return {};
-                });
-            !subscribed) {
-            return std::unexpected(subscribed.error());
-        } else {
-            session_event_subscription_.emplace(std::move(*subscribed));
-        }
-        return {};
     }
 
     /// pi `showLoadedResources`: refresh the loaded-resources block from the
@@ -1270,11 +1186,7 @@ private:
         if (model_fallback_message_) {
             view_->append_warning(*model_fallback_message_);
         }
-        for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
-            auto text = combined_error_text(diagnostic);
-            view_->append_diagnostic(text);
-            displayed_agent_diagnostics_.push_back(std::move(text));
-        }
+        session_ui_->append_snapshot_diagnostics(snapshot.agent_state.diagnostics);
         for (const auto& diagnostic : diagnostics.keybindings) {
             view_->append_diagnostic(diagnostic.message);
         }
@@ -2180,6 +2092,52 @@ private:
             settings_manager_ ? &*settings_manager_ : nullptr);
     }
 
+    /// Wire the session UI binding's host hooks: the binding owns the Agent
+    /// Session subscriptions, the streaming-event translation, the retry
+    /// countdown, and the footer data computation; the gates read this
+    /// state's running/view facts and the presentation channels route through
+    /// the ModalPresenter methods. All hooks capture the state weakly;
+    /// nothing here extends the state's lifetime.
+    [[nodiscard]] std::shared_ptr<SessionUiBinding> make_session_ui_binding() {
+        const auto weak = weak_from_this();
+        SessionUiBindingHooks hooks;
+        hooks.is_live = [weak] {
+            const auto self = weak.lock();
+            return self && self->running_;
+        };
+        hooks.view = [weak]() -> InteractiveView* {
+            const auto self = weak.lock();
+            return self != nullptr ? self->view_ : nullptr;
+        };
+        hooks.prompt_active = [weak] {
+            const auto self = weak.lock();
+            return self && self->prompt_active_;
+        };
+        hooks.invalidate = [weak] {
+            if (const auto self = weak.lock()) self->tui_.invalidate();
+        };
+        hooks.show_status = [weak](std::string text) {
+            if (const auto self = weak.lock()) self->show_status(std::move(text));
+        };
+        hooks.show_error = [weak](std::string text) {
+            if (const auto self = weak.lock()) self->show_error(std::move(text));
+        };
+        hooks.boot_workspace = [weak]() -> std::filesystem::path {
+            const auto self = weak.lock();
+            if (self != nullptr && self->boot_request_) {
+                return self->boot_request_->workspace;
+            }
+            return {};
+        };
+        hooks.auto_compact_enabled = [weak]() -> std::optional<bool> {
+            const auto self = weak.lock();
+            if (!self || !self->settings_manager_) return std::nullopt;
+            const auto compaction = self->settings_manager_->settings().compaction;
+            return !compaction || compaction->enabled.value_or(true);
+        };
+        return std::make_shared<SessionUiBinding>(executor_, std::move(hooks));
+    }
+
     /// pi `handleCtrlZ`: stop the TUI (restore the terminal), ignore SIGINT
     /// while suspended, keep the process alive, and stop the process group
     /// with SIGTSTP; the SIGCONT handler restarts the TUI and forces a
@@ -2551,11 +2509,10 @@ private:
         owned_session_ = std::move(next);
         session_ = owned_session_.get();
         model_flows_->update_model_completion();
-        auto subscribed = subscribe_to_session(weak_from_this());
+        auto subscribed = session_ui_->bind(*session_);
         if (!subscribed) {
             return std::unexpected(subscribed.error());
         }
-        displayed_agent_diagnostics_.clear();
         // The new session's resources replace the loaded-resources block
         // (pi `showLoadedResources` after `renderCurrentSessionState`). The
         // theme re-registration gap (replacement drops the created session's
@@ -2964,7 +2921,7 @@ private:
                         combined_error_text(admitted.error()))));
                 }
             }
-            sync_pending_input();
+            session_ui_->sync_pending_input();
             tui_.invalidate();
             return;
         }
@@ -3023,7 +2980,7 @@ private:
         }
         if (restored.empty()) {
             if (announce) view_->append_frontend_message("No queued messages to restore");
-            sync_pending_input();
+            session_ui_->sync_pending_input();
             tui_.invalidate();
             return;
         }
@@ -3031,7 +2988,7 @@ private:
             view_->append_diagnostic(bounded_redacted_presentation(std::format(
                 "Unable to restore queued input: {}",
                 combined_error_text(cleared.error()))));
-            sync_pending_input();
+            session_ui_->sync_pending_input();
             tui_.invalidate();
             return;
         }
@@ -3042,7 +2999,7 @@ private:
                 restored.size(),
                 restored.size() == 1 ? "" : "s"));
         }
-        sync_pending_input();
+        session_ui_->sync_pending_input();
         tui_.invalidate();
     }
 
@@ -3075,7 +3032,7 @@ private:
         }
         note_prompt_finished();
         prompt_active_ = false;
-        sync_session_observations();
+        session_ui_->sync_session_observations();
         if (!result && view_ != nullptr && running_) {
             view_->append_diagnostic(combined_error_text(result.error()));
             view_->restore_submitted_text(submitted_text);
@@ -3114,253 +3071,6 @@ private:
             tui_.invalidate();
         }
         if (exit_requested_ && !prompt_active_) signal_exit();
-    }
-
-    void sync_pending_input() {
-        if (!running_ || view_ == nullptr || !session_->is_open()) return;
-        view_->set_pending_input(session_->snapshot().agent_state.input_queues);
-    }
-
-    void sync_session_observations() {
-        if (!running_ || view_ == nullptr || !session_->is_open()) return;
-        const auto snapshot = session_->snapshot();
-        view_->set_pending_input(snapshot.agent_state.input_queues);
-
-        std::vector<std::string> current;
-        current.reserve(snapshot.agent_state.diagnostics.size());
-        for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
-            current.push_back(combined_error_text(diagnostic));
-        }
-
-        auto overlap = std::min(displayed_agent_diagnostics_.size(), current.size());
-        while (overlap > 0 && !std::equal(
-                displayed_agent_diagnostics_.end() - static_cast<std::ptrdiff_t>(overlap),
-                displayed_agent_diagnostics_.end(),
-                current.begin())) {
-            --overlap;
-        }
-        for (auto index = overlap; index < current.size(); ++index) {
-            view_->append_diagnostic(current[index]);
-        }
-        displayed_agent_diagnostics_ = std::move(current);
-    }
-
-    void on_event(const agent::AgentLifecycleEvent& event) {
-        if (!running_ || view_ == nullptr) return;
-        view_->apply_event(event);
-        // pi's working indicator: shown while the agent run streams. The
-        // retry/compaction indicators replace it through the session-event
-        // path and are cleared by their own end events.
-        if (std::holds_alternative<agent::AgentStartEvent>(event)) {
-            view_->show_status_working();
-        } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
-            view_->clear_status_indicator();
-        } else if (std::holds_alternative<agent::MessageStartEvent>(event) &&
-                   prompt_active_) {
-            view_->show_status_working();
-        }
-        sync_session_observations();
-        tui_.invalidate();
-    }
-
-    /// pi's `session.on("auto_retry_start"...` / `compaction_start...`
-    /// handlers: the Retry indicator with the backoff countdown, the
-    /// Compaction indicator with the reason wording, and the end-event
-    /// cleanup with pi's statuses.
-    void on_session_event(const AgentSessionEvent& event) {
-        if (!running_ || view_ == nullptr) return;
-        if (const auto* retry = std::get_if<AutoRetryStartEvent>(&event)) {
-            cancel_retry_countdown();
-            const auto seconds = static_cast<int>(std::max<std::int64_t>(
-                1, (retry->delay_ms + 999) / 1000));
-            view_->show_status_retry(
-                retry->attempt, retry->max_attempts, seconds);
-            start_retry_countdown(retry->attempt, retry->max_attempts, seconds);
-        } else if (const auto* retry_end = std::get_if<AutoRetryEndEvent>(&event)) {
-            cancel_retry_countdown();
-            view_->clear_status_indicator();
-            // pi auto_retry_end: only the final failure reports (success
-            // shows the ordinary response).
-            if (!retry_end->success) {
-                show_error(std::format(
-                    "Retry failed after {} attempts: {}",
-                    retry_end->attempt,
-                    retry_end->final_error.value_or("Unknown error")));
-            }
-        } else if (const auto* compaction = std::get_if<CompactionStartEvent>(&event)) {
-            view_->show_status_compaction(compaction->reason);
-        } else if (const auto* compaction_end = std::get_if<CompactionEndEvent>(&event)) {
-            view_->clear_status_indicator();
-            if (compaction_end->aborted) {
-                if (compaction_end->reason == "manual") {
-                    show_error("Compaction cancelled");
-                } else {
-                    show_status("Auto-compaction cancelled");
-                }
-            } else if (compaction_end->error_message) {
-                if (compaction_end->reason == "manual") {
-                    show_error(*compaction_end->error_message);
-                } else {
-                    view_->append_diagnostic(*compaction_end->error_message);
-                }
-            } else {
-                // pi compaction_end with a result: rebuild the chat from the
-                // fresh snapshot (the compaction summary renders as the
-                // latest entry) and refresh the footer's usage totals.
-                const auto snapshot = session_->snapshot();
-                view_->initialize(snapshot);
-                view_->set_pending_input(snapshot.agent_state.input_queues);
-            }
-        }
-        tui_.invalidate();
-    }
-
-    /// pi `CountdownTimer` for the retry indicator: one-second ticks rewrite
-    /// the `Retrying (n/m) in Ns...` message until the delay elapses. The
-    /// tick captures the attempt values (never the countdown itself) so the
-    /// countdown's stored `on_tick_` cannot form a self-cycle that leaks the
-    /// state (ASan, issue #473).
-    void start_retry_countdown(int attempt, int max_attempts, int seconds) {
-        auto countdown = std::make_shared<RetryCountdown>(
-            executor_, attempt, max_attempts);
-        retry_countdown_ = countdown;
-        countdown->start(seconds, [weak = weak_from_this(), attempt, max_attempts](int remaining) {
-            if (const auto self = weak.lock(); self && self->running_ &&
-                self->view_ != nullptr) {
-                self->view_->set_status_retry_message(
-                    attempt,
-                    max_attempts,
-                    remaining);
-                self->tui_.invalidate();
-            }
-        });
-    }
-
-    void cancel_retry_countdown() {
-        if (retry_countdown_) retry_countdown_->cancel();
-        retry_countdown_.reset();
-    }
-
-    /// pi footer.ts render inputs computed from the live session snapshot
-    /// and the model runtime (usage totals over the message history, the
-    /// latest assistant cache hit rate, the context estimate, the model and
-    /// thinking level, the subscription marker, and the available-provider
-    /// count).
-    [[nodiscard]] FooterData compute_footer_data() {
-        if (session_ == nullptr) {
-            // Boot path: the main screen renders while the boot trust prompt
-            // overlay is up, before the session binds; the footer shows the
-            // boot workspace like pi's startup TUI.
-            FooterData data;
-            data.cwd = boot_request_ ? boot_request_->workspace
-                                     : std::filesystem::path{};
-            return data;
-        }
-        FooterData data;
-        const auto snapshot = session_->snapshot();
-        data.cwd = session_->workspace();
-        footer_data_provider_.set_cwd(data.cwd);
-        data.git_branch = footer_data_provider_.git_branch();
-
-        // Usage totals: every assistant message's usage accumulates (pi
-        // `addUsageToTotals` over the session entries; the C++ message
-        // history is the in-memory entry equivalent, and toolResult/
-        // compaction usage is not carried on the C++ message values).
-        for (const auto& message : snapshot.agent_state.messages) {
-            const auto* assistant = std::get_if<ai::AssistantMessage>(&message);
-            if (assistant == nullptr) continue;
-            data.input += assistant->usage.input;
-            data.output += assistant->usage.output;
-            data.cache_read += assistant->usage.cache_read;
-            data.cache_write += assistant->usage.cache_write;
-            data.cost += assistant->usage.cost.total;
-            // pi keeps the latest assistant message's prompt hit rate.
-            const auto prompt_tokens =
-                assistant->usage.input +
-                assistant->usage.cache_read +
-                assistant->usage.cache_write;
-            if (prompt_tokens > 0) {
-                data.cache_hit_rate =
-                    (static_cast<double>(assistant->usage.cache_read) /
-                     static_cast<double>(prompt_tokens)) * 100.0;
-            } else {
-                data.cache_hit_rate.reset();
-            }
-        }
-
-        // Context usage (pi `getContextUsage` subset): the model's context
-        // window with the estimated tokens; after a compaction, tokens are
-        // unknown until a valid assistant usage lands after the boundary.
-        const auto& model = snapshot.agent_state.model;
-        data.context_window = static_cast<std::size_t>(model.context_window);
-        data.model_id = model.id;
-        data.provider = model.provider;
-        data.model_reasoning = model.reasoning;
-        data.thinking_level = snapshot.agent_state.thinking_level.empty()
-            ? std::string{"off"}
-            : snapshot.agent_state.thinking_level;
-        if (data.context_window > 0) {
-            const auto& messages = snapshot.agent_state.messages;
-            std::optional<std::size_t> latest_compaction;
-            for (std::size_t index = 0; index < messages.size(); ++index) {
-                if (std::holds_alternative<ai::CompactionSummaryMessage>(messages[index])) {
-                    latest_compaction = index;
-                }
-            }
-            bool post_compaction_usage = false;
-            if (latest_compaction) {
-                for (std::size_t index = *latest_compaction + 1;
-                     index < messages.size();
-                     ++index) {
-                    const auto* assistant =
-                        std::get_if<ai::AssistantMessage>(&messages[index]);
-                    if (assistant == nullptr) continue;
-                    if (assistant->stop_reason != ai::AssistantStopReason::Aborted &&
-                        assistant->stop_reason != ai::AssistantStopReason::Error &&
-                        harness::session::calculate_context_tokens(assistant->usage) > 0) {
-                        post_compaction_usage = true;
-                        break;
-                    }
-                }
-                if (!post_compaction_usage) {
-                    data.context_tokens = std::nullopt;
-                }
-            }
-            if (!latest_compaction || post_compaction_usage) {
-                data.context_tokens =
-                    harness::session::estimate_context_tokens(messages).tokens;
-            }
-        }
-
-        // pi `usingSubscription`: kimi-coding, or any provider authenticating
-        // through an OAuth credential. The runtime may be absent on
-        // focused-test sessions; both markers stay off then.
-        const auto runtime = session_->model_runtime();
-        if (!model.id.empty() && runtime) {
-            data.using_subscription =
-                model.provider == "kimi-coding" ||
-                runtime->is_using_oauth(model.provider);
-        }
-
-        // pi `updateAvailableProviderCount`: unique providers in the scoped
-        // set, or in the runtime's availability snapshot.
-        const auto& scoped = session_->scoped_models();
-        std::set<std::string> providers;
-        if (!scoped.empty()) {
-            for (const auto& entry : scoped) providers.insert(entry.model.provider);
-        } else if (runtime) {
-            for (const auto& available : runtime->get_available_snapshot()) {
-                providers.insert(available.provider);
-            }
-        }
-        data.available_provider_count = providers.size();
-
-        if (settings_manager_) {
-            const auto compaction = settings_manager_->settings().compaction;
-            data.auto_compact_enabled =
-                !compaction || compaction->enabled.value_or(true);
-        }
-        return data;
     }
 
     void render() {
@@ -3433,6 +3143,11 @@ private:
     std::shared_ptr<ModelFlowController> model_flows_;
     std::shared_ptr<AuthFlowController> auth_flows_;
     std::shared_ptr<SessionFlowController> session_flows_;
+    /// The session synchronization adapter (#505): owns the Agent Session
+    /// event subscriptions, the streaming/retry/compaction event
+    /// translation, and the footer data computation. Created with the flow
+    /// controllers; `bind()`/`detach()` follow the session lifecycle.
+    std::shared_ptr<SessionUiBinding> session_ui_;
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
     /// One move-only sink carrying closed application-level actions to the
@@ -3470,8 +3185,7 @@ private:
     /// asynchronously on the shared Runtime root.
     void retire_current_session() noexcept {
         retire_action_generation();
-        subscription_.reset();
-        session_event_subscription_.reset();
+        session_ui_->detach();
         if (session_ != nullptr) {
             session_->close();
         }
@@ -3506,19 +3220,9 @@ private:
     /// admitted coroutine. Executor-confined; see spawn_flow().
     std::size_t in_flight_flows_{0};
     boost::asio::steady_timer flows_settled_;
-    std::optional<EventSubscription> subscription_;
-    /// Session-assembly event subscription (pi's `session.on(...)` for
-    /// auto-retry and compaction events).
-    std::optional<SessionEventSubscription> session_event_subscription_;
     /// SIGCONT/SIGINT registration while suspended (pi's suspend signal
     /// handlers); reset restores the previous handlers on resume.
     std::shared_ptr<boost::asio::signal_set> suspend_signals_;
-    /// The active retry countdown (pi `CountdownTimer`); null while no retry
-    /// backoff is pending.
-    std::shared_ptr<RetryCountdown> retry_countdown_;
-    /// Git branch source for the footer's pwd line (pi
-    /// `FooterDataProvider` subset).
-    FooterDataProvider footer_data_provider_{std::filesystem::path{}};
     InteractiveView* view_{nullptr}; // aliases the child owned by tui_.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
     SlashCommandRouter slash_command_router_;
@@ -3544,7 +3248,6 @@ private:
     // Suppresses a submission already decoded from Bash text cleared by an
     // earlier key-time interrupt decision.
     std::optional<std::size_t> cleared_editor_revision_;
-    std::vector<std::string> displayed_agent_diagnostics_;
     bool tui_started_{false};
     bool exit_requested_{false};
     bool clipboard_read_active_{false};

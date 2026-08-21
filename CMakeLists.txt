@@ -342,6 +342,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
+        src/coding_agent/tui/SessionUiBinding.cpp
         src/coding_agent/tui/SettingsSelector.cpp
         src/coding_agent/tui/StatusIndicator.cpp
         src/coding_agent/tui/StringListSelector.cpp
