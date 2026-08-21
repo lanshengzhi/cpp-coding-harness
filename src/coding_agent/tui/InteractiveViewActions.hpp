@@ -3,7 +3,7 @@
 // ── Main-screen view-to-state action seam (ADR 0040 shape) ──────────────────
 //
 // The Native TUI main-screen composition (`InteractiveView`) emits one closed
-// passive `ViewAction` value to the owning `InteractiveState` through one
+// passive `ViewAction` value to the owning `InteractiveEngine` through one
 // move-only `ViewActionSink` (the same deepening that ADR 0040 recorded for
 // the outer `TuiActionVariant` host seam, applied to the component seam).
 // The sink is exception-free: it carries a `noexcept` function type and
@@ -111,7 +111,7 @@ struct SuspendAction {};
 struct ExternalEditorAction {};
 
 /// One closed main-screen view action. Each alternative is an owned passive
-/// payload; the owning `InteractiveState` performs the operation on its
+/// payload; the owning `InteractiveEngine` performs the operation on its
 /// serialized execution path.
 using ViewAction = std::variant<
     SubmitAction,
@@ -132,7 +132,7 @@ using ViewAction = std::variant<
     ExternalEditorAction>;
 
 /// One move-only sink carrying closed main-screen view actions to the owning
-/// `InteractiveState`'s serialized execution path. Ordinary failures are
+/// `InteractiveEngine`'s serialized execution path. Ordinary failures are
 /// returned through `ExpectedVoid`; the function type is `noexcept` (a
 /// throwing sink violates the seam contract and is a Runtime invariant
 /// violation). A null sink drops the action silently.

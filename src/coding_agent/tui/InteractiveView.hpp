@@ -4,7 +4,7 @@
 // screen): header hints, loaded-resources block, chat, pending messages,
 // status, editor, and footer, stacked in pi's order with the chat absorbing
 // the flexible space. It emits one closed `ViewAction` value to the owning
-// `InteractiveState` through one move-only `ViewActionSink`; render-state
+// `InteractiveEngine` through one move-only `ViewActionSink`; render-state
 // invalidation stays a separate coalescible request.
 //
 // Repository-private `cch_coding_agent` implementation header: not part of an
@@ -135,6 +135,30 @@ namespace interactive_view_detail {
     }
     if (text.empty()) return std::nullopt;
     return text;
+}
+
+/// The editor-restorable texts of every queued steering and follow-up
+/// message, in queue order; an error when any message carries content the
+/// editor cannot restore.
+[[nodiscard]] inline support::Expected<std::vector<std::string>> queued_editor_texts(
+    const agent::AgentInputQueues& queues) {
+    std::vector<std::string> restored;
+    restored.reserve(
+        queues.steering.messages.size() + queues.follow_up.messages.size());
+    const auto append = [&restored](const auto& messages) {
+        for (const auto& message : messages) {
+            auto text = queued_editor_text(message);
+            if (!text) return false;
+            restored.push_back(std::move(*text));
+        }
+        return true;
+    };
+    if (!append(queues.steering.messages) || !append(queues.follow_up.messages)) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "queued input contains content that the editor cannot restore"));
+    }
+    return restored;
 }
 
 } // namespace interactive_view_detail

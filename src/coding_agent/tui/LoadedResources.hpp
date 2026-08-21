@@ -11,12 +11,18 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
+
+namespace cch::coding_agent {
+class AgentSession;
+} // namespace cch::coding_agent
 
 namespace cch::coding_agent::tui {
 
 class LiveTheme;
+struct RegisteredTheme;
 
 /// pi `interactive-mode.ts` `showLoadedResources` subset (#418): the startup
 /// container's Context/Skills/Prompts/Themes sections with pi's scope
@@ -100,5 +106,15 @@ private:
     Data data_;
     bool expanded_{false};
 };
+
+/// pi `showLoadedResources` data assembly (#506): collect the
+/// loaded-resources block data from the live session (Context sources,
+/// skills, templates), the registered custom themes (pi `getThemes().themes`
+/// filtered to `sourcePath`), and the per-kind diagnostics (loader read
+/// diagnostics plus the theme discovery diagnostics stashed at boot/reload).
+[[nodiscard]] LoadedResources::Data collect_loaded_resources_data(
+    const coding_agent::AgentSession& session,
+    std::span<const RegisteredTheme> registered_themes,
+    std::span<const ResourceDiagnostic> theme_discovery_diagnostics);
 
 } // namespace cch::coding_agent::tui

@@ -1,5 +1,9 @@
 #include "coding_agent/tui/LoadedResources.hpp"
 
+#include "coding_agent/AgentSession.hpp"
+#include "coding_agent/tui/ThemeController.hpp"
+
+#include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/Text.hpp>
 
 #include <cch/support/Error.hpp>
@@ -441,5 +445,60 @@ support::Expected<cch::tui::RenderResult> LoadedResources::render(std::size_t wi
 }
 
 void LoadedResources::invalidate() {}
+
+LoadedResources::Data collect_loaded_resources_data(
+    const coding_agent::AgentSession& session,
+    std::span<const RegisteredTheme> registered_themes,
+    std::span<const ResourceDiagnostic> theme_discovery_diagnostics) {
+    LoadedResources::Data data;
+    data.cwd = session.workspace();
+    data.home = coding_agent::home_directory();
+    // pi `contextFiles`: `getSystemPromptSource()` then
+    // `getAppendSystemPromptSources()` then `getAgentsFiles()`.
+    if (const auto& source = session.system_prompt_source()) {
+        data.context_paths.push_back(*source);
+    }
+    for (const auto& source : session.append_system_prompt_sources()) {
+        data.context_paths.push_back(source);
+    }
+    for (const auto& file : session.context_files()) {
+        data.context_paths.push_back(file.path);
+    }
+    for (const auto& skill : session.skills()) {
+        data.skills.push_back(LoadedResources::SkillItem{
+            .name = skill.name,
+            .path = skill.filePath,
+            .source_info = skill.sourceInfo,
+        });
+    }
+    for (const auto& templ : session.templates()) {
+        data.templates.push_back(LoadedResources::TemplateItem{
+            .name = templ.name,
+            .path = templ.filePath,
+            .source_info = templ.sourceInfo,
+        });
+    }
+    // pi `getThemes().themes` filtered to `sourcePath` (custom only).
+    for (const auto& registered : registered_themes) {
+        if (!registered.source_path) {
+            continue;
+        }
+        data.themes.push_back(LoadedResources::ThemeItem{
+            .name = registered.theme.name,
+            .path = registered.source_path->string(),
+            .scope = registered.scope,
+        });
+    }
+    data.skill_diagnostics = session.skill_diagnostics();
+    data.prompt_diagnostics = session.prompt_diagnostics();
+    // Theme conflicts: the loader's theme read diagnostics plus the
+    // discovery (parse/collision) diagnostics stashed at boot/reload.
+    data.theme_diagnostics = session.theme_diagnostics();
+    data.theme_diagnostics.insert(
+        data.theme_diagnostics.end(),
+        theme_discovery_diagnostics.begin(),
+        theme_discovery_diagnostics.end());
+    return data;
+}
 
 } // namespace cch::coding_agent::tui

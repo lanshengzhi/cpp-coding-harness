@@ -319,12 +319,18 @@ cch_parity_declare_target(
         src/coding_agent/tui/AuthFlowController.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp
         src/coding_agent/tui/ChatContainer.cpp
+        src/coding_agent/tui/ClipboardPaste.cpp
         src/coding_agent/tui/ClipboardWrite.cpp
         src/coding_agent/tui/DiffRenderer.cpp
+        src/coding_agent/tui/EditorAutocomplete.cpp
         src/coding_agent/tui/ExternalEditor.cpp
         src/coding_agent/tui/Footer.cpp
         src/coding_agent/tui/FooterDataProvider.cpp
+        src/coding_agent/tui/InteractiveEngine.cpp
+        src/coding_agent/tui/InteractiveEngineHost.cpp
+        src/coding_agent/tui/InteractiveEngineWiring.cpp
         src/coding_agent/tui/InteractiveMode.cpp
+        src/coding_agent/tui/InteractiveStartup.cpp
         src/coding_agent/tui/InteractiveView.cpp
         src/coding_agent/tui/KeybindingHints.cpp
         src/coding_agent/tui/KeybindingsManager.cpp
@@ -339,13 +345,16 @@ cch_parity_declare_target(
         src/coding_agent/tui/ScopedModelsSelector.cpp
         src/coding_agent/tui/SessionFlowController.cpp
         src/coding_agent/tui/SessionFlowControllerTrust.cpp
+        src/coding_agent/tui/SlashCommandEffects.cpp
         src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
         src/coding_agent/tui/SessionUiBinding.cpp
+        src/coding_agent/tui/SettingsFlowController.cpp
         src/coding_agent/tui/SettingsSelector.cpp
         src/coding_agent/tui/StatusIndicator.cpp
         src/coding_agent/tui/StringListSelector.cpp
+        src/coding_agent/tui/SuspendController.cpp
         src/coding_agent/tui/Theme.cpp
         src/coding_agent/tui/ThemeController.cpp
         src/coding_agent/tui/ToolExecutionComponent.cpp

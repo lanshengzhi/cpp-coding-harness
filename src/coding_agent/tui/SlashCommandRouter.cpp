@@ -1,9 +1,13 @@
 #include "SlashCommandRouter.hpp"
 
+#include <cch/coding_agent/PromptTemplate.hpp>
+#include <cch/coding_agent/Skill.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <format>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -326,6 +330,25 @@ SlashCommandRouteVariant SlashCommandRouter::route(
     return SlashCommandModalResult{
         .invocation = std::move(invocation),
     };
+}
+
+bool is_dynamic_slash_command(
+    std::string_view command,
+    std::span<const coding_agent::PromptTemplate> prompt_templates,
+    std::span<const coding_agent::Skill> skills,
+    bool skill_commands_enabled) {
+    for (const auto& prompt_template : prompt_templates) {
+        if (prompt_template.name == command) return true;
+    }
+    if (!skill_commands_enabled || !command.starts_with("skill:")) {
+        return false;
+    }
+    const auto skill_name = command.substr(std::string_view{"skill:"}.size());
+    if (skill_name.empty()) return false;
+    for (const auto& skill : skills) {
+        if (skill.name == skill_name) return true;
+    }
+    return false;
 }
 
 } // namespace cch::coding_agent::tui

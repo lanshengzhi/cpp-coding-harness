@@ -1,5 +1,8 @@
 #include "coding_agent/tui/ExternalEditor.hpp"
 
+#include "coding_agent/tui/ErrorPresentation.hpp"
+
+#include <cch/tui/Tui.hpp>
 #include <cch/support/Error.hpp>
 
 #include <array>
@@ -168,6 +171,31 @@ edit_in_external_editor(std::string command, std::string content) {
         edited.pop_back();
     }
     co_return support::Expected<std::optional<std::string>>{std::move(edited)};
+}
+
+boost::asio::awaitable<support::Expected<std::optional<std::string>>>
+run_external_editor_flow(cch::tui::Tui& tui, std::string content) {
+    const auto command = external_editor_command();
+    const auto stopped = tui.stop();
+    if (!stopped) {
+        co_return std::unexpected(presentation_error(
+            stopped.error(),
+            "Native TUI external editor stop failed"));
+    }
+    auto result = co_await edit_in_external_editor(command, std::move(content));
+    // Restore the TUI on every exit path (pi's `finally`).
+    if (auto started = tui.start(); !started) {
+        co_return std::unexpected(presentation_error(
+            started.error(),
+            "Native TUI external editor resume failed"));
+    }
+    if (auto rendered = tui.render(); !rendered) {
+        co_return std::unexpected(startup_error(rendered.error()));
+    }
+    if (!result || !*result) {
+        co_return std::optional<std::string>{std::nullopt};
+    }
+    co_return std::optional<std::string>{std::move(**result)};
 }
 
 } // namespace cch::coding_agent::tui

@@ -7,6 +7,10 @@
 #include <optional>
 #include <string>
 
+namespace cch::tui {
+class Tui;
+} // namespace cch::tui
+
 namespace cch::coding_agent::tui {
 
 /// Resolve the external editor command (pi `SettingsManager
@@ -24,5 +28,14 @@ namespace cch::coding_agent::tui {
 /// when the editor failed or the file could not be read.
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
 edit_in_external_editor(std::string command, std::string content);
+
+/// pi `handleOpenExternalEditor` TUI lifecycle: stop the TUI (restore the
+/// terminal), run the resolved external editor over `content`, then restart
+/// the TUI and force a render on every exit path (pi's `finally`). Returns
+/// the edited content on a clean editor exit (`std::nullopt` when the editor
+/// failed, matching pi's silent outcome); a TUI stop/resume/render failure
+/// returns the error for the host's completion path.
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
+run_external_editor_flow(cch::tui::Tui& tui, std::string content);
 
 } // namespace cch::coding_agent::tui

@@ -68,7 +68,7 @@ struct ModelFlowHostHooks {
 /// The Native TUI model flows (pi interactive-mode.ts `handleModelCommand`,
 /// `showModelSelector`, `showModelsSelector`, `cycleModel`, #503): the
 /// `/model [query]` selector flow, the `/models` scoped-models flow, and the
-/// Ctrl+P model cycle, extracted from the InteractiveState monolith. The
+/// Ctrl+P model cycle, extracted from the pre-#506 interactive monolith. The
 /// controller owns the coroutine orchestration; it presents strictly through
 /// the ModalPresenter seam and reads or mutates session state strictly
 /// through the AgentSession resolved from the host hooks, so headless tests

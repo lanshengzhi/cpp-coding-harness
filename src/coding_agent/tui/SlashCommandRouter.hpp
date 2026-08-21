@@ -3,9 +3,15 @@
 #include <cch/support/Error.hpp>
 
 #include <functional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
+
+namespace cch::coding_agent {
+struct PromptTemplate;
+struct Skill;
+} // namespace cch::coding_agent
 
 namespace cch::coding_agent::tui {
 
@@ -109,8 +115,19 @@ struct SlashCommandExecutionContext {
 /// returned as a modal request.
 [[nodiscard]] bool is_immediate_slash_command(SlashCommandId command) noexcept;
 
+/// Whether one trimmed command token (without the leading slash) names a
+/// host-recognized dynamic slash resource: a loaded prompt template, or a
+/// `/skill:` command over an enabled skill (pi's dynamic command surface).
+/// Skill commands count only while the `enableSkillCommands` setting is
+/// enabled.
+[[nodiscard]] bool is_dynamic_slash_command(
+    std::string_view command,
+    std::span<const coding_agent::PromptTemplate> prompt_templates,
+    std::span<const coding_agent::Skill> skills,
+    bool skill_commands_enabled);
+
 /// Deep parser and router for Native TUI slash submissions. The module has no
-/// dependency on InteractiveState, Terminal, or rendering: those concerns
+/// dependency on the InteractiveEngine, Terminal, or rendering: those concerns
 /// enter only through SlashCommandExecutionContext and the returned modal
 /// value.
 class SlashCommandRouter final {
