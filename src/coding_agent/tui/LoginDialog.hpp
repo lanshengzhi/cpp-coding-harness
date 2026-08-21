@@ -98,6 +98,10 @@ public:
     /// per-prompt `manualAbort`: the Codex callback-vs-manual-input race).
     /// The dialog's stop source and cancel sink are NOT fired.
     void cancel_pending_prompt();
+    /// Cancel the whole dialog, including the Auth Interaction stop source and
+    /// any pending prompt. Used by the owning AuthFlowController during host
+    /// Close so detached login flows reach a terminal outcome.
+    void cancel();
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
@@ -117,10 +121,6 @@ private:
 
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> run_prompt(
         std::vector<ContentItem> items);
-    /// Locked-section cancel: request stop, reject the pending slot, and
-    /// report whether the cancel sink should fire.
-    void cancel();
-
     const LiveTheme& theme_; // must outlive this component.
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     std::string title_;

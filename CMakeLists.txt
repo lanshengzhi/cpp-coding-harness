@@ -316,6 +316,7 @@ cch_parity_declare_target(
         src/coding_agent/runtime/SessionPersistence.cpp
         src/coding_agent/runtime/UserBashOutputAccumulator.cpp
         src/coding_agent/tui/AssistantMessageComponent.cpp
+        src/coding_agent/tui/AuthFlowController.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp
         src/coding_agent/tui/ChatContainer.cpp
         src/coding_agent/tui/ClipboardWrite.cpp
@@ -336,6 +337,8 @@ cch_parity_declare_target(
         src/coding_agent/tui/OpenBrowser.cpp
         src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp
+        src/coding_agent/tui/SessionFlowController.cpp
+        src/coding_agent/tui/SessionFlowControllerTrust.cpp
         src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
