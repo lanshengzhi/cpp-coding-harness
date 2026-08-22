@@ -29,6 +29,10 @@ jobs:
       CCH_LIVE_KIMI: "0"
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
       VCPKG_ROOT: ${{ github.workspace }}/.deps/vcpkg
+      # Shared binary cache (issue #521); same directory as the blocking
+      # lanes. Drifted Arch toolchains produce different ABI hashes and
+      # coexist safely.
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
     steps:
       - name: Install tool gaps from current Arch
         run: pacman -Syu --noconfirm --needed git zip unzip python
@@ -50,6 +54,16 @@ jobs:
 
       - name: Install pinned CMake and Ninja
         run: scripts/ci/install-build-tools.sh "$RUNNER_TEMP/cch-build-tools"
+
+      - name: Restore the shared vcpkg binary cache
+        # Per-lane primary key + arch-only prefix fallback (see the blocking
+        # lanes); advisory drift runs must never write into the pinned lane's
+        # entry.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/vcpkg-archives
+          key: vcpkg-${{ hashFiles('vcpkg.json') }}-arch-latest
+          restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-arch-
 
       - name: Bootstrap pinned vcpkg
         run: |

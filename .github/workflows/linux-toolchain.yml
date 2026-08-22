@@ -52,6 +52,13 @@ jobs:
       CCH_LIVE_KIMI: "0"
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
       VCPKG_ROOT: ${{ github.workspace }}/.deps/vcpkg
+      # Shared binary cache (issue #521): built packages unpack from
+      # .cache/vcpkg-archives instead of recompiling ~70 boost-* ports per
+      # lane. The automatic ABI hash covers port versions, triplet, and
+      # compiler, so cross-lane entries cannot false-hit; the spelling is
+      # VCPKG_BINARY_SOURCES because that is the variable this pinned vcpkg
+      # tool revision reads.
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
 
     steps:
       - name: Check out harness
@@ -111,6 +118,20 @@ jobs:
           fi
           test -n "$symbolizer" && test -x "$symbolizer"
           echo "CCH_SYMBOLIZER=$symbolizer" >> "$GITHUB_ENV"
+
+      - name: Restore the shared vcpkg binary cache
+        # Per-lane primary key so every concurrently running job can persist
+        # its own save (one immutable key shared by parallel jobs lets only
+        # the first saver win, leaving the other lanes cold forever). The
+        # prefix fallback still shares ABI-matching archives across lanes:
+        # the GCC-family presets use the same x64-linux triplet, so a warm
+        # sibling lane makes them hit instead of recompile. A baseline touch
+        # changes the hash and cold-rebuilds naturally (#521).
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/vcpkg-archives
+          key: vcpkg-${{ hashFiles('vcpkg.json') }}-${{ matrix.preset }}
+          restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-
 
       - name: Bootstrap pinned vcpkg
         run: |
@@ -202,6 +223,8 @@ jobs:
       CCH_LIVE_KIMI: "0"
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
       VCPKG_ROOT: ${{ github.workspace }}/.deps/vcpkg
+      # Shared binary cache (issue #521); see the build-and-test job.
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
     steps:
       - name: Record the qualification run start
         run: echo "RUN_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
@@ -231,6 +254,15 @@ jobs:
           test "$(dpkg-query --show --showformat='${Version}' gcc-16)" = "$GCC_PACKAGE_VERSION"
           test "$(dpkg-query --show --showformat='${Version}' g++-16)" = "$GCC_PACKAGE_VERSION"
           test "$(g++-16 -dumpfullversion)" = "16.0.1"
+
+      - name: Restore the shared vcpkg binary cache
+        # Per-lane primary key + shared-prefix fallback (see build-and-test);
+        # this lane's dependencies are ABI-identical to the other GCC lanes.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/vcpkg-archives
+          key: vcpkg-${{ hashFiles('vcpkg.json') }}-release-artifact
+          restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-
 
       - name: Bootstrap pinned vcpkg
         run: |
@@ -349,6 +381,11 @@ jobs:
       CCH_LIVE_KIMI: "0"
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
       VCPKG_ROOT: ${{ github.workspace }}/.deps/vcpkg
+      # Shared binary cache (issue #521); see the build-and-test job. The
+      # Arch ABI hashes differ from Ubuntu and coexist in the same directory;
+      # the arch-prefixed fallback keeps Arch lanes from downloading Ubuntu
+      # archives they can never hit.
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
     steps:
       - name: Pin pacman to the image snapshot and install tool gaps
         run: |
@@ -373,6 +410,15 @@ jobs:
 
       - name: Install pinned CMake and Ninja
         run: scripts/ci/install-build-tools.sh "$RUNNER_TEMP/cch-build-tools"
+
+      - name: Restore the shared vcpkg binary cache
+        # Per-lane primary key + arch-only prefix fallback (see
+        # build-and-test); Arch ABIs never match the Ubuntu lanes.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/vcpkg-archives
+          key: vcpkg-${{ hashFiles('vcpkg.json') }}-arch-pinned
+          restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-arch-
 
       - name: Bootstrap pinned vcpkg
         run: |
