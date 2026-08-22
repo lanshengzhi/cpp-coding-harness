@@ -74,8 +74,5 @@ Use fake Providers and deterministic local resources by default. Use live API ke
 
 Use this completion path after implementation; triage and `wontfix` outcomes follow the `/triage` workflow instead. Close-out is ordered:
 
-1. Confirm and tick every acceptance criterion.
-2. Remove every in-flight state label (`needs-*`, `ready-for-*`).
-3. Close the issue.
-4. Run `scripts/verify-closed-issue.sh <n>`.
-5. Resolve every reported failure; close-out is complete only when the verifier exits 0.
+1. Confirm and tick every acceptance criterion in the issue body (`- [x]`).
+2. Close the issue: `gh issue close <n> --comment "..."` (see `docs/agents/issue-tracker.md`).

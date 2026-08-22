@@ -11,3 +11,5 @@ The skills speak in terms of five canonical triage roles. This tracker uses the 
 | `wontfix` | Will not be actioned |
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. If this tracker ever renames a label, edit the table to match.
+
+In-flight triage labels (`needs-*`, `ready-for-*`) represent backlog state; they are removed when an issue is claimed (`--remove-label "..."`).
