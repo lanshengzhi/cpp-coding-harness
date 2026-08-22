@@ -1,4 +1,5 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PseudoTerminal.hpp"
 #include "support/TempWorkspace.hpp"
@@ -96,18 +97,19 @@ TEST_CASE(
     boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
+    auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session(*created->session)
+        .with_agent_config_directory(config.path())
+        .with_initial_prompt("pty prompt")
+        .with_initial_prompt_options({
+            .images = {cch::ai::image_content("cG5n", "image/png")},
+        })
+        .build();
     boost::asio::co_spawn(
         io,
         cch::coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {
-                .agent_config_directory = config.path(),
-                .initial_prompt = "pty prompt",
-                .initial_prompt_options = {
-                    .images = {cch::ai::image_content("cG5n", "image/png")},
-                },
-            }),
+            std::move(run)),
         [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
             run_exception = exception;
             run_result.emplace(std::move(result));

@@ -49,9 +49,19 @@ bool InteractiveSessionRun::has_clipboard_reader() const noexcept {
     return state_ && state_->clipboard_reader != nullptr;
 }
 
-const std::optional<runtime::AgentSessionCreationRequest>& InteractiveSessionRun::boot_request() const noexcept {
-    static const std::optional<runtime::AgentSessionCreationRequest> kEmptyRequest{std::nullopt};
-    return state_ ? state_->boot_request : kEmptyRequest;
+std::unique_ptr<AsyncClipboardReader> InteractiveSessionRun::take_clipboard_reader() noexcept {
+    if (!state_) return nullptr;
+    return std::move(state_->clipboard_reader);
+}
+
+const SessionIntentVariant& InteractiveSessionRun::session_intent() const noexcept {
+    static const SessionIntentVariant kEmptyIntent{BindExistingSession{nullptr}};
+    return state_ ? state_->session_intent : kEmptyIntent;
+}
+
+SessionIntentVariant& InteractiveSessionRun::session_intent() noexcept {
+    static SessionIntentVariant kEmptyIntent{BindExistingSession{nullptr}};
+    return state_ ? state_->session_intent : kEmptyIntent;
 }
 
 bool InteractiveSessionRun::creation_failure_reported() const noexcept {
@@ -173,8 +183,8 @@ support::Expected<TuiActionResultVariant> InteractiveSessionRun::dispatch_action
 
 TuiActionSink InteractiveSessionRun::make_action_sink() const {
     if (!state_) return nullptr;
-    if (state_->custom_action_sink) {
-        return std::move(state_->custom_action_sink);
+    if (state_->custom_action_sink.has_value()) {
+        return std::move(state_->custom_action_sink.value());
     }
     const auto state = state_;
     return [state](std::size_t action_generation, TuiActionVariant action)
@@ -184,27 +194,46 @@ TuiActionSink InteractiveSessionRun::make_action_sink() const {
     };
 }
 
-InteractiveModeConfig InteractiveSessionRun::to_config() {
-    if (!state_) return InteractiveModeConfig{};
-    TuiActionSink sink = make_action_sink();
-    return InteractiveModeConfig{
-        .agent_config_directory = state_->agent_config_directory,
-        .clipboard_reader = std::move(state_->clipboard_reader),
-        .initial_prompt = state_->initial_prompt,
-        .initial_prompt_options = state_->initial_prompt_options,
-        .model_fallback_message = state_->model_fallback_message,
-        .action_sink = std::move(sink),
-        .session_facts = state_->session_facts,
-        .boot_request = std::move(state_->boot_request),
-    };
-}
-
 InteractiveSessionRunBuilder::InteractiveSessionRunBuilder()
     : state_(std::make_shared<InteractiveSessionRun::State>()) {}
 
 InteractiveSessionRunBuilder::~InteractiveSessionRunBuilder() = default;
 InteractiveSessionRunBuilder::InteractiveSessionRunBuilder(InteractiveSessionRunBuilder&&) noexcept = default;
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::operator=(InteractiveSessionRunBuilder&&) noexcept = default;
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_intent(
+    SessionIntentVariant intent) noexcept {
+    if (auto* defer = std::get_if<DeferBoot>(&intent)) {
+        state_->is_resume_target = std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
+            defer->request.session_target);
+    } else {
+        state_->is_resume_target = false;
+    }
+    state_->session_intent = std::move(intent);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(
+    AgentSession& session) noexcept {
+    state_->is_resume_target = false;
+    state_->session_intent = BindExistingSession{.session = &session};
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(
+    AgentSession* session) noexcept {
+    state_->is_resume_target = false;
+    state_->session_intent = BindExistingSession{.session = session};
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_defer_boot(
+    runtime::AgentSessionCreationRequest request) noexcept {
+    state_->is_resume_target = std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
+        request.session_target);
+    state_->session_intent = DeferBoot{.request = std::move(request)};
+    return *this;
+}
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_facts(
     runtime::InteractiveSessionFacts facts) noexcept {
@@ -239,16 +268,6 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_fallback_
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_clipboard_reader(
     std::unique_ptr<AsyncClipboardReader> reader) noexcept {
     state_->clipboard_reader = std::move(reader);
-    return *this;
-}
-
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_boot_request(
-    std::optional<runtime::AgentSessionCreationRequest> request) noexcept {
-    if (request) {
-        state_->is_resume_target = std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
-            request->session_target);
-    }
-    state_->boot_request = std::move(request);
     return *this;
 }
 

@@ -8,6 +8,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
@@ -150,15 +151,17 @@ void drain_ready(boost::asio::io_context& io) {
             return coding_agent::create_agent_session(std::move(request));
         };
 
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session(*created->session)
+        .with_agent_config_directory(fixture.agent_dir.path())
+        .with_action_sink(recorder.make_sink())
+        .build();
+
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             running.terminal,
-            {
-                .agent_config_directory = fixture.agent_dir.path(),
-                .action_sink = recorder.make_sink(),
-            }),
+            std::move(run)),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));

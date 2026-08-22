@@ -9,6 +9,7 @@
 #include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/EditorAutocomplete.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/LoadedResources.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
@@ -51,10 +52,9 @@ using interactive_view_detail::queued_editor_texts;
 InteractiveEngine::~InteractiveEngine() = default;
 
 InteractiveEngine::InteractiveEngine(
-    AgentSession* session,
     cch::tui::Terminal& terminal,
     boost::asio::any_io_executor executor)
-    : session_(session),
+    : session_(nullptr),
       terminal_(terminal),
       tui_(terminal),
       executor_(std::move(executor)),
@@ -64,16 +64,28 @@ InteractiveEngine::InteractiveEngine(
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
-support::ExpectedVoid InteractiveEngine::start(InteractiveModeConfig config) {
-    clipboard_reader_ = std::move(config.clipboard_reader);
-    model_fallback_message_ = std::move(config.model_fallback_message);
-    action_sink_ = std::move(config.action_sink);
-    session_facts_ = std::move(config.session_facts);
-    boot_request_ = std::move(config.boot_request);
+support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
+    std::visit(
+        [this](auto& intent) {
+            using T = std::decay_t<decltype(intent)>;
+            if constexpr (std::is_same_v<T, BindExistingSession>) {
+                session_ = intent.session;
+                boot_request_ = std::nullopt;
+            } else if constexpr (std::is_same_v<T, DeferBoot>) {
+                session_ = nullptr;
+                boot_request_ = std::move(intent.request);
+            }
+        },
+        run.session_intent());
     const bool booting = boot_request_.has_value();
 
+    clipboard_reader_ = run.take_clipboard_reader();
+    model_fallback_message_ = run.model_fallback_message();
+    action_sink_ = run.make_action_sink();
+    session_facts_ = run.session_facts();
+
     InteractiveStartupDiagnostics diagnostics;
-    if (auto loaded = load_startup_resources(config); !loaded) {
+    if (auto loaded = load_startup_resources(run); !loaded) {
         return fail_start(loaded.error());
     } else {
         diagnostics = std::move(*loaded);
@@ -100,6 +112,11 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveModeConfig config) {
         return fail_start(attached.error());
     }
     if (!booting) {
+        if (session_ == nullptr) {
+            return fail_start(support::make_error(
+                support::ErrorCode::Unknown,
+                "BindExistingSession intent supplied a null session"));
+        }
         if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
             return fail_start(subscribed.error());
         }
@@ -118,11 +135,11 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveModeConfig config) {
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
-        if (config.initial_prompt) {
+        if (run.initial_prompt()) {
             submit(
-                std::move(*config.initial_prompt),
+                *run.initial_prompt(),
                 InputSubmission::Ordinary,
-                std::move(config.initial_prompt_options),
+                run.initial_prompt_options(),
                 SubmissionOrigin::InitialPrompt);
         }
     } else {
@@ -135,8 +152,8 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveModeConfig config) {
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
-        initial_prompt_ = std::move(config.initial_prompt);
-        initial_prompt_options_ = config.initial_prompt_options;
+        initial_prompt_ = run.initial_prompt();
+        initial_prompt_options_ = run.initial_prompt_options();
     }
     return {};
 }
@@ -291,12 +308,12 @@ support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
 }
 
 support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup_resources(
-    const InteractiveModeConfig& config) {
+    const InteractiveSessionRun& run) {
     InteractiveStartupDiagnostics diagnostics;
-    agent_config_directory_ = config.agent_config_directory;
+    agent_config_directory_ = run.agent_config_directory();
     const auto actions =
         assemble_keybinding_actions(clipboard_reader_ != nullptr);
-    if (auto manager = load_app_keybinding_manager(config.agent_config_directory, actions);
+    if (auto manager = load_app_keybinding_manager(run.agent_config_directory(), actions);
         !manager) {
         return std::unexpected(manager.error());
     } else {
@@ -313,7 +330,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
     // The manager stays owned by the state: the scoped-models selector
     // persists `enabledModels` through it (pi `setEnabledModels`) and the
     // theme committer below references it.
-    if (auto manager = create_interactive_settings_manager(config.agent_config_directory);
+    if (auto manager = create_interactive_settings_manager(run.agent_config_directory());
         !manager) {
         return std::unexpected(manager.error());
     } else {
@@ -349,7 +366,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
         }
     };
     theme_controller_ = make_interactive_theme_controller(
-        config.agent_config_directory,
+        run.agent_config_directory(),
         *settings_manager_,
         terminal_.capabilities().color,
         tui_,

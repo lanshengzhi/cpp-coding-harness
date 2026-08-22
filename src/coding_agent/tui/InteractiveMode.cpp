@@ -531,34 +531,21 @@ void InteractiveEngine::user_bash_finished(
 }
 
 boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
-    AgentSession& session,
     cch::tui::Terminal& terminal,
-    InteractiveModeConfig config) {
+    InteractiveSessionRun run) {
     const auto executor = co_await boost::asio::this_coro::executor;
-    auto engine = std::make_shared<InteractiveEngine>(&session, terminal, executor);
-    if (auto started = engine->start(std::move(config)); !started) {
+    const bool is_boot = std::holds_alternative<DeferBoot>(run.session_intent());
+    auto engine = std::make_shared<InteractiveEngine>(terminal, executor);
+    if (auto started = engine->start(std::move(run)); !started) {
         co_return std::unexpected(started.error());
     }
-
-    boost::system::error_code wait_error;
-    co_await engine->exit_wait().async_wait(
-        boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
-    co_return co_await engine->finish();
-}
-
-boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode_boot(
-    cch::tui::Terminal& terminal,
-    InteractiveModeConfig config) {
-    const auto executor = co_await boost::asio::this_coro::executor;
-    auto engine = std::make_shared<InteractiveEngine>(nullptr, terminal, executor);
-    if (auto started = engine->start(std::move(config)); !started) {
-        co_return std::unexpected(started.error());
-    }
-    if (auto booted = co_await engine->boot_session(); !booted) {
-        // The boot-created session failed before bind; `boot_session`
-        // already stopped the TUI (the creation-failure sink printed pi's
-        // message).
-        co_return std::unexpected(booted.error());
+    if (is_boot) {
+        if (auto booted = co_await engine->boot_session(); !booted) {
+            // The boot-created session failed before bind; `boot_session`
+            // already stopped the TUI (the creation-failure sink printed pi's
+            // message).
+            co_return std::unexpected(booted.error());
+        }
     }
 
     boost::system::error_code wait_error;

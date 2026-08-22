@@ -14,6 +14,7 @@
 // - shutdown during a transition exits cleanly.
 
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 
 #include "ai/AsyncResultBridge.hpp"
@@ -108,15 +109,16 @@ void boot(
             request.session_target)) {
         request.session_target = coding_agent::InMemorySessionTarget{};
     }
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_defer_boot(std::move(request))
+        .with_agent_config_directory(fixture.agent_dir.path())
+        .with_action_sink(actions->make_sink())
+        .build();
     boost::asio::co_spawn(
         running.io,
-        coding_agent::tui::run_interactive_mode_boot(
+        coding_agent::tui::run_interactive_mode(
             running.terminal,
-            coding_agent::tui::InteractiveModeConfig{
-                .agent_config_directory = fixture.agent_dir.path(),
-                .action_sink = actions->make_sink(),
-                .boot_request = std::move(request),
-            }),
+            std::move(run)),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));

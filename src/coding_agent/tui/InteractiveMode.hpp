@@ -28,6 +28,8 @@ class Terminal;
 
 namespace cch::coding_agent::tui {
 
+class InteractiveSessionRun;
+
 // ── Closed application-level action seam (ADR 0040) ──────────────────────────
 //
 // Broad positional application callbacks become one closed action value and
@@ -119,48 +121,13 @@ using TuiActionResultVariant = std::variant<
 using TuiActionSink = std::move_only_function<
     support::Expected<TuiActionResultVariant>(std::size_t action_generation,
                                            TuiActionVariant action)>;
-struct InteractiveModeConfig {
-    std::filesystem::path agent_config_directory;
-    std::unique_ptr<AsyncClipboardReader> clipboard_reader{nullptr};
-    std::optional<std::string> initial_prompt{std::nullopt};
-    PromptOptions initial_prompt_options{};
-    /// pi `modelFallbackMessage` (sdk.ts `createAgentSession`): shown as a
-    /// `Warning: <message>` boot line in the chat container (pi
-    /// `interactive-mode.ts` `showWarning`). Absent in print mode.
-    std::optional<std::string> model_fallback_message{std::nullopt};
-    /// One move-only sink carrying every application-level Native TUI
-    /// operation to the composition host (ADR 0040). Null falls back to the
-    /// TUI-local platform defaults for environment operations (browser,
-    /// clipboard, process suspend) and reports session replacement as
-    /// unavailable; the CLI interactive host always supplies it and tests
-    /// inject recorders through it.
-    TuiActionSink action_sink{nullptr};
-    /// CLI-owned facts reused for in-session session replacement requests.
-    runtime::InteractiveSessionFacts session_facts{};
-    /// Boot path (pi main.ts `createRuntime` + `resolveProjectTrust`): when
-    /// set, the state creates the boot session itself after the boot trust
-    /// prompt resolves (the main-TUI overlay, G2), instead of binding a
-    /// pre-created session. The CLI interactive host sets this; focused
-    /// tests bind pre-created sessions.
-    std::optional<runtime::AgentSessionCreationRequest> boot_request{std::nullopt};
-};
 
 /// Run the private Native TUI composition until its exit binding is received.
-/// The borrowed Agent Session and Terminal must outlive the returned coroutine.
+/// The session intent in `run` selects whether to bind a pre-created Agent
+/// Session or defer creation to the boot trust prompt.
+/// The Terminal must outlive the returned coroutine.
 [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
-    AgentSession& session,
     cch::tui::Terminal& terminal,
-    InteractiveModeConfig config = {});
-
-/// Boot the private Native TUI composition with session creation deferred to
-/// the boot (pi main.ts `createAgentSessionRuntime`): the TUI starts first,
-/// the boot trust prompt resolves as an overlay when a trust-requiring
-/// resource exists and no override is set (G2 record), then the session is
-/// created through the config's `boot_request`/`action_sink` with the
-/// decided trust, bound, and the initial prompt submitted. The Terminal must
-/// outlive the returned coroutine.
-[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode_boot(
-    cch::tui::Terminal& terminal,
-    InteractiveModeConfig config);
+    InteractiveSessionRun run);
 
 } // namespace cch::coding_agent::tui

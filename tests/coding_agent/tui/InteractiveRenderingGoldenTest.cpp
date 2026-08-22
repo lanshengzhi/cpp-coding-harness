@@ -27,6 +27,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeModelRuntime.hpp"
@@ -59,6 +60,17 @@
 using namespace cch;
 
 namespace {
+
+[[nodiscard]] auto make_run(
+    coding_agent::AgentSession& session,
+    const std::filesystem::path& config_dir = {},
+    coding_agent::tui::TuiActionSink sink = nullptr) {
+    return coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session(session)
+        .with_agent_config_directory(config_dir)
+        .with_action_sink(std::move(sink))
+        .build();
+}
 
 void drain_ready(boost::asio::io_context& io) {
     if (io.stopped()) io.restart();
@@ -342,9 +354,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *fixture->session,
             terminal,
-            {.agent_config_directory = fixture->config.path()}),
+            make_run(*fixture->session, fixture->config.path())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -403,9 +414,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             running.terminal,
-            {.agent_config_directory = fixture.agent_dir.path()}),
+            make_run(*created->session, fixture.agent_dir.path())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
@@ -520,12 +530,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             running.terminal,
-            {
-                .agent_config_directory = agent_dir.path(),
-                .action_sink = recorder.make_sink(),
-            }),
+            make_run(*created->session, agent_dir.path(), recorder.make_sink())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
@@ -571,9 +577,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *fixture->session,
             terminal,
-            {.agent_config_directory = fixture->config.path()}),
+            make_run(*fixture->session, fixture->config.path())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));

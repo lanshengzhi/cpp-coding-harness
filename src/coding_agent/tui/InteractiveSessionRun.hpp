@@ -23,9 +23,24 @@ namespace cch::coding_agent::tui {
 class InteractiveSessionRun;
 class InteractiveSessionRunBuilder;
 
+/// Intent for the Interactive Session Run: either bind a pre-created Agent
+/// Session, or defer session creation until after the boot trust prompt
+/// resolves in the TUI overlay.
+struct BindExistingSession {
+    AgentSession* session{nullptr}; // borrowed; must outlive the interactive run
+};
+
+struct DeferBoot {
+    runtime::AgentSessionCreationRequest request{};
+};
+
+using SessionIntentVariant = std::variant<BindExistingSession, DeferBoot>;
+using InteractiveSessionIntentVariant = SessionIntentVariant;
+
 /// InteractiveSessionRun: The Native TUI's intake composition object (#517).
-/// Carries CLI-owned facts, run-intent values (initial prompt with options,
-/// model-fallback warning), and capability injections (clipboard reader).
+/// Carries CLI-owned facts, session intent (BindExistingSession vs DeferBoot),
+/// run-intent values (initial prompt with options, model-fallback warning), and
+/// capability injections (clipboard reader).
 /// Owns the host effects for the closed application action seam (browser,
 /// clipboard, process suspend, session replacement, boot diagnostics/failure
 /// reporting) so host effects live beside the values they capture.
@@ -45,7 +60,9 @@ public:
     [[nodiscard]] const PromptOptions& initial_prompt_options() const noexcept;
     [[nodiscard]] const std::optional<std::string>& model_fallback_message() const noexcept;
     [[nodiscard]] bool has_clipboard_reader() const noexcept;
-    [[nodiscard]] const std::optional<runtime::AgentSessionCreationRequest>& boot_request() const noexcept;
+    [[nodiscard]] std::unique_ptr<AsyncClipboardReader> take_clipboard_reader() noexcept;
+    [[nodiscard]] const SessionIntentVariant& session_intent() const noexcept;
+    [[nodiscard]] SessionIntentVariant& session_intent() noexcept;
     [[nodiscard]] bool creation_failure_reported() const noexcept;
 
     // ── Owned host effects (closed action seam dispatch) ────────────────
@@ -63,10 +80,9 @@ public:
         std::size_t action_generation,
         TuiActionVariant action) const;
 
-    // ── Action sink and Stage 3 config conversion ────────────────────────
+    // ── Action sink ──────────────────────────────────────────────────────
 
     [[nodiscard]] TuiActionSink make_action_sink() const;
-    [[nodiscard]] InteractiveModeConfig to_config();
 
 private:
     friend class InteractiveSessionRunBuilder;
@@ -78,7 +94,7 @@ private:
         PromptOptions initial_prompt_options{};
         std::optional<std::string> model_fallback_message{std::nullopt};
         std::unique_ptr<AsyncClipboardReader> clipboard_reader{nullptr};
-        std::optional<runtime::AgentSessionCreationRequest> boot_request{std::nullopt};
+        SessionIntentVariant session_intent{BindExistingSession{nullptr}};
 
         std::shared_ptr<harness::RuntimeRoot> runtime_root{nullptr};
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime{nullptr};
@@ -86,7 +102,7 @@ private:
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
         bool is_resume_target{false};
         std::atomic<bool> creation_failure_reported{false};
-        TuiActionSink custom_action_sink{nullptr};
+        std::optional<TuiActionSink> custom_action_sink{std::nullopt};
     };
 
     explicit InteractiveSessionRun(std::shared_ptr<State> state);
@@ -104,6 +120,14 @@ public:
     InteractiveSessionRunBuilder(const InteractiveSessionRunBuilder&) = delete;
     InteractiveSessionRunBuilder& operator=(const InteractiveSessionRunBuilder&) = delete;
 
+    InteractiveSessionRunBuilder& with_session_intent(
+        SessionIntentVariant intent) noexcept;
+    InteractiveSessionRunBuilder& with_session(
+        AgentSession& session) noexcept;
+    InteractiveSessionRunBuilder& with_session(
+        AgentSession* session) noexcept;
+    InteractiveSessionRunBuilder& with_defer_boot(
+        runtime::AgentSessionCreationRequest request) noexcept;
     InteractiveSessionRunBuilder& with_session_facts(
         runtime::InteractiveSessionFacts facts) noexcept;
     InteractiveSessionRunBuilder& with_agent_config_directory(
@@ -116,8 +140,6 @@ public:
         std::optional<std::string> message) noexcept;
     InteractiveSessionRunBuilder& with_clipboard_reader(
         std::unique_ptr<AsyncClipboardReader> reader) noexcept;
-    InteractiveSessionRunBuilder& with_boot_request(
-        std::optional<runtime::AgentSessionCreationRequest> request) noexcept;
     InteractiveSessionRunBuilder& with_runtime_root(
         std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept;
     InteractiveSessionRunBuilder& with_shared_runtime(

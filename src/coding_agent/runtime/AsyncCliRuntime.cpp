@@ -196,7 +196,7 @@ void print_session_diagnostics(
             .expand_prompt_templates = true,
             .images = std::move(initial.initial_images),
         })
-        .with_boot_request(std::move(request))
+        .with_defer_boot(std::move(request))
         .with_runtime_root(runtime_root)
         .with_shared_runtime(shared_runtime)
         .with_models(models)
@@ -205,9 +205,9 @@ void print_session_diagnostics(
 
     auto future = boost::asio::co_spawn(
         *io,
-        coding_agent::tui::run_interactive_mode_boot(
+        coding_agent::tui::run_interactive_mode(
             terminal,
-            run.to_config()),
+            std::move(run)),
         boost::asio::use_future);
     while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
         (void)io->run_one();

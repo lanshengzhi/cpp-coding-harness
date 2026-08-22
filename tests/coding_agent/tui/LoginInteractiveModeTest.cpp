@@ -10,6 +10,7 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 
 #include <cch/ai/Auth.hpp>
@@ -247,31 +248,26 @@ struct InteractiveRun {
     void start(
         coding_agent::AgentSession& session,
         const std::filesystem::path& agent_config_directory) {
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+            .with_session(session)
+            .with_agent_config_directory(agent_config_directory)
+            .with_action_sink([this](
+                                  std::size_t /* action_generation */,
+                                  coding_agent::tui::TuiActionVariant action)
+                              -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
+                if (const auto* open =
+                        std::get_if<coding_agent::tui::OpenBrowserAction>(&action)) {
+                    opened_urls.push_back(open->url);
+                }
+                return coding_agent::tui::TuiActionResultVariant{std::monostate{}};
+            })
+            .build();
+
         boost::asio::co_spawn(
             io,
             coding_agent::tui::run_interactive_mode(
-                session,
                 terminal,
-                [&] {
-                    coding_agent::tui::InteractiveModeConfig config;
-                    config.agent_config_directory = agent_config_directory;
-                    // The closed action seam carries the login dialog's
-                    // browser open (pi `openBrowser`); every other
-                    // application-level action is a no-op here.
-                    config.action_sink =
-                        [this](std::size_t /* action_generation */,
-                               coding_agent::tui::TuiActionVariant action)
-                        -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
-                            if (const auto* open =
-                                    std::get_if<coding_agent::tui::OpenBrowserAction>(
-                                        &action)) {
-                                opened_urls.push_back(open->url);
-                            }
-                            return coding_agent::tui::TuiActionResultVariant{
-                                std::monostate{}};
-                        };
-                    return config;
-                }()),
+                std::move(run)),
             [this](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));

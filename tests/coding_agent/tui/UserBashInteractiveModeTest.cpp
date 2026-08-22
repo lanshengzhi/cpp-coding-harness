@@ -9,6 +9,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeTool.hpp"
@@ -97,6 +98,23 @@ void drain_ready(boost::asio::io_context& io) {
         const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
         return bash != nullptr && bash->command == command;
     });
+}
+
+struct TestRunOptions {
+    std::filesystem::path agent_config_directory{};
+    std::string initial_prompt{};
+    coding_agent::PromptOptions initial_prompt_options{};
+};
+
+[[nodiscard]] auto make_run(
+    coding_agent::AgentSession& session,
+    TestRunOptions options = {}) {
+    return coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session(session)
+        .with_agent_config_directory(std::move(options.agent_config_directory))
+        .with_initial_prompt(std::move(options.initial_prompt))
+        .with_initial_prompt_options(std::move(options.initial_prompt_options))
+        .build();
 }
 
 /// Extracts the leading SGR parameter list from a themed probe string.
@@ -360,9 +378,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -450,12 +467,13 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {
-                .agent_config_directory = workspace.path(),
-                .initial_prompt = "! positional input",
-            }),
+            make_run(
+                *created->session,
+                {
+                    .agent_config_directory = workspace.path(),
+                    .initial_prompt = "! positional input",
+                })),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -523,9 +541,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -631,9 +648,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -898,9 +914,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1009,9 +1024,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*created->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1122,9 +1136,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*created->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1228,9 +1241,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*created->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1307,9 +1319,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*created->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1382,9 +1393,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*created->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1462,9 +1472,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1576,9 +1585,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *resumed->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*resumed->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1650,9 +1658,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1736,9 +1743,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1800,9 +1806,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1894,9 +1899,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            make_run(*created->session, {.agent_config_directory = config.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -1956,9 +1960,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -2032,9 +2035,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -2123,9 +2125,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -2176,9 +2177,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *created->session,
             terminal,
-            {.agent_config_directory = workspace.path()}),
+            make_run(*created->session, {.agent_config_directory = workspace.path()})),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             REQUIRE(exception == nullptr);
             run_result.emplace(std::move(result));

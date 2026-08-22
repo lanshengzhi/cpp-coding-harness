@@ -5,6 +5,7 @@
 // `--approve`/`--no-approve` one-run overrides.
 
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -99,15 +100,16 @@ struct BootTrustRun {
                 return coding_agent::create_agent_session_for_testing(
                     std::move(req), models);
             };
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+            .with_agent_config_directory(fixture.agent_dir)
+            .with_action_sink(recorder.make_sink())
+            .with_defer_boot(std::move(request))
+            .build();
         boost::asio::co_spawn(
             io,
-            coding_agent::tui::run_interactive_mode_boot(
+            coding_agent::tui::run_interactive_mode(
                 terminal,
-                coding_agent::tui::InteractiveModeConfig{
-                    .agent_config_directory = fixture.agent_dir,
-                    .action_sink = recorder.make_sink(),
-                    .boot_request = std::move(request),
-                }),
+                std::move(run)),
             [this](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
@@ -412,15 +414,16 @@ TEST_CASE(
             return coding_agent::create_agent_session_for_testing(
                 std::move(req), models);
         };
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_agent_config_directory(fixture.agent_dir)
+        .with_action_sink(recorder.make_sink())
+        .with_defer_boot(std::move(request))
+        .build();
     boost::asio::co_spawn(
         io,
-        coding_agent::tui::run_interactive_mode_boot(
+        coding_agent::tui::run_interactive_mode(
             terminal,
-            coding_agent::tui::InteractiveModeConfig{
-                .agent_config_directory = fixture.agent_dir,
-                .action_sink = recorder.make_sink(),
-                .boot_request = std::move(request),
-            }),
+            std::move(run)),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));

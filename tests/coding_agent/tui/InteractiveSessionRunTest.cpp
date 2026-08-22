@@ -48,7 +48,7 @@ public:
 
 TEST_CASE(
     "InteractiveSessionRun carries facts, run-intent values, and capability injections",
-    "[coding_agent][tui][session_run][issue517]") {
+    "[coding_agent][tui][session_run][issue518]") {
     coding_agent::runtime::InteractiveSessionFacts facts;
     facts.no_skills = true;
     facts.no_prompt_templates = true;
@@ -75,36 +75,47 @@ TEST_CASE(
     REQUIRE(run.model_fallback_message().has_value());
     CHECK(*run.model_fallback_message() == "model fallback triggered");
     CHECK(run.has_clipboard_reader());
+    auto reader = run.take_clipboard_reader();
+    CHECK(reader != nullptr);
+    CHECK_FALSE(run.has_clipboard_reader());
     CHECK_FALSE(run.creation_failure_reported());
-    CHECK_FALSE(run.boot_request().has_value());
+    CHECK(std::holds_alternative<coding_agent::tui::BindExistingSession>(run.session_intent()));
 }
 
 TEST_CASE(
-    "InteractiveSessionRun converts to InteractiveModeConfig preserving carried values",
-    "[coding_agent][tui][session_run][issue517]") {
-    coding_agent::runtime::InteractiveSessionFacts facts;
-    facts.no_skills = true;
+    "InteractiveSessionRunBuilder assembles BindExistingSession and DeferBoot intents",
+    "[coding_agent][tui][session_run][issue518]") {
+    tests::TempWorkspace workspace;
+    auto options = coding_agent::runtime::AgentSessionCreationRequest{};
+    options.workspace = workspace.path();
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.session_facts.no_skills = true;
+    options.session_facts.no_prompt_templates = true;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
 
-    auto run = InteractiveSessionRunBuilder{}
-        .with_session_facts(facts)
-        .with_agent_config_directory(std::filesystem::path{"/test/agent/config"})
-        .with_initial_prompt(std::optional<std::string>{"prompt text"})
-        .with_initial_prompt_options(PromptOptions{.expand_prompt_templates = true, .images = {}})
-        .with_model_fallback_message(std::optional<std::string>{"warning text"})
-        .with_clipboard_reader(std::make_unique<DummyClipboardReader>())
+    // 1. BindExistingSession via with_session
+    auto bind_run = InteractiveSessionRunBuilder{}
+        .with_session(*created->session)
         .build();
 
-    auto config = run.to_config();
+    const auto* bind = std::get_if<coding_agent::tui::BindExistingSession>(&bind_run.session_intent());
+    REQUIRE(bind != nullptr);
+    CHECK(bind->session == created->session.get());
 
-    CHECK(config.agent_config_directory == std::filesystem::path{"/test/agent/config"});
-    REQUIRE(config.initial_prompt.has_value());
-    CHECK(*config.initial_prompt == "prompt text");
-    CHECK(config.initial_prompt_options.expand_prompt_templates);
-    REQUIRE(config.model_fallback_message.has_value());
-    CHECK(*config.model_fallback_message == "warning text");
-    CHECK(config.clipboard_reader != nullptr);
-    CHECK(config.session_facts.no_skills);
-    CHECK(config.action_sink != nullptr);
+    // 2. DeferBoot via with_defer_boot
+    coding_agent::runtime::AgentSessionCreationRequest defer_req;
+    defer_req.workspace = workspace.path();
+    defer_req.session_target = coding_agent::ExplicitResumeSessionTarget{"/path/to/session.jsonl"};
+
+    auto defer_run = InteractiveSessionRunBuilder{}
+        .with_defer_boot(std::move(defer_req))
+        .build();
+
+    const auto* defer = std::get_if<coding_agent::tui::DeferBoot>(&defer_run.session_intent());
+    REQUIRE(defer != nullptr);
+    CHECK(defer->request.workspace == workspace.path());
+    CHECK(std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(defer->request.session_target));
 }
 
 TEST_CASE(

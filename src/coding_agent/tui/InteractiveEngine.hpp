@@ -25,6 +25,7 @@
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveStartup.hpp"
 #include "coding_agent/tui/InteractiveViewActions.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
@@ -80,11 +81,8 @@ class InteractiveEngine final
     : public std::enable_shared_from_this<InteractiveEngine>,
       public ModalPresenter {
 public:
-    /// `session` is null on the deferred-boot path (the boot session is
-    /// created by `boot_session`); otherwise it must outlive the run. The
-    /// terminal must outlive the run.
+    /// The terminal must outlive the run.
     InteractiveEngine(
-        AgentSession* session,
         cch::tui::Terminal& terminal,
         boost::asio::any_io_executor executor);
     InteractiveEngine(InteractiveEngine&&) = delete;
@@ -96,7 +94,7 @@ public:
     /// Load startup resources, compose and attach the view, create the flow
     /// controllers and session binding, start the TUI, and (outside the
     /// deferred-boot path) bind the session and submit the initial prompt.
-    [[nodiscard]] support::ExpectedVoid start(InteractiveModeConfig config);
+    [[nodiscard]] support::ExpectedVoid start(InteractiveSessionRun run);
 
     /// pi main.ts `createAgentSessionRuntime` + `resolveProjectTrusted`:
     /// the deferred boot of the interactive host. Resolves boot trust
@@ -143,7 +141,7 @@ private:
     [[nodiscard]] support::ExpectedVoid re_catalog_keybindings();
 
     [[nodiscard]] support::Expected<InteractiveStartupDiagnostics> load_startup_resources(
-        const InteractiveModeConfig& config);
+        const InteractiveSessionRun& run);
 
     [[nodiscard]] std::unique_ptr<InteractiveView> make_interactive_view(
         std::weak_ptr<InteractiveEngine> weak);

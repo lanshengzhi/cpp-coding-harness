@@ -16,6 +16,7 @@
 // - `app.interrupt` follows pi's precedence with the stale-generation guard.
 
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/FakeModelRuntime.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -210,7 +211,16 @@ struct E2eSession {
     return runtime;
 }
 
-
+[[nodiscard]] auto make_run(
+    coding_agent::AgentSession& session,
+    const std::filesystem::path& config_dir = {},
+    std::optional<std::string> fallback_message = std::nullopt) {
+    return coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session(session)
+        .with_agent_config_directory(config_dir)
+        .with_model_fallback_message(std::move(fallback_message))
+        .build();
+}
 
 } // namespace
 
@@ -225,9 +235,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *fixture->session,
             terminal,
-            {.agent_config_directory = fixture->config.path()}),
+            make_run(*fixture->session, fixture->config.path())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -268,9 +277,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *fixture->session,
             terminal,
-            {.agent_config_directory = fixture->config.path()}),
+            make_run(*fixture->session, fixture->config.path())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -358,9 +366,8 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *fixture->session,
             terminal,
-            {.agent_config_directory = fixture->config.path()}),
+            make_run(*fixture->session, fixture->config.path())),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
@@ -413,12 +420,12 @@ TEST_CASE(
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
-            *fixture->session,
             terminal,
-            {.agent_config_directory = fixture->config.path(),
-             .model_fallback_message =
-                 "Could not restore model deepseek/deepseek-v4-flash. "
-                 "Using openai-codex/gpt-5.5"}),
+            make_run(
+                *fixture->session,
+                fixture->config.path(),
+                "Could not restore model deepseek/deepseek-v4-flash. "
+                "Using openai-codex/gpt-5.5")),
         [&](std::exception_ptr exception, support::ExpectedVoid result) {
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
