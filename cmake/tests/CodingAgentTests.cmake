@@ -111,6 +111,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
+        tests/coding_agent/tui/InteractiveSessionRunTest.cpp
         tests/coding_agent/tui/InteractiveViewActionTest.cpp
         tests/coding_agent/tui/KeybindingsManagerTest.cpp
         tests/coding_agent/tui/LoadedResourcesTest.cpp

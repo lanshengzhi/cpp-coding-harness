@@ -65,6 +65,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/InteractiveEngineHost.cpp
         src/coding_agent/tui/InteractiveEngineWiring.cpp
         src/coding_agent/tui/InteractiveMode.cpp
+        src/coding_agent/tui/InteractiveSessionRun.cpp
         src/coding_agent/tui/InteractiveStartup.cpp
         src/coding_agent/tui/InteractiveView.cpp
         src/coding_agent/tui/KeybindingHints.cpp

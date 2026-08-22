@@ -11,8 +11,7 @@
 #include "coding_agent/SessionCwd.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
-#include "coding_agent/tui/ClipboardWrite.hpp"
-#include "coding_agent/tui/OpenBrowser.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -186,109 +185,29 @@ void print_session_diagnostics(
             shared_runtime = std::move(*created);
         }
     }
-    // pi `createAgentSessionRuntime`: the in-session session flows reuse the
-    // CLI-owned facts (model selection, resource flags); the factory applies
-    // them to each replacement request, and the state keeps the same facts
-    // for building them.
-    const bool is_resume_target =
-        std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
-            request.session_target);
-    // The boot reports session-creation failures through the action seam (pi
-    // print_creation_failure); the host must not double-print "Native TUI
-    // failed" for those. The flag is written on the io thread before the
-    // future completes and read after io.run(), so the future synchronizes.
-    bool creation_failure_reported = false;
-    coding_agent::tui::TuiActionSink action_sink =
-        [facts = config.session_facts, models, shared_runtime, runtime_root, &streams,
-         &creation_failure_reported, is_resume_target](
-            std::size_t /* action_generation */,
-            coding_agent::tui::TuiActionVariant action)
-        -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
-            // One move-only sink carries every application-level Native TUI
-            // operation to the composition host (ADR 0040); dispatch on the
-            // closed action value.
-            return std::visit(
-                [&](auto&& payload)
-                    -> support::Expected<
-                        coding_agent::tui::TuiActionResultVariant> {
-                    using T = std::decay_t<decltype(payload)>;
-                    if constexpr (std::is_same_v<T, coding_agent::tui::OpenBrowserAction>) {
-                        coding_agent::tui::open_browser(std::move(payload.url));
-                        return coding_agent::tui::TuiActionResultVariant{
-                            std::monostate{}};
-                    } else if constexpr (std::is_same_v<T, coding_agent::tui::WriteClipboardAction>) {
-                        return coding_agent::tui::TuiActionResultVariant{
-                            coding_agent::tui::write_clipboard_text(payload.text)};
-                    } else if constexpr (std::is_same_v<T, coding_agent::tui::SuspendProcessAction>) {
-                        // pi `process.kill(0, "SIGTSTP")`: the host owns the
-                        // process-group suspend.
-                        (void)::kill(0, SIGTSTP);
-                        return coding_agent::tui::TuiActionResultVariant{
-                            std::monostate{}};
-                    } else if constexpr (std::is_same_v<T, coding_agent::tui::ReplaceSessionAction>) {
-                        // The host installs its host-only capabilities on the
-                        // engine-built request (issue #507): the interactive
-                        // Session's independent User Shell (ADR 0026), the CLI
-                        // Runtime root's target, and the host-shared Models
-                        // runtime when one was created (issue #466; a null
-                        // shared runtime leaves the request's model_runtime
-                        // untouched so the factory default-creates a
-                        // Session-owned one). The CLI-owned facts cross with
-                        // the request; the Session Assembly boundary
-                        // re-applies them.
-                        auto request = std::move(payload.request);
-                        request.provide_user_shell = true;
-                        request.execution_runtime_target =
-                            runtime_root->make_target();
-                        if (shared_runtime) {
-                            request.model_runtime = shared_runtime;
-                        }
-                        auto created = coding_agent::create_agent_session(
-                            std::move(request),
-                            facts,
-                            coding_agent::runtime::AssemblyOverrides{
-                                .models = models, .user_shell = nullptr});
-                        return coding_agent::tui::TuiActionResultVariant{
-                            std::move(created)};
-                    } else if constexpr (std::is_same_v<T, coding_agent::tui::ReportBootDiagnosticsAction>) {
-                        print_session_diagnostics(streams.error, payload.diagnostics);
-                        return coding_agent::tui::TuiActionResultVariant{
-                            std::monostate{}};
-                    } else if constexpr (std::is_same_v<T, coding_agent::tui::ReportBootCreationFailureAction>) {
-                        // pi `print_creation_failure`; the host must not
-                        // double-print "Native TUI failed" for those. The
-                        // flag is written on the io thread before the future
-                        // completes and read after io.run(), so the future
-                        // synchronizes.
-                        print_creation_error(
-                            is_resume_target, streams.error, payload.error);
-                        creation_failure_reported = true;
-                        return coding_agent::tui::TuiActionResultVariant{
-                            std::monostate{}};
-                    } else {
-                        return coding_agent::tui::TuiActionResultVariant{
-                            std::monostate{}};
-                    }
-                },
-                std::move(action));
-        };
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session_facts(config.session_facts)
+        .with_agent_config_directory(coding_agent::agent_config_dir())
+        .with_initial_prompt(
+            initial.initial_message.empty()
+                ? std::nullopt
+                : std::optional<std::string>{std::move(initial.initial_message)})
+        .with_initial_prompt_options(coding_agent::PromptOptions{
+            .expand_prompt_templates = true,
+            .images = std::move(initial.initial_images),
+        })
+        .with_boot_request(std::move(request))
+        .with_runtime_root(runtime_root)
+        .with_shared_runtime(shared_runtime)
+        .with_models(models)
+        .with_error_stream(&streams.error)
+        .build();
+
     auto future = boost::asio::co_spawn(
         *io,
         coding_agent::tui::run_interactive_mode_boot(
             terminal,
-            coding_agent::tui::InteractiveModeConfig{
-                .agent_config_directory = coding_agent::agent_config_dir(),
-                .initial_prompt = initial.initial_message.empty()
-                    ? std::nullopt
-                    : std::optional<std::string>{std::move(initial.initial_message)},
-                .initial_prompt_options = coding_agent::PromptOptions{
-                    .expand_prompt_templates = true,
-                    .images = std::move(initial.initial_images),
-                },
-                .action_sink = std::move(action_sink),
-                .session_facts = config.session_facts,
-                .boot_request = std::move(request),
-            }),
+            run.to_config()),
         boost::asio::use_future);
     while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
         (void)io->run_one();
@@ -306,7 +225,7 @@ void print_session_diagnostics(
     try {
 #endif
         if (auto result = future.get(); !result) {
-            if (!creation_failure_reported) {
+            if (!run.creation_failure_reported()) {
                 std::cerr << "Native TUI failed: " << result.error().message;
                 if (!result.error().detail.empty() &&
                     result.error().detail != result.error().message) {
