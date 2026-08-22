@@ -29,9 +29,13 @@ elif [[ $# -eq 1 ]]; then
 	base_commit="$(git merge-base "$1" HEAD)"
 fi
 
-# git clang-format --diff exits nonzero whenever the produced patch is
-# non-empty, so capture under suppression and classify by content below.
-diff_output="$(git clang-format --diff --extensions hpp,cpp ${base_commit:+"$base_commit"} 2>&1)" || true
+# Always pass an explicit baseline commit: with no argument git clang-format
+# only examines the unstaged diff, which silently misses staged work. HEAD
+# covers the working tree (staged and unstaged) against the last commit; a
+# ref argument narrows the baseline to that branch's merge-base.
+# git clang-format --diff exits nonzero whenever it wants to change lines, so
+# capture under suppression and classify by content below.
+diff_output="$(git clang-format --diff --extensions hpp,cpp "${base_commit:-HEAD}" 2>&1)" || true
 
 if [[ -z "$diff_output" ]]; then
 	echo "format check: clean"
@@ -39,7 +43,7 @@ if [[ -z "$diff_output" ]]; then
 fi
 
 case "$diff_output" in
-"no modified files to format"* | "no commit is currently checked out"*)
+"no modified files to format"* | "no commit is currently checked out"* | "clang-format did not modify any files"*)
 	echo "format check: clean"
 	exit 0
 	;;

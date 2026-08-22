@@ -172,7 +172,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.4. Tags are `[module][feature]`, module first, spelled like the owning test area: `[ai]`, `[agent]`, `[harness]`, `[tools]`, `[support]`, `[tui]`, `[cli]`, `[architecture]`, `[coding_agent]`. Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. Fatal-contract probes carry a `[fatal]` tag; the owning shard's `catch_discover_tests` selects `[fatal]` with a tightened CTest timeout. Tags map to CTest labels.
 
-11.5. Layout follows Capability Owner or support ownership: `tests/<owner-or-support>/<Stem>Test.cpp`, with deeper directories for cohesive areas. Shared helpers live in `tests/support/` under `namespace cch::tests` and do not create a cross-Owner production seam.
+11.5. Layout follows Capability Owner or support ownership: `tests/<owner-or-support>/<Stem>Test.cpp`, with deeper directories for cohesive areas. Shared helpers live in `tests/support/` under `namespace cch::tests` and do not create a cross-Owner production seam. Test include roots are declared in `cmake/tests/TestsSetup.cmake` (`CCH_FORMAL_TEST_INCLUDE_DIRS`); shared helpers are included as `"support/<Header>.hpp"` against the declared `tests/` root.
 
 11.6. CTest names and labels are the normal selection, scheduling, timeout, and reporting surface. Fast deterministic unit/contract cases are discovered individually. Process, TTY, golden, and complete Agent Session/TUI scenarios are grouped only when measured startup cost or shared setup justifies it. Fatal, cancellation, Close, and hang-prone contracts run in isolated subprocesses with hard timeouts; the old shard runner is not a second scheduling authority.
 

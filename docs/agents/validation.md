@@ -10,6 +10,8 @@ The validation tiers are defined in `CONTEXT.md`: Focused Validation, Full Valid
 
 During implementation, run the smallest focused test that can fail through `scripts/check.sh`, which builds incrementally on the default Debug preset and passes selection arguments straight through to CTest (CTest names and labels are the sole selection authority, ADR 0039):
 
+Configure presets require `VCPKG_ROOT` pointing at a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline; after Fresh Validation it is `.deps/vcpkg` in the repository root. Any edit to a compiled source can make the build-phase Parity Gate reject with PARITY-4011 (include evidence older than the source): this is staleness, not an architecture violation — reconfigure once (`VCPKG_ROOT=<root> cmake --preset <preset>`) to rescan the direct-include evidence, then build.
+
 ```bash
 scripts/check.sh --target cch_tests_coding_agent -R 'session assembly'  # owning shard, focused name
 scripts/check.sh -L coding_agent                                        # owning module label
