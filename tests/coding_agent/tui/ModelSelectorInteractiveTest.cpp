@@ -107,12 +107,12 @@ void drain_ready(boost::asio::io_context& io) {
     Running& running,
     std::vector<std::string> models = {}) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    request.models = std::move(models);
+    request.session_facts.models = std::move(models);
     auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created.has_value());
 

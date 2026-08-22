@@ -170,8 +170,8 @@ struct E2eSession {
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.workspace = fixture->workspace;
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture->runtime;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());

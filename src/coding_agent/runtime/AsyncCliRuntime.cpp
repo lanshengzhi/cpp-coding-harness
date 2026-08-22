@@ -431,25 +431,13 @@ void print_session_diagnostics(
         std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
             assembly->target);
     request.provide_user_shell = frontend == Frontend::Interactive;
+    request.session_facts = config.session_facts;
     request.project_trust_override = config.session_facts.project_trust_override;
-    request.no_skills = config.session_facts.no_skills;
-    request.no_prompt_templates = config.session_facts.no_prompt_templates;
-    request.prompt_template_paths = config.session_facts.prompt_template_paths;
-    request.skill_paths = config.session_facts.skill_paths;
-    request.no_themes = config.session_facts.no_themes;
-    request.theme_paths = config.session_facts.theme_paths;
-    request.no_context_files = config.session_facts.no_context_files;
-    request.system_prompt = config.session_facts.system_prompt;
-    request.append_system_prompt = config.session_facts.append_system_prompt;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);
     request.resume_cwd_override = boot_cwd_override;
     request.session_name = config.name;
     request.session_dir = config.session_dir;
-    request.provider = config.session_facts.provider;
-    request.model = config.session_facts.model;
-    request.models = config.session_facts.models;
-    request.api_key = config.session_facts.api_key;
 
     const auto print_creation_failure = [&](const support::Error& error) {
         // pi `MissingSessionCwdError`: the resumed session's stored header

@@ -288,8 +288,8 @@ TEST_CASE(
     fixture.write_models(kKeylessAlphaKeyedBeta);
 
     auto request = cli_request(fixture);
-    request.provider = "alpha";
-    request.model = "alpha-1";
+    request.session_facts.provider = "alpha";
+    request.session_facts.model = "alpha-1";
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "alpha");
@@ -315,8 +315,8 @@ TEST_CASE(
     // No models.json: the built-in kimi-coding provider (OAuth + ambient API
     // key) resolves with no stored credential and no KIMI_API_KEY.
     auto request = cli_request(fixture);
-    request.provider = "kimi-coding";
-    request.model = "kimi-for-coding";
+    request.session_facts.provider = "kimi-coding";
+    request.session_facts.model = "kimi-for-coding";
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "kimi-coding");

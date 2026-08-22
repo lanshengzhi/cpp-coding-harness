@@ -220,9 +220,9 @@ TEST_CASE(
 
     auto options = context_session_options(session_file, child, client);
     // pi `--system-prompt <file>`: text-or-file resolution reads the file.
-    options.system_prompt = (child / "custom.md").string();
+    options.session_facts.system_prompt = (child / "custom.md").string();
     // pi `--append-system-prompt` repeatable: joined with "\n\n".
-    options.append_system_prompt = {"first append", "second append"};
+    options.session_facts.append_system_prompt = {"first append", "second append"};
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 
@@ -299,7 +299,7 @@ TEST_CASE(
     auto client = std::make_shared<RecordingProvider>();
 
     auto options = context_session_options(session_file, workspace.path(), client);
-    options.no_context_files = true;
+    options.session_facts.no_context_files = true;
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 

@@ -37,12 +37,43 @@ struct InMemoryBranchSeed {
     std::optional<std::filesystem::path> parent_session;
 };
 
+/// CLI-owned facts (pi CLI options: resource flags, skill/template/theme
+/// paths, system-prompt values, model selection, API key, and Project Trust
+/// override). Reused for in-session session replacement requests (pi's
+/// `createRuntime` closure captures the CLI model selection and resource
+/// flags; the workspace and session target change per flow). Embedded in
+/// AgentSessionCreationRequest and CliConfig (issue #507, #515, #516).
+struct InteractiveSessionFacts {
+    std::optional<bool> project_trust_override;
+    bool no_skills{false};
+    bool no_prompt_templates{false};
+    std::vector<std::string> prompt_template_paths;
+    /// Repeatable pi `--skill` paths: explicit skills load even when
+    /// `--no-skills` drops discovery.
+    std::vector<std::string> skill_paths;
+    /// pi `--no-themes` and repeatable `--theme` paths (file or directory,
+    /// workspace-relative), used by in-session session replacement.
+    bool no_themes{false};
+    std::vector<std::string> theme_paths;
+    /// pi `--no-context-files`, `--system-prompt`, and repeatable
+    /// `--append-system-prompt`, used by in-session session replacement
+    /// (P20).
+    bool no_context_files{false};
+    std::optional<std::string> system_prompt;
+    std::vector<std::string> append_system_prompt;
+    std::optional<std::string> provider;
+    std::optional<std::string> model;
+    std::vector<std::string> models;
+    std::optional<std::string> api_key;
+};
+
 /// Internal creation request shared by the CLI adapters. Session assembly is
-/// SessionFactory-authoritative; the request carries only CLI-owned facts
-/// (workspace, session intent, model selection) plus the two private test
-/// seams documented on their fields. The former public SDK creation options
-/// (host skills/templates, tool selection, execution environment, agent dir,
-/// trust store) are removed with the SDK (pi-coding-agent phase, ADR 0036).
+/// SessionFactory-authoritative; the request embeds CLI-owned facts
+/// (`session_facts`), engine-resolved trust (`project_trust_override`),
+/// per-session deltas (workspace, session intent, session name, resume cwd
+/// override, in-memory branch seed, session-dir override, queue limits),
+/// host-only capabilities (User Shell provision, Runtime target, shared
+/// Models Runtime), and the documented private test seams (issue #507, #516).
 struct AgentSessionCreationRequest {
     /// Assemble the Native TUI's independent Session-owned User Shell
     /// capability (ADR 0026). Only the interactive frontend sets this; it
@@ -53,37 +84,14 @@ struct AgentSessionCreationRequest {
     /// root. Empty only in focused construction tests that do not execute
     /// filesystem or model Shell work.
     std::shared_ptr<harness::RuntimeTarget> execution_runtime_target;
+    /// CLI-owned facts (resource flags, skill/template/theme paths, system
+    /// prompt, model/provider selection, API key, and CLI project-trust override).
+    InteractiveSessionFacts session_facts{};
+    /// Engine-resolved session trust (pi `projectTrustByCwd`: CLI override ->
+    /// boot prompt decision -> boot-workspace inheritance). Kept as a separate
+    /// engine-owned field from session_facts; the Session Assembly facts merge
+    /// fills it only when unset (issue #507, #516).
     std::optional<bool> project_trust_override;
-    /// pi `--no-skills`: drops user and project skill discovery (explicit
-    /// `--skill` paths stay).
-    bool no_skills{false};
-    /// Repeatable pi `--skill` paths (files or directories): explicit skills
-    /// load first (they win name collisions) and stay effective under
-    /// `--no-skills`.
-    std::vector<std::string> skill_paths;
-    /// pi `--no-prompt-templates`: drops user and project prompt discovery
-    /// (explicit `--prompt-template` paths still load).
-    bool no_prompt_templates{false};
-    std::vector<std::string> prompt_template_paths;
-    /// pi `--no-themes`: drops user and project theme discovery (explicit
-    /// `--theme` paths stay).
-    bool no_themes{false};
-    /// Repeatable pi `--theme` paths (files or directories): explicit theme
-    /// inputs load after every discovered source and stay effective under
-    /// `--no-themes`.
-    std::vector<std::string> theme_paths;
-    /// pi `--no-context-files`: disables Project Context File discovery
-    /// (global AGENTS.md/CLAUDE.md + the cwd ancestor chain). Context files
-    /// are never Project Trust gated (pinned fact).
-    bool no_context_files{false};
-    /// pi `--system-prompt`: raw text-or-file value; wins over SYSTEM.md
-    /// discovery and renders as the custom-prompt branch of the System
-    /// Prompt.
-    std::optional<std::string> system_prompt;
-    /// pi `--append-system-prompt` (repeatable): raw text-or-file values;
-    /// win over APPEND_SYSTEM.md discovery and join with `"\n\n"` into the
-    /// append section.
-    std::vector<std::string> append_system_prompt;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// The internal workspace containment seam: always the current working
@@ -112,13 +120,6 @@ struct AgentSessionCreationRequest {
     /// override, ahead of PI_CODING_AGENT_SESSION_DIR and settings
     /// sessionDir. Consulted only for default persisted creation.
     std::optional<std::string> session_dir;
-    /// pi CLI model selection: `--provider`, `--model`, `--models` patterns,
-    /// and `--api-key` (in-memory runtime override). `--api-key` requires an
-    /// explicit model at parse time.
-    std::optional<std::string> provider;
-    std::optional<std::string> model;
-    std::vector<std::string> models;
-    std::optional<std::string> api_key;
     /// Private test seam: an explicit request Model for the injected-Models
     /// assembly path. Production callers never set it — the CLI resolves the
     /// request model through the pi chain (`--model`, resume re-resolution,
@@ -145,35 +146,6 @@ struct AgentSessionCreationRequest {
     /// creates and wires the holder); focused tests capture it to assert the
     /// session refreshes the facts as the model and thinking level change.
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
-};
-
-/// CLI-owned facts reused for in-session session replacement requests (pi's
-/// `createRuntime` closure captures the CLI model selection and resource
-/// flags; the workspace and session target change per flow). Lives beside the
-/// creation request the Session Assembly boundary re-applies it onto (issue
-/// #507 ownership rules).
-struct InteractiveSessionFacts {
-    std::optional<bool> project_trust_override;
-    bool no_skills{false};
-    bool no_prompt_templates{false};
-    std::vector<std::string> prompt_template_paths;
-    /// Repeatable pi `--skill` paths: explicit skills load even when
-    /// `--no-skills` drops discovery.
-    std::vector<std::string> skill_paths;
-    /// pi `--no-themes` and repeatable `--theme` paths (file or directory,
-    /// workspace-relative), used by in-session session replacement.
-    bool no_themes{false};
-    std::vector<std::string> theme_paths;
-    /// pi `--no-context-files`, `--system-prompt`, and repeatable
-    /// `--append-system-prompt`, used by in-session session replacement
-    /// (P20).
-    bool no_context_files{false};
-    std::optional<std::string> system_prompt;
-    std::vector<std::string> append_system_prompt;
-    std::optional<std::string> provider;
-    std::optional<std::string> model;
-    std::vector<std::string> models;
-    std::optional<std::string> api_key;
 };
 
 } // namespace cch::coding_agent::runtime

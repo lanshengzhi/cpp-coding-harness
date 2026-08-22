@@ -206,8 +206,8 @@ struct PipelineSession {
         coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.execution_runtime_target = tests::detail::fixture_runtime_target();
     resume.workspace = fixture->workspace;
-    resume.no_skills = true;
-    resume.no_prompt_templates = true;
+    resume.session_facts.no_skills = true;
+    resume.session_facts.no_prompt_templates = true;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(resume), ai::providers::make_scripted_fake_models());
     REQUIRE(created);
@@ -317,8 +317,8 @@ struct InterruptSession {
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture->workspace;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture->runtime;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -390,8 +390,8 @@ TEST_CASE(
     Running running;
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
@@ -499,8 +499,8 @@ TEST_CASE(
     Running running{{.columns = 100, .rows = 24}};
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = workspace;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
@@ -512,8 +512,8 @@ TEST_CASE(
     recorder.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
         };
 

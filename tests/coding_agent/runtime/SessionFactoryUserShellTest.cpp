@@ -28,8 +28,8 @@ namespace {
     runtime::AgentSessionCreationRequest request;
     request.provide_user_shell = provide_user_shell;
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     return coding_agent::create_agent_session_for_testing(

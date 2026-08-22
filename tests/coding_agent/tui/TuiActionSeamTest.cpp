@@ -83,8 +83,8 @@ struct Fixture {
 [[nodiscard]] coding_agent::tui::testing::TestSessionFactorySink in_memory_session_creator() {
     return [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         return coding_agent::create_agent_session(std::move(request));
     };
 }
@@ -228,8 +228,8 @@ TEST_CASE(
     actions->replace_session =
         [&replacement_calls](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             ++replacement_calls;
             if (replacement_calls == 2) {
                 return std::unexpected(support::make_error(
@@ -269,8 +269,8 @@ TEST_CASE(
                 .agent_config_directory = fixture.agent_dir.path(),
                 .boot_request = [&] {
                     coding_agent::runtime::AgentSessionCreationRequest request;
-                    request.no_skills = true;
-                    request.no_prompt_templates = true;
+                    request.session_facts.no_skills = true;
+                    request.session_facts.no_prompt_templates = true;
                     request.workspace = fixture.workspace.path();
                     request.session_target = coding_agent::InMemorySessionTarget{};
                     return request;

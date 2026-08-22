@@ -159,8 +159,8 @@ public:
     const Fixture& fixture,
     std::shared_ptr<ai::Models> models = nullptr) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
@@ -461,8 +461,8 @@ TEST_CASE(
 
     // In-memory session (no file) so the branch append is observable live.
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
@@ -526,8 +526,8 @@ TEST_CASE(
 
     // Source in-memory session with two completed turns.
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
@@ -550,8 +550,8 @@ TEST_CASE(
     // The replacement in-memory session commits the seed to its store, so
     // the tree surface and navigation work on the seeded entries directly.
     coding_agent::runtime::AgentSessionCreationRequest fork_request;
-    fork_request.no_skills = true;
-    fork_request.no_prompt_templates = true;
+    fork_request.session_facts.no_skills = true;
+    fork_request.session_facts.no_prompt_templates = true;
     fork_request.workspace = fixture.workspace.path();
     fork_request.session_target = coding_agent::InMemorySessionTarget{};
     fork_request.request_model = tests::scripted_request_model("fake", "fake-model");
@@ -600,8 +600,8 @@ TEST_CASE(
     seed.context.has_thinking_level_entry = true;
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
@@ -647,8 +647,8 @@ TEST_CASE(
     // Open the session with the scripted provider (the resumed run answers
     // the post-navigation prompt).
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};

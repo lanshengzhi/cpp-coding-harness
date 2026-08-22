@@ -69,8 +69,8 @@ struct TestPaths {
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
     const TestPaths& paths) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = paths.workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();

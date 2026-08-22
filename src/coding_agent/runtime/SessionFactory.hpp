@@ -47,10 +47,10 @@ public:
     /// The CLI-facts merge the door performs (issue #507, absorbed from the
     /// interactive composition host): engine-resolved session trust wins —
     /// `project_trust_override` is filled from the facts only when the engine
-    /// left it unset; the pure CLI-owned resource and model facts are
-    /// re-applied unconditionally. The host-only capabilities (User Shell,
-    /// Runtime target, shared Models runtime) are not part of the merge; the
-    /// host sets them on the request.
+    /// left it unset; the embedded `session_facts` value is replaced
+    /// unconditionally. The host-only capabilities (User Shell, Runtime
+    /// target, shared Models runtime) are not part of the merge; the host sets
+    /// them on the request.
     static void apply_cli_facts(
         AgentSessionCreationRequest& request,
         const InteractiveSessionFacts& facts);

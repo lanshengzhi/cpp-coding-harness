@@ -126,8 +126,8 @@ struct RichThinkingSession {
         request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
         request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.workspace = workspace.path();
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         auto resumed = coding_agent::create_agent_session_for_testing(
             std::move(request), ai::providers::make_scripted_fake_models());
         REQUIRE(resumed);
@@ -1671,8 +1671,8 @@ TEST_CASE(
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.execution_runtime_target = tests::detail::fixture_runtime_target();
     resume.workspace = workspace.path();
-    resume.no_skills = true;
-    resume.no_prompt_templates = true;
+    resume.session_facts.no_skills = true;
+    resume.session_facts.no_prompt_templates = true;
     auto resumed = coding_agent::create_agent_session_for_testing(
         std::move(resume), ai::providers::make_scripted_fake_models());
     REQUIRE(resumed);

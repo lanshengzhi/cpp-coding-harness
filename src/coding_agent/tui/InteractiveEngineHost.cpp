@@ -149,16 +149,9 @@ runtime::AgentSessionCreationRequest InteractiveEngine::make_session_request(
                       resolved_boot_trust_->first == workspace
                   ? std::optional<bool>{resolved_boot_trust_->second}
                   : std::nullopt);
-    request.no_skills = session_facts_.no_skills;
-    request.no_prompt_templates = session_facts_.no_prompt_templates;
-    request.prompt_template_paths = session_facts_.prompt_template_paths;
-    request.skill_paths = session_facts_.skill_paths;
+    request.session_facts = session_facts_;
     request.workspace = std::move(workspace);
     request.session_target = std::move(target);
-    request.provider = session_facts_.provider;
-    request.model = session_facts_.model;
-    request.models = session_facts_.models;
-    request.api_key = session_facts_.api_key;
     return request;
 }
 

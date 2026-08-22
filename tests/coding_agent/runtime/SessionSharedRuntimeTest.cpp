@@ -75,8 +75,8 @@ struct Fixture {
         request.workspace = workspace.path();
         request.session_target =
             coding_agent::ExplicitResumeSessionTarget{path};
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.model_runtime = runtime;
         return request;
@@ -138,8 +138,8 @@ TEST_CASE(
     owned_request.workspace = fixture.workspace.path();
     owned_request.session_target =
         coding_agent::ExplicitResumeSessionTarget{path};
-    owned_request.no_skills = true;
-    owned_request.no_prompt_templates = true;
+    owned_request.session_facts.no_skills = true;
+    owned_request.session_facts.no_prompt_templates = true;
     owned_request.execution_runtime_target = tests::detail::fixture_runtime_target();
     auto created_owned = coding_agent::create_agent_session_for_testing(
         std::move(owned_request), ai::providers::make_scripted_fake_models());

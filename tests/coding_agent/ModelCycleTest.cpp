@@ -152,8 +152,8 @@ constexpr std::string_view kNonReasoningProvider = R"({
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
     const Fixture& fixture) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
@@ -255,7 +255,7 @@ TEST_CASE(
     // (pi `scopedModels` over the auth-filtered availability snapshot, so the
     // keyless beta model is never in scope).
     auto request = cli_request(fixture);
-    request.models = {"alpha*", "beta*"};
+    request.session_facts.models = {"alpha*", "beta*"};
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
@@ -297,7 +297,7 @@ TEST_CASE(
 
     // --models "alpha-1:high" carries the explicit level into the scope.
     auto request = cli_request(fixture);
-    request.models = {"alpha-2:high"};
+    request.session_facts.models = {"alpha-2:high"};
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     // The scoped initial model is alpha-2 with the explicit level.

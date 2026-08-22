@@ -134,25 +134,25 @@ TEST_CASE(
     auto request = engine_request();
     coding_agent::runtime::SessionFactory::apply_cli_facts(request, facts);
 
-    CHECK(request.no_skills);
-    CHECK(request.no_prompt_templates);
-    CHECK(request.prompt_template_paths == std::vector<std::string>{"prompts/extra.md"});
-    CHECK(request.skill_paths == std::vector<std::string>{"skills/extra"});
-    CHECK(request.no_themes);
-    CHECK(request.theme_paths == std::vector<std::string>{"themes/one.json"});
-    CHECK(request.no_context_files);
-    REQUIRE(request.system_prompt.has_value());
-    CHECK(*request.system_prompt == "system text");
+    CHECK(request.session_facts.no_skills);
+    CHECK(request.session_facts.no_prompt_templates);
+    CHECK(request.session_facts.prompt_template_paths == std::vector<std::string>{"prompts/extra.md"});
+    CHECK(request.session_facts.skill_paths == std::vector<std::string>{"skills/extra"});
+    CHECK(request.session_facts.no_themes);
+    CHECK(request.session_facts.theme_paths == std::vector<std::string>{"themes/one.json"});
+    CHECK(request.session_facts.no_context_files);
+    REQUIRE(request.session_facts.system_prompt.has_value());
+    CHECK(*request.session_facts.system_prompt == "system text");
     CHECK(
-        request.append_system_prompt ==
+        request.session_facts.append_system_prompt ==
         std::vector<std::string>{"append one", "append two"});
-    REQUIRE(request.provider.has_value());
-    CHECK(*request.provider == "fake");
-    REQUIRE(request.model.has_value());
-    CHECK(*request.model == "fake-model");
-    CHECK(request.models == std::vector<std::string>{"fake/fake-model"});
-    REQUIRE(request.api_key.has_value());
-    CHECK(*request.api_key == "sk-test");
+    REQUIRE(request.session_facts.provider.has_value());
+    CHECK(*request.session_facts.provider == "fake");
+    REQUIRE(request.session_facts.model.has_value());
+    CHECK(*request.session_facts.model == "fake-model");
+    CHECK(request.session_facts.models == std::vector<std::string>{"fake/fake-model"});
+    REQUIRE(request.session_facts.api_key.has_value());
+    CHECK(*request.session_facts.api_key == "sk-test");
 }
 
 TEST_CASE(

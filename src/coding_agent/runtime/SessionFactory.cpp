@@ -752,28 +752,30 @@ struct SessionTargetNormalizationOptions {
         plan.model_runtime_owned = false;
     }
     plan.cli_selection = AssemblyPlan::CliModelSelection{
-        .provider = std::move(request.provider),
-        .model = std::move(request.model),
-        .models = std::move(request.models),
-        .api_key = std::move(request.api_key),
+        .provider = std::move(request.session_facts.provider),
+        .model = std::move(request.session_facts.model),
+        .models = std::move(request.session_facts.models),
+        .api_key = std::move(request.session_facts.api_key),
     };
     // Private test seams: an explicit request Model and custom tools flow
     // through the plan unchanged.
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
     plan.bash_session_environment = std::move(request.bash_session_environment);
-    plan.project_trust_override = request.project_trust_override;
+    plan.project_trust_override = request.project_trust_override.has_value()
+        ? request.project_trust_override
+        : request.session_facts.project_trust_override;
     plan.default_project_trust =
         settings.default_project_trust().value_or(DefaultProjectTrust::Ask);
-    plan.no_skills = request.no_skills;
-    plan.no_prompt_templates = request.no_prompt_templates;
-    plan.prompt_template_paths = request.prompt_template_paths;
-    plan.skill_paths = request.skill_paths;
-    plan.no_themes = request.no_themes;
-    plan.theme_paths = request.theme_paths;
-    plan.no_context_files = request.no_context_files;
-    plan.system_prompt = request.system_prompt;
-    plan.append_system_prompt = request.append_system_prompt;
+    plan.no_skills = request.session_facts.no_skills;
+    plan.no_prompt_templates = request.session_facts.no_prompt_templates;
+    plan.prompt_template_paths = std::move(request.session_facts.prompt_template_paths);
+    plan.skill_paths = std::move(request.session_facts.skill_paths);
+    plan.no_themes = request.session_facts.no_themes;
+    plan.theme_paths = std::move(request.session_facts.theme_paths);
+    plan.no_context_files = request.session_facts.no_context_files;
+    plan.system_prompt = std::move(request.session_facts.system_prompt);
+    plan.append_system_prompt = std::move(request.session_facts.append_system_prompt);
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
@@ -1649,19 +1651,7 @@ void SessionFactory::apply_cli_facts(
     // Pure CLI-owned facts (pi `createRuntime` re-applies the CLI options to
     // each replacement): host-authoritative, load-bearing for the fields
     // `InteractiveEngine::make_session_request` deliberately omits.
-    request.no_skills = facts.no_skills;
-    request.no_prompt_templates = facts.no_prompt_templates;
-    request.prompt_template_paths = facts.prompt_template_paths;
-    request.skill_paths = facts.skill_paths;
-    request.no_themes = facts.no_themes;
-    request.theme_paths = facts.theme_paths;
-    request.no_context_files = facts.no_context_files;
-    request.system_prompt = facts.system_prompt;
-    request.append_system_prompt = facts.append_system_prompt;
-    request.provider = facts.provider;
-    request.model = facts.model;
-    request.models = facts.models;
-    request.api_key = facts.api_key;
+    request.session_facts = facts;
 }
 
 support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create(

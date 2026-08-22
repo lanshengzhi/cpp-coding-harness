@@ -94,8 +94,8 @@ struct ResumedSessionFixture {
             coding_agent::ExplicitResumeSessionTarget{session_file};
         request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.workspace = workspace.path();
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         request.model_runtime = runtime;
         auto created = coding_agent::create_agent_session_for_testing(
             std::move(request), ai::providers::make_scripted_fake_models());
@@ -234,8 +234,8 @@ TEST_CASE(
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -363,8 +363,8 @@ TEST_CASE(
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -444,8 +444,8 @@ TEST_CASE(
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -524,8 +524,8 @@ TEST_CASE(
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -720,8 +720,8 @@ TEST_CASE(
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture.runtime;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request),

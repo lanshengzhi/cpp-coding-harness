@@ -133,8 +133,8 @@ void drain_ready(boost::asio::io_context& io) {
     Fixture& fixture,
     Running& running) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
@@ -145,8 +145,8 @@ void drain_ready(boost::asio::io_context& io) {
     recorder.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
         };
 

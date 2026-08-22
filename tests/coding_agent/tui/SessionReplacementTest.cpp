@@ -88,8 +88,8 @@ struct Running {
     const std::shared_ptr<tests::GatedChatProvider>& provider) {
     return [provider](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         request.execution_runtime_target = tests::detail::fixture_runtime_target();
         return coding_agent::create_agent_session_for_testing(
             std::move(request), tests::models_from_provider(provider));
@@ -257,8 +257,8 @@ TEST_CASE(
             coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
             ++replacement_calls;
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             request.execution_runtime_target = tests::detail::fixture_runtime_target();
             if (replacement_calls > 1) {
                 return std::unexpected(support::make_error(
@@ -409,8 +409,8 @@ TEST_CASE(
     actions->replace_session =
         [shell_state](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             request.execution_runtime_target = tests::detail::fixture_runtime_target();
             return coding_agent::create_agent_session_for_testing(
                 std::move(request),

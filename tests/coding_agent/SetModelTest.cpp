@@ -133,8 +133,8 @@ constexpr std::string_view kReasoningAndPlainProviders = R"({
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
     const Fixture& fixture) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
@@ -366,8 +366,8 @@ TEST_CASE(
     fixture.write_models(kTwoKeyedProviders);
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
 

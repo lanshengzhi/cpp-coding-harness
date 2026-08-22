@@ -132,7 +132,7 @@ struct BootTrustRun {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
-    request.no_prompt_templates = true;
+    request.session_facts.no_prompt_templates = true;
     return request;
 }
 
@@ -449,7 +449,7 @@ TEST_CASE(
 
     auto request = boot_request(fixture);
     request.project_trust_override = true;
-    request.theme_paths = {"cli-theme.json"};
+    request.session_facts.theme_paths = {"cli-theme.json"};
 
     BootTrustRun run;
     run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
@@ -519,7 +519,7 @@ TEST_CASE(
 
     auto request = boot_request(fixture);
     request.project_trust_override = true;
-    request.theme_paths = {"broken-theme.json"};
+    request.session_facts.theme_paths = {"broken-theme.json"};
 
     BootTrustRun run;
     run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());

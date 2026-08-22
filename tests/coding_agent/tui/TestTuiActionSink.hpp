@@ -110,7 +110,7 @@ struct ActionSinkRecorder {
                         shared->replace_sessions.push_back(ReplaceSessionRecord{
                             .workspace = payload.request.workspace,
                             .target = target,
-                            .no_skills = payload.request.no_skills,
+                            .no_skills = payload.request.session_facts.no_skills,
                         });
                         if (!shared->replace_session) {
                             return TuiActionResultVariant{

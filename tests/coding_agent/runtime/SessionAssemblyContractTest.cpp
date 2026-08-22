@@ -77,8 +77,8 @@ struct AssemblyFixture {
         runtime::AgentSessionCreationRequest request;
         request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.project_trust_override = trust_override;
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         request.workspace = workspace.path();
         request.session_target = coding_agent::InMemorySessionTarget{};
         return request;
@@ -280,9 +280,9 @@ TEST_CASE(
     // Level 1 (runtime API key override from --api-key) beats everything and
     // installs as the process-lifetime in-memory override.
     auto override_request = fix.make_request();
-    override_request.provider = "gamma";
-    override_request.model = "gamma-1";
-    override_request.api_key = "cli-override-key";
+    override_request.session_facts.provider = "gamma";
+    override_request.session_facts.model = "gamma-1";
+    override_request.session_facts.api_key = "cli-override-key";
     auto overridden = fix.create(std::move(override_request));
     REQUIRE(overridden);
     CHECK(overridden->session->model_runtime()->has_runtime_api_key("gamma"));
@@ -314,7 +314,7 @@ TEST_CASE(
         "---\nname: dupe-skill\ndescription: Duplicate skill.\n---\nDuplicate body.\n");
 
     auto request = fix.make_request(/*trust_override=*/true);
-    request.no_skills = false;
+    request.session_facts.no_skills = false;
     const auto created = fix.create(std::move(request));
     REQUIRE(created);
     const auto& diagnostics = created->diagnostics;

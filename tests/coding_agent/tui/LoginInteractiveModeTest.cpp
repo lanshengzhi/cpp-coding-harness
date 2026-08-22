@@ -228,8 +228,8 @@ struct LoginFixture {
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_session(
         std::shared_ptr<coding_agent::ModelRuntime> runtime) {
         coding_agent::runtime::AgentSessionCreationRequest request;
-        request.no_skills = true;
-        request.no_prompt_templates = true;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
         request.workspace = workspace.path();
         request.session_target = coding_agent::InMemorySessionTarget{};
         request.model_runtime = std::move(runtime);

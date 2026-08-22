@@ -205,8 +205,8 @@ TEST_CASE("CLI model resolution: --model wins over settings defaults", "[coding_
     fixture.write_settings(R"({"defaultProvider":"alpha","defaultModel":"alpha-1"})");
 
     auto request = cli_request(fixture);
-    request.provider = "beta";
-    request.model = "beta-1";
+    request.session_facts.provider = "beta";
+    request.session_facts.model = "beta-1";
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
@@ -251,7 +251,7 @@ TEST_CASE("CLI model resolution: scoped models select the first scoped model for
     fixture.write_models(kTwoKeyedProviders);
 
     auto request = cli_request(fixture);
-    request.models = {"alpha*"};
+    request.session_facts.models = {"alpha*"};
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
@@ -268,7 +268,7 @@ TEST_CASE(
     fixture.write_settings(R"({"defaultProvider":"beta","defaultModel":"beta-1"})");
 
     auto request = cli_request(fixture);
-    request.models = {"alpha*", "beta*"};
+    request.session_facts.models = {"alpha*", "beta*"};
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
@@ -285,8 +285,8 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", 
 
     {
         auto request = cli_request(fixture);
-        request.provider = "beta";
-        request.model = "beta-1";
+        request.session_facts.provider = "beta";
+        request.session_facts.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         created->session->close();
@@ -310,8 +310,8 @@ TEST_CASE(
 
     {
         auto request = cli_request(fixture);
-        request.provider = "beta";
-        request.model = "beta-1";
+        request.session_facts.provider = "beta";
+        request.session_facts.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         created->session->close();
@@ -343,8 +343,8 @@ TEST_CASE(
 
     {
         auto request = cli_request(fixture);
-        request.provider = "beta";
-        request.model = "beta-1";
+        request.session_facts.provider = "beta";
+        request.session_facts.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         created->session->close();
@@ -373,8 +373,8 @@ TEST_CASE(
 
     {
         auto request = cli_request(fixture);
-        request.provider = "beta";
-        request.model = "beta-1";
+        request.session_facts.provider = "beta";
+        request.session_facts.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         created->session->close();
@@ -414,8 +414,8 @@ TEST_CASE(
 
     {
         auto request = cli_request(fixture);
-        request.provider = "beta";
-        request.model = "beta-1";
+        request.session_facts.provider = "beta";
+        request.session_facts.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         created->session->close();
@@ -578,8 +578,8 @@ TEST_CASE(
         // runtime default (alpha-1): resume must re-resolve the recorded
         // identity, not fall through to the first available model.
         auto request = cli_request(fixture);
-        request.provider = "beta";
-        request.model = "beta-1";
+        request.session_facts.provider = "beta";
+        request.session_facts.model = "beta-1";
         auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         CHECK(created->resolved_identity.provider == "beta");

@@ -273,7 +273,7 @@ TEST_CASE(
         options.request_model =
             cch::tests::scripted_request_model("sdk-host", "sdk-model");
         options.project_trust_override = true;
-        options.prompt_template_paths = {"explicit-template.md"};
+        options.session_facts.prompt_template_paths = {"explicit-template.md"};
         auto created = coding_agent::create_agent_session(std::move(options));
         REQUIRE(created.has_value());
         auto second = std::move(created->session);
@@ -318,7 +318,7 @@ TEST_CASE(
     options.models = cch::tests::models_from_provider(client);
     options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
     options.project_trust_override = true;
-    options.skill_paths = {"dup-skill/SKILL.md"};
+    options.session_facts.skill_paths = {"dup-skill/SKILL.md"};
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
     auto* session = created->session.get();

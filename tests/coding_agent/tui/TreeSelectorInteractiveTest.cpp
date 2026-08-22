@@ -133,8 +133,8 @@ void drain_ready(boost::asio::io_context& io) {
     std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder> actions =
         std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>()) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
@@ -144,8 +144,8 @@ void drain_ready(boost::asio::io_context& io) {
     actions->replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
         };
 
@@ -306,8 +306,8 @@ TEST_CASE(
     // empty session.
     Running running;
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.no_skills = true;
-    request.no_prompt_templates = true;
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     auto created = coding_agent::create_agent_session(std::move(request));
@@ -317,8 +317,8 @@ TEST_CASE(
     actions.replace_session =
         [](coding_agent::runtime::AgentSessionCreationRequest request)
         -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.no_skills = true;
-            request.no_prompt_templates = true;
+            request.session_facts.no_skills = true;
+            request.session_facts.no_prompt_templates = true;
             return coding_agent::create_agent_session(std::move(request));
         };
     boost::asio::co_spawn(
