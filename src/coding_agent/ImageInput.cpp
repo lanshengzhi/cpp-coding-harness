@@ -1,8 +1,13 @@
 #include "ImageInput.hpp"
 
+// Vendored stb headers sit outside the project warning contract
+// (ADR 0044): diagnostics they trigger are silenced at this inclusion site
+// so the warning gate (issue #492) stays total over everything the project
+// compiles.
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
