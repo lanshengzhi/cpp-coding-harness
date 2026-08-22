@@ -10,6 +10,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include <cch/support/Error.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
@@ -133,42 +134,40 @@ void ModelSelectorComponent::start_refresh() {
         // receive is a Runtime invariant in the no-exception build).
         auto on_invalidate = std::move(self->on_invalidate_);
         boost::asio::co_spawn(
-            self->executor_,
-            [runtime, self, on_invalidate = std::move(on_invalidate)]() mutable
-                -> boost::asio::awaitable<void> {
-                auto available = co_await runtime->get_available();
-                {
-                    std::lock_guard lock(self->mutex_);
-                    if (self->closed_) co_return;
-                    self->refresh_status_message_.clear();
-                    if (!available) {
-                        self->error_message_ =
-                            "Could not refresh model catalogs; showing cached models.";
-                    } else {
-                        // pi: after a clean refresh, the runtime's own error
-                        // (models.json diagnostics) still surfaces; otherwise the
-                        // success status.
-                        self->error_message_ = runtime->get_error();
-                        if (!self->error_message_) {
-                            self->refresh_status_message_ = "Model catalogs refreshed.";
-                            self->refresh_status_success_ = true;
+                self->executor_,
+                [runtime, self, on_invalidate = std::move(on_invalidate)]() mutable -> boost::asio::awaitable<void> {
+                    auto available = co_await ai::detail::await_async_result(runtime->get_available());
+                    {
+                        std::lock_guard lock(self->mutex_);
+                        if (self->closed_) co_return;
+                        self->refresh_status_message_.clear();
+                        if (!available) {
+                            self->error_message_ = "Could not refresh model catalogs; showing cached models.";
+                        } else {
+                            // pi: after a clean refresh, the runtime's own error
+                            // (models.json diagnostics) still surfaces; otherwise the
+                            // success status.
+                            self->error_message_ = runtime->get_error();
+                            if (!self->error_message_) {
+                                self->refresh_status_message_ = "Model catalogs refreshed.";
+                                self->refresh_status_success_ = true;
+                            }
                         }
+                        self->load_models_from_snapshot();
+                        self->filter_models(self->search_query_);
                     }
-                    self->load_models_from_snapshot();
-                    self->filter_models(self->search_query_);
-                }
-                if (on_invalidate) {
+                    if (on_invalidate) {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    try {
+                        try {
 #endif
-                        on_invalidate();
+                            on_invalidate();
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    } catch (...) {
+                        } catch (...) {
+                        }
+#endif
                     }
-#endif
-                }
-            },
-            boost::asio::detached);
+                },
+                boost::asio::detached);
     });
 }
 

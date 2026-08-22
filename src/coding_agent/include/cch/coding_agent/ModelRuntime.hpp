@@ -7,9 +7,8 @@
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -119,8 +118,8 @@ public:
     /// and refreshes the snapshot. Cached snapshots never replace live
     /// `get_auth`/`check_auth` semantics. Virtual for recording test fakes
     /// (same recorded exception as `model`).
-    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<std::vector<ai::Model>>> get_available(
-        std::optional<std::string_view> provider_id = std::nullopt);
+    [[nodiscard]] virtual support::AsyncResult<std::vector<ai::Model>> get_available(
+            std::optional<std::string> provider_id = std::nullopt);
     /// Last availability snapshot (synchronous). Never replaces live semantics.
     [[nodiscard]] std::vector<ai::Model> get_available_snapshot() const;
 
@@ -128,15 +127,12 @@ public:
 
     /// Side-effect-free; OAuth credentials are never refreshed. Virtual for
     /// recording test fakes (same recorded exception as `model`).
-    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> check_auth(
-        std::string provider_id);
+    [[nodiscard]] virtual support::AsyncResult<std::optional<ai::AuthCheck>> check_auth(std::string provider_id);
     /// Live authentication resolution (delegates to `ai::Models`).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> get_auth(
-        std::string provider_id,
-        std::optional<std::string> explicit_api_key = std::nullopt);
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> get_auth(
-        ai::Model model,
-        std::optional<std::string> explicit_api_key = std::nullopt);
+    [[nodiscard]] support::AsyncResult<std::optional<ai::AuthResult>> get_auth(
+            std::string provider_id, std::optional<std::string> explicit_api_key = std::nullopt);
+    [[nodiscard]] support::AsyncResult<std::optional<ai::AuthResult>> get_auth(
+            ai::Model model, std::optional<std::string> explicit_api_key = std::nullopt);
 
     /// True when the provider currently resolves as configured (snapshot).
     /// Virtual for recording test fakes (same recorded exception as `model`).
@@ -160,21 +156,18 @@ public:
     /// Source/type-only auth status for status UI (never triggers network).
     [[nodiscard]] std::optional<ModelRuntimeAuthStatus> get_provider_auth_status(
         std::string_view provider_id) const;
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<ai::CredentialInfo>>> list_credentials();
+    [[nodiscard]] support::AsyncResult<std::vector<ai::CredentialInfo>> list_credentials();
 
     // ── Login / logout ─────────────────────────────────────────────────────
 
     /// `Models::login` + `refresh()`. A post-login refresh failure is recorded
     /// in the composition-errors map and never fails the login call.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::Credential>> login(
-        std::string provider_id,
-        ai::AuthType type,
-        ai::AuthInteraction interaction);
+    [[nodiscard]] support::AsyncResult<ai::Credential> login(
+            std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction);
 
     /// `Models::logout` + `recomposeProvider` + `refresh()` (order preserved).
     /// A post-logout refresh failure is recorded and never fails the logout.
-    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> logout(
-        std::string provider_id);
+    [[nodiscard]] support::AsyncResult<void> logout(std::string provider_id);
 
     // ── Streaming ─────────────────────────────────────────────────────────
 

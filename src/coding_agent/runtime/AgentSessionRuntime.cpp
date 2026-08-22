@@ -514,7 +514,7 @@ AgentSessionRuntime::preflight_auth_guidance() {
     if (services_.model_runtime->has_configured_auth(model.provider)) {
         co_return support::ExpectedVoid{};
     }
-    auto checked = co_await services_.model_runtime->check_auth(model.provider);
+    auto checked = co_await ai::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
     if (!checked) {
         co_return std::unexpected(std::move(checked.error()));
     }
@@ -1257,7 +1257,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::set_model(
     }
 
     // pi setModel: `if (!(await checkAuth(model.provider))) throw`.
-    auto checked = co_await services_.model_runtime->check_auth(model.provider);
+    auto checked = co_await ai::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
     if (!checked) {
         co_return std::unexpected(std::move(checked.error()));
     }
@@ -1350,7 +1350,8 @@ AgentSessionRuntime::cycle_model(std::string_view direction) {
     if (!scoped_models_.empty()) {
         std::vector<cch::coding_agent::ScopedModel> eligible;
         for (const auto& scoped : scoped_models_) {
-            auto checked = co_await services_.model_runtime->check_auth(scoped.model.provider);
+            auto checked =
+                    co_await ai::detail::await_async_result(services_.model_runtime->check_auth(scoped.model.provider));
             if (!checked) {
                 co_return std::unexpected(std::move(checked.error()));
             }
@@ -1388,7 +1389,7 @@ AgentSessionRuntime::cycle_model(std::string_view direction) {
 
     // Available path (pi `_cycleAvailableModel`): cycle within the
     // auth-filtered availability snapshot.
-    auto available = co_await services_.model_runtime->get_available();
+    auto available = co_await ai::detail::await_async_result(services_.model_runtime->get_available());
     if (!available) {
         co_return std::unexpected(std::move(available.error()));
     }

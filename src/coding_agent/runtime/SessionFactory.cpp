@@ -11,6 +11,7 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include <cch/support/Error.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
@@ -510,12 +511,12 @@ void refresh_availability_sync(
     const std::shared_ptr<ModelRuntime>& runtime) {
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
-        io,
-        [runtime]() -> boost::asio::awaitable<void> {
-            (void)co_await runtime->get_available();
-            co_return;
-        },
-        boost::asio::use_future);
+            io,
+            [runtime]() -> boost::asio::awaitable<void> {
+                (void)co_await ai::detail::await_async_result(runtime->get_available());
+                co_return;
+            },
+            boost::asio::use_future);
     io.run();
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {

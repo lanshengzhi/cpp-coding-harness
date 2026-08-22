@@ -369,8 +369,8 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
     REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
 
     ai::AuthInteraction interaction;
-    auto credential = run_awaitable((*runtime)->login(
-        "login-provider", ai::AuthType::ApiKey, std::move(interaction)));
+    auto credential =
+            run_async_result((*runtime)->login("login-provider", ai::AuthType::ApiKey, std::move(interaction)));
     REQUIRE(credential);
     REQUIRE(std::holds_alternative<ai::ApiKeyCredential>(*credential));
     CHECK(std::get<ai::ApiKeyCredential>(*credential).key == "dummy-login-key");
@@ -398,7 +398,7 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
     REQUIRE(runtime);
     REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
 
-    REQUIRE(run_awaitable((*runtime)->logout("login-provider")));
+    REQUIRE(run_async_result((*runtime)->logout("login-provider")));
     const auto stored = run_async_result(store->read("login-provider"));
     REQUIRE(stored);
     CHECK_FALSE(stored->has_value());
@@ -414,7 +414,7 @@ TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_ag
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
-    const auto available = run_awaitable((*runtime)->get_available());
+    const auto available = run_async_result((*runtime)->get_available());
     REQUIRE(available);
     // With no stored credentials and no ambient env keys, the OAuth-only
     // openai-codex provider and the env api-key kimi-coding provider are not
@@ -537,7 +537,7 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
     REQUIRE(runtime);
 
     const auto get_auth_for = [&](std::string provider_id) {
-        auto auth = run_awaitable((*runtime)->get_auth(std::move(provider_id)));
+        auto auth = run_async_result((*runtime)->get_auth(std::move(provider_id)));
         REQUIRE(auth);
         return std::move(*auth);
     };
@@ -557,7 +557,7 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
     // Level 4 (models.json configured key): an env-template apiKey is
     // unconfigured until its environment variable is present.
     secret.unset();
-    auto unconfigured = run_awaitable((*runtime)->check_auth("deepseek"));
+    auto unconfigured = run_async_result((*runtime)->check_auth("deepseek"));
     REQUIRE(unconfigured);
     CHECK_FALSE(*unconfigured);
 
@@ -598,7 +598,7 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
     CHECK(status->source == "runtime");
 
     // list_credentials stays metadata-only but reports the runtime override.
-    auto listed = run_awaitable((*runtime)->list_credentials());
+    auto listed = run_async_result((*runtime)->list_credentials());
     REQUIRE(listed);
     const auto deepseek_entry = std::find_if(
         listed->begin(), listed->end(), [](const ai::CredentialInfo& entry) {
@@ -665,7 +665,7 @@ TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not confi
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
-    static_cast<void>(run_awaitable((*runtime)->get_available()));
+    static_cast<void>(run_async_result((*runtime)->get_available()));
     auto status = (*runtime)->get_provider_auth_status("openai-codex");
     REQUIRE(status.has_value());
     // pi `getProviderAuthStatus`: no runtime key, no stored credential, no

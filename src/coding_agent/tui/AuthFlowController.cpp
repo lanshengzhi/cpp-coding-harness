@@ -173,7 +173,7 @@ boost::asio::awaitable<void> AuthFlowController::handle_login_command(
     // pi awaits getAvailable() before presenting login options. A completion
     // admitted before a Session replacement must not present against the
     // replacement (ADR 0040 generation retirement).
-    static_cast<void>(co_await runtime->get_available());
+    static_cast<void>(co_await ai::detail::await_async_result(runtime->get_available()));
     if (closed_ || captured_generation != action_generation()) co_return;
     const auto ref = interactive_view_detail::trim_editor_submission(std::move(provider_ref));
     if (ref.empty()) {
@@ -425,8 +425,8 @@ boost::asio::awaitable<void> AuthFlowController::run_login_dialog(
         self->notify_auth_dialog(*dialog, event);
     };
     const auto completion_provider_id = provider_id;
-    auto result = co_await runtime->login(
-        std::move(provider_id), type, std::move(interaction));
+    auto result = co_await ai::detail::await_async_result(
+            runtime->login(std::move(provider_id), type, std::move(interaction)));
     untrack_dialog(dialog);
     // A late login completion admitted before a Session replacement must not
     // restore the slot or report against the replacement (ADR 0040).
@@ -458,7 +458,7 @@ boost::asio::awaitable<void> AuthFlowController::complete_provider_authenticatio
     const auto captured_generation = action_generation();
     auto runtime = session->model_runtime();
     if (!runtime) co_return;
-    auto available = co_await runtime->get_available();
+    auto available = co_await ai::detail::await_async_result(runtime->get_available());
     if (closed_ || captured_generation != action_generation()) co_return;
     session = current_session();
     if (session == nullptr) co_return;
@@ -655,7 +655,7 @@ boost::asio::awaitable<void> AuthFlowController::run_logout() {
     auto runtime = session->model_runtime();
     if (!runtime) co_return;
     const auto captured_generation = action_generation();
-    auto credentials = co_await runtime->list_credentials();
+    auto credentials = co_await ai::detail::await_async_result(runtime->list_credentials());
     if (closed_ || captured_generation != action_generation()) co_return;
     if (!credentials) {
         presenter_->show_error("Logout failed: " + combined_error_text(credentials.error()));
@@ -715,13 +715,13 @@ boost::asio::awaitable<void> AuthFlowController::run_logout_provider(
     auto runtime = session->model_runtime();
     if (!runtime) co_return;
     const auto captured_generation = action_generation();
-    if (auto logged_out = co_await runtime->logout(option.id); !logged_out) {
+    if (auto logged_out = co_await ai::detail::await_async_result(runtime->logout(option.id)); !logged_out) {
         if (closed_ || captured_generation != action_generation()) co_return;
         presenter_->show_error("Logout failed: " + combined_error_text(logged_out.error()));
         co_return;
     }
     // pi: updateAvailableProviderCount after logout.
-    static_cast<void>(co_await runtime->get_available());
+    static_cast<void>(co_await ai::detail::await_async_result(runtime->get_available()));
     if (closed_ || captured_generation != action_generation()) co_return;
     presenter_->show_status(logout_success_message(option.auth_type, option.name));
 }

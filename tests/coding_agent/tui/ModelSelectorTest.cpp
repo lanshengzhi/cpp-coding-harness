@@ -14,6 +14,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include <cch/support/Error.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
@@ -111,18 +112,18 @@ struct RuntimeFixture {
     void prime(boost::asio::io_context& io) {
         auto result = std::optional<support::ExpectedVoid>{};
         boost::asio::co_spawn(
-            io,
-            [runtime = runtime]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                auto available = co_await runtime->get_available();
-                if (!available) {
-                    co_return std::unexpected(available.error());
-                }
-                co_return support::ExpectedVoid{};
-            },
-            [&](std::exception_ptr exception, support::ExpectedVoid outcome) {
-                REQUIRE(exception == nullptr);
-                result.emplace(std::move(outcome));
-            });
+                io,
+                [runtime = runtime]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                    auto available = co_await ai::detail::await_async_result(runtime->get_available());
+                    if (!available) {
+                        co_return std::unexpected(available.error());
+                    }
+                    co_return support::ExpectedVoid{};
+                },
+                [&](std::exception_ptr exception, support::ExpectedVoid outcome) {
+                    REQUIRE(exception == nullptr);
+                    result.emplace(std::move(outcome));
+                });
         io.run();
         REQUIRE(result.has_value());
         REQUIRE(*result);

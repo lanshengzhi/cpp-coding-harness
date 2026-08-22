@@ -13,6 +13,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/support/Error.hpp>
+#include "ai/AsyncResultBridge.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -226,7 +227,7 @@ boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::stri
         auto runtime = session->model_runtime();
         if (!runtime) co_return;
         (void)runtime->refresh();
-        auto available = co_await runtime->get_available();
+        auto available = co_await ai::detail::await_async_result(runtime->get_available());
         if (!available) {
             presenter_->show_error(combined_error_text(available.error()));
             co_return;
@@ -317,7 +318,7 @@ boost::asio::awaitable<void> ModelFlowController::run_scoped_models_selector() {
     if (!runtime) co_return;
     // pi: refresh() then getAvailable().
     (void)runtime->refresh();
-    auto available = co_await runtime->get_available();
+    auto available = co_await ai::detail::await_async_result(runtime->get_available());
     if (!available) {
         presenter_->show_error(combined_error_text(available.error()));
         co_return;

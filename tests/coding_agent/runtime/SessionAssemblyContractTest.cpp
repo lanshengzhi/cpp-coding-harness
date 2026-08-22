@@ -246,8 +246,7 @@ TEST_CASE(
     auto ambient = fix.create(fix.make_request());
     REQUIRE(ambient);
     {
-        auto auth = tests::run_awaitable(
-            ambient->session->model_runtime()->get_auth("gamma"));
+        auto auth = tests::run_async_result(ambient->session->model_runtime()->get_auth("gamma"));
         REQUIRE(auth);
         REQUIRE(*auth);
         CHECK((*auth)->auth.api_key == "env-configured-key");
@@ -270,8 +269,7 @@ TEST_CASE(
     auto with_stored = fix.create(fix.make_request());
     REQUIRE(with_stored);
     {
-        auto auth = tests::run_awaitable(
-            with_stored->session->model_runtime()->get_auth("gamma"));
+        auto auth = tests::run_async_result(with_stored->session->model_runtime()->get_auth("gamma"));
         REQUIRE(auth);
         REQUIRE(*auth);
         CHECK((*auth)->auth.api_key == "stored-key");
@@ -287,8 +285,7 @@ TEST_CASE(
     REQUIRE(overridden);
     CHECK(overridden->session->model_runtime()->has_runtime_api_key("gamma"));
     {
-        auto auth = tests::run_awaitable(
-            overridden->session->model_runtime()->get_auth("gamma"));
+        auto auth = tests::run_async_result(overridden->session->model_runtime()->get_auth("gamma"));
         REQUIRE(auth);
         REQUIRE(*auth);
         CHECK((*auth)->auth.api_key == "cli-override-key");

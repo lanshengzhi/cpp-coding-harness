@@ -84,11 +84,10 @@ public:
         std::string_view provider_id,
         std::string_view model_id) const override;
 
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<ai::Model>>> get_available(
-        std::optional<std::string_view> provider_id = std::nullopt) override;
+    [[nodiscard]] support::AsyncResult<std::vector<ai::Model>> get_available(
+            std::optional<std::string> provider_id = std::nullopt) override;
 
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> check_auth(
-        std::string provider_id) override;
+    [[nodiscard]] support::AsyncResult<std::optional<ai::AuthCheck>> check_auth(std::string provider_id) override;
 
     [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const override;
 
@@ -269,19 +268,19 @@ inline std::optional<ai::Model> FakeModelRuntime::model(
     return model;
 }
 
-inline boost::asio::awaitable<support::Expected<std::vector<ai::Model>>>
-FakeModelRuntime::get_available(std::optional<std::string_view> provider_id) {
+inline support::AsyncResult<std::vector<ai::Model>> FakeModelRuntime::get_available(
+        std::optional<std::string> provider_id) {
     std::vector<ai::Model> models;
     if (auto resolved = model(provider_id.value_or("fake"), "fake-model")) {
         models.push_back(std::move(*resolved));
     }
-    co_return models;
+    return support::AsyncResult<std::vector<ai::Model>>(support::Expected<std::vector<ai::Model>>(std::move(models)));
 }
 
-inline boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>>
-FakeModelRuntime::check_auth(std::string provider_id) {
+inline support::AsyncResult<std::optional<ai::AuthCheck>> FakeModelRuntime::check_auth(std::string provider_id) {
     (void)provider_id;
-    co_return ai::AuthCheck{.source = "fake", .type = ai::AuthType::ApiKey};
+    return support::AsyncResult<std::optional<ai::AuthCheck>>(support::Expected<std::optional<ai::AuthCheck>>(
+            ai::AuthCheck{.source = "fake", .type = ai::AuthType::ApiKey}));
 }
 
 inline bool FakeModelRuntime::has_configured_auth(std::string_view provider_id) const {
