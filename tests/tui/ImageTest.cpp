@@ -600,14 +600,15 @@ TEST_CASE("VirtualTerminal enforces targeted image region ownership", "[tui][ima
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
         [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    const auto encoded_png = base64_encode(png_header(10, 10));
     const cch::tui::TerminalImage image{
-        .encoded_data = base64_encode(png_header(10, 10)),
-        .mime_type = "image/png",
-        .pixel_width = 10,
-        .pixel_height = 10,
-        .resource_id = 1,
-        .revision = 1,
-        .region = {.column = 1, .row = 0, .columns = 1, .rows = 1},
+            .encoded_data = encoded_png,
+            .mime_type = "image/png",
+            .pixel_width = 10,
+            .pixel_height = 10,
+            .resource_id = 1,
+            .revision = 1,
+            .region = {.column = 1, .row = 0, .columns = 1, .rows = 1},
     };
     const auto placed = terminal.place_image(image);
     REQUIRE(placed);

@@ -110,7 +110,8 @@ public:
     }
 
     BoxedMessageComponent(BoxedMessageComponent&&) noexcept = default;
-    BoxedMessageComponent& operator=(BoxedMessageComponent&&) noexcept = default;
+    // Implicitly deleted anyway (const LiveTheme& member); spell it out.
+    BoxedMessageComponent& operator=(BoxedMessageComponent&&) noexcept = delete;
     ~BoxedMessageComponent() override = default;
 
     BoxedMessageComponent(const BoxedMessageComponent&) = delete;

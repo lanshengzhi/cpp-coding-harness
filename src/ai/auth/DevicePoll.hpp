@@ -109,7 +109,6 @@ template <typename T>
 [[nodiscard]] inline boost::asio::awaitable<support::Expected<T>> poll_device_flow(
     DevicePollOptions<T> options) {
     constexpr auto kMinimumInterval = std::chrono::milliseconds{1000};
-    constexpr auto kDefaultInterval = std::chrono::seconds{5};
     constexpr auto kSlowDownIncrement = std::chrono::milliseconds{5000};
 
     const auto start = std::chrono::steady_clock::now();

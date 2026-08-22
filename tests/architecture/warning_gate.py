@@ -100,9 +100,13 @@ def check_entry(entry: dict, ccache: bool) -> tuple[str, str]:
     except ValueError as exc:
         return source, f"invalid compile command: {exc}"
     # -Werror turns the project's -Wall -Wextra -Wpedantic profile into
-    # errors; -fsyntax-only prevents any output from being written. ccache
-    # (when available) keeps repeat runs fast. Passing argv directly avoids
-    # reparsing arguments-list entries through a shell.
+    # errors; -fsyntax-only prevents any output from being written. The
+    # original -c becomes redundant under -fsyntax-only, and Clang rejects it
+    # as an unused command-line argument under -Werror (#477), so drop it;
+    # GCC semantics are unchanged. ccache (when available) keeps repeat runs
+    # fast. Passing argv directly avoids reparsing arguments-list entries
+    # through a shell.
+    invocation = [argument for argument in invocation if argument != "-c"]
     if ccache:
         invocation.insert(0, "ccache")
     invocation.extend(("-Werror", "-fsyntax-only"))

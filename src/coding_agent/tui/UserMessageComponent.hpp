@@ -24,7 +24,7 @@ class LiveTheme;
 /// inline after the box (the C++ terminal-image surface).
 class UserMessageComponent final : public cch::tui::Component {
 public:
-    /// The theme must outlive this component.
+    /// Theme styling is read at construction time.
     UserMessageComponent(
         const LiveTheme& theme,
         std::variant<std::string, std::vector<ai::Content>> content,
@@ -44,7 +44,6 @@ private:
         std::string mime_type;
     };
 
-    const LiveTheme& theme_; // must outlive this component.
     cch::tui::Box box_;
     std::unique_ptr<cch::tui::Markdown> markdown_;
     // In content order so multi-image messages render in source order.

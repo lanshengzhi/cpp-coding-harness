@@ -556,86 +556,78 @@ public:
         ai::AiContext context,
         ai::ProviderStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        auto response = ai::assistant_text_message("tool cycle complete");
-        response.provider = "tool-fake";
-        response.api = "fake";
-        response.model = model.id;
-        if (!context.messages.empty() &&
-            std::holds_alternative<ai::ToolResultMessage>(context.messages.back())) {
-            co_return response;
-        }
+                [model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto response = ai::assistant_text_message("tool cycle complete");
+                    response.provider = "tool-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    if (!context.messages.empty() &&
+                            std::holds_alternative<ai::ToolResultMessage>(context.messages.back())) {
+                        co_return response;
+                    }
 
-        std::string prompt;
-        for (auto message = context.messages.rbegin();
-             message != context.messages.rend();
-             ++message) {
-            if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
-                prompt = ai::text_from_user_message(*user);
-                break;
-            }
-        }
-        const auto path = prompt.starts_with("read ") ? prompt.substr(5) : prompt;
-        support::JsonValue::object_t arguments;
-        arguments.emplace("path", support::JsonValue{path});
-        response.content.clear();
-        response.content.emplace_back(ai::text_content("reading " + path));
-        response.content.emplace_back(ai::tool_call_content(
-            "fake-read-1",
-            "probe-read",
-            std::format(R"({{"path":"{}"}})", path),
-            support::JsonValue{std::move(arguments)}));
-        response.stop_reason = ai::AssistantStopReason::ToolUse;
+                    std::string prompt;
+                    for (auto message = context.messages.rbegin(); message != context.messages.rend(); ++message) {
+                        if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
+                            prompt = ai::text_from_user_message(*user);
+                            break;
+                        }
+                    }
+                    const auto path = prompt.starts_with("read ") ? prompt.substr(5) : prompt;
+                    support::JsonValue::object_t arguments;
+                    arguments.emplace("path", support::JsonValue{path});
+                    response.content.clear();
+                    response.content.emplace_back(ai::text_content("reading " + path));
+                    response.content.emplace_back(ai::tool_call_content("fake-read-1",
+                            "probe-read",
+                            std::format(R"({{"path":"{}"}})", path),
+                            support::JsonValue{std::move(arguments)}));
+                    response.stop_reason = ai::AssistantStopReason::ToolUse;
 
-        auto partial = response;
-        partial.content.clear();
-        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        partial.content.emplace_back(ai::tool_call_content(
-            "fake-read-1",
-            "probe-read",
-            {}));
-        if (auto emitted = sink(ai::ToolCallStartEvent{
-                .content_index = 0,
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        partial.content[0] = ai::tool_call_content(
-            "fake-read-1",
-            "probe-read",
-            R"({"path":"STALE ARGUMENT"})");
-        if (auto emitted = sink(ai::ToolCallDeltaEvent{
-                .content_index = 0,
-                .delta = R"({"path":"STALE ARGUMENT"})",
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        partial.content[0] = response.content[1];
-        if (auto emitted = sink(ai::ToolCallDeltaEvent{
-                .content_index = 0,
-                .delta = std::get<ai::ToolCallContent>(response.content[1]).raw_arguments,
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        const auto& completed_call = std::get<ai::ToolCallContent>(response.content[1]);
-        if (auto emitted = sink(ai::ToolCallEndEvent{
-                .content_index = 0,
-                .tool_call = completed_call,
-                .partial = response,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        co_return response;
+                    auto partial = response;
+                    partial.content.clear();
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content.emplace_back(ai::tool_call_content("fake-read-1", "probe-read", {}));
+                    if (auto emitted = sink(ai::ToolCallStartEvent{
+                                .content_index = 0,
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content[0] =
+                            ai::tool_call_content("fake-read-1", "probe-read", R"({"path":"STALE ARGUMENT"})");
+                    if (auto emitted = sink(ai::ToolCallDeltaEvent{
+                                .content_index = 0,
+                                .delta = R"({"path":"STALE ARGUMENT"})",
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content[0] = response.content[1];
+                    if (auto emitted = sink(ai::ToolCallDeltaEvent{
+                                .content_index = 0,
+                                .delta = std::get<ai::ToolCallContent>(response.content[1]).raw_arguments,
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    const auto& completed_call = std::get<ai::ToolCallContent>(response.content[1]);
+                    if (auto emitted = sink(ai::ToolCallEndEvent{
+                                .content_index = 0,
+                                .tool_call = completed_call,
+                                .partial = response,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    co_return response;
                 });
     }
 
@@ -898,48 +890,42 @@ public:
         ai::AiContext context,
         ai::ProviderStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        std::string prompt;
-        for (auto message = context.messages.rbegin();
-             message != context.messages.rend();
-             ++message) {
-            if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
-                prompt = ai::text_from_user_message(*user);
-                break;
-            }
-        }
+                [model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    std::string prompt;
+                    for (auto message = context.messages.rbegin(); message != context.messages.rend(); ++message) {
+                        if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
+                            prompt = ai::text_from_user_message(*user);
+                            break;
+                        }
+                    }
 
-        auto response = ai::assistant_text_message(
-            prompt == "recover" ? "recovered after accepted outcomes" : "partial response");
-        response.provider = "outcome-fake";
-        response.api = "fake";
-        response.model = model.id;
-        if (prompt == "provider error") {
-            response.stop_reason = ai::AssistantStopReason::Error;
-            response.error_message = "accepted provider failure";
-        } else if (prompt == "provider tool error") {
-            response.content.clear();
-            response.content.emplace_back(ai::tool_call_content(
-                "failed-before-execution",
-                "read",
-                R"({"path":"never.txt"})"));
-            response.stop_reason = ai::AssistantStopReason::Error;
-            response.error_message = "accepted tool-call provider failure";
-        } else if (prompt == "provider abort") {
-            response.stop_reason = ai::AssistantStopReason::Aborted;
-            response.error_message = "Request was aborted";
-        } else if (prompt == "provider tool abort") {
-            response.content.clear();
-            response.content.emplace_back(ai::tool_call_content(
-                "aborted-before-execution",
-                "read",
-                R"({"path":"never.txt"})"));
-            response.stop_reason = ai::AssistantStopReason::Aborted;
-            response.error_message = "custom provider abort detail";
-        }
-        co_return response;
+                    auto response = ai::assistant_text_message(
+                            prompt == "recover" ? "recovered after accepted outcomes" : "partial response");
+                    response.provider = "outcome-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    if (prompt == "provider error") {
+                        response.stop_reason = ai::AssistantStopReason::Error;
+                        response.error_message = "accepted provider failure";
+                    } else if (prompt == "provider tool error") {
+                        response.content.clear();
+                        response.content.emplace_back(
+                                ai::tool_call_content("failed-before-execution", "read", R"({"path":"never.txt"})"));
+                        response.stop_reason = ai::AssistantStopReason::Error;
+                        response.error_message = "accepted tool-call provider failure";
+                    } else if (prompt == "provider abort") {
+                        response.stop_reason = ai::AssistantStopReason::Aborted;
+                        response.error_message = "Request was aborted";
+                    } else if (prompt == "provider tool abort") {
+                        response.content.clear();
+                        response.content.emplace_back(
+                                ai::tool_call_content("aborted-before-execution", "read", R"({"path":"never.txt"})"));
+                        response.stop_reason = ai::AssistantStopReason::Aborted;
+                        response.error_message = "custom provider abort detail";
+                    }
+                    co_return response;
                 });
     }
 

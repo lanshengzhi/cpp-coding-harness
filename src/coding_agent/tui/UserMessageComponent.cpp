@@ -42,11 +42,8 @@ constexpr std::string_view kOsc133ZoneFinal = "\x1b]133;C\x07";
 } // namespace
 
 UserMessageComponent::UserMessageComponent(
-    const LiveTheme& theme,
-    std::variant<std::string, std::vector<ai::Content>> content,
-    std::size_t output_pad)
-    : theme_(theme),
-      box_(output_pad, 1, theme.background_hook(ThemeToken::UserMessageBg)) {
+        const LiveTheme& theme, std::variant<std::string, std::vector<ai::Content>> content, std::size_t output_pad)
+    : box_(output_pad, 1, theme.background_hook(ThemeToken::UserMessageBg)) {
     auto style = theme.markdown_style();
     style.text = theme.foreground_hook(ThemeToken::UserMessageText);
     markdown_ = std::make_unique<cch::tui::Markdown>(

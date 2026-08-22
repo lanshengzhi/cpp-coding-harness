@@ -17,7 +17,6 @@
 namespace cch::tui::detail {
 namespace {
 
-constexpr std::string_view kEscape = "\x1b";
 constexpr std::string_view kPasteStart = "\x1b[200~";
 constexpr std::string_view kPasteEnd = "\x1b[201~";
 constexpr std::size_t kMaxPendingBytes = 256;

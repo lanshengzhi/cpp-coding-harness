@@ -601,72 +601,75 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
             });
     };
 
-    result.resolve = [provider_id, base, raw_key, is_command, raw_key_env_names,
-                      config_headers, header_env_names, runner](
-                         const ai::AuthContext& context,
-                         std::optional<ai::ApiKeyCredential> credential)
-        -> cch::support::AsyncResult<std::optional<AuthResult>> {
+    result.resolve = [provider_id, base, raw_key, raw_key_env_names, config_headers, header_env_names, runner](
+                             const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential)
+            -> cch::support::AsyncResult<std::optional<AuthResult>> {
         return ai::detail::make_async_result(
-            [&context, credential = std::move(credential), provider_id, base, raw_key,
-             is_command, raw_key_env_names, config_headers, header_env_names, runner]()
-                -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
-                ai::ApiKeyAuth* inherited =
-                    base && base->auth().api_key ? &*base->auth().api_key : nullptr;
-                std::optional<AuthResult> resolved_result;
-                if (credential) {
-                    if (inherited && inherited->resolve) {
-                        CCH_TRY(resolved, co_await ai::detail::await_async_result(
-                            inherited->resolve(context, credential)));
+                [&context,
+                        credential = std::move(credential),
+                        provider_id,
+                        base,
+                        raw_key,
+                        raw_key_env_names,
+                        config_headers,
+                        header_env_names,
+                        runner]() -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
+                    ai::ApiKeyAuth* inherited = base && base->auth().api_key ? &*base->auth().api_key : nullptr;
+                    std::optional<AuthResult> resolved_result;
+                    if (credential) {
+                        if (inherited && inherited->resolve) {
+                            CCH_TRY(resolved,
+                                    co_await ai::detail::await_async_result(inherited->resolve(context, credential)));
+                            resolved_result = std::move(resolved);
+                        } else if (credential->key && !credential->key->empty()) {
+                            ai::ProviderEnv credential_env;
+                            credential_env.insert(credential->env.begin(), credential->env.end());
+                            resolved_result = AuthResult{
+                                    .auth = ModelAuth{.api_key = *credential->key},
+                                    .env = std::move(credential_env),
+                                    .source = "stored credential",
+                            };
+                        }
+                    } else if (raw_key) {
+                        CCH_TRY(env, co_await config_context_env(raw_key_env_names, context, {}));
+                        CCH_TRY(key,
+                                co_await config_value::resolve_config_value_required(*raw_key,
+                                        "API key for provider \"" + std::string{provider_id} + "\"",
+                                        env,
+                                        runner));
+                        if (inherited && inherited->resolve) {
+                            ai::ApiKeyCredential configured;
+                            configured.key = std::move(key);
+                            CCH_TRY(resolved,
+                                    co_await ai::detail::await_async_result(
+                                            inherited->resolve(context, std::move(configured))));
+                            resolved_result = std::move(resolved);
+                        } else {
+                            resolved_result = AuthResult{
+                                    .auth = ModelAuth{.api_key = std::move(key)},
+                                    .source = "configured API key",
+                            };
+                        }
+                    } else if (inherited && inherited->resolve) {
+                        CCH_TRY(resolved,
+                                co_await ai::detail::await_async_result(inherited->resolve(context, std::nullopt)));
                         resolved_result = std::move(resolved);
-                    } else if (credential->key && !credential->key->empty()) {
-                        ai::ProviderEnv credential_env;
-                        credential_env.insert(credential->env.begin(), credential->env.end());
-                        resolved_result = AuthResult{
-                            .auth = ModelAuth{.api_key = *credential->key},
-                            .env = std::move(credential_env),
-                            .source = "stored credential",
-                        };
                     }
-                } else if (raw_key) {
-                    CCH_TRY(env, co_await config_context_env(raw_key_env_names, context, {}));
-                    CCH_TRY(key, co_await config_value::resolve_config_value_required(
-                        *raw_key,
-                        "API key for provider \"" + std::string{provider_id} + "\"",
-                        env,
-                        runner));
-                    if (inherited && inherited->resolve) {
-                        ai::ApiKeyCredential configured;
-                        configured.key = std::move(key);
-                        CCH_TRY(resolved, co_await ai::detail::await_async_result(
-                            inherited->resolve(context, std::move(configured))));
-                        resolved_result = std::move(resolved);
-                    } else {
-                        resolved_result = AuthResult{
-                            .auth = ModelAuth{.api_key = std::move(key)},
-                            .source = "configured API key",
-                        };
+                    if (!resolved_result) {
+                        co_return std::optional<AuthResult>{};
                     }
-                } else if (inherited && inherited->resolve) {
-                    CCH_TRY(resolved, co_await ai::detail::await_async_result(
-                        inherited->resolve(context, std::nullopt)));
-                    resolved_result = std::move(resolved);
-                }
-                if (!resolved_result) {
-                    co_return std::optional<AuthResult>{};
-                }
-                if (config_headers) {
-                    CCH_TRY(header_env, co_await config_context_env(
-                        header_env_names, context, resolved_result->env));
-                    CCH_TRY(headers, co_await config_value::resolve_headers(
-                        *config_headers, header_env, runner));
-                    if (headers) {
-                        for (const auto& [name, value] : *headers) {
-                            resolved_result->auth.headers.insert_or_assign(name, value);
+                    if (config_headers) {
+                        CCH_TRY(header_env,
+                                co_await config_context_env(header_env_names, context, resolved_result->env));
+                        CCH_TRY(headers, co_await config_value::resolve_headers(*config_headers, header_env, runner));
+                        if (headers) {
+                            for (const auto& [name, value] : *headers) {
+                                resolved_result->auth.headers.insert_or_assign(name, value);
+                            }
                         }
                     }
-                }
-                co_return resolved_result;
-            });
+                    co_return resolved_result;
+                });
     };
 
     return result;

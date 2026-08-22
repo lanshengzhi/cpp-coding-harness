@@ -145,12 +145,8 @@ public:
         gate.expires_at(std::chrono::steady_clock::time_point::max());
         // Cancellation may be requested from any thread; the timer is only
         // touched on its own executor.
-        std::stop_callback cancellation{options.stop_token, [executor, &gate] {
-            boost::asio::post(executor, [&gate] {
-                boost::system::error_code ignored;
-                (void)gate.cancel();
-            });
-        }};
+        std::stop_callback cancellation{options.stop_token,
+                [executor, &gate] { boost::asio::post(executor, [&gate] { (void)gate.cancel(); }); }};
         boost::system::error_code error;
         co_await gate.async_wait(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));

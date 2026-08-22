@@ -327,7 +327,7 @@ boost::asio::awaitable<support::ExpectedVoid>
 detail::AgentSessionPromptAccess::wait_for_idle_impl(
     std::shared_ptr<AgentSession::Impl> impl) {
     if (impl && impl->runtime) {
-        co_await impl->runtime->wait_for_idle();
+        (void)co_await impl->runtime->wait_for_idle();
     }
     co_return support::ExpectedVoid{};
 }

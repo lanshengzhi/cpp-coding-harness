@@ -48,11 +48,9 @@ public:
         ai::AiContext,
         ai::ProviderStreamOptions) override {
         return ai::detail::make_model_stream(
-            [this](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Stream, "catalog provider has no stream"));
+                [](ai::AssistantEventSink) mutable -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Stream, "catalog provider has no stream"));
                 });
     }
 

@@ -41,7 +41,6 @@ public:
 
 private:
     Kind kind_;
-    const LiveTheme& theme_; // must outlive this component.
     std::unique_ptr<cch::tui::Loader> loader_;
 };
 

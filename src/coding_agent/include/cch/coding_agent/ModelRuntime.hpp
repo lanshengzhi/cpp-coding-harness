@@ -73,7 +73,10 @@ public:
 
     ModelRuntime(ModelRuntime&&) noexcept;
     ModelRuntime& operator=(ModelRuntime&&) noexcept;
-    ~ModelRuntime();
+    /// Virtual because the impl-less recording fakes derive from ModelRuntime
+    /// (the §7.2 recorded exception) and runtimes are owned through shared_ptr
+    /// bases (Clang -Wdelete-non-abstract-non-virtual-dtor).
+    virtual ~ModelRuntime();
     ModelRuntime(const ModelRuntime&) = delete;
     ModelRuntime& operator=(const ModelRuntime&) = delete;
 

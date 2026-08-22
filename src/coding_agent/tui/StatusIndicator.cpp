@@ -11,20 +11,14 @@
 namespace cch::coding_agent::tui {
 
 StatusIndicator::StatusIndicator(
-    Kind kind,
-    const LiveTheme& theme,
-    cch::tui::RenderRequestSink request_render,
-    std::string message)
-    : kind_(kind),
-      theme_(theme),
-      loader_(std::make_unique<cch::tui::Loader>(cch::tui::LoaderOptions{
-          .request_render = std::move(request_render),
-          .spinner_style = kind == Kind::Retry
-              ? theme.foreground_hook(ThemeToken::Warning)
-              : theme.foreground_hook(ThemeToken::Accent),
-          .message_style = theme.foreground_hook(ThemeToken::Muted),
-          .message = std::move(message),
-      })) {
+        Kind kind, const LiveTheme& theme, cch::tui::RenderRequestSink request_render, std::string message)
+    : kind_(kind), loader_(std::make_unique<cch::tui::Loader>(cch::tui::LoaderOptions{
+                           .request_render = std::move(request_render),
+                           .spinner_style = kind == Kind::Retry ? theme.foreground_hook(ThemeToken::Warning)
+                                                                : theme.foreground_hook(ThemeToken::Accent),
+                           .message_style = theme.foreground_hook(ThemeToken::Muted),
+                           .message = std::move(message),
+                   })) {
     loader_->start();
 }
 

@@ -149,22 +149,23 @@ public:
         ai::Model,
         ai::AiContext,
         ai::ProviderStreamOptions) override {
-        return ai::detail::make_model_stream(
-            [this](ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        ai::AssistantMessage message;
-        message.api = "unknown";
-        message.provider = "login-provider";
-        message.model = "host-client";
-        message.stop_reason = ai::AssistantStopReason::Stop;
-        if (sink) {
-            if (auto emitted = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
-                !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-        }
-        co_return message;
-                });
+            return ai::detail::make_model_stream(
+                    [](ai::AssistantEventSink sink) mutable
+                            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                        ai::AssistantMessage message;
+                        message.api = "unknown";
+                        message.provider = "login-provider";
+                        message.model = "host-client";
+                        message.stop_reason = ai::AssistantStopReason::Stop;
+                        if (sink) {
+                            if (auto emitted = sink(
+                                        ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
+                                    !emitted) {
+                                co_return std::unexpected(emitted.error());
+                            }
+                        }
+                        co_return message;
+                    });
     }
 
 

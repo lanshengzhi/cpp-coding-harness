@@ -140,14 +140,13 @@ public:
         ai::AiContext,
         ai::ProviderStreamOptions) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model)](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        auto response = ai::assistant_text_message("captured");
-        response.provider = "snapshot-fake";
-        response.api = "fake";
-        response.model = model.id;
-        co_return response;
+                [model = std::move(model)](ai::AssistantEventSink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto response = ai::assistant_text_message("captured");
+                    response.provider = "snapshot-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    co_return response;
                 });
     }
 

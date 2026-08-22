@@ -13,8 +13,10 @@
     "catch2",
     "utf8proc",
     {
+      "$comment": "simd stays enabled (#477): with WEBP_ENABLE_SIMD=OFF libwebp appends -mno-sse2 globally, which hard-errors under the blocking Clang 22 conformance lane ('SSE2 register return with SSE2 disabled' in sharpyuv).",
       "name": "libwebp",
-      "default-features": false
+      "default-features": false,
+      "features": ["simd"]
     }
   ]
 }

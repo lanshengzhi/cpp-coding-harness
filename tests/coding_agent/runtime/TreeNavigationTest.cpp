@@ -135,20 +135,20 @@ public:
         ai::AiContext context,
         ai::ProviderStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        (void)model;
-        (void)context;
-        (void)options;
-        ai::AssistantMessage message = ai::assistant_text_message("reply");
-        message.api = "fake-api";
-        message.provider = "fake";
-        message.model = "fake-model";
-        if (sink) {
-            (void)sink(ai::AssistantStartEvent{message});
-        }
-        co_return message;
+                [model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    (void)model;
+                    (void)context;
+                    (void)options;
+                    ai::AssistantMessage message = ai::assistant_text_message("reply");
+                    message.api = "fake-api";
+                    message.provider = "fake";
+                    message.model = "fake-model";
+                    if (sink) {
+                        (void)sink(ai::AssistantStartEvent{message});
+                    }
+                    co_return message;
                 });
     }
 

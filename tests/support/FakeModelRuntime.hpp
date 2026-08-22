@@ -74,7 +74,7 @@ private:
 class FakeModelRuntime final : public coding_agent::ModelRuntime {
 public:
     FakeModelRuntime();
-    ~FakeModelRuntime() = default;
+    ~FakeModelRuntime() override = default;
     FakeModelRuntime(const FakeModelRuntime&) = delete;
     FakeModelRuntime& operator=(const FakeModelRuntime&) = delete;
 
