@@ -1,5 +1,6 @@
 #include "agent/harness/Process.hpp"
 
+#include "support/ProcessProbe.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -12,7 +13,6 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 
-#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -22,9 +22,10 @@
 #include <string>
 #include <system_error>
 
-#include <cerrno>
 #include <csignal>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 using namespace cch;
 
@@ -43,17 +44,32 @@ support::Expected<T> run_awaitable(Start start) {
     return future.get();
 }
 
-bool process_gone(const std::string& pid_text) {
-    pid_t pid{};
-    const auto [end, ec] = std::from_chars(pid_text.data(), pid_text.data() + pid_text.size(), pid);
-    if (ec != std::errc{} || end == pid_text.data()) {
-        return false;
-    }
-    errno = 0;
-    return ::kill(pid, 0) == -1 && errno == ESRCH;
-}
-
 } // namespace
+
+TEST_CASE("process exit probe treats an unreaped zombie as exited", "[harness][process][issue524]") {
+    // The Arch pinned CI container's PID 1 (`tail -f /dev/null`) never reaps,
+    // so a terminated descendant stays visible as a zombie and kill(pid, 0)
+    // keeps succeeding after the exit (#524). Model that corpse here by killing
+    // a child while this test deliberately declines to wait for it.
+    const pid_t victim = ::fork();
+    REQUIRE(victim != -1);
+    if (victim == 0) {
+        ::pause();
+        _exit(0);
+    }
+    REQUIRE(::kill(victim, SIGKILL) == 0);
+
+    // The kernel recorded the exit while the PID table still lists the zombie:
+    // exactly what the old bare-kill assertion measured on the container, so
+    // the honest probe must accept it.
+    CHECK(tests::await_process_exit(std::to_string(victim)));
+    CHECK(tests::process_state(victim) == 'Z');
+    CHECK(::kill(victim, 0) == 0);
+
+    // Reap so the corpse does not outlive the test.
+    int status = 0;
+    REQUIRE(::waitpid(victim, &status, 0) == victim);
+}
 
 TEST_CASE("process runner drains both pipes beyond kernel buffer capacity", "[harness][process][issue458]") {
     harness::DefaultAsyncProcessRunner runner;
@@ -199,7 +215,7 @@ TEST_CASE("process runner timeout includes inherited output pipes after child ex
     REQUIRE(result);
     CHECK(result->timed_out);
     CHECK(elapsed < std::chrono::seconds{5});
-    CHECK(process_gone(workspace.read("descendant.pid")));
+    CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
 TEST_CASE("process runner caps newline-free stderr output without stopping the drain", "[harness][process][issue458]") {
@@ -280,7 +296,9 @@ TEST_CASE("process runner timeout terminates and reaps the child", "[harness][pr
     REQUIRE(result);
     CHECK(result->timed_out);
     CHECK(elapsed < std::chrono::seconds{5});
-    CHECK(process_gone(workspace.read("shell.pid")));
+    // The leader's reaping is owned by the runner's waitpid, so demand full
+    // removal from the PID table rather than zombie tolerance.
+    CHECK(tests::await_process_reaped(workspace.read("shell.pid")));
 }
 
 TEST_CASE("process runner reports the terminating signal as exit code", "[harness][process][issue484]") {
@@ -349,8 +367,10 @@ TEST_CASE("process runner cancellation terminates and reaps the process group", 
     REQUIRE_FALSE(*result);
     CHECK((*result).error().code == support::ErrorCode::Cancelled);
     CHECK(elapsed < std::chrono::seconds{2});
-    CHECK(process_gone(workspace.read("shell.pid")));
-    CHECK(process_gone(workspace.read("descendant.pid")));
+    // The leader's reaping is owned by the runner's waitpid; only the orphaned
+    // descendant depends on an external reaper.
+    CHECK(tests::await_process_reaped(workspace.read("shell.pid")));
+    CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
 TEST_CASE("process runner cancellation terminates descendants holding output pipes", "[harness][process][issue484]") {
@@ -399,7 +419,7 @@ TEST_CASE("process runner cancellation terminates descendants holding output pip
     REQUIRE_FALSE(*result);
     CHECK((*result).error().code == support::ErrorCode::Cancelled);
     CHECK(elapsed < std::chrono::seconds{3});
-    CHECK(process_gone(workspace.read("descendant.pid")));
+    CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
 TEST_CASE("process runner keeps stdout and stderr independent for mixed traffic", "[harness][process][issue458]") {

@@ -1,4 +1,5 @@
 #include "support/EnvVarGuard.hpp"
+#include "support/ProcessProbe.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
@@ -16,7 +17,6 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include <charconv>
 #include <chrono>
 #include <atomic>
 #include <filesystem>
@@ -30,8 +30,6 @@
 #include <vector>
 #include <thread>
 
-#include <cerrno>
-#include <csignal>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -507,19 +505,13 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
     CHECK(result->error().message.find("side effects may remain") != std::string::npos);
     CHECK(elapsed < std::chrono::seconds{2});
 
-    auto check_process_absent = [&](const std::string& pid_file) {
-        const auto pid_text = workspace.read(pid_file);
-        pid_t pid{};
-        const auto [end, parse_error] = std::from_chars(
-            pid_text.data(), pid_text.data() + pid_text.size(), pid);
-        REQUIRE(parse_error == std::errc{});
-        CHECK(end != pid_text.data());
-        errno = 0;
-        CHECK(::kill(pid, 0) == -1);
-        CHECK(errno == ESRCH);
-    };
-    check_process_absent("shell.pid");
-    check_process_absent("descendant.pid");
+    // The shell leader's reaping is owned by the runner's waitpid, so it must
+    // demand full removal from the PID table. The descendant is adopted by an
+    // external reaper when the leader dies; on the Arch pinned CI container
+    // that reaper (PID 1, `tail -f /dev/null`) never waits, so the exited
+    // descendant legitimately stays visible as a zombie (#524).
+    CHECK(tests::await_process_reaped(workspace.read("shell.pid")));
+    CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
 TEST_CASE(
