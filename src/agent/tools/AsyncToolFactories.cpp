@@ -260,7 +260,12 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
     if (!read) {
         co_return error_result_from(read.error());
     }
-    const auto [bom, text] = tools::strip_bom(*read);
+    // Bind through a named local: a structured binding that lifetime-extends
+    // a temporary across the co_await suspensions below has been observed to
+    // drop the string destructor on the coroutine frame under GCC 16
+    // (LeakSanitizer finding on the ASan+UBSan lane, issue #522).
+    const auto stripped = tools::strip_bom(*read);
+    const auto& [bom, text] = stripped;
     const auto original_ending = tools::detect_line_ending(text);
     const auto normalized_content = tools::normalize_to_lf(text);
     std::vector<tools::EditReplacement> replacements;
