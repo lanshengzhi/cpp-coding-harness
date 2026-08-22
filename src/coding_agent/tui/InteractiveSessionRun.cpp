@@ -59,9 +59,9 @@ const SessionIntentVariant& InteractiveSessionRun::session_intent() const noexce
     return state_ ? state_->session_intent : kEmptyIntent;
 }
 
-SessionIntentVariant& InteractiveSessionRun::session_intent() noexcept {
-    static SessionIntentVariant kEmptyIntent{BindExistingSession{nullptr}};
-    return state_ ? state_->session_intent : kEmptyIntent;
+SessionIntentVariant InteractiveSessionRun::take_session_intent() noexcept {
+    if (!state_) return BindExistingSession{nullptr};
+    return std::exchange(state_->session_intent, BindExistingSession{nullptr});
 }
 
 bool InteractiveSessionRun::creation_failure_reported() const noexcept {
@@ -215,9 +215,7 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_intent(
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(
     AgentSession& session) noexcept {
-    state_->is_resume_target = false;
-    state_->session_intent = BindExistingSession{.session = &session};
-    return *this;
+    return with_session(&session);
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(

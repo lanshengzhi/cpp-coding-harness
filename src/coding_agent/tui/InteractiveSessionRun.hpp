@@ -35,7 +35,6 @@ struct DeferBoot {
 };
 
 using SessionIntentVariant = std::variant<BindExistingSession, DeferBoot>;
-using InteractiveSessionIntentVariant = SessionIntentVariant;
 
 /// InteractiveSessionRun: The Native TUI's intake composition object (#517).
 /// Carries CLI-owned facts, session intent (BindExistingSession vs DeferBoot),
@@ -62,7 +61,7 @@ public:
     [[nodiscard]] bool has_clipboard_reader() const noexcept;
     [[nodiscard]] std::unique_ptr<AsyncClipboardReader> take_clipboard_reader() noexcept;
     [[nodiscard]] const SessionIntentVariant& session_intent() const noexcept;
-    [[nodiscard]] SessionIntentVariant& session_intent() noexcept;
+    [[nodiscard]] SessionIntentVariant take_session_intent() noexcept;
     [[nodiscard]] bool creation_failure_reported() const noexcept;
 
     // ── Owned host effects (closed action seam dispatch) ────────────────

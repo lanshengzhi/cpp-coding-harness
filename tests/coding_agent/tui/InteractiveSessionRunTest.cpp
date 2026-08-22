@@ -103,6 +103,15 @@ TEST_CASE(
     REQUIRE(bind != nullptr);
     CHECK(bind->session == created->session.get());
 
+    auto taken_intent = bind_run.take_session_intent();
+    const auto* taken_bind = std::get_if<coding_agent::tui::BindExistingSession>(&taken_intent);
+    REQUIRE(taken_bind != nullptr);
+    CHECK(taken_bind->session == created->session.get());
+
+    const auto* reset_bind = std::get_if<coding_agent::tui::BindExistingSession>(&bind_run.session_intent());
+    REQUIRE(reset_bind != nullptr);
+    CHECK(reset_bind->session == nullptr);
+
     // 2. DeferBoot via with_defer_boot
     coding_agent::runtime::AgentSessionCreationRequest defer_req;
     defer_req.workspace = workspace.path();

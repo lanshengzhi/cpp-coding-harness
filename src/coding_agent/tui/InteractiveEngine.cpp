@@ -65,18 +65,19 @@ InteractiveEngine::InteractiveEngine(
 }
 
 support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
+    auto intent = run.take_session_intent();
     std::visit(
-        [this](auto& intent) {
-            using T = std::decay_t<decltype(intent)>;
+        [this](auto&& it) {
+            using T = std::decay_t<decltype(it)>;
             if constexpr (std::is_same_v<T, BindExistingSession>) {
-                session_ = intent.session;
+                session_ = it.session;
                 boot_request_ = std::nullopt;
             } else if constexpr (std::is_same_v<T, DeferBoot>) {
                 session_ = nullptr;
-                boot_request_ = std::move(intent.request);
+                boot_request_ = std::move(it.request);
             }
         },
-        run.session_intent());
+        intent);
     const bool booting = boot_request_.has_value();
 
     clipboard_reader_ = run.take_clipboard_reader();
