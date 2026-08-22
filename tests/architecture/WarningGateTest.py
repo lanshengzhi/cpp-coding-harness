@@ -119,6 +119,50 @@ class SourceSelectionTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
 
+    def test_main_degrades_without_ccache_installed(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_root = Path(temporary_directory)
+            build_directory = project_root / "build"
+            source_file = project_root / "src" / "source.cpp"
+            build_directory.mkdir(parents=True)
+            source_file.parent.mkdir(parents=True)
+            source_file.write_text("// fixture source\\n", encoding="utf-8")
+            compile_commands = project_root / "compile_commands.json"
+            compile_commands.write_text(
+                json.dumps(
+                    [
+                        {
+                            "directory": str(build_directory),
+                            "arguments": ["/bin/true", "-c", "../src/source.cpp"],
+                            "file": "../src/source.cpp",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            def raise_missing_ccache(command, **kwargs):
+                if command == ["ccache", "--version"]:
+                    raise FileNotFoundError(
+                        2, "No such file or directory", "ccache"
+                    )
+                return subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+            with patch.object(wg.subprocess, "run", side_effect=raise_missing_ccache):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = wg.main(
+                        [
+                            "--compile-commands",
+                            str(compile_commands),
+                            "--project-root",
+                            str(project_root),
+                            "--jobs",
+                            "1",
+                        ]
+                    )
+
+        self.assertEqual(result, 0)
+
     def test_is_project_source_resolves_relative_file_against_directory(self):
         entry = {
             "directory": "/tmp/project/build",

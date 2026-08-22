@@ -153,10 +153,16 @@ def main(argv: list[str] | None = None) -> int:
 
     ccache = False
     if not args.no_ccache:
-        probe = subprocess.run(
-            ["ccache", "--version"], capture_output=True, text=True
-        )
-        ccache = probe.returncode == 0
+        # ccache is an optional speedup: the gate must degrade to direct
+        # compiler invocations when the launcher is not installed (issue
+        # #520) instead of crashing on the probe.
+        try:
+            probe = subprocess.run(
+                ["ccache", "--version"], capture_output=True, text=True
+            )
+            ccache = probe.returncode == 0
+        except OSError:
+            ccache = False
 
     commands = load_compile_commands(args.compile_commands)
     entries = [
