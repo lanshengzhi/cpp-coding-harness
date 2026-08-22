@@ -150,14 +150,14 @@ using MessageVariant = std::variant<
 
 // ── LLM conversion prefix/suffix constants ──
 
-inline constexpr std::string_view COMPACTION_SUMMARY_PREFIX =
-    "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
-inline constexpr std::string_view COMPACTION_SUMMARY_SUFFIX = "\n</summary>";
-inline constexpr std::string_view BRANCH_SUMMARY_PREFIX =
-    "The following is a summary of a branch that this conversation came back from:\n\n<summary>\n";
-// pi `packages/agent/src/harness/messages.ts` `BRANCH_SUMMARY_SUFFIX` is
+inline constexpr std::string_view kCompactionSummaryPrefix =
+        "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
+inline constexpr std::string_view kCompactionSummarySuffix = "\n</summary>";
+inline constexpr std::string_view kBranchSummaryPrefix =
+        "The following is a summary of a branch that this conversation came back from:\n\n<summary>\n";
+// pi `packages/agent/src/harness/messages.ts` `kBranchSummarySuffix` is
 // exactly `</summary>` (no leading newline; the compaction suffix does carry one).
-inline constexpr std::string_view BRANCH_SUMMARY_SUFFIX = "</summary>";
+inline constexpr std::string_view kBranchSummarySuffix = "</summary>";
 
 // ── LLM conversion helpers (produce UserMessage from extended types) ──
 
@@ -190,17 +190,17 @@ inline constexpr std::string_view BRANCH_SUMMARY_SUFFIX = "</summary>";
 
 [[nodiscard]] inline UserMessage branch_summary_to_user_message(const BranchSummaryMessage& msg) {
     std::string text;
-    text += BRANCH_SUMMARY_PREFIX;
+    text += kBranchSummaryPrefix;
     text += msg.summary;
-    text += BRANCH_SUMMARY_SUFFIX;
+    text += kBranchSummarySuffix;
     return user_text_message(std::move(text), msg.timestamp);
 }
 
 [[nodiscard]] inline UserMessage compaction_summary_to_user_message(const CompactionSummaryMessage& msg) {
     std::string text;
-    text += COMPACTION_SUMMARY_PREFIX;
+    text += kCompactionSummaryPrefix;
     text += msg.summary;
-    text += COMPACTION_SUMMARY_SUFFIX;
+    text += kCompactionSummarySuffix;
     return user_text_message(std::move(text), msg.timestamp);
 }
 

@@ -1630,7 +1630,7 @@ template <typename T>
 
 [[nodiscard]] bool is_uri_template_format(std::string_view value) {
     constexpr std::string_view operators = "+#./;?&=,!@|";
-    constexpr std::string_view forbidden_literals = "\"'<>\\^`{|}";
+    constexpr std::string_view kForbiddenLiterals = "\"'<>\\^`{|}";
     std::size_t index = 0;
     while (index < value.size()) {
         const auto character = static_cast<unsigned char>(value[index]);
@@ -1644,8 +1644,7 @@ template <typename T>
             continue;
         }
         if (character != '{') {
-            if (character <= 0x20 ||
-                forbidden_literals.find(static_cast<char>(character)) != std::string_view::npos) {
+            if (character <= 0x20 || kForbiddenLiterals.find(static_cast<char>(character)) != std::string_view::npos) {
                 return false;
             }
             ++index;

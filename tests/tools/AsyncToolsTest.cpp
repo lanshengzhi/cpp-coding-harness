@@ -1,4 +1,4 @@
-#include "../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>

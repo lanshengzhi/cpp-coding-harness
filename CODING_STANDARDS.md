@@ -14,6 +14,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 ## 2. Mechanical style
 
+Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or modified lines by `scripts/format-check.sh` (see §14). Untouched lines stay outside that gate.
+
 2.1. Braces are 1TBS: opening brace on the same line for namespaces, types, functions, and control flow.
 
 2.2. Indent with 4 spaces. Wrapped parameter or argument lists either continue at 8 spaces or break one parameter per line.
@@ -22,7 +24,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 2.4. `*` and `&` bind to the type: `const std::string& name`, `AsyncAgentTool* find(...)`.
 
-2.5. Line length is a soft cap of ~120 columns. Break signatures one parameter per line when wrapping.
+2.5. The line-length limit is 120 columns on added or modified lines. Break signatures one parameter per line when wrapping.
 
 2.6. No trailing return types on named functions. Lambdas declare `-> T` when the deduced return type would not be obvious.
 
@@ -202,10 +204,11 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 13.4. Locality of mutable state: Declare a mutable local in the narrowest existing lexical block containing all its uses. Flag it when the declaration can move into an existing nested block without changing behavior, or when the same variable is reused for a different meaning in a later processing phase. Accumulators, parser state, and explicit lifecycle state that intentionally span phases are not violations.
 
-## 14. Validation-enforced — reviewers skip exact duplicates
+## 14. Validation-enforced — reviewers skip exact violations
 
 - Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 conformance (ADR 0039).
 - Compiler diagnostics remain review findings: `-Wall -Wextra -Wpedantic` are enabled without warnings-as-errors.
+- Formatting of added or modified lines is checked against `.clang-format` by `scripts/format-check.sh` (CI runs it as the formatting gate). Reviewers skip findings that duplicate its patch; untouched lines stay outside the gate.
 - For code changes that compile and pass the required suite, report remaining §2–§13 violations. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
 
 ## 15. Known exceptions and migrations
@@ -213,7 +216,4 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
-- **Include spelling (§2.9):** every Owner package has contracted into its Owner-local roots (#469), so production sources carry no relative quoted project includes; the remaining relative quoted includes are test files pulling shared helpers from `tests/support/`, grandfathered on untouched lines. Added or modified include lines use the current canonical spelling rule.
-- **Test tag `[coding-agent]`** (35 uses) predates §11.4's `[coding_agent]`; untouched tags are grandfathered, while added or modified tag lists use `[coding_agent]`.
-- **Constant naming (§3.5):** untouched snake_case constexpr locals and `SCREAMING_SNAKE` public constants are grandfathered; added or modified constant declarations use `kCamelCase`.
 - **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.

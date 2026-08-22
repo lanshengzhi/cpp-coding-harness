@@ -1,5 +1,5 @@
-#include "../support/EnvVarGuard.hpp"
-#include "../support/TempWorkspace.hpp"
+#include "support/EnvVarGuard.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
 #include "agent/harness/ShellResolver.hpp"

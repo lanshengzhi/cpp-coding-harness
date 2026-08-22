@@ -2,8 +2,8 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
-#include "../support/EnvVarGuard.hpp"
-#include "../support/TempWorkspace.hpp"
+#include "support/EnvVarGuard.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

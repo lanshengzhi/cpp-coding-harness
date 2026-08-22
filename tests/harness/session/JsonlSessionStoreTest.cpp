@@ -1,7 +1,7 @@
 #include "agent/harness/session/JsonlSessionStore.hpp"
 #include <cch/agent/harness/session/SessionResume.hpp>
 #include "support/Json.hpp"
-#include "../../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

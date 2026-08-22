@@ -409,296 +409,290 @@ void check_snapshot(std::string_view name, const support::JsonValue &actual) {
 } // namespace
 
 TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
-          "[coding-agent][runtime][golden][issue421]") {
-  tests::TempWorkspace workspace;
-  const auto path = workspace.path() / "lifecycle.jsonl";
+        "[coding_agent][runtime][golden][issue421]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "lifecycle.jsonl";
 
-  auto provider =
-      std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
-          text_turn("Hello there!"),
-          text_turn("Second reply."),
-      });
-  auto model = tests::scripted_request_model("fake", "faux-1");
-  model.api = "fake";
-  model.name = "One";
-  provider->set_model(model);
+    auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
+            text_turn("Hello there!"),
+            text_turn("Second reply."),
+    });
+    auto model = tests::scripted_request_model("fake", "faux-1");
+    model.api = "fake";
+    model.name = "One";
+    provider->set_model(model);
 
-  tests::ModelsSessionOptions options;
-  options.session_target =
-      coding_agent::ExplicitOpenOrCreateSessionTarget{path};
-  options.workspace = workspace.path();
-  options.request_model = model;
-  options.models = tests::models_from_provider(provider);
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
+    options.workspace = workspace.path();
+    options.request_model = model;
+    options.models = tests::models_from_provider(provider);
 
-  auto created = tests::create_agent_session(std::move(options));
-  REQUIRE(created);
-  auto &session = created->session;
-  REQUIRE(session->prompt_blocking("hi").has_value());
-  REQUIRE(session->prompt_blocking("again").has_value());
+    auto created = tests::create_agent_session(std::move(options));
+    REQUIRE(created);
+    auto& session = created->session;
+    REQUIRE(session->prompt_blocking("hi").has_value());
+    REQUIRE(session->prompt_blocking("again").has_value());
 
-  const auto snapshot = session->snapshot();
-  const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::SessionStore::load(path);
-  REQUIRE(loaded);
+    const auto snapshot = session->snapshot();
+    const auto messages = snapshot.agent_state.messages;
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded);
 
-  support::JsonValue::object_t golden{
-      {"meta", support::JsonValue{support::JsonValue::object_t{
-                   {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                   {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
-                   {"family", "session-lifecycle"},
-               }}},
-      {"messages", canonical_messages(messages)},
-      {"context", canonical_messages(to_llm_messages(messages))},
-      {"entries", project_entries(*loaded)},
-      {"values", support::JsonValue{support::JsonValue::object_t{
-                     {"model", "faux-1"},
-                     {"provider", "fake"},
-                     {"thinkingLevel", "off"},
-                 }}},
-  };
+    support::JsonValue::object_t golden{
+            {"meta",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"family", "session-lifecycle"},
+                    }}},
+            {"messages", canonical_messages(messages)},
+            {"context", canonical_messages(to_llm_messages(messages))},
+            {"entries", project_entries(*loaded)},
+            {"values",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"model", "faux-1"},
+                            {"provider", "fake"},
+                            {"thinkingLevel", "off"},
+                    }}},
+    };
 
-  check_snapshot("session-lifecycle.json", support::JsonValue{std::move(golden)});
-  session->close();
+    check_snapshot("session-lifecycle.json", support::JsonValue{std::move(golden)});
+    session->close();
 }
 
 TEST_CASE("session resume golden: persisted history restores at message level",
-          "[coding-agent][runtime][golden][issue421]") {
-  tests::TempWorkspace workspace;
-  const auto path = workspace.path() / "resume.jsonl";
+        "[coding_agent][runtime][golden][issue421]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "resume.jsonl";
 
-  auto provider =
-      std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
-          text_turn("Hello there!"),
-          text_turn("Second reply."),
-      });
-  auto model = tests::scripted_request_model("fake", "faux-1");
-  model.api = "fake";
-  model.name = "One";
-  provider->set_model(model);
+    auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
+            text_turn("Hello there!"),
+            text_turn("Second reply."),
+    });
+    auto model = tests::scripted_request_model("fake", "faux-1");
+    model.api = "fake";
+    model.name = "One";
+    provider->set_model(model);
 
-  {
+    {
+        tests::ModelsSessionOptions options;
+        options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
+        options.workspace = workspace.path();
+        options.request_model = model;
+        options.models = tests::models_from_provider(provider);
+        auto created = tests::create_agent_session(std::move(options));
+        REQUIRE(created);
+        REQUIRE(created->session->prompt_blocking("hi").has_value());
+        REQUIRE(created->session->prompt_blocking("again").has_value());
+        created->session->close();
+    }
+
+    // Resume: no request model, no prompt — the persisted model_change chain
+    // restores the live model/thinking and the full history.
     tests::ModelsSessionOptions options;
-    options.session_target =
-        coding_agent::ExplicitOpenOrCreateSessionTarget{path};
+    options.session_target = coding_agent::ExplicitResumeSessionTarget{path};
+    options.workspace = workspace.path();
+    options.models = tests::models_from_provider(provider);
+    auto created = tests::create_agent_session(std::move(options));
+    REQUIRE(created);
+    auto& session = created->session;
+
+    const auto snapshot = session->snapshot();
+    const auto messages = snapshot.agent_state.messages;
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded);
+
+    support::JsonValue::object_t golden{
+            {"meta",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"family", "session-resume"},
+                    }}},
+            {"messages", canonical_messages(messages)},
+            {"context", canonical_messages(to_llm_messages(messages))},
+            {"entries", project_entries(*loaded)},
+            {"values",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"model", "faux-1"},
+                            {"provider", "fake"},
+                            {"thinkingLevel", "off"},
+                    }}},
+    };
+
+    check_snapshot("session-resume.json", support::JsonValue{std::move(golden)});
+    session->close();
+}
+
+TEST_CASE("session compaction golden: manual compaction pins summary and "
+          "rebuilt context",
+        "[coding_agent][runtime][golden][issue421]") {
+    tests::TempWorkspace workspace;
+    // keepRecentTokens: 0 forces a full cut so the split-turn compaction
+    // exercise is deterministic on both engines (same settings on the TS side).
+    SettingsFixture settings(R"({"compaction":{"keepRecentTokens":0}})");
+    const auto path = workspace.path() / "compaction.jsonl";
+
+    auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
+            text_turn("first reply."),
+            text_turn("second reply."),
+            text_turn("third reply."),
+            text_turn("summary of the work so far."),
+            text_turn("turn context summary."),
+    });
+    auto model = tests::scripted_request_model("fake", "faux-1");
+    model.api = "fake";
+    model.name = "One";
+    provider->set_model(model);
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
     options.workspace = workspace.path();
     options.request_model = model;
     options.models = tests::models_from_provider(provider);
     auto created = tests::create_agent_session(std::move(options));
     REQUIRE(created);
-    REQUIRE(created->session->prompt_blocking("hi").has_value());
-    REQUIRE(created->session->prompt_blocking("again").has_value());
-    created->session->close();
-  }
+    auto& session = created->session;
 
-  // Resume: no request model, no prompt — the persisted model_change chain
-  // restores the live model/thinking and the full history.
-  tests::ModelsSessionOptions options;
-  options.session_target = coding_agent::ExplicitResumeSessionTarget{path};
-  options.workspace = workspace.path();
-  options.models = tests::models_from_provider(provider);
-  auto created = tests::create_agent_session(std::move(options));
-  REQUIRE(created);
-  auto &session = created->session;
+    REQUIRE(session->prompt_blocking("first").has_value());
+    REQUIRE(session->prompt_blocking("second").has_value());
+    REQUIRE(session->prompt_blocking("third").has_value());
+    auto compacted = run_compact(*session);
+    REQUIRE(compacted.has_value());
 
-  const auto snapshot = session->snapshot();
-  const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::SessionStore::load(path);
-  REQUIRE(loaded);
+    const auto snapshot = session->snapshot();
+    const auto messages = snapshot.agent_state.messages;
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded);
 
-  support::JsonValue::object_t golden{
-      {"meta", support::JsonValue{support::JsonValue::object_t{
-                   {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                   {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
-                   {"family", "session-resume"},
-               }}},
-      {"messages", canonical_messages(messages)},
-      {"context", canonical_messages(to_llm_messages(messages))},
-      {"entries", project_entries(*loaded)},
-      {"values", support::JsonValue{support::JsonValue::object_t{
-                     {"model", "faux-1"},
-                     {"provider", "fake"},
-                     {"thinkingLevel", "off"},
-                 }}},
-  };
+    support::JsonValue::object_t golden{
+            {"meta",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"family", "session-compaction"},
+                    }}},
+            {"messages", canonical_messages(messages)},
+            {"context", canonical_messages(to_llm_messages(messages))},
+            {"entries", project_entries(*loaded)},
+            {"values",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"summary", compacted->summary},
+                    }}},
+    };
 
-  check_snapshot("session-resume.json", support::JsonValue{std::move(golden)});
-  session->close();
-}
-
-TEST_CASE("session compaction golden: manual compaction pins summary and "
-          "rebuilt context",
-          "[coding-agent][runtime][golden][issue421]") {
-  tests::TempWorkspace workspace;
-  // keepRecentTokens: 0 forces a full cut so the split-turn compaction
-  // exercise is deterministic on both engines (same settings on the TS side).
-  SettingsFixture settings(R"({"compaction":{"keepRecentTokens":0}})");
-  const auto path = workspace.path() / "compaction.jsonl";
-
-  auto provider =
-      std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
-          text_turn("first reply."),
-          text_turn("second reply."),
-          text_turn("third reply."),
-          text_turn("summary of the work so far."),
-          text_turn("turn context summary."),
-      });
-  auto model = tests::scripted_request_model("fake", "faux-1");
-  model.api = "fake";
-  model.name = "One";
-  provider->set_model(model);
-
-  tests::ModelsSessionOptions options;
-  options.session_target =
-      coding_agent::ExplicitOpenOrCreateSessionTarget{path};
-  options.workspace = workspace.path();
-  options.request_model = model;
-  options.models = tests::models_from_provider(provider);
-  auto created = tests::create_agent_session(std::move(options));
-  REQUIRE(created);
-  auto &session = created->session;
-
-  REQUIRE(session->prompt_blocking("first").has_value());
-  REQUIRE(session->prompt_blocking("second").has_value());
-  REQUIRE(session->prompt_blocking("third").has_value());
-  auto compacted = run_compact(*session);
-  REQUIRE(compacted.has_value());
-
-  const auto snapshot = session->snapshot();
-  const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::SessionStore::load(path);
-  REQUIRE(loaded);
-
-  support::JsonValue::object_t golden{
-      {"meta", support::JsonValue{support::JsonValue::object_t{
-                   {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                   {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
-                   {"family", "session-compaction"},
-               }}},
-      {"messages", canonical_messages(messages)},
-      {"context", canonical_messages(to_llm_messages(messages))},
-      {"entries", project_entries(*loaded)},
-      {"values", support::JsonValue{support::JsonValue::object_t{
-                     {"summary", compacted->summary},
-                 }}},
-  };
-
-  check_snapshot("session-compaction.json", support::JsonValue{std::move(golden)});
-  session->close();
+    check_snapshot("session-compaction.json", support::JsonValue{std::move(golden)});
+    session->close();
 }
 
 TEST_CASE("session model-switch golden: setModel pins entries, thinking "
           "re-clamp, settings default",
-          "[coding-agent][runtime][golden][issue421]") {
-  tests::TempWorkspace workspace;
-  SettingsFixture settings(R"({})");
-  const auto path = workspace.path() / "model-switch.jsonl";
+        "[coding_agent][runtime][golden][issue421]") {
+    tests::TempWorkspace workspace;
+    SettingsFixture settings(R"({})");
+    const auto path = workspace.path() / "model-switch.jsonl";
 
-  auto provider =
-      std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
-          text_turn("Hello there!"),
-          text_turn("After the switch."),
-      });
-  auto model = tests::scripted_request_model("fake", "faux-1");
-  model.api = "fake";
-  model.name = "One";
-  provider->set_model(model);
-  provider->add_model(reasoning_model("faux-2", "Two"));
+    auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
+            text_turn("Hello there!"),
+            text_turn("After the switch."),
+    });
+    auto model = tests::scripted_request_model("fake", "faux-1");
+    model.api = "fake";
+    model.name = "One";
+    provider->set_model(model);
+    provider->add_model(reasoning_model("faux-2", "Two"));
 
-  tests::ModelsSessionOptions options;
-  options.session_target =
-      coding_agent::ExplicitOpenOrCreateSessionTarget{path};
-  options.workspace = workspace.path();
-  options.request_model = model;
-  options.models = tests::models_from_provider(provider);
-  auto created = tests::create_agent_session(std::move(options));
-  REQUIRE(created);
-  auto &session = created->session;
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
+    options.workspace = workspace.path();
+    options.request_model = model;
+    options.models = tests::models_from_provider(provider);
+    auto created = tests::create_agent_session(std::move(options));
+    REQUIRE(created);
+    auto& session = created->session;
 
-  REQUIRE(session->prompt_blocking("hi").has_value());
-  auto switched = session->set_model_blocking(reasoning_model("faux-2", "Two"));
-  REQUIRE(switched.has_value());
-  REQUIRE(session->prompt_blocking("after switch").has_value());
+    REQUIRE(session->prompt_blocking("hi").has_value());
+    auto switched = session->set_model_blocking(reasoning_model("faux-2", "Two"));
+    REQUIRE(switched.has_value());
+    REQUIRE(session->prompt_blocking("after switch").has_value());
 
-  const auto snapshot = session->snapshot();
-  const auto messages = snapshot.agent_state.messages;
-  auto loaded = harness::session::SessionStore::load(path);
-  REQUIRE(loaded);
+    const auto snapshot = session->snapshot();
+    const auto messages = snapshot.agent_state.messages;
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded);
 
-  support::JsonValue::object_t golden{
-      {"meta", support::JsonValue{support::JsonValue::object_t{
-                   {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                   {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
-                   {"family", "session-model-switch"},
-               }}},
-      {"messages", canonical_messages(messages)},
-      {"context", canonical_messages(to_llm_messages(messages))},
-      {"entries", project_entries(*loaded)},
-      {"values", support::JsonValue{support::JsonValue::object_t{
-                     {"model", "faux-2"},
-                     {"provider", "fake"},
-                     {"thinkingLevel", "medium"},
-                 }}},
-  };
+    support::JsonValue::object_t golden{
+            {"meta",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"family", "session-model-switch"},
+                    }}},
+            {"messages", canonical_messages(messages)},
+            {"context", canonical_messages(to_llm_messages(messages))},
+            {"entries", project_entries(*loaded)},
+            {"values",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"model", "faux-2"},
+                            {"provider", "fake"},
+                            {"thinkingLevel", "medium"},
+                    }}},
+    };
 
-  check_snapshot("session-model-switch.json",
-                 support::JsonValue{std::move(golden)});
-  session->close();
+    check_snapshot("session-model-switch.json", support::JsonValue{std::move(golden)});
+    session->close();
 }
 
-TEST_CASE("session-family golden: most-recent selection and header values",
-          "[coding-agent][runtime][golden][issue421]") {
-  tests::TempWorkspace workspace;
-  const auto dir = workspace.path() / "sessions";
-  std::filesystem::create_directories(dir);
+TEST_CASE(
+        "session-family golden: most-recent selection and header values", "[coding_agent][runtime][golden][issue421]") {
+    tests::TempWorkspace workspace;
+    const auto dir = workspace.path() / "sessions";
+    std::filesystem::create_directories(dir);
 
-  // Three pi-shaped session files with deterministic mtimes; the most-recent
-  // selection (pi `findMostRecentSession`, the `--continue` flow) must pick
-  // the newest mtime.
-  auto make_session = [&](std::string name, int mtime_seconds) {
-    const auto file = dir / (name + ".jsonl");
-    harness::session::SessionMetadata metadata{
-        .session_id = name,
-        .created_at = "2026-07-05T00:00:00Z",
-        .workspace = "/workspace",
-        .provider = "fake",
-        .model = "faux-1",
+    // Three pi-shaped session files with deterministic mtimes; the most-recent
+    // selection (pi `findMostRecentSession`, the `--continue` flow) must pick
+    // the newest mtime.
+    auto make_session = [&](std::string name, int mtime_seconds) {
+        const auto file = dir / (name + ".jsonl");
+        harness::session::SessionMetadata metadata{
+                .session_id = name,
+                .created_at = "2026-07-05T00:00:00Z",
+                .workspace = "/workspace",
+                .provider = "fake",
+                .model = "faux-1",
+        };
+        auto store = harness::session::SessionStore::create_new(file, metadata);
+        REQUIRE(store.has_value());
+        REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("hello")}).has_value());
+        auto assistant = ai::assistant_text_message("hi there", 1720000000000);
+        assistant.provider = "fake";
+        assistant.api = "fake";
+        assistant.model = "faux-1";
+        REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}).has_value());
+        const auto now = std::filesystem::file_time_type::clock::now();
+        std::filesystem::last_write_time(file, now - std::chrono::seconds(mtime_seconds));
     };
-    auto store =
-        harness::session::SessionStore::create_new(file, metadata);
-    REQUIRE(store.has_value());
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("hello")})
-                .has_value());
-    auto assistant = ai::assistant_text_message("hi there", 1720000000000);
-    assistant.provider = "fake";
-    assistant.api = "fake";
-    assistant.model = "faux-1";
-    REQUIRE(
-        store->append(ai::MessageVariant{std::move(assistant)}).has_value());
-    const auto now = std::filesystem::file_time_type::clock::now();
-    std::filesystem::last_write_time(file,
-                                     now - std::chrono::seconds(mtime_seconds));
-  };
-  make_session("older", 300);
-  make_session("mid", 200);
-  make_session("newer", 100);
+    make_session("older", 300);
+    make_session("mid", 200);
+    make_session("newer", 100);
 
-  const auto most_recent =
-      coding_agent::session_discovery::find_most_recent_session(dir,
-                                                                std::nullopt);
-  REQUIRE(most_recent.has_value());
+    const auto most_recent = coding_agent::session_discovery::find_most_recent_session(dir, std::nullopt);
+    REQUIRE(most_recent.has_value());
 
-  auto loaded = harness::session::SessionStore::load(most_recent->path);
-  REQUIRE(loaded);
+    auto loaded = harness::session::SessionStore::load(most_recent->path);
+    REQUIRE(loaded);
 
-  support::JsonValue::object_t golden{
-      {"meta", support::JsonValue{support::JsonValue::object_t{
-                   {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                   {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
-                   {"family", "session-family"},
-               }}},
-      {"mostRecent", support::JsonValue{most_recent->path.stem().string()}},
-      {"entries", project_entries(*loaded)},
-  };
+    support::JsonValue::object_t golden{
+            {"meta",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"family", "session-family"},
+                    }}},
+            {"mostRecent", support::JsonValue{most_recent->path.stem().string()}},
+            {"entries", project_entries(*loaded)},
+    };
 
-  check_snapshot("session-family.json", support::JsonValue{std::move(golden)});
+    check_snapshot("session-family.json", support::JsonValue{std::move(golden)});
 }

@@ -1,6 +1,6 @@
 #include "coding_agent/SkillFormatting.hpp"
 #include "coding_agent/prompt/PromptExpansion.hpp"
-#include "../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

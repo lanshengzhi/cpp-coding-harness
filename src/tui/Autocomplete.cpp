@@ -85,20 +85,20 @@ struct FdEntry {
     if (first == std::string::npos) return normalized;
 
     const auto trimmed = normalized.substr(first, last - first + 1);
-    constexpr std::string_view separator_pattern = R"([\\/])";
+    constexpr std::string_view kSeparatorPattern = R"([\\/])";
     std::string pattern;
     bool first_segment = true;
     std::size_t begin = 0;
     for (std::size_t index = 0; index <= trimmed.size(); ++index) {
         if (index != trimmed.size() && trimmed[index] != '/') continue;
         if (index > begin) {
-            if (!first_segment) pattern += separator_pattern;
+            if (!first_segment) pattern += kSeparatorPattern;
             pattern += escape_regex(trimmed.substr(begin, index - begin));
             first_segment = false;
         }
         begin = index + 1;
     }
-    if (has_trailing_separator) pattern += separator_pattern;
+    if (has_trailing_separator) pattern += kSeparatorPattern;
     return pattern;
 }
 

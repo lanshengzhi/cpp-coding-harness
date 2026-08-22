@@ -5,7 +5,7 @@
 namespace cch::ai::providers {
 namespace {
 
-constexpr std::size_t max_pending_bytes = 8 * 1024 * 1024;
+constexpr std::size_t kMaxPendingBytes = 8 * 1024 * 1024;
 
 void strip_trailing_cr(std::string& line) {
     if (!line.empty() && line.back() == '\r') {
@@ -16,7 +16,7 @@ void strip_trailing_cr(std::string& line) {
 } // namespace
 
 support::Expected<std::vector<SseEvent>> SseParser::append(std::string_view bytes) {
-    if (pending_.size() + bytes.size() > max_pending_bytes) {
+    if (pending_.size() + bytes.size() > kMaxPendingBytes) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Provider,
             "SSE stream buffer limit exceeded",

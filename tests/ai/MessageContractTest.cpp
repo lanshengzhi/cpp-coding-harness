@@ -561,7 +561,8 @@ TEST_CASE("compaction_summary_to_user_message wraps with prefix and suffix", "[a
     auto msg = ai::compaction_summary_to_user_message(compaction);
     CHECK(msg.timestamp == 1718000000003);
     const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
-    CHECK(text.text.find(std::string{ai::COMPACTION_SUMMARY_PREFIX} + "Previous 20 messages compacted" + std::string{ai::COMPACTION_SUMMARY_SUFFIX}) != std::string::npos);
+    CHECK(text.text.find(std::string{ai::kCompactionSummaryPrefix} + "Previous 20 messages compacted" +
+                         std::string{ai::kCompactionSummarySuffix}) != std::string::npos);
 }
 
 TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert]") {
@@ -573,7 +574,8 @@ TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][e
     auto msg = ai::branch_summary_to_user_message(branch);
     CHECK(msg.timestamp == 1718000000004);
     const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
-    CHECK(text.text.find(std::string{ai::BRANCH_SUMMARY_PREFIX} + "Branch work completed" + std::string{ai::BRANCH_SUMMARY_SUFFIX}) != std::string::npos);
+    CHECK(text.text.find(std::string{ai::kBranchSummaryPrefix} + "Branch work completed" +
+                         std::string{ai::kBranchSummarySuffix}) != std::string::npos);
 }
 
 TEST_CASE(

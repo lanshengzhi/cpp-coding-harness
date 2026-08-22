@@ -1,0 +1,35 @@
+# Canonical formatting for CODING_STANDARDS.md section 2 (mechanical style).
+# Enforced on added or modified lines through scripts/format-check.sh
+# (git clang-format); untouched lines stay outside the gate, mirroring the
+# grandfathering model of section 15.
+---
+Language: Cpp
+Standard: Latest
+BasedOnStyle: LLVM
+
+# 2.2: 4-space indent, no tabs; wrapped parameter and argument lists continue
+# at 8 spaces (DontAlign + ContinuationIndentWidth) or break one parameter per
+# line (BinPack* false). 2.5: hard 120-column limit on formatted lines.
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+AlignAfterOpenBracket: DontAlign
+ContinuationIndentWidth: 8
+BinPackParameters: false
+BinPackArguments: false
+
+# 2.1: 1TBS braces. 2.4: * and & bind to the type. Access modifiers stay at
+# column 0.
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+DerivePointerAlignment: false
+AccessModifierOffset: -4
+
+# The codebase permits braceless single-statement if bodies on one line.
+AllowShortIfStatementsOnASingleLine: WithoutElse
+
+# 2.8 include order remains a review rule: clang-format must not reorder
+# includes, because group order (corresponding header first) is semantic.
+SortIncludes: Never
+IncludeBlocks: Preserve

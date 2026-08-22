@@ -23,6 +23,10 @@ cmake --build --preset vcpkg
 ctest --preset vcpkg
 ```
 
+### Formatting gate
+
+Added or modified lines must conform to `.clang-format`. `scripts/format-check.sh [base-ref]` checks them through `git clang-format` (no argument: working tree vs HEAD; a ref such as `origin/main`: the branch's merge-base). CI runs the same check as a blocking formatting job. To fix findings, run `git clang-format` with the same arguments and re-stage. Untouched lines stay outside the gate (`CODING_STANDARDS.md` §14).
+
 Fresh Validation (`scripts/bootstrap.sh --test`) is the environment-level tier: clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. Do not run it for ordinary code edits. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039), not the per-change default.
 
 ## Architecture-sensitive changes

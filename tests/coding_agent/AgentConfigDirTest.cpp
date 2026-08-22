@@ -1,6 +1,6 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include "../support/EnvVarGuard.hpp"
-#include "../support/TempWorkspace.hpp"
+#include "support/EnvVarGuard.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

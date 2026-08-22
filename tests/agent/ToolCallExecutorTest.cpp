@@ -1132,16 +1132,14 @@ TEST_CASE(
     std::string parser_prefix = "1:4060: syntax_error\n   ";
     parser_prefix.push_back(static_cast<char>(0xff));
     parser_prefix += " invalid-byte ";
-    constexpr std::string_view truncation_suffix = " [diagnostic truncated]";
-    constexpr std::size_t diagnostic_keep = 4096 - truncation_suffix.size();
+    constexpr std::string_view kTruncationSuffix = " [diagnostic truncated]";
+    constexpr std::size_t kDiagnosticKeep = 4096 - kTruncationSuffix.size();
     const std::string diagnostic_prefix =
         "Tool Argument Contract preparation failed at root for tool \"malformed\": "
         "arguments are malformed JSON (parser detail: " + parser_prefix;
-    REQUIRE(diagnostic_prefix.size() + 5 < diagnostic_keep);
+    REQUIRE(diagnostic_prefix.size() + 5 < kDiagnosticKeep);
     const std::string parser_detail =
-        parser_prefix +
-        std::string(diagnostic_keep - diagnostic_prefix.size() - 5, 'x') +
-        secret + " BROKEN\n   ^";
+            parser_prefix + std::string(kDiagnosticKeep - diagnostic_prefix.size() - 5, 'x') + secret + " BROKEN\n   ^";
 
     agent::ToolRegistry registry;
     auto malformed_tool = make_recording_tool(

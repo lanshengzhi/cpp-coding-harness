@@ -126,11 +126,9 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
                     std::get<std::vector<Content>>(converted.content).front())
                     .text.size();
             } else if constexpr (std::is_same_v<Value, BranchSummaryMessage>) {
-                characters = value.summary.size() + BRANCH_SUMMARY_PREFIX.size() +
-                             BRANCH_SUMMARY_SUFFIX.size();
+                characters = value.summary.size() + kBranchSummaryPrefix.size() + kBranchSummarySuffix.size();
             } else if constexpr (std::is_same_v<Value, CompactionSummaryMessage>) {
-                characters = value.summary.size() + COMPACTION_SUMMARY_PREFIX.size() +
-                             COMPACTION_SUMMARY_SUFFIX.size();
+                characters = value.summary.size() + kCompactionSummaryPrefix.size() + kCompactionSummarySuffix.size();
             }
         },
         message);

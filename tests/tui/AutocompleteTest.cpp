@@ -1,7 +1,7 @@
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Keys.hpp>
 
-#include "../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

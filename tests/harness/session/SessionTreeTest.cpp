@@ -2,7 +2,7 @@
 #include "agent/harness/session/JsonlSessionStore.hpp"
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
-#include "../../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

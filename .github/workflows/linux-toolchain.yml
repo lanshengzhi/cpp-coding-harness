@@ -158,6 +158,35 @@ jobs:
           TSAN_OPTIONS: "halt_on_error=1:external_symbolizer_path=${{ env.CCH_SYMBOLIZER }}"
         run: scripts/ci/tsan-scenarios.sh "${{ github.workspace }}/build/tsan"
 
+  # Formatting gate for added or modified lines (CODING_STANDARDS.md section
+  # 2; section 14). Untouched lines stay outside the gate, mirroring the
+  # grandfathering model of section 15. The clang-format version is pinned to
+  # the same 22.1.x line as the Clang 22 conformance lane so local runs,
+  # this job, and the conformance build agree on .clang-format semantics.
+  format:
+    name: Formatting gate (changed lines)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out harness
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned clang-format 22.1.8
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cch-format-env"
+          "$RUNNER_TEMP/cch-format-env/bin/pip" install --quiet clang-format==22.1.8
+          echo "$RUNNER_TEMP/cch-format-env/bin" >> "$GITHUB_PATH"
+
+      - name: Check formatting of changed lines
+        run: |
+          base="origin/main"
+          if [[ -n "${{ github.base_ref }}" ]]; then
+            base="origin/${{ github.base_ref }}"
+          fi
+          scripts/format-check.sh "$base"
+
   # Release qualification (issue #474): the GCC 16.x Release IPO/LTO artifact
   # lane. The install path itself runs the fail-closed install gate (Gate,
   # evidence freshness, dependency closure); the steps below additionally
