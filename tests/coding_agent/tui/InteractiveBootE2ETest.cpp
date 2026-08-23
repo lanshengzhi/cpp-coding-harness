@@ -303,10 +303,13 @@ TEST_CASE(
     // the wait is event-driven; the budget only bounds the already-failing
     // path.
     REQUIRE(pump_until(io, [&] { return runtime->calls.size() == 2; }));
-    // Settle-before-golden: runtime delivery and screen rendering settle in
-    // separate loop passes; the final answer is the turn's last render.
-    REQUIRE(pump_until(io,
-            [&] { return visible_screen(terminal).find("Done: the notes file now says beta.") != std::string::npos; }));
+    // Settle-before-golden: the final answer and status cleanup render in
+    // separate loop passes, so wait for both before capturing the screen.
+    REQUIRE(pump_until(io, [&] {
+        const auto current_screen = visible_screen(terminal);
+        return current_screen.find("Done: the notes file now says beta.") != std::string::npos &&
+               current_screen.find("Working...") == std::string::npos;
+    }));
     const auto screen = visible_screen(terminal);
     capture_golden("turn.txt", screen);
 

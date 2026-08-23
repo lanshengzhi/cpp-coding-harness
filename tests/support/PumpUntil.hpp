@@ -14,8 +14,9 @@ namespace cch::tests {
 /// `run()` would not return while the root is alive. Session persistence
 /// outcomes also return from Runtime worker threads through the fixture
 /// Runtime loop, so plain drain_ready can go idle while a prompt is still
-/// settling off-thread. The budget only bounds the already-failing path: a
-/// satisfied condition returns immediately.
+/// settling off-thread. Service one ready handler per iteration: `poll()` can
+/// never return when a loader or animation continually reposts render work,
+/// which would make the timeout ineffective under scheduler pressure.
 [[nodiscard]] inline bool pump_until(
     boost::asio::io_context& io,
     const std::atomic<bool>& done,
@@ -26,7 +27,7 @@ namespace cch::tests {
         if (io.stopped()) {
             io.restart();
         }
-        (void)io.poll();
+        (void)io.poll_one();
         std::this_thread::sleep_for(std::chrono::microseconds{100});
     }
     return done.load(std::memory_order_acquire);
@@ -35,7 +36,9 @@ namespace cch::tests {
 /// Pump one loop until `done()` returns true (or the budget expires): the
 /// predicate form lets the test poll a composed condition (for example a
 /// loop-serviced flag together with a delivery count) without relying on a
-/// one-shot handler that can never re-check.
+/// one-shot handler that can never re-check. Ready work is serviced one
+/// handler at a time so the deadline remains effective when another handler
+/// continually reposts work.
 [[nodiscard]] inline bool pump_until(
     boost::asio::io_context& io,
     const std::function<bool()>& done,
@@ -45,7 +48,7 @@ namespace cch::tests {
         if (io.stopped()) {
             io.restart();
         }
-        (void)io.poll();
+        (void)io.poll_one();
         std::this_thread::sleep_for(std::chrono::microseconds{100});
     }
     return done();
