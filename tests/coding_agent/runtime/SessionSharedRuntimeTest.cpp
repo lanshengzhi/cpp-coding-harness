@@ -6,7 +6,7 @@
 // Session needs (ADR 0029/0030, ADR 0040).
 
 #include "support/EnvVarGuard.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/ScriptedRuntimeFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -37,8 +37,8 @@ struct Fixture {
     /// A persisted session file carrying the `fake/fake-model` identity, so
     /// the resume chain resolves the model through the shared runtime (a
     /// fresh in-memory session would consult the runtime's availability
-    /// snapshot, which the impl-less recording FakeModelRuntime does not
-    /// populate).
+    /// snapshot, which a host-injected concrete runtime still populates
+    /// through its registered scripted Providers).
     [[nodiscard]] std::filesystem::path session_file() const {
         const auto path = workspace.path() / "shared-runtime.jsonl";
         auto store = harness::session::SessionStore::create_new(
@@ -69,8 +69,7 @@ struct Fixture {
     /// production interactive CLI host sets on the boot and every in-session
     /// replacement request).
     [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest request(
-        const std::filesystem::path& path,
-        const std::shared_ptr<tests::FakeModelRuntime>& runtime) const {
+            const std::filesystem::path& path, const std::shared_ptr<coding_agent::ModelRuntime>& runtime) const {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.workspace = workspace.path();
         request.session_target =
@@ -90,7 +89,8 @@ TEST_CASE(
     "[coding_agent][runtime][reuse][issue466]") {
     Fixture fixture;
     const auto path = fixture.session_file();
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    tests::ScriptedRuntimeFixture scripted;
+    auto runtime = scripted.runtime;
     // Session A's response carries the fake/fake-model identity so the shared
     // session file keeps a resumable model for Session B.
     auto first_reply = ai::assistant_text_message(
@@ -98,7 +98,7 @@ TEST_CASE(
     first_reply.provider = "fake";
     first_reply.api = "fake";
     first_reply.model = "fake-model";
-    runtime->responses.push_back(std::move(first_reply));
+    scripted.control->responses.push_back(std::move(first_reply));
 
     // Session A shares the host runtime through the production single-argument
     // create path, exactly what the interactive CLI host calls.
@@ -107,7 +107,7 @@ TEST_CASE(
     REQUIRE(created_a);
     CHECK(created_a->session->model() == "fake-model");
     REQUIRE(created_a->session->prompt_blocking("first on shared runtime").has_value());
-    REQUIRE(runtime->calls.size() == 1);
+    REQUIRE(scripted.control->calls.size() == 1);
 
     // Closing Session A must not release the host-shared Models runtime
     // (criterion 4): the replacement Session still needs it. The Session
@@ -121,7 +121,7 @@ TEST_CASE(
         fixture.request(path, runtime));
     REQUIRE(created_b);
     REQUIRE(created_b->session->prompt_blocking("second on shared runtime").has_value());
-    REQUIRE(runtime->calls.size() == 2);
+    REQUIRE(scripted.control->calls.size() == 2);
     CHECK(created_b->session->model_runtime() == runtime);
 
     created_b->session->close();

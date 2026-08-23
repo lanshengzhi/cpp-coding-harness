@@ -1,5 +1,5 @@
 // Interactive-boot-through-an-agent-turn E2E (issue #399): VirtualTerminal-
-// driven boot, a fake ModelRuntime scripted turn, and CLI-level goldens of
+// driven boot, a concrete ModelRuntime with a scripted Provider, and CLI-level goldens of
 // the boot and post-turn screens. The goldens live under
 // `fixtures/pi-coding-agent/e2e/` and are byte-compared like the pi-tui
 // screen-state gate; P24 wraps the bundle documentation around them.
@@ -17,7 +17,7 @@
 
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/ScriptedRuntimeFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
@@ -98,15 +98,17 @@ void capture_golden(std::string_view name, const std::string& screen) {
     return false;
 }
 
-
 /// One resumed session with a fixed workspace file the scripted edit tool
-/// modifies. The session carries the injected fake ModelRuntime. The
-/// workspace lives at the deterministic `e2e_workspace_path()` so the
-/// CLI-level goldens (which render the footer's pwd line) stay byte-stable.
+/// modifies. The session carries an injected concrete ModelRuntime and its
+/// separate scripted Provider control state. The workspace lives at the
+/// deterministic `e2e_workspace_path()` so the CLI-level goldens (which
+/// render the footer's pwd line) stay byte-stable.
 struct E2eSession {
+    explicit E2eSession(tests::ScriptedRuntimeFixture scripted_runtime) : scripted(std::move(scripted_runtime)) {}
+
     std::filesystem::path workspace;
     tests::TempWorkspace config;
-    std::shared_ptr<coding_agent::ModelRuntime> runtime;
+    tests::ScriptedRuntimeFixture scripted;
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
@@ -128,9 +130,8 @@ struct E2eSession {
     return path;
 }
 
-[[nodiscard]] std::unique_ptr<E2eSession> make_e2e_session(
-    std::shared_ptr<coding_agent::ModelRuntime> runtime) {
-    auto fixture = std::make_unique<E2eSession>();
+[[nodiscard]] std::unique_ptr<E2eSession> make_e2e_session(tests::ScriptedRuntimeFixture scripted_runtime) {
+    auto fixture = std::make_unique<E2eSession>(std::move(scripted_runtime));
     fixture->workspace = e2e_workspace_path();
     {
         std::ofstream notes(fixture->workspace / "notes.txt", std::ios::binary);
@@ -166,17 +167,14 @@ struct E2eSession {
         "Resumed reply: the notes file is ready."));
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
-    fixture->runtime = std::move(runtime);
-
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.workspace = fixture->workspace;
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
-    request.model_runtime = fixture->runtime;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    request.model_runtime = fixture->scripted.runtime;
+    auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;
@@ -184,8 +182,8 @@ struct E2eSession {
 
 /// The scripted turn for the golden: thinking, a plan, an edit call (its
 /// result renders through the diff renderer), then the final answer.
-[[nodiscard]] std::shared_ptr<tests::FakeModelRuntime> scripted_turn_runtime() {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+[[nodiscard]] tests::ScriptedRuntimeFixture scripted_turn_runtime() {
+    tests::ScriptedRuntimeFixture runtime;
     ai::AssistantMessage turn;
     turn.provider = "fake";
     turn.api = "fake";
@@ -199,7 +197,7 @@ struct E2eSession {
         "e2e-edit-1",
         "edit",
         R"({"path":"notes.txt","edits":[{"oldText":"alpha","newText":"beta"}]})"));
-    runtime->responses.push_back(std::move(turn));
+    runtime.control->responses.push_back(std::move(turn));
 
     ai::AssistantMessage final_answer;
     final_answer.provider = "fake";
@@ -208,7 +206,7 @@ struct E2eSession {
     final_answer.stop_reason = ai::AssistantStopReason::Stop;
     final_answer.content.emplace_back(ai::text_content(
         "Done: the notes file now says beta."));
-    runtime->responses.push_back(std::move(final_answer));
+    runtime.control->responses.push_back(std::move(final_answer));
     return runtime;
 }
 
@@ -271,11 +269,10 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "E2E: a focused-editor submission streams a fake-runtime turn in the pi shape",
-    "[coding_agent][tui][e2e][issue399]") {
+TEST_CASE("E2E: a focused-editor submission streams a scripted-runtime turn in the pi shape",
+        "[coding_agent][tui][e2e][issue399]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
-    auto* runtime = static_cast<tests::FakeModelRuntime*>(fixture->runtime.get());
+    const auto& control = *fixture->scripted.control;
 
     // 25 rows keep the typed user message visible below the two-line compact
     // header (the loaded-resources notice, #418); at 24 rows the extra header
@@ -302,8 +299,9 @@ TEST_CASE(
     // The scripted turn reaches the runtime through scheduler pressure, so
     // the wait is event-driven; the budget only bounds the already-failing
     // path.
-    REQUIRE(pump_until(io, [&] { return runtime->calls.size() == 2; }));
-    // Settle-before-golden: the final answer and status cleanup render in
+    REQUIRE(pump_until(io, [&] {
+        return control.calls.size() == 2;
+    })); // Settle-before-golden: the final answer and status cleanup render in
     // separate loop passes, so wait for both before capturing the screen.
     REQUIRE(pump_until(io, [&] {
         const auto current_screen = visible_screen(terminal);
@@ -372,9 +370,9 @@ TEST_CASE(
 TEST_CASE(
     "E2E: app.interrupt aborts the active Agent run with the stale-generation guard",
     "[coding_agent][tui][e2e][issue399]") {
-    auto gated = std::make_shared<tests::FakeModelRuntime>();
-    gated->gate_at = 0;
-    gated->emit_partial_before_gate = true;
+    tests::ScriptedRuntimeFixture gated;
+    gated.control->gate_at = 0;
+    gated.control->emit_partial_before_gate = true;
     auto fixture = make_e2e_session(gated);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
@@ -401,15 +399,14 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.inject_input(""));
     drain_ready(io);
-    CHECK(gated->calls.empty());
-
+    CHECK(gated.control->calls.empty());
     // A focused-editor submission starts the run; Esc aborts it while the
     // stream is active (pi's app.interrupt precedence: active Agent run
     // first, then running User Bash, then pending User Bash submission).
     REQUIRE(terminal.inject_input("start the run\r"));
     // The submission reaches the runtime through scheduler pressure; the
     // budget only bounds the already-failing path.
-    REQUIRE(pump_until(io, [&] { return gated->calls.size() == 1; }));
+    REQUIRE(pump_until(io, [&] { return gated.control->calls.size() == 1; }));
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.inject_input(""));
     // Abort finalization and its notice render asynchronously across loop
@@ -421,9 +418,8 @@ TEST_CASE(
     // The aborted run is quiescent: a fresh submission starts a new turn;
     // releasing the gate lets it complete.
     REQUIRE(terminal.inject_input("retry\r"));
-    REQUIRE(pump_until(io, [&] { return gated->calls.size() == 2; }));
-    gated->release();
-    // Release -> provider completion -> render settles across loop passes.
+    REQUIRE(pump_until(io, [&] { return gated.control->calls.size() == 2; }));
+    gated.control->release(); // Release -> provider completion -> render settles across loop passes.
     REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("gated done") != std::string::npos; }));
     CHECK(visible_screen(terminal).find("gated done") != std::string::npos);
 

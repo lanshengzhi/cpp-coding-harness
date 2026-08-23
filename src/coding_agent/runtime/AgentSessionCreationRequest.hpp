@@ -133,9 +133,9 @@ struct AgentSessionCreationRequest {
     /// worker capacity, and model/auth resources are reused rather than
     /// reconstructed. The Session never owns or releases a host-injected
     /// runtime, so closing one Session keeps the shared Models resources the
-    /// replacement Session needs. The private test seam injects a fake
-    /// ModelRuntime through it; absent, the factory default-creates a
-    /// Session-owned runtime from the Agent Config Directory.
+    /// replacement Session needs. The private test seam injects a concrete
+    /// ModelRuntime with scripted Provider behavior; absent, the factory
+    /// default-creates a Session-owned runtime from the Agent Config Directory.
     std::shared_ptr<coding_agent::ModelRuntime> model_runtime;
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set. Production callers never set it (the fixed #331 tool set is

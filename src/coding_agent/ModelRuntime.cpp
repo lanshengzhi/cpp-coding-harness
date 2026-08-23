@@ -146,8 +146,6 @@ struct ModelRuntime::Impl {
 ModelRuntime::ModelRuntime(std::unique_ptr<Impl> impl)
     : impl_(std::move(impl)) {}
 
-ModelRuntime::ModelRuntime() noexcept = default;
-
 ModelRuntime::ModelRuntime(ModelRuntime&&) noexcept = default;
 ModelRuntime& ModelRuntime::operator=(ModelRuntime&&) noexcept = default;
 ModelRuntime::~ModelRuntime() = default;
@@ -226,44 +224,6 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
     return runtime;
 }
 
-support::Expected<std::shared_ptr<ModelRuntime>>
-ModelRuntime::create_from_models_for_testing(
-    std::shared_ptr<ai::Models> models,
-    ModelRuntimeOptions options) {
-    std::filesystem::path agent_dir = options.agent_dir.empty()
-        ? agent_config_dir()
-        : options.agent_dir;
-    std::shared_ptr<ai::CredentialStore> credentials = std::move(options.credentials);
-    if (!credentials) {
-        credentials = std::make_shared<AuthStorage>(agent_dir / "auth.json");
-    }
-    auto credentials_with_overlay = std::make_shared<RuntimeApiKeyOverlay>(credentials);
-    auto auth_context = std::make_shared<ProcessAuthContext>();
-    auto impl = std::make_unique<Impl>(Impl{
-        .agent_dir = std::move(agent_dir),
-        .models_path = {},
-        .credentials = credentials_with_overlay,
-        .auth_context = auth_context,
-        .models = std::move(models),
-        .config = {},
-        .builtins = {},
-        .native_extensions = {},
-        .composition_errors = {},
-        .composer_options = {},
-        .config_error = {},
-        .all_models = {},
-        .available_models = {},
-        .configured_providers = {},
-        .stored_providers = {},
-        .runtime_providers = {},
-        .auth_snapshot = {},
-        .availability_error = {},
-    });
-    auto runtime = std::shared_ptr<ModelRuntime>(new ModelRuntime(std::move(impl)));
-    runtime->impl_->update_snapshot();
-    return runtime;
-}
-
 const std::filesystem::path& ModelRuntime::agent_dir() const noexcept {
     return impl_->agent_dir;
 }
@@ -280,7 +240,6 @@ support::ExpectedVoid ModelRuntime::refresh() {
 }
 
 std::optional<std::string> ModelRuntime::get_error() const {
-    if (!impl_) return std::nullopt;
     std::vector<std::string> errors;
     if (impl_->config_error) {
         errors.push_back(*impl_->config_error);
@@ -365,11 +324,7 @@ support::AsyncResult<std::vector<ai::Model>> ModelRuntime::get_available(std::op
     });
 }
 
-std::vector<ai::Model> ModelRuntime::get_available_snapshot() const {
-    // Impl-less recording fakes (the §7.2 test seam) serve an empty
-    // snapshot instead of dereferencing a null impl.
-    return impl_ ? impl_->available_models : std::vector<ai::Model>{};
-}
+std::vector<ai::Model> ModelRuntime::get_available_snapshot() const { return impl_->available_models; }
 
 support::AsyncResult<std::optional<ai::AuthCheck>> ModelRuntime::check_auth(std::string provider_id) {
     return ai::detail::make_async_result(
@@ -404,9 +359,6 @@ bool ModelRuntime::has_configured_auth(std::string_view provider_id) const {
 }
 
 bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
-    // Impl-less recording fakes (the §7.2 test seam) resolve no provider
-    // instead of dereferencing a null impl.
-    if (!impl_) return false;
     const auto selected = provider(provider_id);
     return selected != nullptr && selected->auth().oauth.has_value();
 }

@@ -1667,12 +1667,21 @@ support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create
     }
     auto snapshot = load_settings_snapshot(request.workspace);
     if (overrides.models) {
+        // The assembly override contributes concrete Providers only. The
+        // SessionFactory owns the concrete ModelRuntime that receives them;
+        // no alternate Models Runtime construction path exists.
         ModelRuntimeOptions wrap_options;
-        auto wrapped = ModelRuntime::create_from_models_for_testing(
-            std::move(overrides.models), std::move(wrap_options));
+        wrap_options.models_path = std::filesystem::path{};
+        auto wrapped = ModelRuntime::create(std::move(wrap_options));
         if (!wrapped) {
             return std::unexpected(
                 with_settings_fallback_context(wrapped.error(), snapshot));
+        }
+        const auto incoming_providers = overrides.models->providers();
+        for (auto provider : incoming_providers) {
+            if (auto registered = (*wrapped)->register_native_provider(std::move(provider)); !registered) {
+                return std::unexpected(with_settings_fallback_context(registered.error(), snapshot));
+            }
         }
         auto plan = normalize_cli(std::move(request), snapshot.manager);
         if (!plan) {
@@ -1680,10 +1689,10 @@ support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create
                 with_settings_fallback_context(plan.error(), snapshot));
         }
         // A host-injected runtime (the private E2E seam, already marked as
-        // never-owned by normalize_cli) wins; otherwise the injected Models is
-        // the runtime's catalog: its scripted fake provider serves streams,
-        // and the request model is fabricated from it (the deterministic
-        // provider surface the deleted fake-provider CLI flag used to drive).
+        // never-owned by normalize_cli) wins; otherwise the incoming concrete
+        // Providers serve the deterministic CLI fake path, whose request Model
+        // remains fabricated to preserve the deleted fake-provider flag's
+        // behavior.
         if (!plan->model_runtime) {
             plan->model_runtime = std::move(*wrapped);
             plan->model_runtime_owned = true;

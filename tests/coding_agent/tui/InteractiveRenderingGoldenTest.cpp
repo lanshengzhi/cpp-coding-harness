@@ -30,7 +30,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/ScriptedRuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -278,20 +278,20 @@ struct Running {
     std::optional<support::ExpectedVoid> run_result;
 };
 
-// ── interrupt: a gated recording runtime for the app.interrupt leg ─────────
-
+// ── interrupt: a gated scripted Provider for the app.interrupt leg ─────────
 
 /// One resumed session (the e2e shape) for the interrupt golden.
 struct InterruptSession {
+    explicit InterruptSession(tests::ScriptedRuntimeFixture scripted_runtime) : scripted(std::move(scripted_runtime)) {}
+
     std::filesystem::path workspace;
     tests::TempWorkspace config;
-    std::shared_ptr<coding_agent::ModelRuntime> runtime;
+    tests::ScriptedRuntimeFixture scripted;
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
-[[nodiscard]] std::unique_ptr<InterruptSession> make_interrupt_session(
-    std::shared_ptr<coding_agent::ModelRuntime> runtime) {
-    auto fixture = std::make_unique<InterruptSession>();
+[[nodiscard]] std::unique_ptr<InterruptSession> make_interrupt_session(tests::ScriptedRuntimeFixture scripted_runtime) {
+    auto fixture = std::make_unique<InterruptSession>(std::move(scripted_runtime));
     fixture->workspace = rendering_workspace_path("interrupt");
 
     const auto session_file = fixture->workspace / "interrupt-session.jsonl";
@@ -323,17 +323,14 @@ struct InterruptSession {
         ai::text_content("Resumed reply: the notes file is ready."));
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
-    fixture->runtime = std::move(runtime);
-
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture->workspace;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
-    request.model_runtime = fixture->runtime;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    request.model_runtime = fixture->scripted.runtime;
+    auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;
@@ -566,10 +563,10 @@ TEST_CASE(
     "rendering golden: app.interrupt aborts the active run and renders the "
     "aborted entry",
     "[coding_agent][tui][rendering][issue422]") {
-    auto gated = std::make_shared<tests::FakeModelRuntime>();
-    gated->gate_at = 0;
-    gated->emit_partial_before_gate = true;
-    auto fixture = make_interrupt_session(gated);
+    tests::ScriptedRuntimeFixture gated;
+    gated.control->gate_at = 0;
+    gated.control->emit_partial_before_gate = true;
+    auto fixture = make_interrupt_session(std::move(gated));
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
@@ -589,7 +586,7 @@ TEST_CASE(
     // stream is active (pi's app.interrupt precedence).
     REQUIRE(terminal.inject_input("start the run\r"));
     drain_ready(io);
-    REQUIRE(gated->calls.size() == 1);
+    REQUIRE(fixture->scripted.control->calls.size() == 1);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.inject_input(""));
     drain_ready(io);

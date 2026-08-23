@@ -49,13 +49,11 @@ struct ModelRuntimeAuthStatus {
     std::optional<std::string> label{std::nullopt};
 };
 
-/// The sole public model/auth runtime seam (ADR 0029/0030/0032). Owns Agent
-/// Config Directory paths, `models.json`, built-in/config composition,
-/// availability snapshots, Provider recomposition, and `refresh()`; it holds
-/// and delegates `ai::Models` privately. Injected as a `std::shared_ptr` into
-/// `CreateAgentSessionOptions` and into the stateful Agent (the sole injectable
-/// seam per #326); runtimes are reusable across sessions with no dispose
-/// ceremony.
+/// The concrete model/auth runtime (ADR 0029/0030/0040). Owns Agent Config
+/// Directory paths, `models.json`, built-in/config composition, availability
+/// snapshots, Provider recomposition, and `refresh()`; it holds and delegates
+/// `ai::Models` privately. A concrete runtime may be shared across Sessions
+/// and has no dispose ceremony.
 ///
 /// Concurrency contract: a runtime and everything it owns (Models, Providers,
 /// adapters, transports, credential store) are not internally synchronized.
@@ -64,7 +62,7 @@ struct ModelRuntimeAuthStatus {
 /// drive the same runtime from two threads. `AgentSession::prompt_blocking`
 /// runs the prompt on a temporary executor created for that call, so it must
 /// not interleave with another thread driving the same runtime.
-class ModelRuntime {
+class ModelRuntime final {
 public:
     /// Construct and refresh a ModelRuntime from the Agent Config Directory.
     /// Filesystem I/O is synchronous; provider recomposition is synchronous.
@@ -73,10 +71,7 @@ public:
 
     ModelRuntime(ModelRuntime&&) noexcept;
     ModelRuntime& operator=(ModelRuntime&&) noexcept;
-    /// Virtual because the impl-less recording fakes derive from ModelRuntime
-    /// (the §7.2 recorded exception) and runtimes are owned through shared_ptr
-    /// bases (Clang -Wdelete-non-abstract-non-virtual-dtor).
-    virtual ~ModelRuntime();
+    ~ModelRuntime();
     ModelRuntime(const ModelRuntime&) = delete;
     ModelRuntime& operator=(const ModelRuntime&) = delete;
 
@@ -102,35 +97,26 @@ public:
     /// The AI-owned Models catalog this runtime composes and delegates to.
     /// The Agent's model-streaming seam is built from this catalog's
     /// `ModelStream` surface (ADR 0040 / #453), not from the runtime itself.
-    /// Virtual for the session-seam recording fake (the §7.2 recorded
-    /// exception: an impl-less fake serves a scripted catalog).
-    [[nodiscard]] virtual std::shared_ptr<ai::Models> ai_models() const;
+    [[nodiscard]] std::shared_ptr<ai::Models> ai_models() const;
     [[nodiscard]] std::vector<ai::Model> models(
         std::optional<std::string_view> provider_id = std::nullopt) const;
-    /// Virtual for recording test fakes that stand in for the runtime at the
-    /// session seam (the §7.2 recorded exception: an impl-less fake serves
-    /// model resolution and auth).
-    [[nodiscard]] virtual std::optional<ai::Model> model(
-        std::string_view provider_id,
-        std::string_view model_id) const;
+    [[nodiscard]] std::optional<ai::Model> model(std::string_view provider_id, std::string_view model_id) const;
 
     // ── Availability ───────────────────────────────────────────────────────
 
     /// Live availability: models whose provider has configured auth. Without a
     /// provider id this runs an availability refresh against the live runtime
     /// and refreshes the snapshot. Cached snapshots never replace live
-    /// `get_auth`/`check_auth` semantics. Virtual for recording test fakes
-    /// (same recorded exception as `model`).
-    [[nodiscard]] virtual support::AsyncResult<std::vector<ai::Model>> get_available(
+    /// `get_auth`/`check_auth` semantics.
+    [[nodiscard]] support::AsyncResult<std::vector<ai::Model>> get_available(
             std::optional<std::string> provider_id = std::nullopt);
     /// Last availability snapshot (synchronous). Never replaces live semantics.
     [[nodiscard]] std::vector<ai::Model> get_available_snapshot() const;
 
     // ── Authentication ─────────────────────────────────────────────────────
 
-    /// Side-effect-free; OAuth credentials are never refreshed. Virtual for
-    /// recording test fakes (same recorded exception as `model`).
-    [[nodiscard]] virtual support::AsyncResult<std::optional<ai::AuthCheck>> check_auth(std::string provider_id);
+    /// Side-effect-free; OAuth credentials are never refreshed.
+    [[nodiscard]] support::AsyncResult<std::optional<ai::AuthCheck>> check_auth(std::string provider_id);
     /// Live authentication resolution (delegates to `ai::Models`).
     [[nodiscard]] support::AsyncResult<std::optional<ai::AuthResult>> get_auth(
             std::string provider_id, std::optional<std::string> explicit_api_key = std::nullopt);
@@ -138,8 +124,7 @@ public:
             ai::Model model, std::optional<std::string> explicit_api_key = std::nullopt);
 
     /// True when the provider currently resolves as configured (snapshot).
-    /// Virtual for recording test fakes (same recorded exception as `model`).
-    [[nodiscard]] virtual bool has_configured_auth(std::string_view provider_id) const;
+    [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const;
     /// True when the provider authenticates through an OAuth credential.
     [[nodiscard]] bool is_using_oauth(std::string_view provider_id) const;
 
@@ -189,32 +174,17 @@ public:
 
     /// Env var names referenced by configured models.json `apiKey` templates
     /// (pi `getConfigValueEnvVarNames`). Used for execution environment secret
-    /// filtering. Virtual for recording test fakes (same recorded exception
-    /// as `model`); the impl-less fake serves no env names.
-    [[nodiscard]] virtual std::vector<std::string> configured_api_key_env_names() const;
+    /// filtering.
+    [[nodiscard]] std::vector<std::string> configured_api_key_env_names() const;
 
     /// Frozen default-model table for the supported provider subset.
     [[nodiscard]] static std::optional<std::string> default_model_for_provider(
         std::string_view provider_id);
 
+private:
     struct Impl;
 
-protected:
-    /// Test-support construction for recording fakes that stand in for the
-    /// runtime at the session seam. Leaves the runtime without an impl; only
-    /// the virtual model/auth surfaces overridden by the fake are callable.
-    /// Production construction always goes through `create`.
-    ModelRuntime() noexcept;
-
-private:
     explicit ModelRuntime(std::unique_ptr<Impl> impl);
-    /// Private test-support assembly: build a runtime around an externally
-    /// constructed `ai::Models` without re-composing providers. The Models
-    /// stays privately held; the runtime delegates everything to it. Used by
-    /// the private session test seam only.
-    static support::Expected<std::shared_ptr<ModelRuntime>> create_from_models_for_testing(
-        std::shared_ptr<ai::Models> models,
-        ModelRuntimeOptions options = {});
 
     friend class runtime::SessionFactory;
     friend support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(

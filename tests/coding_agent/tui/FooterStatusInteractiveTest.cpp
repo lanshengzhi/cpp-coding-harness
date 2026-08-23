@@ -2,7 +2,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include "support/EnvVarGuard.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/ScriptedRuntimeFixture.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -66,13 +66,13 @@ void drain_ready(boost::asio::io_context& io) {
 }
 
 /// A persisted session with one user/assistant pair, resumable through the
-/// interactive boot with an injected fake runtime.
+/// interactive boot with an injected concrete runtime and scripted Provider.
 struct ResumedSessionFixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     std::filesystem::path session_file;
-    std::shared_ptr<tests::FakeModelRuntime> runtime{
-        std::make_shared<tests::FakeModelRuntime>()};
+    tests::ScriptedRuntimeFixture scripted;
+    std::shared_ptr<coding_agent::ModelRuntime> runtime{scripted.runtime};
     std::unique_ptr<coding_agent::AgentSession> session;
 
     void create() {
@@ -107,8 +107,7 @@ struct ResumedSessionFixture {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.model_runtime = runtime;
-        auto created = coding_agent::create_agent_session_for_testing(
-            std::move(request), ai::providers::make_scripted_fake_models());
+        auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created);
         session = std::move(created->session);
     }
@@ -184,7 +183,7 @@ TEST_CASE(
     turn.usage.cost.cache_read = 0.0002;
     turn.usage.cost.cache_write = 0.0001;
     turn.usage.cost.total = 0.0018;
-    fixture.runtime->responses.push_back(std::move(turn));
+    fixture.scripted.control->responses.push_back(std::move(turn));
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
@@ -233,9 +232,9 @@ TEST_CASE(
     "[coding_agent][tui][status][issue411]") {
     ResumedSessionFixture fixture;
     fixture.create();
-    auto gated = std::make_shared<tests::FakeModelRuntime>();
-    gated->gate_at = 0;
-    gated->responses.push_back(ai::assistant_text_message("gated answer"));
+    tests::ScriptedRuntimeFixture gated;
+    gated.control->gate_at = 0;
+    gated.control->responses.push_back(ai::assistant_text_message("gated answer"));
     fixture.session->close();
     // Rebuild the fixture session with the gated runtime.
     coding_agent::runtime::AgentSessionCreationRequest request;
@@ -245,9 +244,8 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
-    request.model_runtime = gated;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    request.model_runtime = gated.runtime;
+    auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -270,7 +268,7 @@ TEST_CASE(
     // pi WorkingStatusIndicator: "Working..." with the accent spinner.
     CHECK(screen.find("Working...") != std::string::npos);
 
-    gated->release();
+    gated.control->release();
     drain_ready(io);
     screen = visible_screen(terminal);
     // agent_end clears the indicator back to the two-row idle status.
@@ -294,10 +292,8 @@ TEST_CASE(
     fixture.config.write(
         "settings.json",
         R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 2000}})");
-    fixture.runtime->responses.push_back(
-        retryable_error_terminal("overloaded_error"));
-    fixture.runtime->responses.push_back(
-        ai::assistant_text_message("Recovered after retry"));
+    fixture.scripted.control->responses.push_back(retryable_error_terminal("overloaded_error"));
+    fixture.scripted.control->responses.push_back(ai::assistant_text_message("Recovered after retry"));
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
@@ -359,11 +355,11 @@ TEST_CASE(
     fixture.config.write(
         "settings.json",
         R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
-    auto gated = std::make_shared<tests::FakeModelRuntime>();
-    gated->gate_at = 1;
-    gated->responses.push_back(overflow_terminal());
-    gated->responses.push_back(summarization_response());
-    gated->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
+    tests::ScriptedRuntimeFixture gated;
+    gated.control->gate_at = 1;
+    gated.control->responses.push_back(overflow_terminal());
+    gated.control->responses.push_back(summarization_response());
+    gated.control->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
     fixture.session->close();
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
@@ -372,9 +368,8 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
-    request.model_runtime = gated;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    request.model_runtime = gated.runtime;
+    auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -401,7 +396,7 @@ TEST_CASE(
             "Context overflow detected, Auto-compacting... (escape to cancel)") !=
         std::string::npos);
 
-    gated->release();
+    gated.control->release();
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("Auto-compacting") == std::string::npos);
@@ -439,11 +434,11 @@ TEST_CASE(
     fixture.config.write(
         "settings.json",
         R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
-    auto gated = std::make_shared<tests::FakeModelRuntime>();
-    gated->gate_at = 1;
-    gated->responses.push_back(overflow_terminal());
-    gated->responses.push_back(summarization_response());
-    gated->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
+    tests::ScriptedRuntimeFixture gated;
+    gated.control->gate_at = 1;
+    gated.control->responses.push_back(overflow_terminal());
+    gated.control->responses.push_back(summarization_response());
+    gated.control->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
     fixture.session->close();
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
@@ -452,9 +447,8 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
-    request.model_runtime = gated;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    request.model_runtime = gated.runtime;
+    auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -496,7 +490,7 @@ TEST_CASE(
         screen.find("Reloaded keybindings, skills, prompts, themes, and context files") ==
         std::string::npos);
 
-    gated->release();
+    gated.control->release();
     drain_ready(io);
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -520,9 +514,9 @@ TEST_CASE(
     // The manual compaction's summarization is the first model call; gating
     // it keeps `isCompacting` true while `isStreaming` stays false (the
     // signal pair pi's `handleReloadCommand` checks second).
-    auto gated = std::make_shared<tests::FakeModelRuntime>();
-    gated->gate_at = 0;
-    gated->responses.push_back(summarization_response());
+    tests::ScriptedRuntimeFixture gated;
+    gated.control->gate_at = 0;
+    gated.control->responses.push_back(summarization_response());
     fixture.session->close();
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
@@ -531,9 +525,8 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
-    request.model_runtime = gated;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    request.model_runtime = gated.runtime;
+    auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -579,7 +572,7 @@ TEST_CASE(
             "Wait for the current response to finish before reloading.") ==
         std::string::npos);
 
-    gated->release();
+    gated.control->release();
     drain_ready(io);
     REQUIRE(compact_result.has_value());
     REQUIRE(compact_result->has_value());
@@ -725,10 +718,10 @@ TEST_CASE(
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture.runtime;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request),
-        ai::providers::make_scripted_fake_models(),
-        std::make_unique<tests::FakeUserShell>());
+    auto created = coding_agent::create_agent_session(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .models = nullptr, .user_shell = std::make_unique<tests::FakeUserShell>()});
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});

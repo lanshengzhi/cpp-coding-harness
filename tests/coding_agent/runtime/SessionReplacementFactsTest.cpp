@@ -12,7 +12,7 @@
 
 #include "coding_agent/runtime/SessionFactory.hpp"
 
-#include "support/FakeModelRuntime.hpp"
+#include "support/ScriptedRuntimeFixture.hpp"
 #include "support/ModelsFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -172,7 +172,8 @@ TEST_CASE(
     auto installed = engine_request();
     installed.provide_user_shell = true;
     installed.execution_runtime_target = tests::detail::fixture_runtime_target();
-    installed.model_runtime = std::make_shared<tests::FakeModelRuntime>();
+    tests::ScriptedRuntimeFixture scripted;
+    installed.model_runtime = scripted.runtime;
     const auto target = installed.execution_runtime_target;
     const auto runtime = installed.model_runtime;
 
