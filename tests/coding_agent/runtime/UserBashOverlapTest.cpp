@@ -6,6 +6,7 @@
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/ReleaseGate.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
@@ -20,11 +21,13 @@
 
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <format>
 #include <chrono>
+#include <iterator>
 #include <optional>
 #include <string>
-#include <thread>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -34,11 +37,12 @@ using namespace cch;
 
 namespace {
 
-using tests::drain_ready;
-using tests::require_completed;
 using tests::bash_message_count;
 using tests::BashResult;
+using tests::drain_ready;
 using tests::PromptResult;
+using tests::pump_until;
+using tests::require_completed;
 using tests::spawn_bash;
 using tests::spawn_prompt;
 
@@ -103,6 +107,13 @@ private:
     tests::ReleaseGate gate_;
 };
 
+/// Read a small journal file and report whether it carries `needle`.
+[[nodiscard]] bool journal_contains(const std::filesystem::path& path, std::string_view needle) {
+    std::ifstream file(path);
+    const std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    return text.contains(needle);
+}
+
 [[nodiscard]] bool context_has_bash_command(
     const tests::RecordedProviderRequest& request,
     std::string_view command) {
@@ -143,14 +154,16 @@ TEST_CASE(
     PromptResult prompt_result;
     BashResult bash_result;
     spawn_prompt(io, session, "start run", prompt_result);
-    drain_ready(io);
-    REQUIRE(client_pointer->requests.size() == 1);
+    // Provider admission crosses Runtime hops; wait for the observable
+    // request instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 1; }));
 
     REQUIRE(session.steer("steer input"));
 
     spawn_bash(io, session, "during run", bash_result);
-    drain_ready(io);
-    REQUIRE(shell_pointer->started_count == 1);
+    // Shell admission settles through Runtime hops; wait for the observable
+    // start instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
 
     const auto before_completion = now_ms();
     shell_pointer->release();
@@ -160,9 +173,8 @@ TEST_CASE(
     REQUIRE_FALSE(bash_result.has_value());
 
     client_pointer->release();
-    drain_ready(io);
     // The steering continuation keeps the run active; Bash stays pending.
-    REQUIRE(client_pointer->requests.size() == 2);
+    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 2; }));
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
     REQUIRE_FALSE(bash_result.has_value());
     CHECK_FALSE(context_has_bash_command(client_pointer->requests[1], "during run"));
@@ -179,6 +191,10 @@ TEST_CASE(
     CHECK((*bash_result)->message.timestamp >= before_completion);
     CHECK((*bash_result)->message.timestamp <= now_ms());
 
+    // The deferred commitment lands in Live Session State through mailbox
+    // hops behind the completion callback; wait for the observable snapshot
+    // instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return session.snapshot().agent_state.messages.size() == 5; }));
     const auto& messages = session.snapshot().agent_state.messages;
     REQUIRE(messages.size() == 5);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
@@ -218,12 +234,12 @@ TEST_CASE(
     PromptResult prompt_result;
     BashResult bash_result;
     spawn_bash(io, session, "first bash", bash_result);
-    drain_ready(io);
-    REQUIRE(shell_pointer->started_count == 1);
+    // Shell admission settles through Runtime hops; wait for the observable
+    // start instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
 
     spawn_prompt(io, session, "during bash", prompt_result);
-    drain_ready(io);
-    REQUIRE(client_pointer->requests.size() == 1);
+    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 1; }));
 
     client_pointer->release();
     drain_ready(io);
@@ -234,11 +250,14 @@ TEST_CASE(
     REQUIRE_FALSE(bash_result.has_value());
 
     shell_pointer->release();
-    drain_ready(io);
     require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.exit_code == 3);
 
+    // The deferred commitment lands in Live Session State through mailbox
+    // hops behind the completion callback; wait for the observable snapshot
+    // instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return session.snapshot().agent_state.messages.size() == 3; }));
     const auto& messages = session.snapshot().agent_state.messages;
     REQUIRE(messages.size() == 3);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
@@ -281,8 +300,9 @@ TEST_CASE(
     boost::asio::io_context io;
     BashResult first_result;
     spawn_bash(io, session, "first bash", first_result);
-    drain_ready(io);
-    REQUIRE(shell_pointer->started_count == 1);
+    // Shell admission settles through Runtime hops; wait for the observable
+    // start instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
 
     BashResult second_result;
     spawn_bash(io, session, "second bash", second_result);
@@ -351,6 +371,10 @@ TEST_CASE(
     CHECK(*prompt_result);
     require_completed(io, bash_result);
     REQUIRE(*bash_result);
+    // The deferred commitment's JSONL append crosses a Runtime persistence
+    // worker; wait for the journal to carry the Bash entry instead of
+    // assuming the completion callback implies the write landed (#531).
+    REQUIRE(pump_until(io, [&] { return journal_contains(session_path, "deferred bash"); }));
     session.close();
 
     auto resumed = harness::session::resume_session(session_path);
@@ -395,12 +419,10 @@ TEST_CASE(
     boost::asio::io_context io;
     PromptResult first_prompt;
     spawn_prompt(io, session, "read the note", first_prompt);
-    // Filesystem completion is worker-backed, so drive the session loop until
-    // its tool result advances the provider to the gated second request.
-    for (int attempt = 0; attempt < 100 && client_pointer->requests.size() != 2; ++attempt) {
-        drain_ready(io);
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-    }
+    // Filesystem completion is worker-backed, so pump the session loop until
+    // its tool result advances the provider to the gated second request
+    // (#531); the budget only bounds the already-failing path.
+    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 2; }));
     // Turn 1 produced the tool call; the run is held on the post-tool turn.
     REQUIRE(client_pointer->requests.size() == 2);
 
@@ -420,6 +442,10 @@ TEST_CASE(
     require_completed(io, bash_result);
     REQUIRE(*bash_result);
 
+    // The deferred commitment lands in Live Session State through mailbox
+    // hops behind the completion callback; wait for the observable snapshot
+    // instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return session.snapshot().agent_state.messages.size() == 5; }));
     const auto& messages = session.snapshot().agent_state.messages;
     REQUIRE(messages.size() == 5);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
@@ -485,8 +511,12 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE_FALSE(bash_result.has_value());
 
-    // The next appends on this path are the run's assistant entry, then the
-    // deferred Bash commitment; fail only the Bash write.
+    // The deferred Bash commitment must be the second append after the
+    // run's user entry (then the assistant entry), and appends cross
+    // Runtime persistence workers: wait until the user entry has landed in
+    // the journal so the counted failure pins exactly the Bash write no
+    // matter when the earlier append lands (#531).
+    REQUIRE(pump_until(io, [&] { return journal_contains(session_path, "failing persist run"); }));
     harness::session::testing::fail_nth_append_for_test(session_path, 2);
     client_pointer->release();
     drain_ready(io);
@@ -496,6 +526,7 @@ TEST_CASE(
     REQUIRE(*bash_result);
     // Live Session State advanced; only persistence failed, reported explicitly.
     REQUIRE((*bash_result)->diagnostic.has_value());
+    REQUIRE(pump_until(io, [&] { return bash_message_count(session.snapshot().agent_state.messages) == 1; }));
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
 
     // The Session stays usable: a later prompt runs and persists again.
@@ -561,6 +592,10 @@ TEST_CASE(
     require_completed(io, bash_result);
     REQUIRE(*bash_result);
     CHECK((*bash_result)->message.command == "pending at close");
+    // Close finalization settles through Runtime hops behind the completion
+    // callbacks; wait for quiescence instead of asserting after one drain
+    // pass (#531).
+    REQUIRE(pump_until(io, [&] { return !session.is_open() && !session.is_busy(); }));
     CHECK_FALSE(session.is_open());
     CHECK_FALSE(session.is_busy());
 
@@ -604,15 +639,18 @@ TEST_CASE(
     spawn_prompt(io, session, "run", prompt_result);
     drain_ready(io);
     spawn_bash(io, session, "overlapping bash", bash_result);
-    drain_ready(io);
-    REQUIRE(shell_pointer->started_count == 1);
+    // Shell admission settles through Runtime hops; wait for the observable
+    // start instead of asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
 
     const auto before_close = now_ms();
     session.close();
-    drain_ready(io);
+    // Cancellation propagates to the shell through the stop_token across
+    // Runtime hops; wait for the observable cancellation instead of
+    // asserting after one drain pass (#531).
+    REQUIRE(pump_until(io, [&] { return shell_pointer->cancellation_request_count == 1; }));
     // Close cancelled the Bash while the run was still active: the cancelled
     // completion defers to the run's settle like any other mid-run result.
-    CHECK(shell_pointer->cancellation_request_count == 1);
     REQUIRE_FALSE(bash_result.has_value());
     CHECK(session.is_busy());
 
@@ -627,6 +665,10 @@ TEST_CASE(
     CHECK((*bash_result)->message.cancelled);
     CHECK((*bash_result)->message.timestamp >= before_close);
     CHECK((*bash_result)->message.timestamp <= now_ms());
+    // Close finalization settles through Runtime hops behind the completion
+    // callbacks; wait for quiescence instead of asserting after one drain
+    // pass (#531).
+    REQUIRE(pump_until(io, [&] { return !session.is_open() && !session.is_busy(); }));
     CHECK_FALSE(session.is_open());
     CHECK_FALSE(session.is_busy());
 }
