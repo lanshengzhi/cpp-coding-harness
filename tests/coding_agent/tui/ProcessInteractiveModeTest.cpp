@@ -15,12 +15,14 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -71,11 +73,29 @@ private:
     bool active_{true};
 };
 
+/// Accumulate PTY output into `buffer` until every needle of the expected
+/// main-TUI state is observable (#530, the #526/#527/#528 defect class):
+/// stopping at the first needle asserts against - and writes follow-up input
+/// into - a half-delivered screen under scheduler pressure. The budget only
+/// bounds the already-failing path.
+[[nodiscard]] bool drain_pty_until_all(int master_fd,
+        std::string& buffer,
+        const std::vector<std::string>& needles,
+        const std::chrono::milliseconds budget = std::chrono::seconds(10)) {
+    return cch::tests::wait_until(
+            [&] {
+                buffer.append(cch::tests::read_available(master_fd, std::chrono::milliseconds(20)));
+                return std::all_of(needles.begin(), needles.end(), [&buffer](const std::string& needle) {
+                    return buffer.find(needle) != std::string::npos;
+                });
+            },
+            budget);
+}
+
 } // namespace
 
-TEST_CASE(
-    "Process Terminal runs the private Native TUI composition and restores the PTY",
-    "[coding_agent][tui][terminal][issue58]") {
+TEST_CASE("Process Terminal runs the private Native TUI composition and restores the PTY",
+        "[coding_agent][tui][terminal][issue58][issue530]") {
     auto pty = cch::tests::open_pseudo_terminal(60, 12);
     REQUIRE(pty);
     termios original{};
@@ -127,14 +147,11 @@ TEST_CASE(
         std::chrono::seconds(2)));
     auto output = cch::tests::read_available(pty->master.get());
 
-    REQUIRE(cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(
-                pty->master.get(),
-                std::chrono::milliseconds(20)));
-            return output.find("fake: pty prompt") != std::string::npos;
-        },
-        std::chrono::seconds(2)));
+    // The drain waits for the full settled main-TUI state - the assistant
+    // response, the rendered user message with its image part, and the footer
+    // stats line (the selected fake-model id) - before anything asserts on the
+    // session snapshot or Ctrl+D targets the screen (#530).
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake: pty prompt", "[Image: [image/png]", "fake-model"}));
     const auto snapshot = created->session->snapshot();
     REQUIRE_FALSE(snapshot.agent_state.messages.empty());
     const auto* user = std::get_if<cch::ai::UserMessage>(&snapshot.agent_state.messages.front());
@@ -145,9 +162,7 @@ TEST_CASE(
 
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
-    REQUIRE(cch::tests::wait_until(
-        [&] { return !terminal.modes().started; },
-        std::chrono::seconds(2)));
+    REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
     runner.join();
     cleanup.dismiss();
 
@@ -158,4 +173,3 @@ TEST_CASE(
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
     CHECK(cch::tests::same_terminal_state(restored, original));
 }
-
