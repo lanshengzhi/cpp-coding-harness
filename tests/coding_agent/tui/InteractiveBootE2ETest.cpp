@@ -19,6 +19,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/FakeModelRuntime.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -39,7 +40,6 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -48,10 +48,10 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 using namespace cch;
+using tests::pump_until;
 
 namespace {
 
@@ -112,12 +112,13 @@ struct E2eSession {
 
 /// Deterministic workspace path for the CLI-level goldens: the footer's pwd
 /// line renders the workspace, so a random temp path would make the goldens
-/// nondeterministic. The fixture removes and recreates the directory at
-/// boot, so a crashed prior run cannot leak stale state.
+/// byte-unstable, and the rendered line's layout padding pins the exact path
+/// length too. The fixture removes and recreates the directory at boot, so a
+/// crashed prior run cannot leak stale state. The four E2E cases here are
+/// mutually serialized through their CTest RESOURCE_LOCK (#529): sibling
+/// processes must not share (and reset) one fixed directory concurrently.
 [[nodiscard]] std::filesystem::path e2e_workspace_path() {
     std::error_code error;
-    // Fixed base: the committed goldens render the footer's pwd line, so a
-    // TMPDIR-isolated temp path would make them byte-unstable.
     const auto base = std::filesystem::path{"/tmp"};
     const auto path = base / "cpp-harness-e2e-workspace";
     std::filesystem::remove_all(path, error);
@@ -243,6 +244,15 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    // Settle-before-golden: async boot rendering spans several loop passes,
+    // and the last element it paints is the footer's pwd line. The budget
+    // only bounds the already-failing path.
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("/tmp/cpp-harness-e2e-workspace") != std::string::npos; }));
     const auto screen = visible_screen(terminal);
     capture_golden("boot.txt", screen);
 
@@ -257,8 +267,7 @@ TEST_CASE(
     CHECK(screen.find("Resumed reply: the notes file is ready.") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -285,13 +294,19 @@ TEST_CASE(
         });
     drain_ready(io);
 
-    REQUIRE(terminal.inject_input("continue the work\r"));
-    for (int attempt = 0; attempt < 100 && runtime->calls.size() != 2; ++attempt) {
-        drain_ready(io);
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-    }
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
-    REQUIRE(runtime->calls.size() == 2);
+    REQUIRE(terminal.inject_input("continue the work\r"));
+    // The scripted turn reaches the runtime through scheduler pressure, so
+    // the wait is event-driven; the budget only bounds the already-failing
+    // path.
+    REQUIRE(pump_until(io, [&] { return runtime->calls.size() == 2; }));
+    // Settle-before-golden: runtime delivery and screen rendering settle in
+    // separate loop passes; the final answer is the turn's last render.
+    REQUIRE(pump_until(io,
+            [&] { return visible_screen(terminal).find("Done: the notes file now says beta.") != std::string::npos; }));
     const auto screen = visible_screen(terminal);
     capture_golden("turn.txt", screen);
 
@@ -347,8 +362,7 @@ TEST_CASE(
     CHECK(read_text_file(fixture->workspace / "notes.txt") == "beta\n");
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -374,6 +388,10 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
     // Esc while idle with an empty editor is a no-op (no pending Bash, no
     // active run): the editor stays focused and the session keeps running.
     // The empty inject flushes the input decoder's pending ESC.
@@ -386,26 +404,28 @@ TEST_CASE(
     // stream is active (pi's app.interrupt precedence: active Agent run
     // first, then running User Bash, then pending User Bash submission).
     REQUIRE(terminal.inject_input("start the run\r"));
-    drain_ready(io);
-    REQUIRE(gated->calls.size() == 1);
+    // The submission reaches the runtime through scheduler pressure; the
+    // budget only bounds the already-failing path.
+    REQUIRE(pump_until(io, [&] { return gated->calls.size() == 1; }));
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.inject_input(""));
-    drain_ready(io);
+    // Abort finalization and its notice render asynchronously across loop
+    // passes.
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("Operation aborted") != std::string::npos; }));
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("Operation aborted") != std::string::npos);
 
     // The aborted run is quiescent: a fresh submission starts a new turn;
     // releasing the gate lets it complete.
     REQUIRE(terminal.inject_input("retry\r"));
-    drain_ready(io);
-    CHECK(gated->calls.size() == 2);
+    REQUIRE(pump_until(io, [&] { return gated->calls.size() == 2; }));
     gated->release();
-    drain_ready(io);
+    // Release -> provider completion -> render settles across loop passes.
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("gated done") != std::string::npos; }));
     CHECK(visible_screen(terminal).find("gated done") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -432,6 +452,17 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    // Settle-before-read: the boot warning renders asynchronously across
+    // loop passes; the budget only bounds the already-failing path.
+    REQUIRE(pump_until(io, [&] {
+        const auto screen = visible_screen(terminal);
+        return screen.find("Warning: Could not restore model deepseek/deepseek-v4-flash.") != std::string::npos &&
+               screen.find("openai-codex/gpt-5.5") != std::string::npos;
+    }));
     // pi interactive-mode.ts `showWarning`: `Warning: <modelFallbackMessage>`
     // renders in the chat container before the initial prompt (wrapped at
     // the terminal width like pi's Text component).
@@ -444,7 +475,6 @@ TEST_CASE(
     CHECK(screen.find("Resume request: check the notes file.") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }

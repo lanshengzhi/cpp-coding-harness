@@ -148,5 +148,15 @@ include_guard(GLOBAL)
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_coding_agent_interactive PRIVATE ${CCH_WARNING_OPTIONS})
-    catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS)
+    # The four InteractiveBootE2ETest cases share the fixed byte-stable
+    # workspace directory the CLI-level goldens render (#529): discover them
+    # separately so they carry a RESOURCE_LOCK that serializes the sibling
+    # processes under the parallel ctest default, while everything else
+    # discovers without the lock. The two discovery passes partition the
+    # executable's cases by the cases' unique `E2E: ` name prefix.
+    catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
+        TEST_SPEC "~E2E: *")
+    catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
+        TEST_SPEC "E2E: *"
+        PROPERTIES RESOURCE_LOCK "cch-interactive-boot-e2e-workspace")
     add_dependencies(cch_tests_coding_agent_interactive ${CCH_PARITY_BUILD_GATE_TARGET})
