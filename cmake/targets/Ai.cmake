@@ -18,6 +18,7 @@ cch_parity_declare_target(
         src/ai/api/MessageConversion.cpp
         src/ai/api/OpenAICodexResponsesAdapter.cpp
         src/ai/api/OpenAIResponsesAdapter.cpp
+        src/ai/api/ResponsesEventProcessor.cpp
         src/ai/api/Termination.cpp
         src/ai/api/UsageNormalization.cpp
         src/ai/auth/OAuthCallbackServer.cpp

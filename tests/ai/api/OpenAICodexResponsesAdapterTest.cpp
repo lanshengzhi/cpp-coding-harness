@@ -625,9 +625,7 @@ TEST_CASE(
     CHECK(run.events.size() >= 2);
 }
 
-TEST_CASE(
-    "Codex retries previous_response_not_found once on WebSocket",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex retries previous_response_not_found once on WebSocket", "[ai][provider][codex][issue342][issue536]") {
     auto harness = make_codex_harness(codex_model());
     auto first = std::make_shared<ScriptedWebSocket::Session>();
     auto second = std::make_shared<ScriptedWebSocket::Session>();
@@ -635,9 +633,9 @@ TEST_CASE(
         if (socket.session()->sent_frames.size() == 1) {
             socket.session()->frames.push_back(simple_terminal());
         } else {
-            socket.session()->frames.push_back(error_frame(
-                "previous_response_not_found",
-                "Previous response with id 'resp_1' not found."));
+            socket.session()->frames.push_back("{\"type\":\"response.failed\",\"response\":{\"status\":\"failed\","
+                                               "\"error\":{\"code\":\"previous_response_not_found\","
+                                               "\"message\":\"Previous response with id 'resp_1' not found.\"}}}");
         }
     };
     second->on_send = [](ScriptedWebSocket& socket, std::string_view) {
@@ -709,9 +707,8 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex retries websocket_connection_limit_reached once before start",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex retries websocket_connection_limit_reached once before start",
+        "[ai][provider][codex][issue342][issue536]") {
     auto harness = make_codex_harness(codex_model());
     auto first = std::make_shared<ScriptedWebSocket::Session>();
     auto second = std::make_shared<ScriptedWebSocket::Session>();
@@ -734,6 +731,7 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(event_names(run.events) == std::vector<std::string>{"start", "done"});
     CHECK(harness.ws->requests.size() == 2);
     CHECK(harness.http->requests.empty());
 }
@@ -1086,9 +1084,7 @@ TEST_CASE(
     CHECK(quota_harness.http->requests.size() == 1);
 }
 
-TEST_CASE(
-    "Codex API errors never fall back to SSE",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex API errors never fall back to SSE", "[ai][provider][codex][issue342][issue536]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     session->frames.push_back(error_frame("server_error", "upstream exploded"));
@@ -1103,7 +1099,23 @@ TEST_CASE(
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(run.result->error_message);
     CHECK(run.result->error_message->find("upstream exploded") != std::string::npos);
+    CHECK(event_names(run.events) == std::vector<std::string>{"error"});
     CHECK(harness.http->requests.empty());
+
+    auto failed_harness = make_codex_harness(codex_model());
+    auto failed_session = std::make_shared<ScriptedWebSocket::Session>();
+    failed_session->frames.push_back("{\"type\":\"response.failed\",\"response\":{\"status\":\"failed\","
+                                     "\"error\":{\"code\":\"server_error\",\"message\":\"failed frame\"}}}");
+    failed_harness.ws->connect_scripts.push_back(ScriptedWebSocketTransport::ConnectScript{.session = failed_session});
+
+    ai::SimpleStreamOptions failed_options;
+    failed_options.api_key = std::string{kCodexToken};
+    auto failed_run = run_codex(*failed_harness.models, codex_model(), {}, std::move(failed_options));
+
+    REQUIRE(failed_run.result);
+    CHECK(failed_run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(event_names(failed_run.events) == std::vector<std::string>{"error"});
+    CHECK(failed_harness.http->requests.empty());
 }
 
 TEST_CASE(

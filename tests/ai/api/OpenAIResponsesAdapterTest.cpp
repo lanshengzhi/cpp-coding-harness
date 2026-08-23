@@ -420,9 +420,8 @@ TEST_CASE(
     CHECK_FALSE(deleted_headers.contains("Content-Type"));
 }
 
-TEST_CASE(
-    "DeepSeek Responses partials start pending and flip to stop at final_answer",
-    "[ai][provider][responses][issue374][issue370]") {
+TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_answer",
+        "[ai][provider][responses][issue374][issue370][issue536]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_pending\"}}\n\n"
@@ -465,9 +464,8 @@ TEST_CASE(
     CHECK(partial_stop_reasons(run.events) == expected_partials);
 }
 
-TEST_CASE(
-    "DeepSeek Responses stream ending without a terminal event is a terminal error",
-    "[ai][provider][responses][issue374][issue375]") {
+TEST_CASE("DeepSeek Responses stream ending without a terminal event is a terminal error",
+        "[ai][provider][responses][issue374][issue375][issue536]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse =
         read_fixture_text("wire/openai-responses-deepseek-no-terminal.sse");
