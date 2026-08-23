@@ -1,5 +1,4 @@
 // T07 (#356): the pi v3 session wire contract — all eleven entry types
-#include "ai/AsyncResultBridge.hpp"
 // round-trip byte-identically against a golden captured from the frozen pi
 // tests (fixtures/pi-agent-core/session-roundtrip.jsonl), and context
 // projection per entry type matches pi (custom omitted by default,
@@ -14,7 +13,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
-#include "agent/AgentLoop.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "agent/harness/session/EntrySerializer.hpp"
 #include "support/FakeModelStream.hpp"

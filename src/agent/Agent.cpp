@@ -1,6 +1,6 @@
 #include <cch/agent/Agent.hpp>
 
-#include "AgentLoop.hpp"
+#include "agent/AgentExecution.hpp"
 #include "agent/AgentMessageAccess.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
@@ -17,6 +17,7 @@
 #include <optional>
 #include <stop_token>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -28,22 +29,16 @@ struct AgentSubscriptionAnchor {
     Agent::Impl* agent{nullptr};
 };
 
-[[nodiscard]] support::ExpectedVoid invoke_weak_observer(
-    AgentEventSink& sink,
-    const AgentLifecycleEvent& event) {
+[[nodiscard]] support::ExpectedVoid invoke_weak_observer(AgentEventSink& sink, const AgentLifecycleEvent& event) {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
 #endif
         return sink(event);
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception& exception) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            exception.what()));
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, exception.what()));
     } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "unknown exception"));
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "unknown exception"));
     }
 #endif
 }
@@ -57,68 +52,68 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
     return names;
 }
 
+[[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
+    static const std::vector<std::string> allowed{"off", "minimal", "low", "medium", "high", "xhigh", "max"};
+    return std::find(allowed.begin(), allowed.end(), level) != allowed.end();
+}
+
 [[nodiscard]] std::size_t approximate_content_size(const ai::Content& block) {
     return std::visit(
-        [](const auto& content) -> std::size_t {
-            if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::TextContent>) {
-                return content.text.size();
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ImageContent>) {
-                return content.data.size() + content.mime_type.size();
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ThinkingContent>) {
-                return content.thinking.size();
-            }
-            return 0;
-        },
-        block);
+            [](const auto& content) -> std::size_t {
+                if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::TextContent>) {
+                    return content.text.size();
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ImageContent>) {
+                    return content.data.size() + content.mime_type.size();
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ThinkingContent>) {
+                    return content.thinking.size();
+                }
+                return 0;
+            },
+            block);
 }
 
 [[nodiscard]] std::size_t approximate_message_size(const ai::MessageVariant& message) {
     return std::visit(
-        [](const auto& current) -> std::size_t {
-            if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::UserMessage>) {
-                std::size_t size = 0;
-                if (const auto* text = std::get_if<std::string>(&current.content)) {
-                    size = text->size();
-                } else {
-                    for (const auto& block :
-                         std::get<std::vector<ai::Content>>(current.content)) {
-                        size += approximate_content_size(block);
+            [](const auto& current) -> std::size_t {
+                if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::UserMessage>) {
+                    std::size_t size = 0;
+                    if (const auto* text = std::get_if<std::string>(&current.content)) {
+                        size = text->size();
+                    } else {
+                        for (const auto& block : std::get<std::vector<ai::Content>>(current.content)) {
+                            size += approximate_content_size(block);
+                        }
                     }
-                }
-                return size;
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::AssistantMessage>) {
-                std::size_t size = 0;
-                for (const auto& block : current.content) {
-                    if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                        size += text->text.size();
-                    } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                        size += thinking->thinking.size();
-                    } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                        size += call->raw_arguments.size();
+                    return size;
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::AssistantMessage>) {
+                    std::size_t size = 0;
+                    for (const auto& block : current.content) {
+                        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+                            size += text->text.size();
+                        } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+                            size += thinking->thinking.size();
+                        } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                            size += call->raw_arguments.size();
+                        }
                     }
+                    return size;
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::ToolResultMessage>) {
+                    return ai::text_from_content(current.content).size();
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::SystemMessage>) {
+                    return current.content.size();
                 }
-                return size;
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::ToolResultMessage>) {
-                return ai::text_from_content(current.content).size();
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::SystemMessage>) {
-                return current.content.size();
-            }
-            return 0;
-        },
-        message);
+                return 0;
+            },
+            message);
 }
 
 [[nodiscard]] support::ExpectedVoid admit_queued_message(
-    AgentInputQueues& queues,
-    AgentInputQueue& queue,
-    ai::MessageVariant message,
-    std::string_view queue_name) {
+        AgentInputQueues& queues, AgentInputQueue& queue, ai::MessageVariant message, std::string_view queue_name) {
     const std::size_t message_bytes = approximate_message_size(message);
     if (queue.messages.size() + 1 > queues.max_messages) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "too many queued messages",
-            std::string{queue_name} + " message count exceeds " + std::to_string(queues.max_messages)));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "too many queued messages",
+                std::string{queue_name} + " message count exceeds " + std::to_string(queues.max_messages)));
     }
 
     std::size_t queued_bytes = message_bytes;
@@ -126,10 +121,9 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
         queued_bytes += approximate_message_size(queued);
     }
     if (queued_bytes > queues.max_bytes) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "queued messages too large",
-            std::string{queue_name} + " message byte size exceeds " + std::to_string(queues.max_bytes)));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "queued messages too large",
+                std::string{queue_name} + " message byte size exceeds " + std::to_string(queues.max_bytes)));
     }
 
     queue.messages.push_back(std::move(message));
@@ -151,34 +145,112 @@ struct Agent::Impl {
         bool delivery_enabled{true};
     };
 
-    Impl(
-        ai::ModelStreamFactory stream_factory,
-        std::vector<ai::Tool> definitions,
-        ToolRegistry tools,
-        AsyncAgentOptions options,
-        AgentInitialState initial_state)
-        : loop(std::move(stream_factory), std::move(tools), std::move(options)) {
+    struct CommitmentState {
+        AgentEventCommitter commitment;
+        std::optional<support::Error> failure{std::nullopt};
+    };
+
+    Impl(ai::ModelStreamFactory stream_factory,
+            std::vector<ai::Tool> definitions,
+            ToolRegistry tools,
+            AsyncAgentOptions options,
+            AgentInitialState initial_state)
+        : run_policy{.stream_factory = std::move(stream_factory),
+                  .registry = std::move(tools),
+                  .session_id = std::move(options.session_id),
+                  .max_turns = options.max_turns,
+                  .cache_retention = options.cache_retention,
+                  .timeout_ms = options.timeout_ms,
+                  .max_retries = options.max_retries,
+                  .max_retry_delay_ms = options.max_retry_delay_ms,
+                  .headers = std::move(options.headers),
+                  .before_tool_call = std::move(options.before_tool_call),
+                  .after_tool_call = std::move(options.after_tool_call),
+                  .transform_context = std::move(options.transform_context),
+                  .convert_to_llm = std::move(options.convert_to_llm),
+                  .prepare_next_turn = std::move(options.prepare_next_turn),
+                  .should_stop_after_turn = std::move(options.should_stop_after_turn),
+                  .validate_turn_update = std::move(options.validate_turn_update),
+                  .tool_execution = options.tool_execution} {
         state.messages = std::move(initial_state.messages);
-        // The loop clamps the requested level against the active model at
-        // construction; live state reflects the effective (clamped) level so
-        // `state()` and the wire never diverge (#352).
-        state.thinking_level = loop.current_thinking_level();
-        // The session System Prompt lives on the loop options (pi
-        // `AgentState.systemPrompt`) and is mirrored into live state like the
-        // model and thinking level.
-        state.system_prompt = loop.current_system_prompt();
-        state.input_queues.max_messages = loop.max_queued_messages();
-        state.input_queues.max_bytes = loop.max_queued_bytes();
-        state.input_queues.steering.mode = loop.steering_mode();
-        state.input_queues.follow_up.mode = loop.follow_up_mode();
-        // Every definition came from the registry now owned by the loop.
+        state.model = std::move(options.model);
+        state.thinking_level = options.thinking_level.empty() ? "medium" : std::move(options.thinking_level);
+        state.thinking_level = ai::clamp_thinking_level_string(state.model, state.thinking_level);
+        state.system_prompt = std::move(options.system_prompt);
+        state.input_queues.max_messages = options.max_queued_messages;
+        state.input_queues.max_bytes = options.max_queued_bytes;
+        state.input_queues.steering.mode = options.steering_mode;
+        state.input_queues.follow_up.mode = options.follow_up_mode;
         state.active_tool_names = tool_names(definitions);
     }
 
-    [[nodiscard]] support::ExpectedVoid process_event(
-        const AgentLifecycleEvent& event,
-        AgentEventCommitter& commitment,
-        std::optional<support::Error>& commitment_failure) {
+    [[nodiscard]] detail::AgentExecutionSnapshot snapshot() const {
+        return detail::AgentExecutionSnapshot{
+                .model = state.model,
+                .thinking_level = state.thinking_level,
+                .system_prompt = state.system_prompt,
+                .messages = state.messages,
+                .tools = run_policy.registry.definitions(),
+        };
+    }
+
+    [[nodiscard]] support::Expected<detail::AgentExecutionSnapshot> apply_update(AgentLoopTurnUpdate update) {
+        if (update.model) {
+            if (auto valid = ai::validate_model(*update.model); !valid) {
+                return std::unexpected(valid.error());
+            }
+        }
+        if (update.thinking_level && !is_valid_thinking_level(*update.thinking_level)) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "invalid thinking level", *update.thinking_level));
+        }
+
+        ai::Model next_model = state.model;
+        std::string next_thinking_level = state.thinking_level;
+        if (update.model) {
+            next_model = *update.model;
+        }
+        if (update.thinking_level) {
+            next_thinking_level = *update.thinking_level;
+        }
+        next_thinking_level = ai::clamp_thinking_level_string(next_model, next_thinking_level);
+
+        // A replacement is the next model-facing context, not a new durable
+        // Agent state. Live history remains event-owned so AgentEnd still
+        // reports the messages produced by this invocation.
+        state.model = std::move(next_model);
+        state.thinking_level = std::move(next_thinking_level);
+
+        auto updated = snapshot();
+        if (update.context) {
+            updated.system_prompt = update.context->system_prompt.value_or("");
+            updated.messages = std::move(update.context->messages);
+        }
+        return updated;
+    }
+
+    [[nodiscard]] std::vector<ai::MessageVariant> drain(detail::InputQueueKind queue_kind) {
+        auto& queue = queue_kind == detail::InputQueueKind::Steering ? state.input_queues.steering.messages
+                                                                     : state.input_queues.follow_up.messages;
+        const auto mode = queue_kind == detail::InputQueueKind::Steering ? state.input_queues.steering.mode
+                                                                         : state.input_queues.follow_up.mode;
+        if (queue.empty()) {
+            return {};
+        }
+        if (mode == InputQueueMode::All) {
+            auto drained = std::move(queue);
+            queue.clear();
+            return drained;
+        }
+        std::vector<ai::MessageVariant> drained;
+        drained.push_back(std::move(queue.front()));
+        queue.erase(queue.begin());
+        return drained;
+    }
+
+    [[nodiscard]] support::ExpectedVoid process_event(const AgentLifecycleEvent& event,
+            AgentEventCommitter& commitment,
+            std::optional<support::Error>& commitment_failure) {
         reduce_state(event);
 
         std::optional<AgentLifecycleEvent> invocation_event;
@@ -186,8 +258,8 @@ struct Agent::Impl {
         if (std::holds_alternative<AgentEndEvent>(event)) {
             AgentEndEvent invocation_end;
             invocation_end.messages.assign(
-                state.messages.begin() + static_cast<std::ptrdiff_t>(invocation_message_offset),
-                state.messages.end());
+                    state.messages.begin() + static_cast<std::ptrdiff_t>(invocation_message_offset),
+                    state.messages.end());
             invocation_event.emplace(std::move(invocation_end));
             delivered_event = &*invocation_event;
         }
@@ -220,26 +292,44 @@ struct Agent::Impl {
             if (const auto* assistant = std::get_if<ai::AssistantMessage>(&update->message)) {
                 state.streaming_message = *assistant;
             }
+            if (const auto* tool_end = std::get_if<ai::ToolCallEndEvent>(&update->assistant_event)) {
+                if (!tool_end->tool_call.id.empty() &&
+                        std::find(state.pending_tool_call_ids.begin(),
+                                state.pending_tool_call_ids.end(),
+                                tool_end->tool_call.id) == state.pending_tool_call_ids.end()) {
+                    state.pending_tool_call_ids.push_back(tool_end->tool_call.id);
+                }
+            }
             return;
         }
         if (const auto* end = std::get_if<MessageEndEvent>(&event)) {
             state.messages.push_back(end->message);
-            if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
+            if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
                 state.streaming_message.reset();
+                state.pending_tool_call_ids.clear();
+                for (const auto& block : assistant->content) {
+                    if (const auto* call = std::get_if<ai::ToolCallContent>(&block);
+                            call != nullptr && !call->id.empty()) {
+                        state.pending_tool_call_ids.push_back(call->id);
+                    }
+                }
             }
             return;
         }
         if (const auto* start = std::get_if<ToolExecutionStartEvent>(&event)) {
-            if (std::find(
-                    state.pending_tool_call_ids.begin(),
-                    state.pending_tool_call_ids.end(),
-                    start->tool_call_id) == state.pending_tool_call_ids.end()) {
+            if (std::find(state.pending_tool_call_ids.begin(),
+                        state.pending_tool_call_ids.end(),
+                        start->tool_call_id) == state.pending_tool_call_ids.end()) {
                 state.pending_tool_call_ids.push_back(start->tool_call_id);
             }
             return;
         }
         if (const auto* end = std::get_if<ToolExecutionEndEvent>(&event)) {
             std::erase(state.pending_tool_call_ids, end->tool_call_id);
+            return;
+        }
+        if (std::holds_alternative<TurnEndEvent>(event)) {
+            state.pending_tool_call_ids.clear();
             return;
         }
         if (std::holds_alternative<AgentEndEvent>(event)) {
@@ -256,21 +346,17 @@ struct Agent::Impl {
             detail += ": ";
             detail += failure.detail;
         }
-        detail = ai::bounded_redacted_text(
-            std::move(detail), kMaxDetailBytes, "...");
+        detail = ai::bounded_redacted_text(std::move(detail), kMaxDetailBytes, "...");
 
         if (state.diagnostics.size() == kMaxDiagnostics) {
             state.diagnostics.erase(state.diagnostics.begin());
         }
-        state.diagnostics.push_back(support::make_error(
-            failure.code,
-            "agent event observer failed",
-            std::move(detail)));
+        state.diagnostics.push_back(
+                support::make_error(failure.code, "agent event observer failed", std::move(detail)));
     }
 
     [[nodiscard]] support::ExpectedVoid notify(
-        const AgentLifecycleEvent& event,
-        const std::vector<std::shared_ptr<Subscriber>>& delivery_snapshot) {
+            const AgentLifecycleEvent& event, const std::vector<std::shared_ptr<Subscriber>>& delivery_snapshot) {
         for (const auto& subscriber : delivery_snapshot) {
             if (!subscriber->delivery_enabled || !subscriber->sink) {
                 continue;
@@ -289,10 +375,7 @@ struct Agent::Impl {
 
     void remove_unregistered_subscribers() {
         std::erase_if(
-            subscribers,
-            [](const std::shared_ptr<Subscriber>& subscriber) {
-                return !subscriber->registered;
-            });
+                subscribers, [](const std::shared_ptr<Subscriber>& subscriber) { return !subscriber->registered; });
     }
 
     void unsubscribe(std::size_t id) {
@@ -324,24 +407,19 @@ struct Agent::Impl {
     }
 
     [[nodiscard]] bool is_subscribed(std::size_t id) const {
-        return std::ranges::any_of(
-            subscribers,
-            [id](const std::shared_ptr<Subscriber>& subscriber) {
-                return subscriber->id == id && subscriber->registered;
-            });
+        return std::ranges::any_of(subscribers, [id](const std::shared_ptr<Subscriber>& subscriber) {
+            return subscriber->id == id && subscriber->registered;
+        });
     }
 
     /// Shared execution body for `prompt` and `continue_run`: installs the
-    /// run-stop source, drives the loop through `run_loop_call` with the
-    /// run-scoped event sink and stop token, and settles run state on every
-    /// exit path. `run_loop_call` is built by the caller (a friend context)
-    /// because the loop's private input-queue kinds are not reachable here.
-    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_loop(
-        std::shared_ptr<Impl> impl,
-        std::move_only_function<boost::asio::awaitable<support::Expected<AsyncAgentRunResult>>(
-            AgentEventSink sink, std::stop_token token)> run_loop_call,
-        AgentEventCommitter commitment,
-        std::stop_source stop_source) {
+    /// run-stop source, wires the private callback bundle, and settles run
+    /// state on every exit path. All live Agent state is reduced or applied in
+    /// this implementation object; the execution coroutine owns only copies.
+    [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_loop(std::shared_ptr<Impl> impl,
+            std::optional<ai::UserMessage> user_message,
+            AgentEventCommitter commitment,
+            std::stop_source stop_source) {
         impl->active_run = true;
         impl->active_stop_source.emplace(std::move(stop_source));
         impl->state.is_running = true;
@@ -350,9 +428,6 @@ struct Agent::Impl {
         impl->invocation_message_offset = impl->state.messages.size();
 
         const auto finish_run = [impl] {
-            impl->state.model = impl->loop.current_model();
-            impl->state.thinking_level = impl->loop.current_thinking_level();
-            impl->state.system_prompt = impl->loop.current_system_prompt();
             impl->state.streaming_message.reset();
             impl->state.pending_tool_call_ids.clear();
             impl->state.is_running = false;
@@ -361,25 +436,22 @@ struct Agent::Impl {
             impl->remove_unregistered_subscribers();
         };
 
-        std::optional<support::Error> commitment_failure;
-        auto result = co_await run_loop_call(
-            [impl, &commitment, &commitment_failure](
-                const AgentLifecycleEvent& event) {
-                return impl->process_event(
-                    event, commitment, commitment_failure);
-            },
-            impl->active_stop_source->get_token());
-
-        if (result) {
-            impl->state.model = result->state.model;
-            if (!result->state.thinking_level.empty()) {
-                impl->state.thinking_level = result->state.thinking_level;
-            }
-        }
+        auto commitment_state = std::make_shared<CommitmentState>(CommitmentState{.commitment = std::move(commitment)});
+        detail::AgentExecutionCallbacks callbacks{
+                .snapshot = [impl] { return impl->snapshot(); },
+                .emit =
+                        [impl, commitment_state](const AgentLifecycleEvent& event) {
+                            return impl->process_event(event, commitment_state->commitment, commitment_state->failure);
+                        },
+                .apply_update = [impl](AgentLoopTurnUpdate update) { return impl->apply_update(std::move(update)); },
+                .drain = [impl](detail::InputQueueKind queue_kind) { return impl->drain(queue_kind); },
+        };
+        auto result = co_await detail::run_agent_execution(
+                impl->run_policy, std::move(callbacks), std::move(user_message), impl->active_stop_source->get_token());
         finish_run();
 
-        if (commitment_failure) {
-            co_return std::unexpected(std::move(*commitment_failure));
+        if (commitment_state->failure) {
+            co_return std::unexpected(std::move(*commitment_state->failure));
         }
         if (!result) {
             co_return std::unexpected(result.error());
@@ -387,7 +459,7 @@ struct Agent::Impl {
         co_return support::ExpectedVoid{};
     }
 
-    AsyncAgentLoop loop;
+    detail::RunPolicy run_policy;
     AgentState state;
     bool active_run{false};
     std::optional<std::stop_source> active_stop_source;
@@ -397,11 +469,9 @@ struct Agent::Impl {
     std::shared_ptr<AgentSubscriptionAnchor> subscription_anchor;
 };
 
-AgentEventSubscription::AgentEventSubscription(
-    AgentEventSubscription&& other) noexcept = default;
+AgentEventSubscription::AgentEventSubscription(AgentEventSubscription&& other) noexcept = default;
 
-AgentEventSubscription& AgentEventSubscription::operator=(
-    AgentEventSubscription&& other) noexcept {
+AgentEventSubscription& AgentEventSubscription::operator=(AgentEventSubscription&& other) noexcept {
     if (this != &other) {
         unsubscribe();
         impl_ = std::move(other.impl_);
@@ -409,9 +479,7 @@ AgentEventSubscription& AgentEventSubscription::operator=(
     return *this;
 }
 
-AgentEventSubscription::~AgentEventSubscription() {
-    unsubscribe();
-}
+AgentEventSubscription::~AgentEventSubscription() { unsubscribe(); }
 
 void AgentEventSubscription::unsubscribe() {
     if (!impl_) {
@@ -431,20 +499,17 @@ AgentEventSubscription::operator bool() const {
     return anchor && anchor->agent && anchor->agent->is_subscribed(impl_->id);
 }
 
-Agent::Agent(
-    ai::ModelStreamFactory stream_factory,
-    ToolRegistry tools,
-    AsyncAgentOptions options,
-    AgentInitialState initial_state) {
+Agent::Agent(ai::ModelStreamFactory stream_factory,
+        ToolRegistry tools,
+        AsyncAgentOptions options,
+        AgentInitialState initial_state) {
     options.thinking_level = initial_state.thinking_level;
     auto definitions = tools.definitions();
-    impl_ = std::make_shared<Impl>(
-        std::move(stream_factory),
-        std::move(definitions),
-        std::move(tools),
-        std::move(options),
-        std::move(initial_state));
-    impl_->state.model = impl_->loop.current_model();
+    impl_ = std::make_shared<Impl>(std::move(stream_factory),
+            std::move(definitions),
+            std::move(tools),
+            std::move(options),
+            std::move(initial_state));
     impl_->subscription_anchor = std::make_shared<AgentSubscriptionAnchor>(impl_.get());
 }
 
@@ -466,141 +531,57 @@ Agent::~Agent() {
     }
 }
 
-support::AsyncResult<void> Agent::prompt(std::string user_prompt) {
-    return prompt(std::move(user_prompt), {});
+support::AsyncResult<void> Agent::prompt(std::string user_prompt) { return prompt(std::move(user_prompt), {}); }
+
+support::AsyncResult<void> Agent::prompt(std::string user_prompt, AgentEventCommitter commitment) {
+    return prompt(ai::user_text_message(std::move(user_prompt)), std::move(commitment), std::stop_source{});
 }
 
 support::AsyncResult<void> Agent::prompt(
-    std::string user_prompt,
-    AgentEventCommitter commitment) {
-    return prompt(
-        ai::user_text_message(std::move(user_prompt)),
-        std::move(commitment),
-        std::stop_source{});
-}
-
-support::AsyncResult<void> Agent::prompt(
-    ai::UserMessage user_message,
-    AgentEventCommitter commitment,
-    std::stop_source stop_source) {
+        ai::UserMessage user_message, AgentEventCommitter commitment, std::stop_source stop_source) {
     if (!impl_) {
-        return support::AsyncResult<void>{std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"))};
+        return support::AsyncResult<void>{
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"))};
     }
     if (impl_->active_run) {
-        return support::AsyncResult<void>{std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is busy (prompt already in flight)"))};
+        return support::AsyncResult<void>{std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "agent is busy (prompt already in flight)"))};
     }
     return ai::detail::make_async_result(
-        [impl = impl_,
-         user_message = std::move(user_message),
-         commitment = std::move(commitment),
-         stop_source = std::move(stop_source)]() mutable
-            -> boost::asio::awaitable<support::ExpectedVoid> {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
-    }
-    if (impl->active_run) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is busy (prompt already in flight)"));
-    }
-    co_return co_await Impl::run_loop(
-        impl,
-        [impl, user_message = std::move(user_message)](
-            AgentEventSink sink,
-            std::stop_token token) mutable {
-            return impl->loop.continue_with(
-                impl->state.messages,
-                std::move(user_message),
-                std::move(sink),
-                token,
-                [impl](AsyncAgentLoop::InputQueueKind queue_kind) {
-                    auto& queue =
-                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
-                            ? impl->state.input_queues.steering.messages
-                            : impl->state.input_queues.follow_up.messages;
-                    const auto mode =
-                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
-                            ? impl->state.input_queues.steering.mode
-                            : impl->state.input_queues.follow_up.mode;
-                    if (queue.empty()) {
-                        return std::vector<ai::MessageVariant>{};
-                    }
-                    if (mode == InputQueueMode::All) {
-                        auto drained = std::move(queue);
-                        queue.clear();
-                        return drained;
-                    }
-                    std::vector<ai::MessageVariant> drained;
-                    drained.push_back(std::move(queue.front()));
-                    queue.erase(queue.begin());
-                    return drained;
-                });
-        },
-        std::move(commitment),
-        std::move(stop_source));
-        });
+            [impl = impl_,
+                    user_message = std::move(user_message),
+                    commitment = std::move(commitment),
+                    stop_source = std::move(stop_source)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                if (!impl) {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
+                }
+                if (impl->active_run) {
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
+                }
+                co_return co_await Impl::run_loop(impl,
+                        std::optional<ai::UserMessage>{std::move(user_message)},
+                        std::move(commitment),
+                        std::move(stop_source));
+            });
 }
 
-support::AsyncResult<void> Agent::continue_run(
-    AgentEventCommitter commitment,
-    std::stop_source stop_source) {
+support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment, std::stop_source stop_source) {
     return ai::detail::make_async_result(
-        [impl = impl_,
-         commitment = std::move(commitment),
-         stop_source = std::move(stop_source)]() mutable
-            -> boost::asio::awaitable<support::ExpectedVoid> {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
-    }
-    if (impl->active_run) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is busy (prompt already in flight)"));
-    }
-    co_return co_await Impl::run_loop(
-        impl,
-        [impl](
-            AgentEventSink sink,
-            std::stop_token token) {
-            return impl->loop.continue_with(
-                impl->state.messages,
-                std::nullopt,
-                std::move(sink),
-                token,
-                [impl](AsyncAgentLoop::InputQueueKind queue_kind) {
-                    auto& queue =
-                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
-                            ? impl->state.input_queues.steering.messages
-                            : impl->state.input_queues.follow_up.messages;
-                    const auto mode =
-                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
-                            ? impl->state.input_queues.steering.mode
-                            : impl->state.input_queues.follow_up.mode;
-                    if (queue.empty()) {
-                        return std::vector<ai::MessageVariant>{};
-                    }
-                    if (mode == InputQueueMode::All) {
-                        auto drained = std::move(queue);
-                        queue.clear();
-                        return drained;
-                    }
-                    std::vector<ai::MessageVariant> drained;
-                    drained.push_back(std::move(queue.front()));
-                    queue.erase(queue.begin());
-                    return drained;
-                });
-        },
-        std::move(commitment),
-        std::move(stop_source));
-        });
+            [impl = impl_,
+                    commitment = std::move(commitment),
+                    stop_source = std::move(stop_source)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                if (!impl) {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
+                }
+                if (impl->active_run) {
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
+                }
+                co_return co_await Impl::run_loop(impl, std::nullopt, std::move(commitment), std::move(stop_source));
+            });
 }
 
 void Agent::abort() {
@@ -611,31 +592,23 @@ void Agent::abort() {
 
 support::ExpectedVoid Agent::steer(ai::MessageVariant message) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     auto& queues = impl_->state.input_queues;
-    return admit_queued_message(
-        queues, queues.steering, std::move(message), "steering");
+    return admit_queued_message(queues, queues.steering, std::move(message), "steering");
 }
 
 support::ExpectedVoid Agent::follow_up(ai::MessageVariant message) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     auto& queues = impl_->state.input_queues;
-    return admit_queued_message(
-        queues, queues.follow_up, std::move(message), "follow-up");
+    return admit_queued_message(queues, queues.follow_up, std::move(message), "follow-up");
 }
 
 support::ExpectedVoid Agent::set_steering_mode(InputQueueMode mode) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     impl_->state.input_queues.steering.mode = mode;
     return {};
@@ -643,56 +616,35 @@ support::ExpectedVoid Agent::set_steering_mode(InputQueueMode mode) {
 
 support::ExpectedVoid Agent::set_follow_up_mode(InputQueueMode mode) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     impl_->state.input_queues.follow_up.mode = mode;
     return {};
 }
 
-namespace {
-
-[[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
-    static const std::vector<std::string> allowed{
-        "off", "minimal", "low", "medium", "high", "xhigh", "max"};
-    return std::find(allowed.begin(), allowed.end(), level) != allowed.end();
-}
-
-} // namespace
-
 support::Expected<std::string> Agent::set_thinking_level(std::string_view level) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     if (!is_valid_thinking_level(level)) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "invalid thinking level",
-            std::string{level}));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "invalid thinking level", std::string{level}));
     }
     // Clamp against the active model so an unsupported level can never be
     // forwarded to the stream (pi agent-session.ts setThinkingLevel clamps
     // before persisting; a clamped level equal to the current one is a no-op).
-    const auto effective = ai::clamp_thinking_level_string(
-        impl_->loop.current_model(), level);
-    impl_->loop.set_thinking_level(effective);
+    const auto effective = ai::clamp_thinking_level_string(impl_->state.model, level);
     impl_->state.thinking_level = effective;
     return effective;
 }
 
 support::ExpectedVoid Agent::set_model(ai::Model model) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     if (auto valid = ai::validate_model(model); !valid) {
         return valid;
     }
-    impl_->loop.set_model(model);
     impl_->state.model = std::move(model);
     return {};
 }
@@ -701,15 +653,12 @@ void Agent::set_system_prompt(std::string system_prompt) {
     if (!impl_) {
         return;
     }
-    impl_->loop.set_system_prompt(system_prompt);
     impl_->state.system_prompt = std::move(system_prompt);
 }
 
 support::ExpectedVoid Agent::clear_steering_queue() {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     impl_->state.input_queues.steering.messages.clear();
     return {};
@@ -717,9 +666,7 @@ support::ExpectedVoid Agent::clear_steering_queue() {
 
 support::ExpectedVoid Agent::clear_follow_up_queue() {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     impl_->state.input_queues.follow_up.messages.clear();
     return {};
@@ -732,26 +679,18 @@ support::ExpectedVoid Agent::clear_input_queues() {
     return clear_follow_up_queue();
 }
 
-AgentState Agent::state() const {
-    return impl_ ? impl_->state : AgentState{};
-}
+AgentState Agent::state() const { return impl_ ? impl_->state : AgentState{}; }
 
-support::Expected<AgentEventSubscription> Agent::subscribe(
-    AgentEventSink sink) {
+support::Expected<AgentEventSubscription> Agent::subscribe(AgentEventSink sink) {
     if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     if (!sink) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent event sink is empty"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent event sink is empty"));
     }
 
     const auto id = impl_->next_subscriber_id++;
-    impl_->subscribers.push_back(std::make_shared<Impl::Subscriber>(
-        Impl::Subscriber{id, std::move(sink), true, true}));
+    impl_->subscribers.push_back(std::make_shared<Impl::Subscriber>(Impl::Subscriber{id, std::move(sink), true, true}));
 
     auto subscription_impl = std::make_unique<AgentEventSubscription::Impl>();
     subscription_impl->id = id;
@@ -769,34 +708,26 @@ void Agent::clear_subscriptions() {
 }
 
 support::ExpectedVoid detail::AgentMessageAccess::append_bash_execution(
-    Agent& agent,
-    ai::BashExecutionMessage message) {
+        Agent& agent, ai::BashExecutionMessage message) {
     if (!agent.impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is busy (cannot commit passive message)"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "agent is busy (cannot commit passive message)"));
     }
     agent.impl_->state.messages.emplace_back(std::move(message));
     return {};
 }
 
 support::ExpectedVoid detail::AgentMessageAccess::replace_messages(
-    Agent& agent,
-    std::vector<ai::MessageVariant> messages) {
+        Agent& agent, std::vector<ai::MessageVariant> messages) {
     if (!agent.impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is busy (cannot replace session context)"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "agent is busy (cannot replace session context)"));
     }
     agent.impl_->state.messages = std::move(messages);
     agent.impl_->state.streaming_message.reset();
@@ -804,21 +735,16 @@ support::ExpectedVoid detail::AgentMessageAccess::replace_messages(
     return {};
 }
 
-support::ExpectedVoid detail::AgentMessageAccess::pop_trailing_assistant(
-    Agent& agent) {
+support::ExpectedVoid detail::AgentMessageAccess::pop_trailing_assistant(Agent& agent) {
     if (!agent.impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is not initialized"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "agent is busy (cannot mutate session context)"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "agent is busy (cannot mutate session context)"));
     }
     auto& messages = agent.impl_->state.messages;
-    if (!messages.empty() &&
-        std::holds_alternative<ai::AssistantMessage>(messages.back())) {
+    if (!messages.empty() && std::holds_alternative<ai::AssistantMessage>(messages.back())) {
         messages.pop_back();
     }
     return {};
