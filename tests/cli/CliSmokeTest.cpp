@@ -24,6 +24,8 @@
 #include <vector>
 
 #include <sys/wait.h>
+#include <csignal>
+#include <thread>
 #include <format>
 
 #ifndef CCH_BINARY
@@ -225,6 +227,59 @@ cch::tests::CliRunResult run_in_workspace(
         .models = {},
     });
 }
+
+/// Accumulate PTY output into `buffer` until every needle of the expected
+/// screen state is observable (#528, the #526/#527 defect class): stopping at
+/// the first needle asserts against - and writes follow-up input into - a
+/// half-delivered screen under scheduler pressure. The budget only bounds
+/// the already-failing path.
+[[nodiscard]] bool drain_pty_until_all(int master_fd,
+        std::string& buffer,
+        const std::vector<std::string>& needles,
+        const std::chrono::milliseconds budget = std::chrono::seconds(10)) {
+    return cch::tests::wait_until(
+            [&] {
+                buffer.append(cch::tests::read_available(master_fd, std::chrono::milliseconds(20)));
+                return std::all_of(needles.begin(), needles.end(), [&buffer](const std::string& needle) {
+                    return buffer.find(needle) != std::string::npos;
+                });
+            },
+            budget);
+}
+
+/// Reaps (terminating first, then killing) the forked CLI child on every
+/// scope-exit path (#528): no spawned child may survive unwind. Best-effort
+/// by design like tests::RunJoinGuard: in the strict no-exception shards a
+/// failed REQUIRE terminates without unwinding, so only paths where
+/// destructors run reach this guard; the bounded escalation keeps a wedged
+/// child from hanging the shard.
+struct ChildReapGuard {
+    explicit ChildReapGuard(const pid_t process_id) : pid(process_id) {}
+
+    ChildReapGuard(const ChildReapGuard&) = delete;
+    ChildReapGuard& operator=(const ChildReapGuard&) = delete;
+
+    ~ChildReapGuard() {
+        if (pid <= 0) return;
+        int status = 0;
+        const auto already_reaped = [&](const pid_t result) {
+            return result == pid || (result < 0 && errno == ECHILD);
+        };
+        if (already_reaped(::waitpid(pid, &status, WNOHANG))) return;
+        (void)::kill(pid, SIGTERM);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (already_reaped(::waitpid(pid, &status, WNOHANG))) return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        (void)::kill(pid, SIGKILL);
+        while (!already_reaped(::waitpid(pid, &status, WNOHANG))) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+
+    pid_t pid;
+};
 
 /// pi `formatMissingSessionCwdError` (session-cwd.ts), verbatim.
 [[nodiscard]] std::string missing_cwd_error_text(
@@ -514,9 +569,7 @@ TEST_CASE("CLI --session open resumes and appends to an existing redacted sessio
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE(
-    "CLI interactive boot Continue recovers a vanished session cwd",
-    "[cli][startup-tui][issue417]") {
+TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd", "[cli][startup-tui][issue417][issue528]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace storage;
     cch::tests::TempWorkspace home;
@@ -559,49 +612,46 @@ TEST_CASE(
             static_cast<char*>(nullptr));
         ::_exit(127);
     }
+    const ChildReapGuard reap_child{pid};
 
     // The interactive boot shows pi's startup-TUI Continue/Cancel prompt
-    // with the verbatim missing-cwd text before the main TUI starts.
-    std::string output;
-    REQUIRE(cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(
-                pty->master.get(), std::chrono::milliseconds(20)));
-            return output.find("cwd from session file does not exist") !=
-                std::string::npos;
-        },
-        std::chrono::seconds(5)));
-    CHECK(output.find("continue in current cwd") != std::string::npos);
-    CHECK(output.find(original.path().string()) != std::string::npos);
-    CHECK(output.find("Continue") != std::string::npos);
-    CHECK(output.find("Cancel") != std::string::npos);
+    // with the verbatim missing-cwd text before the main TUI starts. The
+    // drain waits for the full prompt screen (title, both paths, and both
+    // actions) before anything asserts on it or Enter targets it (#528).
+    std::string prompt_output;
+    REQUIRE(drain_pty_until_all(pty->master.get(),
+            prompt_output,
+            {"cwd from session file does not exist",
+                    original.path().string(),
+                    "continue in current cwd",
+                    storage.path().string(),
+                    "Continue",
+                    "Cancel"}));
+    CHECK(prompt_output.find("continue in current cwd") != std::string::npos);
+    CHECK(prompt_output.find(original.path().string()) != std::string::npos);
+    CHECK(prompt_output.find("Continue") != std::string::npos);
+    CHECK(prompt_output.find("Cancel") != std::string::npos);
 
-    // Enter picks Continue; the main TUI boots with the resumed session
-    // (its footer shows the stored model), then Ctrl+D exits.
+    // Enter picks Continue only once the whole prompt screen is observable;
+    // the main-TUI boot then settles into its own buffer (footer pwd line
+    // plus the stored model in the stats line that follows it, pi footer.ts
+    // order) before Ctrl+D targets the settled screen (#528).
     REQUIRE(::write(pty->master.get(), "\r", 1) == 1);
-    REQUIRE(cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(
-                pty->master.get(), std::chrono::milliseconds(20)));
-            return output.find("deepseek-v4-flash") != std::string::npos;
-        },
-        std::chrono::seconds(5)));
+    std::string tui_output;
+    REQUIRE(drain_pty_until_all(pty->master.get(), tui_output, {storage.path().string(), "deepseek-v4-flash"}));
     REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
     int status = 0;
     REQUIRE(cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(
-                pty->master.get(), std::chrono::milliseconds(20)));
-            return ::waitpid(pid, &status, WNOHANG) == pid;
-        },
-        std::chrono::seconds(5)));
+            [&] {
+                tui_output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                return ::waitpid(pid, &status, WNOHANG) == pid;
+            },
+            std::chrono::seconds(10)));
     REQUIRE(WIFEXITED(status));
     CHECK(WEXITSTATUS(status) == 0);
 }
 
-TEST_CASE(
-    "CLI --resume opens the startup-TUI picker on a real terminal",
-    "[cli][startup-tui][issue417]") {
+TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal", "[cli][startup-tui][issue417][issue528]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     home.write(".pi/agent/models.json", R"({
@@ -640,31 +690,28 @@ TEST_CASE(
         ::execl(CCH_BINARY, "cpp_harness", "--print", "--resume", static_cast<char*>(nullptr));
         ::_exit(127);
     }
+    const ChildReapGuard reap_child{pid};
 
     // The startup TUI renders the picker on the terminal before any session
-    // machinery (pi selectSession).
-    std::string output;
-    REQUIRE(cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(
-                pty->master.get(), std::chrono::milliseconds(20)));
-            return output.find("Resume Session (Current Folder)") !=
-                std::string::npos;
-        },
-        std::chrono::seconds(5)));
-    CHECK(output.find("deepseek-v4-flash") == std::string::npos);
+    // machinery (pi selectSession). The drain waits for the full picker
+    // state - title plus the rendered seeded-session entry row (its "›"
+    // cursor, SessionSelector.cpp) - before Enter targets it (#528); the
+    // list loads synchronously with the first frame, so the entry cursor is
+    // observable exactly when a selection is selectable.
+    std::string picker_output;
+    REQUIRE(drain_pty_until_all(pty->master.get(), picker_output, {"Resume Session (Current Folder)", "\xe2\x80\xba"}));
+    CHECK(picker_output.find("deepseek-v4-flash") == std::string::npos);
 
     // Enter selects the seeded session; the picker clears, the print run
     // resumes with no prompt (nothing printed, exit 0).
     REQUIRE(::write(pty->master.get(), "\r", 1) == 1);
     int status = 0;
     REQUIRE(cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(
-                pty->master.get(), std::chrono::milliseconds(20)));
-            return ::waitpid(pid, &status, WNOHANG) == pid;
-        },
-        std::chrono::seconds(5)));
+            [&] {
+                picker_output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                return ::waitpid(pid, &status, WNOHANG) == pid;
+            },
+            std::chrono::seconds(10)));
     REQUIRE(WIFEXITED(status));
     CHECK(WEXITSTATUS(status) == 0);
 }
