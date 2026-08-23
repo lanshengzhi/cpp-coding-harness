@@ -708,9 +708,14 @@ TEST_CASE(
     const auto value = find_compaction_entry(paths);
     REQUIRE(value.has_value());
 
-    // No retry: the run completed on the response that crossed the threshold.
-    CHECK(std::holds_alternative<ai::AssistantMessage>(
-        session->snapshot().agent_state.messages.back()));
+    // No retry: the run completed on the response that crossed the threshold,
+    // and the rebuilt context retains that exact answer (a branch read racing
+    // the terminal commitment's persistence hop used to drop it from live
+    // state, issue #526).
+    const auto final_snapshot = session->snapshot();
+    const auto& retained = final_snapshot.agent_state.messages.back();
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(retained));
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(retained).content) == "huge");
     session->close();
 }
 

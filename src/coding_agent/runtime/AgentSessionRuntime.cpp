@@ -1928,6 +1928,15 @@ boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
         co_return false;
     }
 
+    // The triggering turn's terminal commitment is submitted synchronously
+    // but settles through the persistence channel's Runtime hops, so the
+    // branch read below can race the final append and cut the just-finished
+    // assistant answer out of the retained tail (issue #526). Drain the
+    // channel first: event-driven quiescence, not a wall-clock wait.
+    if (persistence_) {
+        co_await persistence_->drain();
+    }
+
     auto branch_entries = session_.store->get_branch();
     std::reverse(branch_entries.begin(), branch_entries.end());
     std::vector<const harness::session::SessionEntry*> branch;

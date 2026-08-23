@@ -21,6 +21,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/support/Error.hpp>
@@ -37,7 +38,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -47,13 +47,6 @@ namespace {
 
 void drain_ready(boost::asio::io_context& io) {
     if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
-    // The credential store persists on its own worker thread (AuthStorage,
-    // ADR 0040 / #454); yield and re-poll so a completion posted from that
-    // thread is processed before the caller's next assertion observes the
-    // screen.
-    std::this_thread::sleep_for(std::chrono::milliseconds{2});
     while (io.poll() != 0) {
     }
 }
@@ -278,17 +271,17 @@ struct InteractiveRun {
         drain_ready(io);
     }
 
+    void wait_for_screen(std::string_view text) {
+        REQUIRE(tests::pump_until(io, [&] { return visible_screen(terminal).find(text) != std::string::npos; }));
+    }
+
     void exit() {
         type("\x04");
         // The credential store persists on its own worker thread (AuthStorage,
-        // ADR 0040 / #454); poll the io_context and yield until the interactive
-        // mode reaches its terminal outcome so a background completion can be
-        // posted back and processed deterministically.
-        for (int attempt = 0; attempt < 2000 && !run_result; ++attempt) {
-            drain_ready(io);
-            std::this_thread::sleep_for(std::chrono::milliseconds{1});
-        }
-        REQUIRE(run_result);
+        // ADR 0040 / #454); pump until the interactive mode reaches its
+        // terminal outcome instead of asserting after a fixed wall-clock
+        // budget. Runtime and worker hops may take longer under parallel load.
+        REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
         CHECK(*run_result);
     }
 };
@@ -344,6 +337,7 @@ TEST_CASE(
     // /login with no reference opens the auth-type picker (pi's generic
     // string-list selector).
     run.type("/login\r");
+    run.wait_for_screen("Select authentication method:");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Select authentication method:") != std::string::npos);
     CHECK(screen.find("Sign in with an account") != std::string::npos);
@@ -351,6 +345,7 @@ TEST_CASE(
 
     // The OAuth branch opens the provider selector with auth-status labels.
     run.type("\r");
+    run.wait_for_screen("Select provider to configure:");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Select provider to configure:") != std::string::npos);
     CHECK(screen.find("OpenAI Codex") != std::string::npos);
@@ -360,6 +355,7 @@ TEST_CASE(
     // Kimi sorts before OpenAI; move to OpenAI Codex and confirm.
     run.type("\x1b[B");
     run.type("\r");
+    run.wait_for_screen("Paste the authorization code");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Login to OpenAI Codex") != std::string::npos);
     CHECK(screen.find("https://auth.openai.example/authorize?client=abc") != std::string::npos);
@@ -372,6 +368,7 @@ TEST_CASE(
     // Submit the manual code; the login completes and the post-login
     // auto-selection picks the provider's frozen default model.
     run.type("dummy-code\r");
+    run.wait_for_screen("Logged in to OpenAI Codex.");
     CHECK(submitted_code->has_value());
     CHECK(*submitted_code == std::optional<std::string>{"dummy-code"});
     screen = visible_screen(run.terminal);
@@ -429,6 +426,7 @@ TEST_CASE(
     // A single (provider, auth-type) match skips both pickers (pi
     // startProviderLogin direct branch).
     run.type("/login kimi-coding\r");
+    run.wait_for_screen("Waiting for authentication...");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Select authentication method") == std::string::npos);
     CHECK(screen.find("Login to Kimi For Coding") != std::string::npos);
@@ -437,6 +435,7 @@ TEST_CASE(
     CHECK(screen.find("Waiting for authentication...") != std::string::npos);
 
     run.type("\r");
+    run.wait_for_screen("Logged in to Kimi For Coding.");
     screen = visible_screen(run.terminal);
     const std::string expected_status =
         "Logged in to Kimi For Coding. Selected kimi-for-coding. Credentials saved to " +
@@ -473,11 +472,13 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login deepseek\r");
+    run.wait_for_screen("Enter API key");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Login to DeepSeek") != std::string::npos);
     CHECK(screen.find("Enter API key") != std::string::npos);
 
     run.type("dummy-deepseek-key\r");
+    run.wait_for_screen("Saved API key for DeepSeek.");
     screen = visible_screen(run.terminal);
     // The C++ frozen default-model table has no deepseek entry: pi's first
     // verbatim selection error follows the success status.
@@ -514,8 +515,7 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login openai-codex\r");
-    REQUIRE(visible_screen(run.terminal).find("Paste the authorization code") !=
-        std::string::npos);
+    run.wait_for_screen("Paste the authorization code");
 
     // Esc/Ctrl+C cancels through the Auth Interaction stop source: the
     // prompt rejects with the stable cancelled kind and no failure UI
@@ -527,7 +527,7 @@ TEST_CASE(
 
     // The editor is restored and still accepts ordinary input.
     run.type("hello after cancel");
-    CHECK(visible_screen(run.terminal).find("hello after cancel") != std::string::npos);
+    run.wait_for_screen("hello after cancel");
 
     // pi: app.exit (Ctrl+D) exits only when the editor is empty; clear it
     // first (app.clear is Ctrl+C in the main editor), then exit.
@@ -557,6 +557,7 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login openai-codex\r");
+    run.wait_for_screen("Error: Failed to login");
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find(
         "Error: Failed to login to OpenAI Codex: OpenAI Codex token exchange failed (400): "
@@ -592,6 +593,7 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login no-such-provider\r");
+    run.wait_for_screen("Select provider to configure:");
     const auto screen = visible_screen(run.terminal);
     // pi falls through to the provider selector with the reference as the
     // initial search; nothing matches.
@@ -637,6 +639,7 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login openai-codex\r");
+    run.wait_for_screen("Choose sign-in method");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Choose sign-in method") != std::string::npos);
     CHECK(screen.find("Work account") != std::string::npos);
@@ -644,7 +647,8 @@ TEST_CASE(
 
     run.type("\x1b[B");
     run.type("\r");
-    REQUIRE(selected_id->has_value());
+    run.wait_for_screen("Logged in to OpenAI Codex.");
+    REQUIRE(tests::pump_until(run.io, [&] { return selected_id->has_value(); }));
     CHECK(*selected_id == std::optional<std::string>{"device"});
 
     run.exit();
@@ -673,12 +677,14 @@ TEST_CASE(
     // One provider with both auth types lands on the auth-type picker for
     // that provider (pi's same-id branch).
     run.type("/login kimi-coding\r");
+    run.wait_for_screen("Select authentication method for Kimi For Coding:");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Select authentication method for Kimi For Coding:") != std::string::npos);
 
     // The api-key method has no login hook: pi shows the ambient info dialog.
     run.type("\x1b[B");
     run.type("\r");
+    run.wait_for_screen("Kimi For Coding setup");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Kimi For Coding setup") != std::string::npos);
     CHECK(screen.find("Kimi API key is configured outside cch.") != std::string::npos);
@@ -688,7 +694,7 @@ TEST_CASE(
     // Esc/Ctrl+C closes the ambient dialog back to the editor.
     run.type("\x03");
     run.type("back to the editor");
-    CHECK(visible_screen(run.terminal).find("back to the editor") != std::string::npos);
+    run.wait_for_screen("back to the editor");
 
     // pi: app.exit (Ctrl+D) exits only when the editor is empty; clear it
     // first (app.clear is Ctrl+C in the main editor), then exit.
@@ -724,12 +730,14 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/logout\r");
+    run.wait_for_screen("Select provider to logout:");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Select provider to logout:") != std::string::npos);
     CHECK(screen.find("OpenAI Codex") != std::string::npos);
     CHECK(screen.find("configured") != std::string::npos);
 
     run.type("\r");
+    run.wait_for_screen("Logged out of OpenAI Codex");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Logged out of OpenAI Codex") != std::string::npos);
     // The stored credential was removed through the store.
@@ -738,6 +746,7 @@ TEST_CASE(
 
     // A second /logout reports the empty state verbatim (pi).
     run.type("/logout\r");
+    run.wait_for_screen("No stored credentials to remove.");
     screen = visible_screen(run.terminal);
     CHECK(screen.find(
         "No stored credentials to remove. /logout only removes credentials saved by "
@@ -787,6 +796,7 @@ TEST_CASE(
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("hello\r");
+    run.wait_for_screen("Authentication failed for \"openai-codex\"");
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find(
         "Authentication failed for \"openai-codex\". Credentials may have expired or "

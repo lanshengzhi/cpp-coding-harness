@@ -149,13 +149,15 @@
       "name": "vcpkg",
       "configurePreset": "vcpkg",
       "configuration": "Debug",
-      "output": { "outputOnFailure": true }
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 4, "noTests": "error" }
     },
     {
       "name": "vcpkg-release",
       "configurePreset": "vcpkg-release",
       "configuration": "Release",
-      "output": { "outputOnFailure": true }
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 4, "noTests": "error" }
     },
     {
       "name": "clang-conformance",

@@ -265,8 +265,13 @@ TEST_CASE(
     "interaction and timers progress while session persistence is slow",
     "[coding_agent][runtime][commitment][issue464]") {
     PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    // Hold the model response on the ReleaseGate so the timer observation
+    // below is event-driven: without the gate, heavy parallel load can
+    // starve this thread past the persistence delay, letting the prompt
+    // complete before the 50ms timer is serviced and inverting the ordering
+    // the test exists to pin (issue #526).
+    auto provider = std::make_shared<tests::GatedChatProvider>();
+    auto created = coding_agent::create_agent_session(fixture.options(provider));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
@@ -276,6 +281,7 @@ TEST_CASE(
     boost::asio::io_context io;
     PromptResult prompt_result;
     spawn_prompt(io, session, "slow persistence", prompt_result);
+    drain_ready(io);
 
     bool timer_fired = false;
     bool timer_beat_prompt = false;
@@ -291,15 +297,18 @@ TEST_CASE(
         },
         boost::asio::detached);
 
+    // The loop services timers while the run is held open and the session's
+    // slow persistence chain (the delayed user-entry append) is in flight.
+    REQUIRE(pump_until(io, [&] { return timer_fired; }));
+    CHECK(timer_beat_prompt);
+
+    provider->release();
     REQUIRE(pump_until(io, [&] { return prompt_result.has_value(); }));
     harness::session::testing::clear_append_delay_for_test(fixture.session_path);
 
     CHECK(prompt_result->has_value());
     CHECK(timer_fired);
-    CHECK(timer_beat_prompt);
-    CHECK(
-        fixture.persisted_texts() ==
-        std::vector<std::string>{"slow persistence", "fake: slow persistence"});
+    CHECK(fixture.persisted_texts() == std::vector<std::string>{"slow persistence", "turn 1"});
     session.close();
 }
 

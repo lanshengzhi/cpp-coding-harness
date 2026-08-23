@@ -427,8 +427,13 @@ TEST_CASE(
     "Session Close drains admitted Session Event Commitments under slow persistence",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    // Hold the model response on the ReleaseGate so Close observably arrives
+    // while admitted work is in flight: without the gate, heavy parallel load
+    // can starve this thread past the persistence delay and the whole run
+    // settles before close(), collapsing the deferral assertions into a
+    // wall-clock race (issue #526).
+    auto provider = std::make_shared<tests::GatedChatProvider>();
+    auto created = coding_agent::create_agent_session(fixture.options(provider));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
@@ -440,13 +445,13 @@ TEST_CASE(
     spawn_prompt(io, session, "slow close", prompt_result);
     drain_ready(io);
 
-    // The run completed loop-side and now awaits the delayed persistence
-    // channel; Close defers finalization until every admitted Session Event
+    // The admitted run and its delayed persistence chain are both in flight;
+    // Close defers finalization until every admitted Session Event
     // Commitment reaches its terminal outcome.
     session.close();
     CHECK(session.is_busy());
-    CHECK_FALSE(prompt_result.has_value());
 
+    provider->release();
     REQUIRE(pump_until(io, [&] { return prompt_result.has_value(); }));
     harness::session::testing::clear_append_delay_for_test(
         fixture.session_path);
@@ -455,9 +460,7 @@ TEST_CASE(
     CHECK_FALSE(session.is_busy());
 
     // Every admitted event persisted in order before the prompt settled.
-    CHECK(
-        fixture.persisted_texts() ==
-        std::vector<std::string>{"slow close", "fake: slow close"});
+    CHECK(fixture.persisted_texts() == std::vector<std::string>{"slow close", "turn 1"});
 }
 
 TEST_CASE(
@@ -570,13 +573,19 @@ TEST_CASE(
     "Session Close with a latched persistence failure completes and keeps the session file consistent",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    // Hold the model response on the ReleaseGate so Close observably arrives
+    // while admitted work is in flight: without the gate, heavy parallel load
+    // can starve this thread past the persistence delay and the run settles
+    // before close(), making the is_busy assertion a wall-clock race
+    // (issue #526).
+    auto provider = std::make_shared<tests::GatedChatProvider>();
+    auto created = coding_agent::create_agent_session(fixture.options(provider));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
-    // The user message lands; the assistant append fails slowly, so Close
-    // arrives while the failing persistence channel is still in flight.
+    // The user message lands; the assistant append fails slowly, so the
+    // failing persistence channel is still ahead of the run when Close
+    // requests quiescence.
     harness::session::testing::fail_nth_append_for_test(fixture.session_path, 2);
     harness::session::testing::delay_appends_for_test(
         fixture.session_path, std::chrono::milliseconds{300});
@@ -589,6 +598,7 @@ TEST_CASE(
     session.close();
     CHECK(session.is_busy());
 
+    provider->release();
     REQUIRE(pump_until(io, [&] { return prompt_result.has_value(); }));
     harness::session::testing::clear_append_delay_for_test(
         fixture.session_path);
