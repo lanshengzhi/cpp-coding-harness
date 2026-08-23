@@ -7,7 +7,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/agent/AgentCoreEvidenceTest.cpp
         tests/agent/AgentTest.cpp
-        tests/agent/AsyncAgentLoopTest.cpp
+        tests/agent/AgentBehaviorTest.cpp
         tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp
 )

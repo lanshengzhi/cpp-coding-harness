@@ -1,7 +1,6 @@
 #include <cch/agent/Agent.hpp>
-#include "ai/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
-#include "agent/AgentLoop.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
@@ -43,35 +42,45 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     return std::move(*result);
 }
 
-struct LoopRun {
-    support::Expected<agent::AsyncAgentRunResult> result;
+struct AgentRun {
+    support::ExpectedVoid result;
     std::vector<agent::AgentLifecycleEvent> events;
+    agent::AgentState state;
 };
 
-LoopRun run_loop(
-    agent::AsyncAgentLoop& loop,
-    std::string prompt,
-    std::stop_token stop_token = {}) {
+AgentRun run_agent(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
-    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::ExpectedVoid> result;
     std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.continue_with(
-                {},
-                std::move(prompt),
-                [&](const agent::AgentLifecycleEvent& event) {
-                    events.push_back(event);
-                    return support::ExpectedVoid{};
-                },
-                stop_token);
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     REQUIRE(result.has_value());
-    return LoopRun{std::move(*result), std::move(events)};
+    return AgentRun{
+            .result = std::move(*result),
+            .events = std::move(events),
+            .state = subject.state(),
+    };
+}
+
+[[nodiscard]] ai::AssistantStopReason final_stop_reason(const std::vector<agent::AgentLifecycleEvent>& events) {
+    for (auto it = events.rbegin(); it != events.rend(); ++it) {
+        if (const auto* turn_end = std::get_if<agent::TurnEndEvent>(&*it)) {
+            return std::get<ai::AssistantMessage>(turn_end->message).stop_reason;
+        }
+    }
+    return ai::AssistantStopReason::Stop;
 }
 
 template <typename T>
@@ -136,15 +145,29 @@ TEST_CASE(
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
     options.session_id = "session-2";
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    std::stop_source stop_source;
-    auto run = run_loop(loop, "hi", stop_source.get_token());
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> result;
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt("hi"));
+                co_return;
+            },
+            boost::asio::detached);
+    while (runtime->calls.empty()) {
+        REQUIRE(io.run_one() == 1);
+    }
+    CHECK_FALSE(result.has_value());
+    subject.abort();
+    io.run();
 
-    REQUIRE(run.result);
+    REQUIRE(result.has_value());
+    REQUIRE(*result);
     REQUIRE(runtime->calls.size() == 1);
-    CHECK(runtime->calls[0].options.stop_token == stop_source.get_token());
-    CHECK_FALSE(runtime->calls[0].options.stop_token.stop_requested());
+    CHECK(runtime->calls[0].options.stop_token.stop_possible());
+    CHECK(runtime->calls[0].options.stop_token.stop_requested());
 }
 
 TEST_CASE(
@@ -254,18 +277,17 @@ void expect_terminal_matrix_row(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    auto run = run_loop(loop, "hi");
+    auto run = run_agent(subject, "hi");
 
     // Exactly one terminal event plus an agreeing final AssistantMessage, with
     // the category flowing through the single support::Expected error value (the
     // #326 six-category channel; no second exception hierarchy).
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->context.messages.size() == 2);
-    const auto* final =
-        std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Error);
+    REQUIRE(run.state.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&run.state.messages.back());
     REQUIRE(final != nullptr);
     CHECK(final->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(final->error_message.has_value());
@@ -301,14 +323,14 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    auto run = run_loop(loop, "hi");
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 1);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    REQUIRE(run.result->context.messages.size() == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
+    REQUIRE(run.state.messages.size() == 2);
     REQUIRE(runtime->calls.size() == 1);
     REQUIRE(runtime->calls[0].context.messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(runtime->calls[0].context.messages[0]));
@@ -328,17 +350,17 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    auto run = run_loop(loop, "hi");
+    auto run = run_agent(subject, "hi");
 
     // The run completes through the single Expected value channel with the
     // agreeing terminal AssistantMessage; exactly one error terminal event was
     // forwarded and one assistant lifecycle was presented.
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->context.messages.size() == 2);
-    const auto* final = std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Error);
+    REQUIRE(run.state.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&run.state.messages.back());
     REQUIRE(final != nullptr);
     CHECK(final->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(final->error_message.has_value());
@@ -374,23 +396,43 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    std::stop_source stop_source;
-    stop_source.request_stop();
-    auto run = run_loop(loop, "cancel me", stop_source.get_token());
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> result;
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt("cancel me"));
+                co_return;
+            },
+            boost::asio::detached);
+    while (runtime->calls.empty()) {
+        REQUIRE(io.run_one() == 1);
+    }
+    subject.abort();
+    io.run();
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
-    REQUIRE(run.result->context.messages.size() == 2);
-    const auto* final = std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    REQUIRE(result.has_value());
+    REQUIRE(*result);
+    CHECK(final_stop_reason(events) == ai::AssistantStopReason::Aborted);
+    const auto state = subject.state();
+    REQUIRE(state.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&state.messages.back());
     REQUIRE(final != nullptr);
     CHECK(final->stop_reason == ai::AssistantStopReason::Aborted);
     REQUIRE(final->error_message.has_value());
     CHECK(*final->error_message == "Request was aborted");
     CHECK(runtime->terminal_events == 1);
-    CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
-    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::TurnEndEvent>(events) == 1);
+    CHECK(count_events<agent::AgentEndEvent>(events) == 1);
 }
 
 TEST_CASE(
@@ -475,11 +517,17 @@ void expect_creation_clamp(
     options.max_turns = 3;
     options.model = model;
     options.thinking_level = std::string{requested};
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(runtime->factory(),
+            agent::ToolRegistry{},
+            std::move(options),
+            agent::AgentInitialState{
+                    .messages = {},
+                    .thinking_level = std::string{requested},
+            });
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->state.thinking_level == expected_level);
+    CHECK(run.result.has_value());
+    CHECK(run.state.thinking_level == expected_level);
     REQUIRE(runtime->calls.size() == 1);
     CHECK(runtime->calls[0].options.reasoning == wire_reasoning(expected_level));
 }
@@ -576,15 +624,15 @@ TEST_CASE(
     // DEFAULT_THINKING_LEVEL ("medium") which clamps to kDefaultModel's only
     // supported level ("off") — a fresh Agent's first turn carries no
     // reasoning, matching pi's `if (!model) thinkingLevel = "off"`.
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, {});
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, {});
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result.has_value());
+    CHECK(run.result.has_value());
     REQUIRE(runtime->calls.size() == 1);
     CHECK(runtime->calls[0].model.id == "unknown");
     CHECK(runtime->calls[0].model.provider == "unknown");
-    CHECK(run.result->state.model.id == "unknown");
-    CHECK(run.result->state.thinking_level == "off");
+    CHECK(run.state.model.id == "unknown");
+    CHECK(run.state.thinking_level == "off");
     CHECK(runtime->calls[0].options.reasoning == std::nullopt);
 }
 

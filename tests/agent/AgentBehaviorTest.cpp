@@ -1,6 +1,6 @@
+#include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/Error.hpp>
-#include "agent/AgentLoop.hpp"
 #include "ai/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
@@ -44,21 +44,17 @@ class FakeStreamingClient final : public std::enable_shared_from_this<FakeStream
 public:
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
-        return tests::adapt_stream_simple(
-            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
-                   ai::AssistantEventSink sink) {
-                return self->stream_simple(
-                    std::move(model), std::move(context), std::move(options), std::move(sink));
-            });
+        return tests::adapt_stream_simple([self](ai::Model model,
+                                                  ai::AiContext context,
+                                                  ai::SimpleStreamOptions options,
+                                                  ai::AssistantEventSink sink) {
+            return self->stream_simple(std::move(model), std::move(context), std::move(options), std::move(sink));
+        });
     }
 
     boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) {
-        requests.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model), std::move(context), std::move(options)});
+            ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options, ai::AssistantEventSink sink) {
+        requests.push_back(tests::RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
         if (failure) {
             co_return std::unexpected(*failure);
         }
@@ -94,36 +90,30 @@ class CancellationAwarePolicyClient final : public std::enable_shared_from_this<
 public:
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
-        return tests::adapt_stream_simple(
-            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
-                   ai::AssistantEventSink sink) {
-                return self->stream_simple(
-                    std::move(model), std::move(context), std::move(options), std::move(sink));
-            });
+        return tests::adapt_stream_simple([self](ai::Model model,
+                                                  ai::AiContext context,
+                                                  ai::SimpleStreamOptions options,
+                                                  ai::AssistantEventSink sink) {
+            return self->stream_simple(std::move(model), std::move(context), std::move(options), std::move(sink));
+        });
     }
 
     boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) {
-        requests.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model), std::move(context), std::move(options)});
+            ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options, ai::AssistantEventSink sink) {
+        requests.push_back(tests::RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
         if (requests.back().options.stop_token.stop_requested()) {
             auto terminal = ai::assistant_text_message("");
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "prompt aborted by policy";
             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
-                .reason = ai::AssistantStopReason::Aborted,
-                .error = terminal,
+                    .reason = ai::AssistantStopReason::Aborted,
+                    .error = terminal,
             }));
             co_return terminal;
         }
 
         if (responses.empty()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Provider,
-                "no scripted policy response"));
+            co_return std::unexpected(support::make_error(support::ErrorCode::Provider, "no scripted policy response"));
         }
         auto response = responses.front();
         responses.pop_front();
@@ -131,25 +121,25 @@ public:
         for (std::size_t index = 0; index < response.content.size(); ++index) {
             if (const auto* call = std::get_if<ai::ToolCallContent>(&response.content[index])) {
                 CCH_TRY_VOID(sink(ai::ToolCallStartEvent{
-                    .content_index = index,
-                    .partial = response,
+                        .content_index = index,
+                        .partial = response,
                 }));
                 CCH_TRY_VOID(sink(ai::ToolCallDeltaEvent{
-                    .content_index = index,
-                    .delta = call->raw_arguments,
-                    .partial = response,
+                        .content_index = index,
+                        .delta = call->raw_arguments,
+                        .partial = response,
                 }));
                 CCH_TRY_VOID(sink(ai::ToolCallEndEvent{
-                    .content_index = index,
-                    .tool_call = *call,
-                    .partial = response,
+                        .content_index = index,
+                        .tool_call = *call,
+                        .partial = response,
                 }));
             }
         }
 
         CCH_TRY_VOID(sink(ai::AssistantDoneEvent{
-            .reason = response.stop_reason,
-            .message = response,
+                .reason = response.stop_reason,
+                .message = response,
         }));
         co_return response;
     }
@@ -160,26 +150,21 @@ public:
 
 class TerminalOutcomeClient final : public std::enable_shared_from_this<TerminalOutcomeClient> {
 public:
-    explicit TerminalOutcomeClient(ai::AssistantMessage terminal)
-        : terminal_(std::move(terminal)) {}
+    explicit TerminalOutcomeClient(ai::AssistantMessage terminal) : terminal_(std::move(terminal)) {}
 
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
-        return tests::adapt_stream_simple(
-            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
-                   ai::AssistantEventSink sink) {
-                return self->stream_simple(
-                    std::move(model), std::move(context), std::move(options), std::move(sink));
-            });
+        return tests::adapt_stream_simple([self](ai::Model model,
+                                                  ai::AiContext context,
+                                                  ai::SimpleStreamOptions options,
+                                                  ai::AssistantEventSink sink) {
+            return self->stream_simple(std::move(model), std::move(context), std::move(options), std::move(sink));
+        });
     }
 
     boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) {
-        requests.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model), std::move(context), std::move(options)});
+            ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options, ai::AssistantEventSink sink) {
+        requests.push_back(tests::RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
         ++error_events;
         CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
@@ -195,26 +180,21 @@ public:
 /// assistant lifecycle even if a provider repeats its start event.
 class DuplicateStartClient final : public std::enable_shared_from_this<DuplicateStartClient> {
 public:
-    explicit DuplicateStartClient(ai::AssistantMessage terminal)
-        : terminal_(std::move(terminal)) {}
+    explicit DuplicateStartClient(ai::AssistantMessage terminal) : terminal_(std::move(terminal)) {}
 
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
-        return tests::adapt_stream_simple(
-            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
-                   ai::AssistantEventSink sink) {
-                return self->stream_simple(
-                    std::move(model), std::move(context), std::move(options), std::move(sink));
-            });
+        return tests::adapt_stream_simple([self](ai::Model model,
+                                                  ai::AiContext context,
+                                                  ai::SimpleStreamOptions options,
+                                                  ai::AssistantEventSink sink) {
+            return self->stream_simple(std::move(model), std::move(context), std::move(options), std::move(sink));
+        });
     }
 
     boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) {
-        requests.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model), std::move(context), std::move(options)});
+            ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options, ai::AssistantEventSink sink) {
+        requests.push_back(tests::RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
         CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
@@ -230,29 +210,24 @@ public:
 /// AssistantMessage through the value alternative.
 class TerminalBeforeStartClient final : public std::enable_shared_from_this<TerminalBeforeStartClient> {
 public:
-    explicit TerminalBeforeStartClient(ai::AssistantMessage terminal)
-        : terminal_(std::move(terminal)) {}
+    explicit TerminalBeforeStartClient(ai::AssistantMessage terminal) : terminal_(std::move(terminal)) {}
 
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
-        return tests::adapt_stream_simple(
-            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
-                   ai::AssistantEventSink sink) {
-                return self->stream_simple(
-                    std::move(model), std::move(context), std::move(options), std::move(sink));
-            });
+        return tests::adapt_stream_simple([self](ai::Model model,
+                                                  ai::AiContext context,
+                                                  ai::SimpleStreamOptions options,
+                                                  ai::AssistantEventSink sink) {
+            return self->stream_simple(std::move(model), std::move(context), std::move(options), std::move(sink));
+        });
     }
 
     boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) {
-        requests.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model), std::move(context), std::move(options)});
+            ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options, ai::AssistantEventSink sink) {
+        requests.push_back(tests::RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
         ++terminal_events;
         if (terminal_.stop_reason == ai::AssistantStopReason::Error ||
-            terminal_.stop_reason == ai::AssistantStopReason::Aborted) {
+                terminal_.stop_reason == ai::AssistantStopReason::Aborted) {
             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
         } else {
             CCH_TRY_VOID(sink(ai::AssistantDoneEvent{terminal_.stop_reason, terminal_}));
@@ -264,7 +239,6 @@ public:
     int terminal_events{0};
     std::vector<tests::RecordedStreamSimpleCall> requests;
 };
-
 
 struct FakeToolState {
     std::vector<agent::ToolInvocation> invocations;
@@ -278,18 +252,17 @@ struct FakeToolHandle {
 [[nodiscard]] FakeToolHandle make_fake_tool(ai::Tool definition) {
     auto state = std::make_shared<FakeToolState>();
     return FakeToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::Exclusive,
-            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                state->invocations.push_back(invocation);
-                co_return agent::AsyncToolExecutionResult{
-                    .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
-                    .details = std::nullopt,
-                    .is_error = false};
-            }),
-        state,
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::Exclusive,
+                    [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        state->invocations.push_back(invocation);
+                        co_return agent::AsyncToolExecutionResult{
+                                .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
+                                .details = std::nullopt,
+                                .is_error = false};
+                    }),
+            state,
     };
 }
 
@@ -308,77 +281,83 @@ struct CancellableFakeToolHandle {
 [[nodiscard]] CancellableFakeToolHandle make_cancellable_fake_tool(ai::Tool definition) {
     auto state = std::make_shared<CancellableFakeToolState>();
     return CancellableFakeToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::Exclusive,
-            [state](agent::ToolInvocation invocation, std::stop_token stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                state->invocations.push_back(std::move(invocation));
-                state->observed_stop_token = stop_token;
-                boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
-                timer.expires_at(std::chrono::steady_clock::time_point::max());
-                // The stop callback runs on the requesting thread, but asio
-                // timers are single-threaded: post the cancel to the timer's
-                // executor so it can only land after async_wait is initiated
-                // (a direct cancel here races the wait registration — TSan,
-                // issue #473).
-                const auto timer_executor = timer.get_executor();
-                std::stop_callback cancellation{stop_token, [timer_executor, &timer] {
-                    boost::asio::post(timer_executor, [&timer] { (void)timer.cancel(); });
-                }};
-                state->suspended.store(true, std::memory_order_release);
-                state->suspended_signal.release();
-                boost::system::error_code error;
-                co_await timer.async_wait(boost::asio::redirect_error(
-                    boost::asio::use_awaitable,
-                    error));
-                if (stop_token.stop_requested()) {
-                    co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Cancelled,
-                        "Operation aborted"));
-                }
-                co_return agent::AsyncToolExecutionResult{};
-            }),
-        state,
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::Exclusive,
+                    [state](agent::ToolInvocation invocation, std::stop_token stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        state->invocations.push_back(std::move(invocation));
+                        state->observed_stop_token = stop_token;
+                        boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
+                        timer.expires_at(std::chrono::steady_clock::time_point::max());
+                        // The stop callback runs on the requesting thread, but asio
+                        // timers are single-threaded: post the cancel to the timer's
+                        // executor so it can only land after async_wait is initiated
+                        // (a direct cancel here races the wait registration — TSan,
+                        // issue #473).
+                        const auto timer_executor = timer.get_executor();
+                        std::stop_callback cancellation{stop_token, [timer_executor, &timer] {
+                                                            boost::asio::post(
+                                                                    timer_executor, [&timer] { (void)timer.cancel(); });
+                                                        }};
+                        state->suspended.store(true, std::memory_order_release);
+                        state->suspended_signal.release();
+                        boost::system::error_code error;
+                        co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        if (stop_token.stop_requested()) {
+                            co_return std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "Operation aborted"));
+                        }
+                        co_return agent::AsyncToolExecutionResult{};
+                    }),
+            state,
     };
 }
 
-struct RunResult {
-    support::Expected<agent::AsyncAgentRunResult> result;
+struct AgentRun {
+    support::ExpectedVoid result;
     std::vector<agent::AgentLifecycleEvent> events;
+    agent::AgentState state;
 };
 
-RunResult run_loop(
-    agent::AsyncAgentLoop& loop,
-    std::string prompt,
-    std::vector<ai::MessageVariant> history = {},
-    std::stop_token stop_token = {}) {
+AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventCommitter commitment = {}) {
     boost::asio::io_context io;
-    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::ExpectedVoid> result;
     std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
 
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.continue_with(
-                std::move(history),
-                std::move(prompt),
-                [&](const agent::AgentLifecycleEvent& event) {
-                    events.push_back(event);
-                    return support::ExpectedVoid{};
-                },
-                stop_token);
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(
+                        subject.prompt(std::move(prompt), std::move(commitment)));
+                co_return;
+            },
+            boost::asio::detached);
 
     io.run();
     REQUIRE(result.has_value());
-    return RunResult{std::move(*result), std::move(events)};
+    return AgentRun{
+            .result = std::move(*result),
+            .events = std::move(events),
+            .state = subject.state(),
+    };
 }
 
-template <typename T>
-std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) {
+[[nodiscard]] ai::AssistantStopReason final_stop_reason(const std::vector<agent::AgentLifecycleEvent>& events) {
+    for (auto it = events.rbegin(); it != events.rend(); ++it) {
+        if (const auto* turn_end = std::get_if<agent::TurnEndEvent>(&*it)) {
+            return std::get<ai::AssistantMessage>(turn_end->message).stop_reason;
+        }
+    }
+    return ai::AssistantStopReason::Stop;
+}
+
+template <typename T> std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) {
     std::size_t count = 0;
     for (const auto& event : events) {
         if (std::holds_alternative<T>(event)) {
@@ -413,10 +392,10 @@ TEST_CASE("async tool registry owns tools and returns deterministic definitions"
     static_assert(std::is_move_constructible_v<agent::ToolRegistry>);
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(
-        ai::Tool{"zed", "Zed tool", test::permissive_object_tool_argument_contract()}).tool));
-    REQUIRE(registry.add(make_fake_tool(
-        ai::Tool{"alpha", "Alpha tool", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"zed", "Zed tool", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"alpha", "Alpha tool", test::permissive_object_tool_argument_contract()}).tool));
 
     CHECK(registry.find("zed") != nullptr);
     CHECK(registry.find("alpha") != nullptr);
@@ -435,14 +414,14 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "hi");
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 1);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    REQUIRE(run.result->context.messages.size() == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
+    REQUIRE(run.state.messages.size() == 2);
     CHECK(count_events<agent::AgentStartEvent>(run.events) == 1);
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
@@ -452,9 +431,7 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "async agent loop seeds the session system prompt into every request context",
-    "[agent][async][issue414]") {
+TEST_CASE("async agent loop seeds the session system prompt into every request context", "[agent][async][issue414]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
     client->responses.push_back(ai::assistant_text_message("second"));
@@ -464,32 +441,29 @@ TEST_CASE(
     options.model = tests::make_model("gpt-test");
     // The session System Prompt (pi `AgentState.systemPrompt`): seeded into
     // every per-run request context exactly like pi's `createContextSnapshot`.
-    options.system_prompt =
-        "You are an expert coding assistant operating inside cch, a coding "
-        "agent harness.\n\nCurrent working directory: /workspace";
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    options.system_prompt = "You are an expert coding assistant operating inside cch, a coding "
+                            "agent harness.\n\nCurrent working directory: /workspace";
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "hi");
-    REQUIRE(run.result);
+    auto run = run_agent(subject, "hi");
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].context.system_prompt.has_value());
-    const std::string expected_prompt =
-        "You are an expert coding assistant operating inside cch, a coding "
-        "agent harness.\n\nCurrent working directory: /workspace";
+    const std::string expected_prompt = "You are an expert coding assistant operating inside cch, a coding "
+                                        "agent harness.\n\nCurrent working directory: /workspace";
     CHECK(*client->requests[0].context.system_prompt == expected_prompt);
-    CHECK(run.result->state.system_prompt == expected_prompt);
+    CHECK(run.state.system_prompt == expected_prompt);
 
     // A second run re-seeds the same prompt from the loop options.
-    auto second = run_loop(loop, "again");
-    REQUIRE(second.result);
+    auto second = run_agent(subject, "again");
+    CHECK(second.result);
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].context.system_prompt.has_value());
     CHECK(*client->requests[1].context.system_prompt == expected_prompt);
 }
 
-TEST_CASE(
-    "async agent loop synthesizes the assistant start for a done terminal before any start",
-    "[agent][async][issue15]") {
+TEST_CASE("async agent loop synthesizes the assistant start for a done terminal before any start",
+        "[agent][async][issue15]") {
     auto terminal = ai::assistant_text_message("host reply without a streamed start");
     terminal.api = "host-api";
     terminal.provider = "host-provider";
@@ -500,14 +474,14 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hello");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hello");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    CHECK(run.result->turns == 1);
-    REQUIRE(run.result->context.messages.size() == 2);
-    const auto* final = std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
+    REQUIRE(run.state.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&run.state.messages.back());
     REQUIRE(final != nullptr);
     CHECK(ai::text_from_assistant_content(final->content) == "host reply without a streamed start");
 
@@ -523,8 +497,7 @@ TEST_CASE(
     const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
     REQUIRE(assistant_start != nullptr);
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
-    CHECK(std::get<ai::AssistantMessage>(assistant_start->message).stop_reason ==
-          ai::AssistantStopReason::Stop);
+    CHECK(std::get<ai::AssistantMessage>(assistant_start->message).stop_reason == ai::AssistantStopReason::Stop);
     CHECK(std::holds_alternative<agent::MessageEndEvent>(run.events[index++]));
     const auto* turn_end = std::get_if<agent::TurnEndEvent>(&run.events[index++]);
     REQUIRE(turn_end != nullptr);
@@ -532,9 +505,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<agent::AgentEndEvent>(run.events[index++]));
 }
 
-TEST_CASE(
-    "async agent loop does not synthesize a duplicate after a streamed assistant start",
-    "[agent][async][issue15]") {
+TEST_CASE("async agent loop does not synthesize a duplicate after a streamed assistant start",
+        "[agent][async][issue15]") {
     ai::AssistantMessage terminal;
     terminal.api = "host-api";
     terminal.provider = "host-provider";
@@ -547,11 +519,11 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hello");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hello");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Error);
 
     std::size_t assistant_starts = 0;
     std::size_t assistant_ends = 0;
@@ -571,9 +543,7 @@ TEST_CASE(
     CHECK(assistant_ends == 1);
 }
 
-TEST_CASE(
-    "async agent loop suppresses duplicate assistant starts from a host provider",
-    "[agent][async][issue15]") {
+TEST_CASE("async agent loop suppresses duplicate assistant starts from a host provider", "[agent][async][issue15]") {
     ai::AssistantMessage terminal;
     terminal.api = "host-api";
     terminal.provider = "host-provider";
@@ -586,22 +556,22 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hello");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hello");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Error);
     CHECK(client->requests.size() == 1);
 
     std::size_t assistant_starts = 0;
     std::size_t assistant_ends = 0;
     for (const auto& event : run.events) {
         if (const auto* start = std::get_if<agent::MessageStartEvent>(&event);
-            start && std::holds_alternative<ai::AssistantMessage>(start->message)) {
+                start && std::holds_alternative<ai::AssistantMessage>(start->message)) {
             ++assistant_starts;
         }
         if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
-            end && std::holds_alternative<ai::AssistantMessage>(end->message)) {
+                end && std::holds_alternative<ai::AssistantMessage>(end->message)) {
             ++assistant_ends;
         }
     }
@@ -616,12 +586,12 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "hi");
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
-    REQUIRE(run.result->context.messages.size() == 2);
+    CHECK(run.result);
+    REQUIRE(run.state.messages.size() == 2);
 
     // Exact semantic order: agent_start, turn_start, user lifecycle, assistant lifecycle, turn_end, agent_end.
     std::size_t index = 0;
@@ -646,12 +616,14 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     REQUIRE(assistant_update);
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_update->message));
     CHECK(std::holds_alternative<ai::TextDeltaEvent>(assistant_update->assistant_event));
-    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(assistant_update->message).content) == "hello user");
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(assistant_update->message).content) ==
+            "hello user");
 
     const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&run.events[index++]);
     REQUIRE(assistant_end);
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
-    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(assistant_end->message).content) == "hello user");
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(assistant_end->message).content) ==
+            "hello user");
 
     const auto* turn_end = std::get_if<agent::TurnEndEvent>(&run.events[index++]);
     REQUIRE(turn_end);
@@ -665,12 +637,11 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     REQUIRE(std::holds_alternative<ai::UserMessage>(agent_end->messages[0]));
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(agent_end->messages[0])) == "hi");
-    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(agent_end->messages[1]).content) == "hello user");
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(agent_end->messages[1]).content) ==
+            "hello user");
 
     CHECK(index == run.events.size());
 }
-
-
 
 TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle events", "[agent][async][u5]") {
     auto client = std::make_shared<FakeStreamingClient>();
@@ -683,25 +654,27 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
 
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_fake_tool(ai::Tool{
-        "read_file",
-        "Read a workspace file",
-        test::path_tool_argument_contract(),
-    }).tool));
+                                                "read_file",
+                                                "Read a workspace file",
+                                                test::path_tool_argument_contract(),
+                                        })
+                    .tool));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "read");
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) >= 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
-    CHECK(run.result->state.model.id == "gpt-test");
-    CHECK(run.result->state.pending_tool_call_ids.empty());
-    CHECK(run.result->state.active_tool_names.empty());
-    CHECK(run.result->state.messages.size() == run.result->context.messages.size());
+    CHECK(run.state.model.id == "gpt-test");
+    CHECK(run.state.pending_tool_call_ids.empty());
+    REQUIRE(run.state.active_tool_names.size() == 1);
+    CHECK(run.state.active_tool_names[0] == "read_file");
+    CHECK(run.state.messages.size() == client->requests.back().context.messages.size() + 1);
 }
 
 TEST_CASE("async agent loop executes tool calls and continues with tool result context", "[agent][async][u5][ae2]") {
@@ -710,9 +683,9 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     client->responses.push_back(ai::assistant_text_message("done"));
 
     auto tool = make_fake_tool(ai::Tool{
-        "read_file",
-        "Read a workspace file",
-        test::path_tool_argument_contract(),
+            "read_file",
+            "Read a workspace file",
+            test::path_tool_argument_contract(),
     });
     auto* tool_ptr = tool.state.get();
     agent::ToolRegistry registry;
@@ -720,16 +693,17 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "read");
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(tool_ptr->invocations.size() == 1);
     CHECK(tool_ptr->invocations[0].call_id == "call-1");
     CHECK(tool_ptr->invocations[0].name == "read_file");
-    CHECK(tool_ptr->invocations[0].arguments.get<support::JsonValue::object_t>().at("path").get_string() == "README.md");
+    CHECK(tool_ptr->invocations[0].arguments.get<support::JsonValue::object_t>().at("path").get_string() ==
+            "README.md");
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].context.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
@@ -738,8 +712,9 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
-    CHECK(run.result->state.pending_tool_call_ids.empty());
-    CHECK(run.result->state.active_tool_names.empty());
+    CHECK(run.state.pending_tool_call_ids.empty());
+    REQUIRE(run.state.active_tool_names.size() == 1);
+    CHECK(run.state.active_tool_names[0] == "read_file");
 }
 
 TEST_CASE("async agent loop turns malformed tool arguments into error tool results", "[agent][async][u5]") {
@@ -747,15 +722,16 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     client->responses.push_back(tool_call_response("not-json"));
     client->responses.push_back(ai::assistant_text_message("saw error"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "read");
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
     const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
@@ -772,16 +748,17 @@ TEST_CASE("async agent loop default options impose no turn cap", "[agent][async]
     }
     client->responses.push_back(ai::assistant_text_message("done"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "read");
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 10);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 10);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
@@ -789,13 +766,14 @@ TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][as
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentOptions options;
     options.max_turns = 1;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    auto run = run_loop(loop, "read");
+    auto run = run_agent(subject, "read");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Validation);
@@ -808,22 +786,6 @@ TEST_CASE("agent queue bounds are documented configuration fields", "[agent][asy
     CHECK(options.max_queued_messages == 256);
     CHECK(options.max_queued_bytes == 16 * 1024 * 1024);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
@@ -838,16 +800,15 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
-        return agent::BeforeToolCallResult{true, "blocked by policy"};
-    });
+                return agent::BeforeToolCallResult{true, "blocked by policy"};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(tool_ptr->invocations.empty());
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
@@ -883,19 +844,18 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext& ctx) -> support::Expected<agent::BeforeToolCallResult> {
-        REQUIRE(ctx.tool_call.name == "read_file");
-        REQUIRE(ctx.args.get<support::JsonValue::object_t>().at("path").get_string() == "README.md");
-        REQUIRE(!ctx.context.messages.empty());
-        return agent::BeforeToolCallResult{false, std::nullopt};
-    });
+                REQUIRE(ctx.tool_call.name == "read_file");
+                REQUIRE(ctx.args.get<support::JsonValue::object_t>().at("path").get_string() == "README.md");
+                REQUIRE(!ctx.context.messages.empty());
+                return agent::BeforeToolCallResult{false, std::nullopt};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(tool_ptr->invocations.size() == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
@@ -906,24 +866,24 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async]
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
-        return std::unexpected(support::make_error(support::ErrorCode::Tool, "policy rejected"));
-    });
+                return std::unexpected(support::make_error(support::ErrorCode::Tool, "policy rejected"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
     // pi prepareToolCall catches a failing before hook into that call's error
     // result; the run continues (ADR 0008).
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 3);
@@ -940,25 +900,23 @@ TEST_CASE("beforeToolCall hook failure diagnostic becomes a per-call tool error"
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            "beforeToolCall hook failed",
-            "boom"));
-    });
+                return std::unexpected(
+                        support::make_error(support::ErrorCode::Tool, "beforeToolCall hook failed", "boom"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 3);
@@ -975,22 +933,24 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return agent::AfterToolCallResult{
-            std::vector<ai::Content>{ai::text_content("overridden")}, std::nullopt, std::nullopt, std::nullopt};
-    });
+                return agent::AfterToolCallResult{std::vector<ai::Content>{ai::text_content("overridden")},
+                        std::nullopt,
+                        std::nullopt,
+                        std::nullopt};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
     const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
@@ -1004,21 +964,21 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, std::nullopt};
-    });
+                return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, std::nullopt};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
     const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
@@ -1027,30 +987,27 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE(
-    "afterToolCall terminate hint stops automatic continuation",
-    "[agent][async][issue35]") {
+TEST_CASE("afterToolCall terminate hint stops automatic continuation", "[agent][async][issue35]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(
-        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
-    });
+                return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 1);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::ToolUse);
     CHECK(client->requests.size() == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
@@ -1076,24 +1033,21 @@ struct ConfigurableFakeToolHandle {
 };
 
 [[nodiscard]] ConfigurableFakeToolHandle make_configurable_fake_tool(
-    ai::Tool definition,
-    agent::ToolConcurrency concurrency,
-    std::string result_text = "tool says ok") {
+        ai::Tool definition, agent::ToolConcurrency concurrency, std::string result_text = "tool says ok") {
     auto state = std::make_shared<ConfigurableFakeToolState>();
     state->result_text = std::move(result_text);
     return ConfigurableFakeToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            concurrency,
-            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                state->invocations.push_back(invocation);
-                co_return agent::AsyncToolExecutionResult{
-                    .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
-                    .details = std::nullopt,
-                    .is_error = false};
-            }),
-        state,
+            tests::make_fake_tool(std::move(definition),
+                    concurrency,
+                    [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        state->invocations.push_back(invocation);
+                        co_return agent::AsyncToolExecutionResult{
+                                .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
+                                .details = std::nullopt,
+                                .is_error = false};
+                    }),
+            state,
     };
 }
 
@@ -1109,29 +1063,24 @@ struct DelayedFakeToolHandle {
 };
 
 [[nodiscard]] DelayedFakeToolHandle make_delayed_fake_tool(
-    ai::Tool definition,
-    std::chrono::milliseconds delay,
-    std::string result_text = "tool says ok") {
+        ai::Tool definition, std::chrono::milliseconds delay, std::string result_text = "tool says ok") {
     auto state = std::make_shared<DelayedFakeToolState>();
     state->delay = delay;
     state->result_text = std::move(result_text);
     return DelayedFakeToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::ParallelSafe,
-            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                auto timer = boost::asio::steady_timer(
-                    co_await boost::asio::this_coro::executor,
-                    state->delay);
-                co_await timer.async_wait(boost::asio::use_awaitable);
-                state->invocations.push_back(invocation);
-                co_return agent::AsyncToolExecutionResult{
-                    .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
-                    .details = std::nullopt,
-                    .is_error = false};
-            }),
-        state,
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::ParallelSafe,
+                    [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor, state->delay);
+                        co_await timer.async_wait(boost::asio::use_awaitable);
+                        state->invocations.push_back(invocation);
+                        co_return agent::AsyncToolExecutionResult{
+                                .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
+                                .details = std::nullopt,
+                                .is_error = false};
+                    }),
+            state,
     };
 }
 
@@ -1147,15 +1096,14 @@ struct FailingFakeToolHandle {
 [[nodiscard]] FailingFakeToolHandle make_failing_fake_tool(ai::Tool definition) {
     auto state = std::make_shared<FailingFakeToolState>();
     return FailingFakeToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::ParallelSafe,
-            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                state->invocations.push_back(invocation);
-                co_return std::unexpected(support::make_error(support::ErrorCode::Tool, "tool failed", "boom"));
-            }),
-        state,
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::ParallelSafe,
+                    [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        state->invocations.push_back(invocation);
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Tool, "tool failed", "boom"));
+                    }),
+            state,
     };
 }
 
@@ -1176,66 +1124,66 @@ struct ProbedFakeToolHandle {
 };
 
 [[nodiscard]] ProbedFakeToolHandle make_probed_fake_tool(
-    ai::Tool definition,
-    agent::ToolConcurrency concurrency,
-    ConcurrencyProbe& probe) {
+        ai::Tool definition, agent::ToolConcurrency concurrency, ConcurrencyProbe& probe) {
     auto state = std::make_shared<ProbedFakeToolState>();
     state->probe = &probe;
     state->name = definition.name;
     return ProbedFakeToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            concurrency,
-            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                state->invocations.push_back(invocation);
-                const int current = ++state->probe->active;
-                int observed = state->probe->max_active.load();
-                while (current > observed && !state->probe->max_active.compare_exchange_weak(observed, current)) {}
-                auto timer = boost::asio::steady_timer(
-                    co_await boost::asio::this_coro::executor,
-                    std::chrono::milliseconds{30});
-                co_await timer.async_wait(boost::asio::use_awaitable);
-                --state->probe->active;
-                co_return agent::AsyncToolExecutionResult{
-                    .content = std::vector<ai::Content>{ai::text_content(state->name + " result")},
-                    .details = std::nullopt,
-                    .is_error = false};
-            }),
-        state,
+            tests::make_fake_tool(std::move(definition),
+                    concurrency,
+                    [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        state->invocations.push_back(invocation);
+                        const int current = ++state->probe->active;
+                        int observed = state->probe->max_active.load();
+                        while (current > observed &&
+                                !state->probe->max_active.compare_exchange_weak(observed, current)) {
+                        }
+                        auto timer = boost::asio::steady_timer(
+                                co_await boost::asio::this_coro::executor, std::chrono::milliseconds{30});
+                        co_await timer.async_wait(boost::asio::use_awaitable);
+                        --state->probe->active;
+                        co_return agent::AsyncToolExecutionResult{
+                                .content = std::vector<ai::Content>{ai::text_content(state->name + " result")},
+                                .details = std::nullopt,
+                                .is_error = false};
+                    }),
+            state,
     };
 }
 
-RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
+AgentRun run_agent_on_pool(agent::Agent& subject, std::string prompt, agent::AgentEventCommitter commitment = {}) {
     boost::asio::thread_pool pool{4};
-    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::ExpectedVoid> result;
     std::vector<agent::AgentLifecycleEvent> events;
     std::mutex events_mutex;
+    auto subscribed = subject.subscribe([&events, &events_mutex](const agent::AgentLifecycleEvent& event) {
+        std::lock_guard lock(events_mutex);
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
 
     boost::asio::co_spawn(
-        pool,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.run(
-                std::move(prompt),
-                [&](const agent::AgentLifecycleEvent& event) {
-                    std::lock_guard lock(events_mutex);
-                    events.push_back(event);
-                    return support::ExpectedVoid{};
-                });
-            co_return;
-        },
-        boost::asio::detached);
+            pool,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(
+                        subject.prompt(std::move(prompt), std::move(commitment)));
+                co_return;
+            },
+            boost::asio::detached);
 
     pool.join();
     REQUIRE(result.has_value());
-    return RunResult{std::move(*result), std::move(events)};
+    return AgentRun{
+            .result = std::move(*result),
+            .events = std::move(events),
+            .state = subject.state(),
+    };
 }
 
-
-
 } // namespace
-
-
 
 TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
@@ -1243,27 +1191,28 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext& ctx) -> support::Expected<agent::AfterToolCallResult> {
-        if (ctx.tool_call.name == "alpha") {
-            return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
-        }
-        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, false};
-    });
+                if (ctx.tool_call.name == "alpha") {
+                    return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+                }
+                return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, false};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
@@ -1274,31 +1223,31 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
             [](const agent::BeforeToolCallContext& ctx) -> support::Expected<agent::BeforeToolCallResult> {
-        if (ctx.tool_call.name == "alpha") {
-            return agent::BeforeToolCallResult{true, "no alpha"};
-        }
-        return agent::BeforeToolCallResult{false, std::nullopt};
-    });
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+                if (ctx.tool_call.name == "alpha") {
+                    return agent::BeforeToolCallResult{true, "no alpha"};
+                }
+                return agent::BeforeToolCallResult{false, std::nullopt};
+            });
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
-    });
+                return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
@@ -1308,31 +1257,32 @@ TEST_CASE("an error result with an explicit terminate hint still terminates the 
     client->responses.push_back(two_tool_call_response());
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext& ctx) -> support::Expected<agent::AfterToolCallResult> {
-        if (ctx.tool_call.name == "alpha") {
-            return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, true};
-        }
-        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
-    });
+                if (ctx.tool_call.name == "alpha") {
+                    return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, true};
+                }
+                return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
     // pi shouldTerminateToolBatch: every finalized result carries
     // terminate === true. The alpha error result still counts because the
     // after hook explicitly set the hint; there is no implicit ban on error
     // results (ADR 0008).
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 1);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::ToolUse);
     CHECK(client->requests.size() == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
@@ -1343,24 +1293,24 @@ TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[ag
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return std::unexpected(support::make_error(support::ErrorCode::Tool, "post-processor failed"));
-    });
+                return std::unexpected(support::make_error(support::ErrorCode::Tool, "post-processor failed"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
     // pi finalizeExecutedToolCall catches a failing after hook into that
     // call's error result; the run continues (ADR 0008).
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 3);
@@ -1377,25 +1327,23 @@ TEST_CASE("afterToolCall hook failure diagnostic becomes a per-call tool error",
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Tool,
-            "afterToolCall hook failed",
-            "after boom"));
-    });
+                return std::unexpected(
+                        support::make_error(support::ErrorCode::Tool, "afterToolCall hook failed", "after boom"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 3);
@@ -1416,9 +1364,7 @@ TEST_CASE("AsyncAgentOptions hooks are move-only", "[agent][async][u7][issue82]"
     static_assert(!std::is_copy_constructible_v<agent::AfterToolCallHook>);
 }
 
-TEST_CASE(
-    "awaitable context policies suspend and resume in Agent executor order",
-    "[agent][async][issue82]") {
+TEST_CASE("awaitable context policies suspend and resume in Agent executor order", "[agent][async][issue82]") {
     boost::asio::io_context io;
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("ok"));
@@ -1431,51 +1377,48 @@ TEST_CASE(
     bool stop_requested_after_resume = false;
     std::optional<boost::asio::steady_timer> gate;
     options.transform_context = [owned = std::make_unique<int>(41),
-                                 &ordering,
-                                 &resumed_on_same_executor,
-                                 &stop_requested_after_resume,
-                                 &gate](std::vector<ai::MessageVariant> messages,
-                                        std::stop_token stop_token) mutable {
+                                        &ordering,
+                                        &resumed_on_same_executor,
+                                        &stop_requested_after_resume,
+                                        &gate](
+                                        std::vector<ai::MessageVariant> messages, std::stop_token stop_token) mutable {
         return ai::detail::make_async_result(
-            [owned = std::move(owned),
-             &ordering,
-             &resumed_on_same_executor,
-             &stop_requested_after_resume,
-             &gate,
-             messages = std::move(messages),
-             stop_token]() mutable
-                -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
-                const auto executor = co_await boost::asio::this_coro::executor;
-                CHECK(*owned == 41);
-                ordering.push_back("transform-start");
-                gate.emplace(executor);
-                gate->expires_at(std::chrono::steady_clock::time_point::max());
-                boost::system::error_code error;
-                co_await gate->async_wait(boost::asio::redirect_error(
-                    boost::asio::use_awaitable, error));
-                const auto resumed_executor = co_await boost::asio::this_coro::executor;
-                resumed_on_same_executor = resumed_executor == executor;
-                stop_requested_after_resume = stop_token.stop_requested();
-                ordering.push_back("transform-resume");
-                co_return messages;
-            });
+                [owned = std::move(owned),
+                        &ordering,
+                        &resumed_on_same_executor,
+                        &stop_requested_after_resume,
+                        &gate,
+                        messages = std::move(messages),
+                        stop_token]() mutable
+                        -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    CHECK(*owned == 41);
+                    ordering.push_back("transform-start");
+                    gate.emplace(executor);
+                    gate->expires_at(std::chrono::steady_clock::time_point::max());
+                    boost::system::error_code error;
+                    co_await gate->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    const auto resumed_executor = co_await boost::asio::this_coro::executor;
+                    resumed_on_same_executor = resumed_executor == executor;
+                    stop_requested_after_resume = stop_token.stop_requested();
+                    ordering.push_back("transform-resume");
+                    co_return messages;
+                });
     };
     options.convert_to_llm = [&ordering](std::vector<ai::MessageVariant> messages) {
         ordering.push_back("convert");
-        return support::AsyncResult<std::vector<ai::MessageVariant>>{
-            std::move(messages)};
+        return support::AsyncResult<std::vector<ai::MessageVariant>>{std::move(messages)};
     };
 
-    agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
-    std::stop_source stop_source;
-    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+    std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.continue_with({}, "hello", {}, stop_source.get_token());
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt("hello"));
+                co_return;
+            },
+            boost::asio::detached);
 
     while (!gate) {
         REQUIRE(io.run_one() == 1);
@@ -1484,7 +1427,7 @@ TEST_CASE(
     const std::vector<std::string> suspended{"transform-start"};
     CHECK(ordering == suspended);
 
-    REQUIRE(stop_source.request_stop());
+    subject.abort();
     gate->cancel();
     io.run();
 
@@ -1492,14 +1435,11 @@ TEST_CASE(
     REQUIRE(*result);
     CHECK(resumed_on_same_executor);
     CHECK(stop_requested_after_resume);
-    const std::vector<std::string> expected{
-        "transform-start", "transform-resume", "convert"};
+    const std::vector<std::string> expected{"transform-start", "transform-resume", "convert"};
     CHECK(ordering == expected);
 }
 
-TEST_CASE(
-    "awaitable signal-bearing policies receive the active run stop token",
-    "[agent][async][issue39][issue82]") {
+TEST_CASE("awaitable signal-bearing policies receive the active run stop token", "[agent][async][issue39][issue82]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
@@ -1510,49 +1450,41 @@ TEST_CASE(
     bool transform_stop_possible = false;
     bool before_stop_possible = false;
     bool after_stop_possible = false;
-    options.transform_context =
-        agent::adapt_sync_transform_context(
+    options.transform_context = agent::adapt_sync_transform_context(
             [&transform_stop_possible](std::vector<ai::MessageVariant> messages,
-                                       std::stop_token stop_token)
-                -> support::Expected<std::vector<ai::MessageVariant>> {
+                    std::stop_token stop_token) -> support::Expected<std::vector<ai::MessageVariant>> {
                 transform_stop_possible = stop_token.stop_possible();
                 return messages;
             });
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
             [&before_stop_possible](agent::BeforeToolCallContext,
-                                    std::stop_token stop_token)
-                -> support::Expected<agent::BeforeToolCallResult> {
+                    std::stop_token stop_token) -> support::Expected<agent::BeforeToolCallResult> {
                 before_stop_possible = stop_token.stop_possible();
                 return agent::BeforeToolCallResult{};
             });
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [&after_stop_possible](agent::AfterToolCallContext,
-                                   std::stop_token stop_token)
-                -> support::Expected<agent::AfterToolCallResult> {
+                    std::stop_token stop_token) -> support::Expected<agent::AfterToolCallResult> {
                 after_stop_possible = stop_token.stop_possible();
                 return agent::AfterToolCallResult{};
             });
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{
-        "read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    std::stop_source stop_source;
-    auto run = run_loop(loop, "read", {}, stop_source.get_token());
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(run.result);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
     CHECK(transform_stop_possible);
     CHECK(before_stop_possible);
     CHECK(after_stop_possible);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "cancellation reaches a suspended tool and completes one ordinary aborted lifecycle",
-    "[agent][async][abort][issue40]") {
+TEST_CASE("cancellation reaches a suspended tool and completes one ordinary aborted lifecycle",
+        "[agent][async][abort][issue40]") {
     boost::asio::io_context io;
     auto client = std::make_shared<CancellationAwarePolicyClient>();
     client->responses.push_back(tool_call_response());
@@ -1560,49 +1492,47 @@ TEST_CASE(
     options.model = tests::make_model("gpt-test");
 
     auto tool = make_cancellable_fake_tool(ai::Tool{
-        .name = "read_file",
-        .description = "Read",
-        .parameters = test::permissive_object_tool_argument_contract(),
+            .name = "read_file",
+            .description = "Read",
+            .parameters = test::permissive_object_tool_argument_contract(),
     });
     auto* tool_ptr = tool.state.get();
     agent::ToolRegistry registry;
     REQUIRE(registry.add(std::move(tool.tool)));
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    std::stop_source stop_source;
     std::vector<agent::AgentLifecycleEvent> events;
-    auto future = boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<support::Expected<agent::AsyncAgentRunResult>> {
-            co_return co_await loop.continue_with(
-                {},
-                "cancel active tool",
-                [&](const agent::AgentLifecycleEvent& event) {
-                    events.push_back(event);
-                    return support::ExpectedVoid{};
-                },
-                stop_source.get_token());
-        },
-        boost::asio::use_future);
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+    std::optional<support::ExpectedVoid> result;
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt("cancel active tool"));
+                co_return;
+            },
+            boost::asio::detached);
 
-    // Run the loop executor on a background thread while the tool suspends on
+    // Run the Agent executor on a background thread while the tool suspends on
     // its private executor; the work guard keeps io.run() alive across the
     // suspension so it can deliver the tool's terminal outcome.
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work{
-        boost::asio::make_work_guard(io)};
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work{boost::asio::make_work_guard(io)};
     std::jthread io_thread{[&] { io.run(); }};
 
     tool.state->suspended_signal.acquire();
-    REQUIRE(stop_source.request_stop());
+    subject.abort();
 
-    auto result = future.get();
     work.reset();
     io_thread.join();
 
     REQUIRE(result.has_value());
-    CHECK(result->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(*result);
+    CHECK(final_stop_reason(events) == ai::AssistantStopReason::Aborted);
     REQUIRE(tool_ptr->observed_stop_token.has_value());
-    CHECK(*tool_ptr->observed_stop_token == stop_source.get_token());
     CHECK(tool_ptr->observed_stop_token->stop_requested());
     CHECK(tool_ptr->invocations.size() == 1);
     REQUIRE(client->requests.size() == 2);
@@ -1611,27 +1541,25 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "transform policy cancellation completes through an aborted provider turn",
-    "[agent][async][abort][issue39]") {
+        "transform policy cancellation completes through an aborted provider turn", "[agent][async][abort][issue39]") {
     auto client = std::make_shared<CancellationAwarePolicyClient>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
-    std::stop_source stop_source;
-    options.transform_context = [&stop_source](
-                                    std::vector<ai::MessageVariant>,
-                                    std::stop_token) {
-        (void)stop_source.request_stop();
+    // Stored policy hooks below run only while this test-owned Agent is alive.
+    // The non-owning pointer must outlive the prompt that invokes the hook.
+    agent::Agent* subject_ptr = nullptr;
+    options.transform_context = [&subject_ptr](std::vector<ai::MessageVariant>, std::stop_token) {
+        subject_ptr->abort();
         return support::AsyncResult<std::vector<ai::MessageVariant>>{
-            std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "transform policy cancelled"))};
+                std::unexpected(support::make_error(support::ErrorCode::Cancelled, "transform policy cancelled"))};
     };
 
-    agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
-    auto run = run_loop(loop, "cancel transform", {}, stop_source.get_token());
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+    subject_ptr = &subject;
+    auto run = run_agent(subject, "cancel transform");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Aborted);
     REQUIRE(client->requests.size() == 1);
     CHECK(client->requests[0].options.stop_token.stop_requested());
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
@@ -1639,37 +1567,37 @@ TEST_CASE(
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "before-tool policy cancellation skips the tool and reaches an aborted provider turn",
-    "[agent][async][abort][issue39][issue40]") {
+TEST_CASE("before-tool policy cancellation skips the tool and reaches an aborted provider turn",
+        "[agent][async][abort][issue39][issue40]") {
     auto client = std::make_shared<CancellationAwarePolicyClient>();
     client->responses.push_back(tool_call_response());
-    std::stop_source stop_source;
+    // Stored policy hooks below run only while this test-owned Agent is alive.
+    // The non-owning pointer must outlive the prompt that invokes the hook.
+    agent::Agent* subject_ptr = nullptr;
     agent::AsyncAgentOptions options;
     options.max_turns = 1;
     options.model = tests::make_model("gpt-test");
-    options.before_tool_call = [&stop_source](agent::BeforeToolCallContext, std::stop_token) {
-        (void)stop_source.request_stop();
+    options.before_tool_call = [&subject_ptr](agent::BeforeToolCallContext, std::stop_token) {
+        subject_ptr->abort();
         return support::AsyncResult<agent::BeforeToolCallResult>{
-            std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "before-tool policy cancelled"))};
+                std::unexpected(support::make_error(support::ErrorCode::Cancelled, "before-tool policy cancelled"))};
     };
 
     auto tool = make_fake_tool(ai::Tool{
-        .name = "read_file",
-        .description = "Read",
-        .parameters = test::permissive_object_tool_argument_contract(),
+            .name = "read_file",
+            .description = "Read",
+            .parameters = test::permissive_object_tool_argument_contract(),
     });
     auto* tool_ptr = tool.state.get();
     agent::ToolRegistry registry;
     REQUIRE(registry.add(std::move(tool.tool)));
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "cancel before tool", {}, stop_source.get_token());
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    subject_ptr = &subject;
+    auto run = run_agent(subject, "cancel before tool");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Aborted);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     CHECK(tool_ptr->invocations.empty());
     REQUIRE(client->requests.size() == 2);
     CHECK(client->requests[1].options.stop_token.stop_requested());
@@ -1677,35 +1605,35 @@ TEST_CASE(
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "after-tool policy cancellation keeps the tool result and reaches an aborted provider turn",
-    "[agent][async][abort][issue39][issue40]") {
+TEST_CASE("after-tool policy cancellation keeps the tool result and reaches an aborted provider turn",
+        "[agent][async][abort][issue39][issue40]") {
     auto client = std::make_shared<CancellationAwarePolicyClient>();
     client->responses.push_back(tool_call_response());
-    std::stop_source stop_source;
+    // Stored policy hooks below run only while this test-owned Agent is alive.
+    // The non-owning pointer must outlive the prompt that invokes the hook.
+    agent::Agent* subject_ptr = nullptr;
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call = [&stop_source](agent::AfterToolCallContext, std::stop_token) {
-        (void)stop_source.request_stop();
+    options.after_tool_call = [&subject_ptr](agent::AfterToolCallContext, std::stop_token) {
+        subject_ptr->abort();
         return support::AsyncResult<agent::AfterToolCallResult>{
-            std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "after-tool policy cancelled"))};
+                std::unexpected(support::make_error(support::ErrorCode::Cancelled, "after-tool policy cancelled"))};
     };
 
     auto tool = make_fake_tool(ai::Tool{
-        .name = "read_file",
-        .description = "Read",
-        .parameters = test::permissive_object_tool_argument_contract(),
+            .name = "read_file",
+            .description = "Read",
+            .parameters = test::permissive_object_tool_argument_contract(),
     });
     auto* tool_ptr = tool.state.get();
     agent::ToolRegistry registry;
     REQUIRE(registry.add(std::move(tool.tool)));
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "cancel after tool", {}, stop_source.get_token());
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    subject_ptr = &subject;
+    auto run = run_agent(subject, "cancel after tool");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Aborted);
     REQUIRE(tool_ptr->invocations.size() == 1);
     REQUIRE(client->requests.size() == 2);
     CHECK(client->requests[1].options.stop_token.stop_requested());
@@ -1713,9 +1641,8 @@ TEST_CASE(
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "awaitable policy failures after suspension stay in the existing error channel",
-    "[agent][async][issue82][issue483]") {
+TEST_CASE("awaitable policy failures after suspension stay in the existing error channel",
+        "[agent][async][issue82][issue483]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("unused"));
     agent::AsyncAgentOptions options;
@@ -1723,21 +1650,18 @@ TEST_CASE(
     options.model = tests::make_model("gpt-test");
     options.transform_context = [](std::vector<ai::MessageVariant> messages, std::stop_token) {
         return ai::detail::make_async_result(
-            [messages = std::move(messages)]() mutable
-                -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
-                auto timer = boost::asio::steady_timer(
-                    co_await boost::asio::this_coro::executor);
-                timer.expires_after(std::chrono::milliseconds{0});
-                co_await timer.async_wait(boost::asio::use_awaitable);
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Tool,
-                    "transformContext hook failed",
-                    "suspended transform boom"));
-            });
+                [messages = std::move(messages)]() mutable
+                        -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
+                    auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor);
+                    timer.expires_after(std::chrono::milliseconds{0});
+                    co_await timer.async_wait(boost::asio::use_awaitable);
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Tool, "transformContext hook failed", "suspended transform boom"));
+                });
     };
 
-    agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
-    auto run = run_loop(loop, "hello");
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+    auto run = run_agent(subject, "hello");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Tool);
@@ -1754,24 +1678,22 @@ TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent]
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.transform_context =
-        agent::adapt_sync_transform_context(
-            [](const std::vector<ai::MessageVariant>& messages)
-        -> support::Expected<std::vector<ai::MessageVariant>> {
-        if (messages.size() <= 1) {
-            return messages;
-        }
-        return std::vector<ai::MessageVariant>{messages.back()};
-    });
+    options.transform_context = agent::adapt_sync_transform_context(
+            [](const std::vector<ai::MessageVariant>& messages) -> support::Expected<std::vector<ai::MessageVariant>> {
+                if (messages.size() <= 1) {
+                    return messages;
+                }
+                return std::vector<ai::MessageVariant>{messages.back()};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].context.messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(client->requests[0].context.messages[0]));
-    REQUIRE(run.result->context.messages.size() == 2);
+    REQUIRE(run.state.messages.size() == 2);
 }
 
 TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
@@ -1782,25 +1704,23 @@ TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.convert_to_llm =
-        agent::adapt_sync_convert_to_llm(
-            [](const std::vector<ai::MessageVariant>& messages)
-        -> support::Expected<std::vector<ai::MessageVariant>> {
-        std::vector<ai::MessageVariant> result;
-        for (const auto& message : messages) {
-            if (std::holds_alternative<ai::UserMessage>(message) ||
-                std::holds_alternative<ai::AssistantMessage>(message) ||
-                std::holds_alternative<ai::ToolResultMessage>(message)) {
-                result.push_back(message);
-            }
-        }
-        return result;
-    });
+    options.convert_to_llm = agent::adapt_sync_convert_to_llm(
+            [](const std::vector<ai::MessageVariant>& messages) -> support::Expected<std::vector<ai::MessageVariant>> {
+                std::vector<ai::MessageVariant> result;
+                for (const auto& message : messages) {
+                    if (std::holds_alternative<ai::UserMessage>(message) ||
+                            std::holds_alternative<ai::AssistantMessage>(message) ||
+                            std::holds_alternative<ai::ToolResultMessage>(message)) {
+                        result.push_back(message);
+                    }
+                }
+                return result;
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].context.messages.size() == 1);
 }
@@ -1813,13 +1733,13 @@ TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.convert_to_llm =
-        agent::adapt_sync_convert_to_llm(
-            [](const std::vector<ai::MessageVariant>&)
-        -> support::Expected<std::vector<ai::MessageVariant>> { return std::vector<ai::MessageVariant>{}; });
+    options.convert_to_llm = agent::adapt_sync_convert_to_llm(
+            [](const std::vector<ai::MessageVariant>&) -> support::Expected<std::vector<ai::MessageVariant>> {
+                return std::vector<ai::MessageVariant>{};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Validation);
@@ -1835,15 +1755,13 @@ TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.transform_context =
-        agent::adapt_sync_transform_context(
-            [](const std::vector<ai::MessageVariant>&)
-        -> support::Expected<std::vector<ai::MessageVariant>> {
-        return std::unexpected(support::make_error(support::ErrorCode::Tool, "context transform failed"));
-    });
+    options.transform_context = agent::adapt_sync_transform_context(
+            [](const std::vector<ai::MessageVariant>&) -> support::Expected<std::vector<ai::MessageVariant>> {
+                return std::unexpected(support::make_error(support::ErrorCode::Tool, "context transform failed"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Tool);
@@ -1858,15 +1776,13 @@ TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.convert_to_llm =
-        agent::adapt_sync_convert_to_llm(
-            [](const std::vector<ai::MessageVariant>&)
-        -> support::Expected<std::vector<ai::MessageVariant>> {
-        return std::unexpected(support::make_error(support::ErrorCode::Tool, "conversion failed"));
-    });
+    options.convert_to_llm = agent::adapt_sync_convert_to_llm(
+            [](const std::vector<ai::MessageVariant>&) -> support::Expected<std::vector<ai::MessageVariant>> {
+                return std::unexpected(support::make_error(support::ErrorCode::Tool, "conversion failed"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Tool);
@@ -1882,18 +1798,14 @@ TEST_CASE("transformContext and convertToLlm failure diagnostics abort cleanly",
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
         options.model = tests::make_model("gpt-test");
-        options.transform_context =
-            agent::adapt_sync_transform_context(
-                [](const std::vector<ai::MessageVariant>&)
-            -> support::Expected<std::vector<ai::MessageVariant>> {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                "transformContext hook failed",
-                "transform boom"));
-        });
+        options.transform_context = agent::adapt_sync_transform_context(
+                [](const std::vector<ai::MessageVariant>&) -> support::Expected<std::vector<ai::MessageVariant>> {
+                    return std::unexpected(support::make_error(
+                            support::ErrorCode::Tool, "transformContext hook failed", "transform boom"));
+                });
 
-        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-        auto run = run_loop(loop, "hi");
+        agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+        auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
         CHECK(run.result.error().code == support::ErrorCode::Tool);
@@ -1909,18 +1821,14 @@ TEST_CASE("transformContext and convertToLlm failure diagnostics abort cleanly",
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
         options.model = tests::make_model("gpt-test");
-        options.convert_to_llm =
-            agent::adapt_sync_convert_to_llm(
-                [](const std::vector<ai::MessageVariant>&)
-            -> support::Expected<std::vector<ai::MessageVariant>> {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                "convertToLlm hook failed",
-                "convert boom"));
-        });
+        options.convert_to_llm = agent::adapt_sync_convert_to_llm(
+                [](const std::vector<ai::MessageVariant>&) -> support::Expected<std::vector<ai::MessageVariant>> {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Tool, "convertToLlm hook failed", "convert boom"));
+                });
 
-        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-        auto run = run_loop(loop, "hi");
+        agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+        auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
         CHECK(run.result.error().code == support::ErrorCode::Tool);
@@ -1929,18 +1837,6 @@ TEST_CASE("transformContext and convertToLlm failure diagnostics abort cleanly",
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 TEST_CASE("agent_end contains only messages from the current invocation", "[agent][async][issue35]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("current reply"));
@@ -1948,31 +1844,23 @@ TEST_CASE("agent_end contains only messages from the current invocation", "[agen
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(
-        client->factory(),
-        std::move(registry),
-        std::move(options));
+    agent::Agent subject(client->factory(),
+            std::move(registry),
+            std::move(options),
+            agent::AgentInitialState{
+                    .messages = {ai::user_text_message("prior prompt")},
+            });
 
-    auto run = run_loop(
-        loop,
-        "current prompt",
-        std::vector<ai::MessageVariant>{ai::user_text_message("prior prompt")});
+    auto run = run_agent(subject, "current prompt");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(ended != nullptr);
     REQUIRE(ended->messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) ==
-          "current prompt");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) == "current prompt");
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(ended->messages[1]));
 }
-
-
-
-
-
-
 
 TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
@@ -1980,33 +1868,31 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
-    });
-    options.validate_turn_update =
-        agent::adapt_sync_validate_turn_update(
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
+            });
+    options.validate_turn_update = agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate& update) -> support::ExpectedVoid {
-        if (update.model && update.model->id == "gpt-swapped") {
-            return {};
-        }
-        return std::unexpected(support::make_error(support::ErrorCode::Validation, "unknown model"));
-    });
+                if (update.model && update.model->id == "gpt-swapped") {
+                    return {};
+                }
+                return std::unexpected(support::make_error(support::ErrorCode::Validation, "unknown model"));
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     CHECK(client->requests[1].model.id == "gpt-swapped");
-    CHECK(run.result->state.model.id == "gpt-swapped");
+    CHECK(run.state.model.id == "gpt-swapped");
 }
 
 TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent][async][u8]") {
@@ -2014,20 +1900,19 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     client->responses.push_back(tool_call_response());
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
-    });
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Validation);
@@ -2043,15 +1928,13 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"invalid"}};
-    });
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"invalid"}};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Validation);
@@ -2063,39 +1946,37 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     client->responses.push_back(ai::assistant_text_message("second run"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     int prepare_calls = 0;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [&](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        ++prepare_calls;
-        if (prepare_calls == 1) {
-            return agent::AgentLoopTurnUpdate{
-                    .model = tests::make_model("gpt-swapped"),
-                    .thinking_level = std::string{"invalid"},
-                };
-        }
-        return std::nullopt;
-    });
-    options.validate_turn_update =
-        agent::adapt_sync_validate_turn_update(
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [&](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                ++prepare_calls;
+                if (prepare_calls == 1) {
+                    return agent::AgentLoopTurnUpdate{
+                            .model = tests::make_model("gpt-swapped"),
+                            .thinking_level = std::string{"invalid"},
+                    };
+                }
+                return std::nullopt;
+            });
+    options.validate_turn_update = agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate&) -> support::ExpectedVoid { return {}; });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto first = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto first = run_agent(subject, "read");
     REQUIRE_FALSE(first.result);
     CHECK(first.result.error().code == support::ErrorCode::Validation);
 
-    auto second = run_loop(loop, "hi again");
-    REQUIRE(second.result);
+    auto second = run_agent(subject, "hi again");
+    CHECK(second.result);
     REQUIRE(client->requests.size() == 2);
     CHECK(client->requests[1].model.id == "gpt-test");
-    CHECK(second.result->state.model.id == "gpt-test");
+    CHECK(second.state.model.id == "gpt-test");
 }
 
 TEST_CASE("prepareNextTurn replaces model context without publishing replacement messages", "[agent][async][issue35]") {
@@ -2104,8 +1985,8 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(
-        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     bool prepared = false;
     bool stop_observed_replacement = false;
@@ -2113,37 +1994,32 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
             [&](const agent::PrepareNextTurnContext& context)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        if (prepared) {
-            return std::nullopt;
-        }
-        prepared = true;
-        first_prepare_new_message_count = context.new_messages.size();
-        agent::AgentLoopContextReplacement replacement;
-        replacement.system_prompt = "replacement prompt";
-        replacement.messages.push_back(ai::user_text_message("replacement history"));
-        return agent::AgentLoopTurnUpdate{
-            std::move(replacement), std::nullopt, std::nullopt};
-    });
-    options.should_stop_after_turn =
-        agent::adapt_sync_should_stop_after_turn(
-            [&](const agent::PrepareNextTurnContext& context)
-        -> support::Expected<bool> {
-        if (context.context.system_prompt &&
-            *context.context.system_prompt == "replacement prompt" &&
-            context.context.messages.size() == 1) {
-            stop_observed_replacement = true;
-        }
-        return false;
-    });
+                    -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                if (prepared) {
+                    return std::nullopt;
+                }
+                prepared = true;
+                first_prepare_new_message_count = context.new_messages.size();
+                agent::AgentLoopContextReplacement replacement;
+                replacement.system_prompt = "replacement prompt";
+                replacement.messages.push_back(ai::user_text_message("replacement history"));
+                return agent::AgentLoopTurnUpdate{std::move(replacement), std::nullopt, std::nullopt};
+            });
+    options.should_stop_after_turn = agent::adapt_sync_should_stop_after_turn(
+            [&](const agent::PrepareNextTurnContext& context) -> support::Expected<bool> {
+                if (context.context.system_prompt && *context.context.system_prompt == "replacement prompt" &&
+                        context.context.messages.size() == 1) {
+                    stop_observed_replacement = true;
+                }
+                return false;
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(prepared);
     CHECK(first_prepare_new_message_count == 3);
     CHECK(stop_observed_replacement);
@@ -2153,26 +2029,31 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     REQUIRE(client->requests[1].context.messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(client->requests[1].context.messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[1].context.messages[0])) ==
-          "replacement history");
+            "replacement history");
     REQUIRE(client->requests[1].context.tools.size() == 1);
     CHECK(client->requests[1].context.tools[0].name == "read_file");
 
-    REQUIRE(run.result->context.messages.size() == 2);
-    REQUIRE(std::holds_alternative<ai::UserMessage>(run.result->context.messages[0]));
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(run.result->context.messages[1]));
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.result->context.messages[0])) ==
-          "replacement history");
-    CHECK(ai::text_from_assistant_content(
-              std::get<ai::AssistantMessage>(run.result->context.messages[1]).content) ==
-          "second");
+    const auto& replacement_context = client->requests[1].context.messages;
+    REQUIRE(replacement_context.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(replacement_context[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(replacement_context[0])) == "replacement history");
+    const agent::MessageEndEvent* final_message_end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* message_end = std::get_if<agent::MessageEndEvent>(&event);
+                message_end && std::holds_alternative<ai::AssistantMessage>(message_end->message)) {
+            final_message_end = message_end;
+        }
+    }
+    REQUIRE(final_message_end != nullptr);
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(final_message_end->message).content) ==
+            "second");
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
     const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(ended != nullptr);
     REQUIRE(ended->messages.size() == 4);
     REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) ==
-          "read");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) == "read");
 }
 
 TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged", "[agent][async][u8]") {
@@ -2184,20 +2065,20 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> { return std::nullopt; });
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                return std::nullopt;
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
-    CHECK(run.result->state.model.id == "gpt-test");
+    CHECK(run.result);
+    CHECK(run.state.model.id == "gpt-test");
     // The unset level requested pi's DEFAULT_THINKING_LEVEL ("medium") and was
     // clamped at creation against the non-reasoning model's only supported
     // level (#352). The no-update turn leaves that clamped level unchanged.
-    CHECK(run.result->state.thinking_level == "off");
+    CHECK(run.state.thinking_level == "off");
 }
 
 TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent][async][u8]") {
@@ -2211,18 +2092,16 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
     // A full-map reasoning model supports "high", so the level-only update
     // passes through creation and re-clamp unchanged (#352).
     options.model = tests::make_full_thinking_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"high"}};
-    });
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"high"}};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result);
-    CHECK(run.result->state.thinking_level == "high");
+    CHECK(run.result);
+    CHECK(run.state.thinking_level == "high");
 }
 
 TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[agent][async][u8]") {
@@ -2231,28 +2110,27 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{.model = tests::make_model("missing-model")};
-    });
-    options.validate_turn_update =
-        agent::adapt_sync_validate_turn_update(
+    options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&) -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{.model = tests::make_model("missing-model")};
+            });
+    options.validate_turn_update = agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate& update) -> support::ExpectedVoid {
-        if (update.model && update.model->id != "gpt-test") {
-            return std::unexpected(support::make_error(support::ErrorCode::Validation, "unknown model", update.model->id));
-        }
-        return {};
-    });
+                if (update.model && update.model->id != "gpt-test") {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "unknown model", update.model->id));
+                }
+                return {};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Validation);
@@ -2268,18 +2146,15 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
         options.model = tests::make_model("gpt-test");
-        options.prepare_next_turn =
-            agent::adapt_sync_prepare_next_turn(
+        options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
                 [](const agent::PrepareNextTurnContext&)
-            -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                "prepareNextTurn hook failed",
-                "prepare boom"));
-        });
+                        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                    return std::unexpected(support::make_error(
+                            support::ErrorCode::Tool, "prepareNextTurn hook failed", "prepare boom"));
+                });
 
-        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-        auto run = run_loop(loop, "hi");
+        agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+        auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
         CHECK(run.result.error().message == "prepareNextTurn hook failed");
@@ -2294,23 +2169,19 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
         options.model = tests::make_model("gpt-test");
-        options.prepare_next_turn =
-            agent::adapt_sync_prepare_next_turn(
+        options.prepare_next_turn = agent::adapt_sync_prepare_next_turn(
                 [](const agent::PrepareNextTurnContext&)
-            -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-            return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-next")};
-        });
+                        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+                    return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-next")};
+                });
         options.validate_turn_update =
-            agent::adapt_sync_validate_turn_update(
-                [](const agent::AgentLoopTurnUpdate&) -> support::ExpectedVoid {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                "validateTurnUpdate hook failed",
-                "validator boom"));
-        });
+                agent::adapt_sync_validate_turn_update([](const agent::AgentLoopTurnUpdate&) -> support::ExpectedVoid {
+                    return std::unexpected(support::make_error(
+                            support::ErrorCode::Tool, "validateTurnUpdate hook failed", "validator boom"));
+                });
 
-        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-        auto run = run_loop(loop, "hi");
+        agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+        auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
         CHECK(run.result.error().message == "validateTurnUpdate hook failed");
@@ -2331,24 +2202,26 @@ TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[
 
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::Exclusive,
-        probe).tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::Exclusive,
+                    probe)
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     CHECK(probe.max_active.load() == 1);
 }
@@ -2359,14 +2232,13 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    auto alpha = make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result");
-    auto beta = make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result");
+    auto alpha =
+            make_configurable_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "alpha result");
+    auto beta = make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            "beta result");
     auto* alpha_ptr = alpha.state.get();
     auto* beta_ptr = beta.state.get();
     REQUIRE(registry.add(std::move(alpha.tool)));
@@ -2377,10 +2249,10 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(alpha_ptr->invocations.size() == 1);
     CHECK(beta_ptr->invocations.size() == 1);
 
@@ -2407,23 +2279,19 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     CHECK(message_order[1] == "beta");
 }
 
-TEST_CASE(
-    "agent loop recovers after a schema-invalid call in a bounded parallel batch",
-    "[agent][async][tool-arguments][issue27]") {
+TEST_CASE("agent loop recovers after a schema-invalid call in a bounded parallel batch",
+        "[agent][async][tool-arguments][issue27]") {
     auto client = std::make_shared<FakeStreamingClient>();
 
     ai::AssistantMessage mixed_calls;
     mixed_calls.stop_reason = ai::AssistantStopReason::ToolUse;
-    mixed_calls.content.emplace_back(ai::tool_call_content(
-        "call-invalid", "alpha", R"({"value":"not-an-integer"})"));
-    mixed_calls.content.emplace_back(ai::tool_call_content(
-        "call-valid", "beta", R"({"value":"2"})"));
+    mixed_calls.content.emplace_back(ai::tool_call_content("call-invalid", "alpha", R"({"value":"not-an-integer"})"));
+    mixed_calls.content.emplace_back(ai::tool_call_content("call-valid", "beta", R"({"value":"2"})"));
     client->responses.push_back(std::move(mixed_calls));
 
     ai::AssistantMessage corrected_call;
     corrected_call.stop_reason = ai::AssistantStopReason::ToolUse;
-    corrected_call.content.emplace_back(ai::tool_call_content(
-        "call-corrected", "alpha", R"({"value":"3"})"));
+    corrected_call.content.emplace_back(ai::tool_call_content("call-corrected", "alpha", R"({"value":"3"})"));
     client->responses.push_back(std::move(corrected_call));
     client->responses.push_back(ai::assistant_text_message("recovered"));
 
@@ -2431,13 +2299,9 @@ TEST_CASE(
 
     agent::ToolRegistry registry;
     auto alpha = make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", strict_contract},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result");
+            ai::Tool{"alpha", "Alpha", strict_contract}, agent::ToolConcurrency::ParallelSafe, "alpha result");
     auto beta = make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", strict_contract},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result");
+            ai::Tool{"beta", "Beta", strict_contract}, agent::ToolConcurrency::ParallelSafe, "beta result");
     auto* alpha_ptr = alpha.state.get();
     auto* beta_ptr = beta.state.get();
     REQUIRE(registry.add(std::move(alpha.tool)));
@@ -2449,21 +2313,19 @@ TEST_CASE(
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
-            [&](const agent::BeforeToolCallContext& context)
-        -> support::Expected<agent::BeforeToolCallResult> {
-        before_hook_names.push_back(context.tool_call.name);
-        before_hook_arguments.push_back(context.args);
-        return agent::BeforeToolCallResult{};
-    });
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
+            [&](const agent::BeforeToolCallContext& context) -> support::Expected<agent::BeforeToolCallResult> {
+                before_hook_names.push_back(context.tool_call.name);
+                before_hook_arguments.push_back(context.args);
+                return agent::BeforeToolCallResult{};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "run both calls and recover");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "run both calls and recover");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 3);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 3);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
     REQUIRE(alpha_ptr->invocations.size() == 1);
     REQUIRE(beta_ptr->invocations.size() == 1);
     CHECK(alpha_ptr->invocations[0].call_id == "call-corrected");
@@ -2508,24 +2370,26 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
 
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{1};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(probe.max_active.load() == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
@@ -2538,24 +2402,26 @@ TEST_CASE("Async Agent Loop treats bounded parallel zero as no explicit cap", "[
 
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{0};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(probe.max_active.load() == 2);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
@@ -2567,14 +2433,13 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    auto alpha = make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result");
-    auto beta = make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result");
+    auto alpha =
+            make_configurable_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "alpha result");
+    auto beta = make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            "beta result");
     auto* alpha_ptr = alpha.state.get();
     auto* beta_ptr = beta.state.get();
     REQUIRE(registry.add(std::move(alpha.tool)));
@@ -2584,20 +2449,18 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext& context)
-        -> support::Expected<agent::BeforeToolCallResult> {
-        if (context.tool_call.name == "alpha") {
-            return agent::BeforeToolCallResult{true, "blocked alpha"};
-        }
-        return agent::BeforeToolCallResult{};
-    });
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
+            [](const agent::BeforeToolCallContext& context) -> support::Expected<agent::BeforeToolCallResult> {
+                if (context.tool_call.name == "alpha") {
+                    return agent::BeforeToolCallResult{true, "blocked alpha"};
+                }
+                return agent::BeforeToolCallResult{};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(alpha_ptr->invocations.empty());
     CHECK(beta_ptr->invocations.size() == 1);
     REQUIRE(client->requests.size() == 2);
@@ -2620,33 +2483,33 @@ TEST_CASE("bounded parallel before-hook failure finalizes every call without sta
 
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
-            [](const agent::BeforeToolCallContext&)
-        -> support::Expected<agent::BeforeToolCallResult> {
-        return std::unexpected(support::make_error(support::ErrorCode::Tool, "preflight failed"));
-    });
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
+            [](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
+                return std::unexpected(support::make_error(support::ErrorCode::Tool, "preflight failed"));
+            });
 
     // pi prepareToolCall: every failing before hook finalizes its own call's
     // error result; no worker ever starts and the run continues (ADR 0008).
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     CHECK(probe.max_active.load() == 0);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
@@ -2669,22 +2532,23 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_failing_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
-    REQUIRE(registry.add(make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result").tool));
+    REQUIRE(registry.add(
+            make_failing_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "beta result")
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
@@ -2698,63 +2562,47 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8][issue483]") {
+TEST_CASE(
+        "bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8][issue483]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result").tool));
-    REQUIRE(registry.add(make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result").tool));
+    REQUIRE(registry.add(
+            make_configurable_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "alpha result")
+                    .tool));
+    REQUIRE(registry.add(
+            make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "beta result")
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
-    boost::asio::thread_pool pool{4};
-    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
     std::atomic<int> agent_end_events{0};
-    std::vector<agent::AgentLifecycleEvent> events;
-    std::mutex events_mutex;
-    boost::asio::co_spawn(
-        pool,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.run(
-                "read",
-                [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
-                    {
-                        std::lock_guard lock(events_mutex);
-                        events.push_back(event);
-                    }
-                    if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
-                        return std::unexpected(support::make_error(
-                            support::ErrorCode::Tool,
-                            "agent event sink failed",
-                            "sink boom"));
-                    }
-                    if (std::holds_alternative<agent::AgentEndEvent>(event)) {
-                        ++agent_end_events;
-                    }
-                    return {};
-                });
-            co_return;
-        },
-        boost::asio::detached);
-    pool.join();
+    auto commitment = [&agent_end_events](const agent::AgentLifecycleEvent& event) {
+        if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
+            return support::ExpectedVoid{std::unexpected(
+                    support::make_error(support::ErrorCode::Tool, "agent event sink failed", "sink boom"))};
+        }
+        if (std::holds_alternative<agent::AgentEndEvent>(event)) {
+            ++agent_end_events;
+        }
+        return support::ExpectedVoid{};
+    };
+    auto run = run_agent_on_pool(subject, "read", std::move(commitment));
 
-    REQUIRE(result.has_value());
-    REQUIRE_FALSE(*result);
-    CHECK(result->error().message == "agent event sink failed");
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().message == "agent event sink failed");
     CHECK(agent_end_events.load() == 1);
-    CHECK(count_events<agent::MessageStartEvent>(events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(events) == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent][async][u8]") {
@@ -2763,34 +2611,34 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result").tool));
-    REQUIRE(registry.add(make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result").tool));
+    REQUIRE(registry.add(
+            make_configurable_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "alpha result")
+                    .tool));
+    REQUIRE(registry.add(
+            make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "beta result")
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext& context)
-        -> support::Expected<agent::AfterToolCallResult> {
-        if (context.tool_call.name == "alpha") {
-            return std::unexpected(support::make_error(support::ErrorCode::Tool, "post-processor failed"));
-        }
-        return agent::AfterToolCallResult{};
-    });
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
+            [](const agent::AfterToolCallContext& context) -> support::Expected<agent::AfterToolCallResult> {
+                if (context.tool_call.name == "alpha") {
+                    return std::unexpected(support::make_error(support::ErrorCode::Tool, "post-processor failed"));
+                }
+                return agent::AfterToolCallResult{};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
@@ -2811,24 +2659,26 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
     client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_delayed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        std::chrono::milliseconds{100},
-        "alpha result").tool));
-    REQUIRE(registry.add(make_delayed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        std::chrono::milliseconds{10},
-        "beta result").tool));
+    REQUIRE(registry.add(
+            make_delayed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    std::chrono::milliseconds{100},
+                    "alpha result")
+                    .tool));
+    REQUIRE(registry.add(
+            make_delayed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    std::chrono::milliseconds{10},
+                    "beta result")
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
 
     std::vector<std::string> end_order;
     for (const auto& event : run.events) {
@@ -2863,14 +2713,13 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     client->responses.push_back(ai::assistant_text_message("recovered"));
 
     agent::ToolRegistry registry;
-    auto alpha = make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result");
-    auto beta = make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result");
+    auto alpha =
+            make_configurable_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "alpha result");
+    auto beta = make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            "beta result");
     auto* alpha_ptr = alpha.state.get();
     auto* beta_ptr = beta.state.get();
     REQUIRE(registry.add(std::move(alpha.tool)));
@@ -2882,26 +2731,22 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    options.before_tool_call =
-        agent::adapt_sync_before_tool_call(
-            [&](const agent::BeforeToolCallContext&)
-        -> support::Expected<agent::BeforeToolCallResult> {
-        ++before_calls;
-        return agent::BeforeToolCallResult{};
-    });
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
-            [&](const agent::AfterToolCallContext&)
-        -> support::Expected<agent::AfterToolCallResult> {
-        ++after_calls;
-        return agent::AfterToolCallResult{};
-    });
+    options.before_tool_call = agent::adapt_sync_before_tool_call(
+            [&](const agent::BeforeToolCallContext&) -> support::Expected<agent::BeforeToolCallResult> {
+                ++before_calls;
+                return agent::BeforeToolCallResult{};
+            });
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
+            [&](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
+                ++after_calls;
+                return agent::AfterToolCallResult{};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     CHECK(alpha_ptr->invocations.empty());
     CHECK(beta_ptr->invocations.empty());
     CHECK(before_calls == 0);
@@ -2924,15 +2769,16 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     CHECK(beta_result.tool_name == "beta");
     CHECK(ai::text_from_content(alpha_result.content).find("output token limit") != std::string::npos);
     CHECK(ai::text_from_content(alpha_result.content).find(R"({"x":1})") == std::string::npos);
-    CHECK(run.result->state.pending_tool_call_ids.empty());
-    CHECK(run.result->state.active_tool_names.empty());
+    CHECK(run.state.pending_tool_call_ids.empty());
+    REQUIRE(run.state.active_tool_names.size() == 2);
+    CHECK(run.state.active_tool_names[0] == "alpha");
+    CHECK(run.state.active_tool_names[1] == "beta");
 }
 
 TEST_CASE("tool scheduling vocabulary belongs to cch::agent", "[agent][async][u8]") {
     static_assert(std::is_enum_v<agent::ToolConcurrency>);
-    static_assert(std::is_same_v<
-        agent::ToolExecutionPolicy,
-        std::variant<agent::SequentialToolExecution, agent::BoundedParallelToolExecution>>);
+    static_assert(std::is_same_v<agent::ToolExecutionPolicy,
+            std::variant<agent::SequentialToolExecution, agent::BoundedParallelToolExecution>>);
 }
 
 TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[agent][async][issue355]") {
@@ -2942,25 +2788,27 @@ TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[ag
 
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     // No explicit tool_execution: the loop default is bounded parallel with
     // no cap, so a parallel-safe batch overlaps (pi's parallel default).
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     CHECK(probe.max_active.load() == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
@@ -2971,33 +2819,34 @@ TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[ag
     CHECK(std::get<ai::ToolResultMessage>(messages[3]).tool_name == "beta");
 }
 
-TEST_CASE(
-    "an exclusive tool serializes the whole batch with full per-call lifecycle at the loop",
-    "[agent][async][issue355]") {
+TEST_CASE("an exclusive tool serializes the whole batch with full per-call lifecycle at the loop",
+        "[agent][async][issue355]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        probe).tool));
-    REQUIRE(registry.add(make_probed_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::Exclusive,
-        probe).tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    probe)
+                    .tool));
+    REQUIRE(registry.add(
+            make_probed_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::Exclusive,
+                    probe)
+                    .tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
+    CHECK(run.result);
     CHECK(probe.max_active.load() == 1);
 
     // pi executeToolCallsSequential: each call's full lifecycle completes
@@ -3015,18 +2864,16 @@ TEST_CASE(
         }
     }
     REQUIRE((sequence == std::vector<std::string>{
-        "start:call-1",
-        "end:call-1",
-        "message-start:call-1",
-        "start:call-2",
-        "end:call-2",
-        "message-start:call-2",
-    }));
+                                 "start:call-1",
+                                 "end:call-1",
+                                 "message-start:call-1",
+                                 "start:call-2",
+                                 "end:call-2",
+                                 "message-start:call-2",
+                         }));
 }
 
-TEST_CASE(
-    "length-truncated fail-all matches pi's message and emits source-order errors",
-    "[agent][async][issue355]") {
+TEST_CASE("length-truncated fail-all matches pi's message and emits source-order errors", "[agent][async][issue355]") {
     auto client = std::make_shared<FakeStreamingClient>();
     auto truncated = two_tool_call_response();
     truncated.stop_reason = ai::AssistantStopReason::Length;
@@ -3034,14 +2881,13 @@ TEST_CASE(
     client->responses.push_back(ai::assistant_text_message("recovered"));
 
     agent::ToolRegistry registry;
-    auto alpha = make_configurable_fake_tool(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "alpha result");
-    auto beta = make_configurable_fake_tool(
-        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe,
-        "beta result");
+    auto alpha =
+            make_configurable_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    "alpha result");
+    auto beta = make_configurable_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            "beta result");
     auto* alpha_ptr = alpha.state.get();
     auto* beta_ptr = beta.state.get();
     REQUIRE(registry.add(std::move(alpha.tool)));
@@ -3051,11 +2897,11 @@ TEST_CASE(
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop_on_pool(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     CHECK(alpha_ptr->invocations.empty());
     CHECK(beta_ptr->invocations.empty());
 
@@ -3063,8 +2909,8 @@ TEST_CASE(
     // source order with the verbatim truncated-arguments message.
     std::vector<std::string> sequence;
     const std::string expected_message =
-        "Tool call \"alpha\" was not executed: the response hit the output token limit, so its "
-        "arguments may be truncated. Re-issue the tool call with complete arguments.";
+            "Tool call \"alpha\" was not executed: the response hit the output token limit, so its "
+            "arguments may be truncated. Re-issue the tool call with complete arguments.";
     for (const auto& event : run.events) {
         if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
             sequence.push_back("start:" + start->tool_call_id);
@@ -3080,13 +2926,13 @@ TEST_CASE(
         }
     }
     REQUIRE((sequence == std::vector<std::string>{
-        "start:call-1",
-        "end:call-1",
-        "message-start:call-1",
-        "start:call-2",
-        "end:call-2",
-        "message-start:call-2",
-    }));
+                                 "start:call-1",
+                                 "end:call-1",
+                                 "message-start:call-1",
+                                 "start:call-2",
+                                 "end:call-2",
+                                 "message-start:call-2",
+                         }));
 
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
@@ -3103,24 +2949,25 @@ TEST_CASE("all-true terminate batch ends the loop after one turn", "[agent][asyn
     client->responses.push_back(ai::assistant_text_message("unused"));
 
     agent::ToolRegistry registry;
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
-    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
+    options.after_tool_call = agent::adapt_sync_after_tool_call(
             [](const agent::AfterToolCallContext&) -> support::Expected<agent::AfterToolCallResult> {
-        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
-    });
+                return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+            });
 
-    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
-    auto run = run_loop(loop, "read");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
 
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 1);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(run.result);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::ToolUse);
     CHECK(client->requests.size() == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }

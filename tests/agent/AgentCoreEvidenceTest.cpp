@@ -19,7 +19,6 @@
 
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
-#include "agent/AgentLoop.hpp"
 #include "agent/ToolCallExecutor.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/FakeModelStream.hpp"
@@ -318,35 +317,56 @@ support::ExpectedVoid run_prompt(
     return std::move(*result);
 }
 
-struct LoopRun {
-    support::Expected<agent::AsyncAgentRunResult> result;
+struct AgentRun {
+    support::ExpectedVoid result;
     std::vector<agent::AgentLifecycleEvent> events;
+    agent::AgentState state;
 };
 
-LoopRun run_loop(
-    agent::AsyncAgentLoop& loop,
-    std::string prompt,
-    std::stop_token stop_token = {}) {
+AgentRun run_agent(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
-    std::optional<support::Expected<agent::AsyncAgentRunResult>> result;
+    std::optional<support::ExpectedVoid> result;
     std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.continue_with(
-                {},
-                std::move(prompt),
-                [&](const agent::AgentLifecycleEvent& event) {
-                    events.push_back(event);
-                    return support::ExpectedVoid{};
-                },
-                stop_token);
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     REQUIRE(result.has_value());
-    return LoopRun{std::move(*result), std::move(events)};
+    return AgentRun{
+            .result = std::move(*result),
+            .events = std::move(events),
+            .state = subject.state(),
+    };
+}
+
+[[nodiscard]] ai::AssistantStopReason final_stop_reason(const std::vector<agent::AgentLifecycleEvent>& events) {
+    for (auto it = events.rbegin(); it != events.rend(); ++it) {
+        if (const auto* turn_end = std::get_if<agent::TurnEndEvent>(&*it)) {
+            return std::get<ai::AssistantMessage>(turn_end->message).stop_reason;
+        }
+    }
+    return ai::AssistantStopReason::Stop;
+}
+
+template <typename T> std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) {
+    std::size_t count = 0;
+    for (const auto& event : events) {
+        if (std::holds_alternative<T>(event)) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 [[nodiscard]] support::JsonValue lifecycle_events_to_json(
@@ -549,12 +569,12 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    auto run = run_loop(loop, "hi");
+    auto run = run_agent(subject, "hi");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(run.result.has_value());
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Error);
     CHECK(runtime->terminal_events == 1);
     expect_json_equal(
         lifecycle_events_to_json(run.events), "loop-terminal-error.json");
@@ -569,17 +589,35 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
-    std::stop_source stop_source;
-    stop_source.request_stop();
-    auto run = run_loop(loop, "cancel me", stop_source.get_token());
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> result;
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await ai::detail::await_async_result(subject.prompt("cancel me"));
+                co_return;
+            },
+            boost::asio::detached);
+    while (runtime->calls.empty()) {
+        REQUIRE(io.run_one() == 1);
+    }
+    subject.abort();
+    io.run();
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(result.has_value());
+    REQUIRE(*result);
+    CHECK(final_stop_reason(events) == ai::AssistantStopReason::Aborted);
     CHECK(runtime->terminal_events == 1);
-    expect_json_equal(
-        lifecycle_events_to_json(run.events), "loop-terminal-aborted.json");
+    expect_json_equal(lifecycle_events_to_json(events), "loop-terminal-aborted.json");
 }
 
 TEST_CASE(
@@ -940,12 +978,12 @@ TEST_CASE(
             std::nullopt, std::nullopt, std::nullopt, terminate};
     });
 
-    agent::AsyncAgentLoop loop(runtime->factory(), std::move(tools), std::move(options));
-    auto run = run_loop(loop, "schedule tools");
+    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options));
+    auto run = run_agent(subject, "schedule tools");
 
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->turns == 3);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(run.result.has_value());
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 3);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::ToolUse);
     REQUIRE(runtime->calls.size() == 3);
 
     expect_json_equal(
@@ -963,5 +1001,5 @@ TEST_CASE(
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(third_turn_messages[6]));
     CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[5]).is_error);
     CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[6]).is_error);
-    CHECK(run.result->state.pending_tool_call_ids.empty());
+    CHECK(run.state.pending_tool_call_ids.empty());
 }
