@@ -51,4 +51,29 @@ namespace cch::tests {
     return done();
 }
 
+/// Join a co_spawned test run when the test scope ends: if the outcome has
+/// not arrived, pump briefly so the completion handler runs while every
+/// reference the run captures (terminal, session) is still alive. Declare it
+/// after the run's captured locals so destruction pumps before they die.
+/// Best-effort by design: in the strict no-exception shards a failed REQUIRE
+/// terminates without unwinding, so only paths where destructors run reach
+/// this guard; the short budget keeps a genuinely stuck failure path from
+/// hanging the shard.
+struct RunJoinGuard {
+    RunJoinGuard(boost::asio::io_context& loop, std::function<bool()> predicate)
+        : io(loop), done(std::move(predicate)) {}
+
+    RunJoinGuard(const RunJoinGuard&) = delete;
+    RunJoinGuard& operator=(const RunJoinGuard&) = delete;
+
+    ~RunJoinGuard() {
+        if (!done()) {
+            (void)pump_until(io, done, std::chrono::milliseconds{1000});
+        }
+    }
+
+    boost::asio::io_context& io;
+    std::function<bool()> done;
+};
+
 } // namespace cch::tests

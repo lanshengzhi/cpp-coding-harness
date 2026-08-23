@@ -4,6 +4,7 @@
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -2010,13 +2011,18 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
     REQUIRE(terminal.inject_input("stop and close\r"));
     drain_ready(io);
     REQUIRE(client_pointer->started);
     REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~\x1b[17~\x1b[17~"));
-    drain_ready(io);
-
-    REQUIRE(run_result);
+    // Shutdown while a prompt is active cancels the request and waits for
+    // quiescence across Runtime hops; pump until the terminal outcome instead
+    // of asserting after one drain (#527).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
     CHECK(client_pointer->stop_callback_count == 1);
     CHECK(count_text(visible_screen(terminal), "prompt aborted") == 1);
@@ -4028,17 +4034,22 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    // Turn settlement crosses Runtime worker-thread hops, so wait on the
+    // observable outcome instead of asserting after one pump pass (#527);
+    // a spurious REQUIRE failure terminates the strict no-exception test
+    // shard mid-flight and leaves the run's stack locals for LeakSanitizer.
     REQUIRE(terminal.inject_input("hello\r"));
     drain_ready(io);
     REQUIRE(terminal.inject_input("again\r"));
-    drain_ready(io);
-    REQUIRE(gated->request_count == 2);
-    REQUIRE(created->session->message_count() == 4);
+    REQUIRE(tests::pump_until(io, [&] { return gated->request_count == 2 && created->session->message_count() == 4; }));
 
     // The /compact summarization request is admitted and gated.
     REQUIRE(terminal.inject_input("/compact\r"));
-    drain_ready(io);
-    REQUIRE(gated->request_count == 3);
+    REQUIRE(tests::pump_until(io, [&] { return gated->request_count == 3; }));
 
     // Exit requests Session Close but cannot complete — and the run cannot
     // tear down the loop — while the admitted compaction still uses Session
@@ -4049,12 +4060,14 @@ TEST_CASE(
     CHECK_FALSE(run_result.has_value());
 
     // The compaction reaches its terminal outcome, Close finalizes, and the
-    // deferred exit completes exactly once.
+    // deferred exit completes exactly once. Release-to-exit crosses provider,
+    // persistence, and Runtime hops, so pump until the terminal outcome
+    // instead of asserting after one drain (#527).
     gated->release();
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
     CHECK_FALSE(created->session->is_open());
+    REQUIRE(tests::pump_until(io, [&] { return !created->session->is_busy(); }));
     CHECK_FALSE(created->session->is_busy());
 }
 

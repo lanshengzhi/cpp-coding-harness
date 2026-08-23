@@ -15,6 +15,7 @@
 #include "support/FakeTool.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 #include "ai/Redactor.hpp"
@@ -1327,27 +1328,35 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Tool start and shell execution settle through Runtime hops; wait on
+    // the observable outcome instead of asserting after one pump pass (#527).
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
     REQUIRE(terminal.inject_input("use the tool\r"));
-    drain_ready(io);
-    REQUIRE(tool_pointer->started);
+    REQUIRE(tests::pump_until(
+        io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
     REQUIRE(terminal.inject_input("!echo close\r"));
-    drain_ready(io);
-    REQUIRE(shell_pointer->commands.size() == 1);
+    REQUIRE(tests::pump_until(io, [&] { return shell_pointer->commands.size() == 1; }));
 
     // Close requests both cancellations and waits for quiescence: the run
     // cannot finish while the tool callback is still gated.
     REQUIRE(terminal.inject_input("/quit\r"));
-    drain_ready(io);
-    CHECK(tool_pointer->stop_callback_count == 1);
-    CHECK(shell_pointer->cancellation_request_count == 1);
+    REQUIRE(tests::pump_until(
+        io,
+        [&] {
+            return tool_pointer->stop_callback_count == 1 &&
+                shell_pointer->cancellation_request_count == 1;
+        }));
     CHECK(created->session->is_busy());
     REQUIRE_FALSE(run_result.has_value());
 
     tool_pointer->release();
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
     CHECK_FALSE(created->session->is_open());
+    REQUIRE(tests::pump_until(io, [&] { return !created->session->is_busy(); }));
     CHECK_FALSE(created->session->is_busy());
 
     // The cancelled Bash committed exactly once; cleanup and terminal
@@ -1401,25 +1410,33 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Tool start and shell execution settle through Runtime hops; wait on
+    // the observable outcome instead of asserting after one pump pass (#527).
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
     REQUIRE(terminal.inject_input("use the tool\r"));
-    drain_ready(io);
-    REQUIRE(tool_pointer->started);
+    REQUIRE(tests::pump_until(
+        io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
     REQUIRE(terminal.inject_input("!echo f6 close\r"));
-    drain_ready(io);
-    REQUIRE(shell_pointer->commands.size() == 1);
+    REQUIRE(tests::pump_until(io, [&] { return shell_pointer->commands.size() == 1; }));
 
     REQUIRE(terminal.inject_input("\x1b[17~"));
-    drain_ready(io);
-    CHECK(tool_pointer->stop_callback_count == 1);
-    CHECK(shell_pointer->cancellation_request_count == 1);
+    REQUIRE(tests::pump_until(
+        io,
+        [&] {
+            return tool_pointer->stop_callback_count == 1 &&
+                shell_pointer->cancellation_request_count == 1;
+        }));
     CHECK(created->session->is_busy());
     REQUIRE_FALSE(run_result.has_value());
 
     tool_pointer->release();
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
     CHECK_FALSE(created->session->is_open());
+    REQUIRE(tests::pump_until(io, [&] { return !created->session->is_busy(); }));
     CHECK_FALSE(created->session->is_busy());
 
     const auto screen = visible_screen(terminal);
