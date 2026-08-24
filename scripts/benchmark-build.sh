@@ -62,8 +62,8 @@ Options:
   -h, --help           Show this help.
 
 Dependencies: cmake, ninja, ccache, python3 (for parsing and JSON). A prior
-`scripts/bootstrap.sh --no-build` warms the vcpkg binary cache so the benchmark
-configure is fully offline.
+`scripts/bootstrap.sh` plus one `cmake --preset vcpkg` configure warms the
+vcpkg binary cache so the benchmark configure is fully offline.
 EOF
 }
 
@@ -210,7 +210,7 @@ done
 
 if [[ ! -x "$vcpkg_root/vcpkg" ]]; then
 	echo "error: vcpkg checkout not found at $vcpkg_root" >&2
-	echo "       run scripts/bootstrap.sh --no-build once to set up dependencies" >&2
+	echo "       run scripts/bootstrap.sh once to set up dependencies" >&2
 	exit 1
 fi
 if [[ ! -f "$vcpkg_root/scripts/buildsystems/vcpkg.cmake" ]]; then

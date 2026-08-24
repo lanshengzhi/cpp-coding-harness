@@ -5,7 +5,8 @@ usage() {
 	cat <<'EOF'
 Usage: scripts/bootstrap.sh [options]
 
-Bootstraps vcpkg, configures CMake with the vcpkg preset, and optionally builds/tests.
+Prepares the host environment and the pinned vcpkg dependency checkout.
+It does not configure, build, or test: CMake and CTest own those steps.
 
 Environment precheck: native Linux x86-64 with glibc, git, curl, zip, unzip,
 tar, CMake 4.4+, Ninja 1.11+, and a GCC 16.x compiler are required. When a
@@ -14,34 +15,36 @@ exits before touching anything. vcpkg is pinned to the builtin-baseline commit
 recorded in vcpkg.json.
 
 Options:
-  --no-build       Configure dependencies/project only; do not build.
-  --test           Build and run tests after configuration.
-  --release        Use the vcpkg-release preset instead of Debug.
   --vcpkg-root DIR Use DIR for vcpkg instead of $VCPKG_ROOT or .deps/vcpkg.
   -h, --help       Show this help.
+
+After bootstrap, configure, build, and test with CMake directly:
+
+  export VCPKG_ROOT=<vcpkg root>
+  cmake --preset vcpkg --fresh     # Fresh Validation configure
+  cmake --build --preset vcpkg
+  ctest --preset vcpkg
+
+Use the vcpkg-release preset for the Release configuration.
 EOF
 }
 
-build=1
-run_tests=0
-release=0
+removed_option() {
+	echo "error: $1 is no longer handled by bootstrap.sh; it only prepares the host and pinned vcpkg" >&2
+	echo "run CMake/CTest directly instead, for example:" >&2
+	echo "  export VCPKG_ROOT=<vcpkg root>" >&2
+	if [[ "$1" == "--release" ]]; then
+		echo "  cmake --preset vcpkg-release --fresh && cmake --build --preset vcpkg-release && ctest --preset vcpkg-release" >&2
+	else
+		echo "  cmake --preset vcpkg --fresh && cmake --build --preset vcpkg && ctest --preset vcpkg" >&2
+	fi
+	exit 2
+}
+
 vcpkg_root_arg=""
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
-	--no-build)
-		build=0
-		shift
-		;;
-	--test)
-		run_tests=1
-		build=1
-		shift
-		;;
-	--release)
-		release=1
-		shift
-		;;
 	--vcpkg-root)
 		if [[ $# -lt 2 ]]; then
 			echo "error: --vcpkg-root requires a directory" >&2
@@ -49,6 +52,9 @@ while [[ $# -gt 0 ]]; do
 		fi
 		vcpkg_root_arg="$2"
 		shift 2
+		;;
+	--no-build | --test | --release)
+		removed_option "$1"
 		;;
 	-h | --help)
 		usage
@@ -148,8 +154,9 @@ if ! version_at_least "$ninja_version" "1.11"; then
 	precheck_fail "Ninja 1.11 or newer is required (found $ninja_version)"
 fi
 
-# GCC 16.x is the sole supported build/release compiler (ADR 0039). Check and
-# then export the exact gcc/g++ paths used by CMake and vcpkg.
+# GCC 16.x is the sole supported build/release compiler (ADR 0039). The vcpkg
+# configure preset pins CMAKE_CXX_COMPILER to the g++ driver on PATH, so verify
+# gcc/g++ are 16.x.
 if ! command -v gcc >/dev/null 2>&1 || ! command -v g++ >/dev/null 2>&1; then
 	echo "error: GCC build compilers (gcc and g++) were not found on PATH" >&2
 	case "$distro" in
@@ -194,8 +201,6 @@ if [[ "$gcc_major" != "16" || "$gxx_major" != "16" ]]; then
 	exit 1
 fi
 
-gcc_bin="$(command -v gcc)"
-gxx_bin="$(command -v g++)"
 echo "Environment precheck passed: native Linux x86-64 glibc, CMake $cmake_version, Ninja $ninja_version, GCC $gcc_major.x"
 
 # --- vcpkg acquisition and pinning ----------------------------------------
@@ -253,39 +258,13 @@ fi
 echo "Building/updating vcpkg for baseline $baseline"
 "$vcpkg_root/bootstrap-vcpkg.sh" -disableMetrics
 
-export VCPKG_ROOT="$vcpkg_root"
+cat <<EOF
+Bootstrap complete. Configure, build, and test with CMake directly:
 
-preset="vcpkg"
-if [[ "$release" -eq 1 ]]; then
-	preset="vcpkg-release"
-fi
+  export VCPKG_ROOT="$vcpkg_root"
+  cmake --preset vcpkg --fresh
+  cmake --build --preset vcpkg
+  ctest --preset vcpkg
 
-cmake_bin="$(command -v cmake)"
-ctest_bin="$(dirname "$cmake_bin")/ctest"
-if [[ ! -x "$ctest_bin" ]]; then
-	ctest_bin="$(command -v ctest)"
-fi
-
-# CMake presets resolve CMakePresets.json relative to the current working
-# directory, so run from repo_root regardless of where the script is invoked.
-(
-	cd "$repo_root" || exit 1
-
-	export CC="$gcc_bin"
-	export CXX="$gxx_bin"
-
-	echo "Configuring with CMake preset '$preset'"
-	"$cmake_bin" --preset "$preset" --fresh
-
-	if [[ "$build" -eq 1 ]]; then
-		echo "Building with CMake preset '$preset'"
-		"$cmake_bin" --build --preset "$preset"
-	fi
-
-	if [[ "$run_tests" -eq 1 ]]; then
-		echo "Running tests with CTest preset '$preset'"
-		"$ctest_bin" --preset "$preset"
-	fi
-)
-
-echo "Bootstrap complete. VCPKG_ROOT=$VCPKG_ROOT"
+Use the vcpkg-release preset for the Release configuration.
+EOF
