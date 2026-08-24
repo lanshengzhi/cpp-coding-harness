@@ -10,6 +10,7 @@
       "binaryDir": "${sourceDir}/build",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
         "CCH_TOOLCHAIN_ROLE": "build",
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
@@ -150,14 +151,14 @@
       "configurePreset": "vcpkg",
       "configuration": "Debug",
       "output": { "outputOnFailure": true },
-      "execution": { "jobs": 4, "noTests": "error" }
+      "execution": { "jobs": 4, "noTestsAction": "error" }
     },
     {
       "name": "vcpkg-release",
       "configurePreset": "vcpkg-release",
       "configuration": "Release",
       "output": { "outputOnFailure": true },
-      "execution": { "jobs": 4, "noTests": "error" }
+      "execution": { "jobs": 4, "noTestsAction": "error" }
     },
     {
       "name": "clang-conformance",
