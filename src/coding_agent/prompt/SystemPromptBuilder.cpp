@@ -193,14 +193,13 @@ std::string buildSystemPrompt(const BuildSystemPromptOptions& options) {
     }
 
     // The identity line and documentation block carry the C++ binary's own
-    // ("cch") identity and docs paths — the only delta from pi's verbatim
+    // ("pike") identity and docs paths — the only delta from pi's verbatim
     // block (pinned by the differential golden; ADR 0036 G4).
-    std::string prompt =
-        "You are an expert coding assistant operating inside cch, a coding "
-        "agent harness. You help users by reading files, executing commands, "
-        "editing code, and writing new files.\n"
-        "\n"
-        "Available tools:\n";
+    std::string prompt = "You are an expert coding assistant operating inside pike, a coding "
+                         "agent harness. You help users by reading files, executing commands, "
+                         "editing code, and writing new files.\n"
+                         "\n"
+                         "Available tools:\n";
     prompt += tools_list;
     prompt +=
         "\n"
@@ -210,12 +209,11 @@ std::string buildSystemPrompt(const BuildSystemPromptOptions& options) {
         "\n"
         "Guidelines:\n";
     prompt += guidelines;
-    prompt +=
-        "\n"
-        "\n"
-        "cch documentation (read only when the user asks about cch itself, "
-        "its SDK, extensions, themes, skills, or TUI):\n"
-        "- Main documentation: ";
+    prompt += "\n"
+              "\n"
+              "pike documentation (read only when the user asks about pike itself, "
+              "its SDK, extensions, themes, skills, or TUI):\n"
+              "- Main documentation: ";
     prompt += options.readmePath;
     prompt +=
         "\n"
@@ -225,23 +223,22 @@ std::string buildSystemPrompt(const BuildSystemPromptOptions& options) {
         "\n"
         "- Examples: ";
     prompt += options.examplesPath;
-    prompt +=
-        " (extensions, custom tools, SDK)\n"
-        "- When reading cch docs or examples, resolve docs/... under "
-        "Additional docs and examples/... under Examples, not the current "
-        "working directory\n"
-        "- When asked about: extensions (docs/extensions.md, "
-        "examples/extensions/), themes (docs/themes.md), skills "
-        "(docs/skills.md), prompt templates (docs/prompt-templates.md), TUI "
-        "components (docs/tui.md), keybindings (docs/keybindings.md), SDK "
-        "integrations (docs/sdk.md), custom providers "
-        "(docs/custom-provider.md), adding models (docs/models.md), cch "
-        "packages (docs/packages.md), environment variables "
-        "(docs/environment-variables.md)\n"
-        "- When working on cch topics, read the docs and examples, and "
-        "follow .md cross-references before implementing\n"
-        "- Always read cch .md files completely and follow links to related "
-        "docs (e.g., tui.md for TUI API details)";
+    prompt += " (extensions, custom tools, SDK)\n"
+              "- When reading pike docs or examples, resolve docs/... under "
+              "Additional docs and examples/... under Examples, not the current "
+              "working directory\n"
+              "- When asked about: extensions (docs/extensions.md, "
+              "examples/extensions/), themes (docs/themes.md), skills "
+              "(docs/skills.md), prompt templates (docs/prompt-templates.md), TUI "
+              "components (docs/tui.md), keybindings (docs/keybindings.md), SDK "
+              "integrations (docs/sdk.md), custom providers "
+              "(docs/custom-provider.md), adding models (docs/models.md), pike "
+              "packages (docs/packages.md), environment variables "
+              "(docs/environment-variables.md)\n"
+              "- When working on pike topics, read the docs and examples, and "
+              "follow .md cross-references before implementing\n"
+              "- Always read pike .md files completely and follow links to related "
+              "docs (e.g., tui.md for TUI API details)";
 
     if (!append_section.empty()) {
         prompt += append_section;

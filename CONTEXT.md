@@ -16,6 +16,10 @@ _Avoid_: Missing contract, unsupported stub
 The harness-owned interactive terminal product surface, combining reusable terminal UI capabilities with coding-agent-specific interaction. A non-interactive programmatic frontend is not the Native TUI.
 _Avoid_: Text REPL, RPC frontend
 
+**Pike Runtime**:
+The only released product: the native Linux executable that composes the CLI, Agent Session, Runtime Root, and Native TUI for one invocation.
+_Avoid_: `cpp_harness`, Owner library, SDK
+
 **Interactive Session Run**:
 One Native TUI execution from boot through exit: the assembled CLI-owned facts, session intent (bind an existing Agent Session or defer creation to the boot trust prompt), and host capabilities, packed once by the CLI adapter so the Native TUI consumes run intent and outcome rather than individual fields.
 _Avoid_: TUI config bag, boot options

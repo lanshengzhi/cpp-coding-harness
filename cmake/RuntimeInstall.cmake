@@ -1,6 +1,6 @@
 # Runtime-only install surface (ADR 0039; issue #472).
 #
-# `cmake --install` installs only the cpp_harness Runtime and the required
+# `cmake --install` installs only the Pike Runtime and the required
 # third-party license/notice texts — no Owner Interface headers, static
 # libraries, CMake package metadata, exported targets, components, or other
 # development surface. The install path is gated: a generated install-gate

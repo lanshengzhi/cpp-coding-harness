@@ -56,7 +56,7 @@ struct BuildSystemPromptOptions {
 /// `Available tools` from tool snippets (`(none)` when empty), deduped
 /// guidelines (tool guidelines + the auto bash-exploration rule + the
 /// always-lines), the identity-adjusted documentation block (the C++ binary's
-/// own "cch" identity and docs paths — the only delta from pi, pinned by the
+/// own "pike" identity and docs paths — the only delta from pi, pinned by the
 /// differential golden), the append section, `<project_context>`, the skills
 /// section (gated on the read tool), and the trailing
 /// `Current working directory:` line.

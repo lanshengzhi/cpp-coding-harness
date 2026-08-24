@@ -1,6 +1,6 @@
 # Build Performance Plan
 
-Status: Historical measurement record. The proposed policy and staged recommendation are superseded by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) and accepted [ADR 0039](adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md)/[ADR 0040](adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md). This document preserves benchmark evidence; it does not authorize implementation or define a supported build path.
+Status: Historical measurement record. The proposed policy and staged recommendation are superseded by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) and accepted [ADR 0039](adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md)/[ADR 0040](adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md). This document preserves benchmark evidence; it does not authorize implementation or define a supported build path. Historical target names such as `cpp_harness` and `cpp_harness_tests` are intentionally retained in the measurements; the current product target is `pike` per ADR 0045.
 
 ## Current architecture-policy supersession
 

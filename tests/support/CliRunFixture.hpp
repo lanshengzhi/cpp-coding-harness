@@ -150,7 +150,7 @@ inline CliRunResult run_cli(CliRunOptions options) {
     detail::CliRunCwdGuard cwd_guard{options.cwd};
     detail::CliRunEnvGuard env_guard{options.env};
 
-    std::vector<std::string> args{"cpp_harness"};
+    std::vector<std::string> args{"pike"};
     args.insert(args.end(), options.args.begin(), options.args.end());
     std::vector<char*> argv;
     argv.reserve(args.size());

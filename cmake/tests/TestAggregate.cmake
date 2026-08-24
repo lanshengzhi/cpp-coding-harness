@@ -4,7 +4,7 @@ include_guard(GLOBAL)
 
     # Aggregate target that builds every shard; a build convenience, not a
     # scheduling authority (issue #447; CODING_STANDARDS.md section 11.6).
-    add_custom_target(cpp_harness_tests
+    add_custom_target(pike_tests
         DEPENDS
             cch_tests_support
             cch_tests_tui

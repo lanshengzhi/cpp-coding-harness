@@ -5,7 +5,7 @@
 // scenarios this file drives through the C++ `SystemPromptBuilder` with
 // identical inputs. Each snapshot carries the `identityDelta`: the identity
 // line and the documentation block in both forms (pi vs the C++ binary's own
-// "cch"). This test swaps the delta regions into pi's message and byte-
+// "pike"). This test swaps the delta regions into pi's message and byte-
 // compares against the C++-built prompt, so the golden pins "structure byte-
 // identical, identity lines swapped" (ADR 0036 G4 / #392) as a differential
 // check — the only transformations between pi's message and the C++ prompt
@@ -36,7 +36,7 @@ namespace {
 /// The scenario inputs must match the capture sidecar
 /// (`fixtures/pi-coding-agent/capture/system-prompt-snapshots.mts`) and the
 /// `SystemPromptBuilderTest` session shape byte-for-byte. The docs paths are
-/// the scrubbed `/cch/*` identity forms; pi's side resolves the scrubbed
+/// the scrubbed `/pike/*` identity forms; pi's side resolves the scrubbed
 /// `/pi/*` paths through `PI_PACKAGE_DIR=/pi`.
 [[nodiscard]] coding_agent::prompt::BuildSystemPromptOptions session_shape_options(
     std::string cwd = "/tmp/workspace") {
@@ -67,9 +67,9 @@ namespace {
     };
     options.cwd = std::move(cwd);
     // Identity delta: the C++ binary's own docs paths (scrubbed in goldens).
-    options.readmePath = "/cch/README.md";
-    options.docsPath = "/cch/docs";
-    options.examplesPath = "/cch/examples";
+    options.readmePath = "/pike/README.md";
+    options.docsPath = "/pike/docs";
+    options.examplesPath = "/pike/examples";
     return options;
 }
 
@@ -147,7 +147,7 @@ namespace {
 // ── Scenario runners ────────────────────────────────────────────────────────
 
 /// Pins one scenario: loads pi's message from the committed snapshot, swaps
-/// the identity-delta regions (pi -> cch) into pi's text, and byte-compares
+/// the identity-delta regions (pi -> pike) into pi's text, and byte-compares
 /// the result against the C++-built prompt.
 void check_message_golden(
     std::string_view scenario,
@@ -179,41 +179,41 @@ void check_message_golden(
     CHECK(required_string(*block, "type") == "text");
     const auto pi_text = required_string(*block, "text");
 
-    const auto cch_prompt = coding_agent::prompt::buildSystemPrompt(options);
+    const auto pike_prompt = coding_agent::prompt::buildSystemPrompt(options);
 
     const auto& identity_delta = required_object(*root, "identityDelta");
     if (identity_delta.empty()) {
         // Custom branch: no identity regions; the two sides are byte-identical.
-        CHECK(pi_text == cch_prompt);
+        CHECK(pi_text == pike_prompt);
         return;
     }
 
-    // Default branch: swap the identity regions (pi -> cch) into pi's text.
+    // Default branch: swap the identity regions (pi -> pike) into pi's text.
     const auto& identity_line = required_object(identity_delta, "identityLine");
     const auto& docs_block = required_object(identity_delta, "docsBlock");
     const auto pi_identity = required_string(identity_line, "pi");
-    const auto cch_identity = required_string(identity_line, "cch");
+    const auto pike_identity = required_string(identity_line, "pike");
     const auto pi_docs = required_string(docs_block, "pi");
-    const auto cch_docs = required_string(docs_block, "cch");
+    const auto pike_docs = required_string(docs_block, "pike");
 
     // The delta regions are present in pi's message (sanity).
     REQUIRE(pi_text.find(pi_identity) != std::string::npos);
     REQUIRE(pi_text.find(pi_docs) != std::string::npos);
-    // The cch forms carry the C++ binary's own identity, not pi's.
-    CHECK(cch_identity.find("inside cch,") != std::string::npos);
-    CHECK(cch_docs.find("cch documentation") != std::string::npos);
-    CHECK(cch_docs.find("/cch/") != std::string::npos);
+    // The Pike forms carry the C++ binary's own identity, not pi's.
+    CHECK(pike_identity.find("inside pike,") != std::string::npos);
+    CHECK(pike_docs.find("pike documentation") != std::string::npos);
+    CHECK(pike_docs.find("/pike/") != std::string::npos);
 
-    auto swapped = replace_all(pi_text, pi_identity, cch_identity);
-    swapped = replace_all(swapped, pi_docs, cch_docs);
-    CHECK(swapped == cch_prompt);
+    auto swapped = replace_all(pi_text, pi_identity, pike_identity);
+    swapped = replace_all(swapped, pi_docs, pike_docs);
+    CHECK(swapped == pike_prompt);
 }
 
 } // namespace
 
-TEST_CASE("system prompt default message golden: pi structure, cch identity "
+TEST_CASE("system prompt default message golden: pi structure, Pike identity "
           "line and docs block swapped",
-          "[coding_agent][prompt][golden][issue422]") {
+        "[coding_agent][prompt][golden][issue422]") {
     auto options = session_shape_options();
     options.skills = {dummy_skill()};
     check_message_golden("default", options);

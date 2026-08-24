@@ -20,7 +20,7 @@ fi
 
 staged_prefix="$1"
 reference_binary="$2"
-binary_name="cpp_harness"
+binary_name="pike"
 
 fail() {
 	echo "smoke FAIL: $1" >&2

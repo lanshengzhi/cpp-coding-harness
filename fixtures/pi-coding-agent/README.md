@@ -112,7 +112,7 @@ identical inputs. Each snapshot pins pi's prompt at **message level** (a `system
 one text content block, the same message/content-block projection as the session suites) and
 carries the pinned baseline citation in `meta`. The `identityDelta` pins the only delta from
 pi: the identity line and the documentation block, in both forms (pi vs the C++ binary's own
-"cch"); the C++ test swaps the regions into pi's message and byte-compares, so the golden pins
+"pike"); the C++ test swaps the regions into pi's message and byte-compares, so the golden pins
 "structure byte-identical, identity lines swapped" (ADR 0036 G4 / [#392]). The custom branch
 carries no identity regions and is pinned byte-identical.
 
@@ -175,7 +175,7 @@ second capture pass.
 regenerates the System Prompt message goldens ([#422]): it re-asserts the frozen-checkout
 guard, pins `PI_PACKAGE_DIR=/pi` (scrubbing pi's resolved docs paths), drives the frozen
 `buildSystemPrompt` through the three scripted scenarios, extracts the identity-delta regions
-(identity line + docs block, both pi and cch forms), and byte-verifies determinism with a second
+(identity line + docs block, both pi and pike forms), and byte-verifies determinism with a second
 capture pass.
 
 Regenerate with:

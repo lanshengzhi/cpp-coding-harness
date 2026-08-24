@@ -4,7 +4,7 @@ status: accepted
 
 # Own the Capability Owner Package graph and Parity Architecture Gate
 
-The repository has four authoritative Capability Owner Packages: `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`. One pi-neutral C++ Support Package, `cch_support`, provides only shared C++ values and mechanics and owns no Supported Capability. One strict, versioned Parity Architecture Manifest defines the legal Owner graph and evidence policy, and one fail-closed Parity Architecture Gate enforces that policy from configured build evidence. Owner Interfaces remain repository-internal; the only released product is the `cpp_harness` Runtime for native Linux x86-64 with glibc.
+The repository has four authoritative Capability Owner Packages: `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`. One pi-neutral C++ Support Package, `cch_support`, provides only shared C++ values and mechanics and owns no Supported Capability. One strict, versioned Parity Architecture Manifest defines the legal Owner graph and evidence policy, and one fail-closed Parity Architecture Gate enforces that policy from configured build evidence. Owner Interfaces remain repository-internal; the only released product is the `pike` Runtime for native Linux x86-64 with glibc.
 
 This decision records the destination frozen by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) for documentation ticket [#440](https://github.com/lanshengzhi/cpp-coding-harness/issues/440) without reopening it. User-visible capability behavior remains governed by [#396](https://github.com/lanshengzhi/cpp-coding-harness/issues/396), the planning authority remains parity map [#2](https://github.com/lanshengzhi/cpp-coding-harness/issues/2), and Semantic Parity remains pinned to pi commit `83114817c68f5413e4d7ba6d7003ddc511cd31d2`. muduo, Boost.Asio, and other implementations are research inputs, not product authorities. This ADR neither advances the Parity Baseline nor adds a Supported Capability.
 
@@ -37,7 +37,7 @@ Other operating systems, architectures, and C libraries are unsupported. Cross-c
 
 ## Runtime-only release
 
-`cmake --install` installs only the `cpp_harness` Runtime, required runtime resources, and required licenses/notices. It installs no Owner Interface headers, static libraries, SDK, CMake package, exported targets, components, compatibility files, or other development surface. Packaging format and dynamic-dependency treatment follow measured linkage evidence and are not product interfaces.
+`cmake --install` installs only the `pike` Runtime, required runtime resources, and required licenses/notices. The product identity is recorded by ADR 0045. It installs no Owner Interface headers, static libraries, SDK, CMake package, exported targets, components, compatibility files, or other development surface. Packaging format and dynamic-dependency treatment follow measured linkage evidence and are not product interfaces.
 
 A clean staging-prefix smoke verifies Runtime resource relocation, dynamic dependency closure, licenses/notices, `--help`, `--version`, deterministic offline startup, Ubuntu baseline execution, pinned Arch execution, and the absence of development artifacts.
 

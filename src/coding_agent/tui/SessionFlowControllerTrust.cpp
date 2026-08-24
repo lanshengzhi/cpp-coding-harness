@@ -288,9 +288,8 @@ boost::asio::awaitable<void> SessionFlowController::run_trust_selector() {
                 presenter_->show_error(combined_error_text(saved.error()));
             }
         }
-        presenter_->show_status(std::format(
-            "Saved trust decision: {}. Restart cch for this to take effect.",
-            option.trusted ? "trusted" : "untrusted"));
+        presenter_->show_status(std::format("Saved trust decision: {}. Restart pike for this to take effect.",
+                option.trusted ? "trusted" : "untrusted"));
         break;
     }
 }

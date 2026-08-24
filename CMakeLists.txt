@@ -19,13 +19,13 @@ include(cmake/targets/Tui.cmake)
 include(cmake/targets/Ai.cmake)
 include(cmake/targets/AgentCore.cmake)
 include(cmake/targets/CodingAgent.cmake)
-include(cmake/targets/Runtime.cmake)    # cpp_harness executable
+include(cmake/targets/Runtime.cmake)    # pike Runtime executable
 
 include(cmake/ParityGate.cmake)         # configure/build Gate and post-build attachment
 include(cmake/RuntimeInstall.cmake)     # existing Runtime-only install rules
 cch_runtime_collect_licenses(CCH_RUNTIME_LICENSE_FILES)
 cch_runtime_install_rules(
-    TARGET cpp_harness
+    TARGET pike
     MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
     LICENSE_FILES ${CCH_RUNTIME_LICENSE_FILES}

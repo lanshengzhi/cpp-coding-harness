@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic Kitty keyboard-protocol negotiation probe for cpp_harness.
+"""Deterministic Kitty keyboard-protocol negotiation probe for Pike.
 
 Scenario 1 (kitty-capable terminal):
   - capture the startup byte stream; assert the app pushes ESC[>7u and
@@ -15,7 +15,7 @@ Scenario 2 (legacy terminal, degradation):
 """
 import os, pty, select, sys, time, signal, fcntl, termios, struct
 
-BIN = "/home/lansy/Work/github/coding-agent/cpp-coding-harness/build/cpp_harness"
+BIN = "/home/lansy/Work/github/coding-agent/cpp-coding-harness/build/pike"
 ARGS = [BIN, "--provider", "openai-codex", "--model", "gpt-5.6-terra"]
 PUSH = b"\x1b[>7u"
 QUERY = b"\x1b[?u\x1b[c"

@@ -441,7 +441,7 @@ TEST_CASE("async agent loop seeds the session system prompt into every request c
     options.model = tests::make_model("gpt-test");
     // The session System Prompt (pi `AgentState.systemPrompt`): seeded into
     // every per-run request context exactly like pi's `createContextSnapshot`.
-    options.system_prompt = "You are an expert coding assistant operating inside cch, a coding "
+    options.system_prompt = "You are an expert coding assistant operating inside pike, a coding "
                             "agent harness.\n\nCurrent working directory: /workspace";
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
 
@@ -449,7 +449,7 @@ TEST_CASE("async agent loop seeds the session system prompt into every request c
     CHECK(run.result);
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].context.system_prompt.has_value());
-    const std::string expected_prompt = "You are an expert coding assistant operating inside cch, a coding "
+    const std::string expected_prompt = "You are an expert coding assistant operating inside pike, a coding "
                                         "agent harness.\n\nCurrent working directory: /workspace";
     CHECK(*client->requests[0].context.system_prompt == expected_prompt);
     CHECK(run.state.system_prompt == expected_prompt);

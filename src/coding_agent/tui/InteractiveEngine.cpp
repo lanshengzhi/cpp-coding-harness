@@ -42,7 +42,7 @@ namespace {
 /// binary's own identity and the absent packages clause dropped.
 [[nodiscard]] std::string project_trust_warning_text() {
     return "This project is not trusted. Project .pi resources are ignored. "
-           "Use /trust to save a trust decision, then restart cch.";
+           "Use /trust to save a trust decision, then restart pike.";
 }
 
 } // namespace

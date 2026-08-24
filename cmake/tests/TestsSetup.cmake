@@ -34,7 +34,7 @@ include_guard(GLOBAL)
     # registers Catch2 cases as individual CTest tests, and CTest names/labels
     # are the sole selection, scheduling, timeout, and reporting authority.
     # Each shard is its own executable, so a focused test edit builds and links
-    # only its owning package. `cpp_harness_tests` remains as the aggregate
+    # only its owning package. `pike_tests` remains as the aggregate
     # target that builds every shard. Grouping follows the Capability Owner or
     # support ownership in CODING_STANDARDS.md section 11.5 and fixture
     # ownership, not equal file counts; no test object is compiled twice.

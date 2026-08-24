@@ -35,7 +35,7 @@ cch_parity_run_gate(
 # evidence and validates manifest, index, direct-include, compile-command, and
 # depfile evidence, failing the build on any rejection. The composition
 # executable additionally carries the same Gate as a POST_BUILD step, so a
-# direct production-target build (`--target cpp_harness`) also requires fresh
+# direct production-target build (`--target pike`) also requires fresh
 # successful Gate evidence. Test executables depend on
 # ${CCH_PARITY_BUILD_GATE_TARGET} so every CTest entry point requires it.
 cch_parity_add_build_gate(
@@ -45,4 +45,4 @@ cch_parity_add_build_gate(
     EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
     STRICT_NO_EXCEPTIONS ${CCH_STRICT_NO_EXCEPTIONS}
 )
-cch_parity_attach_build_gate_post_build(cpp_harness)
+cch_parity_attach_build_gate_post_build(pike)

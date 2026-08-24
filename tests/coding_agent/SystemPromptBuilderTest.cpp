@@ -15,7 +15,7 @@ namespace {
 /// Committed golden fixtures pin the identity delta byte-for-byte (ADR 0036
 /// G4): the System Prompt structure is pi's `core/system-prompt.ts`
 /// `buildSystemPrompt` at baseline 83114817 with only the identity line and
-/// the documentation block swapped for the C++ binary's own ("cch") identity
+/// the documentation block swapped for the C++ binary's own ("pike") identity
 /// and docs paths. Paths inside the goldens are scrubbed dummy values.
 [[nodiscard]] std::filesystem::path fixture_path(std::string_view name) {
     return std::filesystem::path{CCH_SOURCE_DIR} /
@@ -73,9 +73,9 @@ void check_golden(std::string_view golden_name, const std::string& prompt) {
     };
     options.cwd = std::move(cwd);
     // Identity delta: the C++ binary's own docs paths (scrubbed in goldens).
-    options.readmePath = "/cch/README.md";
-    options.docsPath = "/cch/docs";
-    options.examplesPath = "/cch/examples";
+    options.readmePath = "/pike/README.md";
+    options.docsPath = "/pike/docs";
+    options.examplesPath = "/pike/examples";
     return options;
 }
 
@@ -97,13 +97,13 @@ void check_golden(std::string_view golden_name, const std::string& prompt) {
 
 } // namespace
 
-TEST_CASE("system prompt default branch matches the cch identity golden", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt default branch matches the Pike identity golden", "[coding_agent][prompt][system-prompt]") {
     auto options = session_shape_options();
     options.skills = {dummy_skill()};
     check_golden("system-prompt-default.txt", coding_agent::prompt::buildSystemPrompt(options));
 }
 
-TEST_CASE("system prompt custom branch matches the cch identity golden", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt custom branch matches the Pike identity golden", "[coding_agent][prompt][system-prompt]") {
     auto options = session_shape_options();
     options.customPrompt = "You are a custom assistant.";
     options.appendSystemPrompt = "Custom append section.";
@@ -114,7 +114,8 @@ TEST_CASE("system prompt custom branch matches the cch identity golden", "[codin
     check_golden("system-prompt-custom.txt", coding_agent::prompt::buildSystemPrompt(options));
 }
 
-TEST_CASE("system prompt pi-truthy edge cases match the cch identity goldens", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE(
+        "system prompt pi-truthy edge cases match the Pike identity goldens", "[coding_agent][prompt][system-prompt]") {
     // pi `if (customPrompt)`: an empty custom prompt is falsy and takes the
     // default branch — byte-identical to the default golden.
     auto empty_custom = session_shape_options();
@@ -285,7 +286,7 @@ TEST_CASE("system prompt treats an empty custom prompt as absent like pi's truth
 
     // pi `if (customPrompt)`: the empty string is falsy → default branch.
     CHECK(prompt.find("Available tools:") != std::string::npos);
-    CHECK(prompt.find("cch documentation") != std::string::npos);
+    CHECK(prompt.find("pike documentation") != std::string::npos);
 }
 
 TEST_CASE("system prompt renders the skills section in pi's shape", "[coding_agent][prompt][system-prompt]") {
@@ -324,5 +325,5 @@ TEST_CASE("system prompt custom branch omits the default sections", "[coding_age
     CHECK(prompt == "Only this.\nCurrent working directory: /tmp/workspace");
     CHECK(prompt.find("Available tools:") == std::string::npos);
     CHECK(prompt.find("Guidelines:") == std::string::npos);
-    CHECK(prompt.find("cch documentation") == std::string::npos);
+    CHECK(prompt.find("pike documentation") == std::string::npos);
 }

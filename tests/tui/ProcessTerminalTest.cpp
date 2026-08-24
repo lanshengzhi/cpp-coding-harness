@@ -796,10 +796,8 @@ TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue3
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
         [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
-    REQUIRE(terminal.set_title("cch - session - workspace"));
-    CHECK(
-        cch::tests::read_available(pty->master.get()) ==
-        "\x1b]0;cch - session - workspace\x07");
+    REQUIRE(terminal.set_title("pike - session - workspace"));
+    CHECK(cch::tests::read_available(pty->master.get()) == "\x1b]0;pike - session - workspace\x07");
     REQUIRE(terminal.stop());
 }
 

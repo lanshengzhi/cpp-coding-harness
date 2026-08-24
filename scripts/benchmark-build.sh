@@ -83,7 +83,7 @@ test_shard_for() {
 		tests/coding_agent/tui/*) echo cch_tests_coding_agent_interactive ;;
 		tests/coding_agent/*) echo cch_tests_coding_agent ;;
 		tests/cli/* | tests/architecture/*) echo cch_tests_cli_arch ;;
-		*) echo cpp_harness_tests ;;
+		*) echo pike_tests ;;
 	esac
 }
 
@@ -441,7 +441,7 @@ sample_scenario() {
 }
 
 echo "[6/8] production-source incremental ($prod_source, $samples samples)"
-read -r -a prod_samples <<< "$(sample_scenario "$prod_source" cpp_harness "$samples")"
+read -r -a prod_samples <<< "$(sample_scenario "$prod_source" pike "$samples")"
 echo "      prod incremental: ${prod_samples[*]}s"
 
 # --- 6. Typical test-source incremental build -------------------------------
@@ -453,7 +453,7 @@ echo "      test incremental ($test_target): ${test_samples[*]}s"
 
 # --- 7. Leading-hotspot rebuild ---------------------------------------------
 echo "[8/8] hotspot rebuild ($hotspot_source, $samples samples)"
-read -r -a hotspot_samples <<< "$(sample_scenario "$hotspot_source" cpp_harness "$samples")"
+read -r -a hotspot_samples <<< "$(sample_scenario "$hotspot_source" pike "$samples")"
 echo "      hotspot: ${hotspot_samples[*]}s"
 
 # --- Post-run caveats --------------------------------------------------------
@@ -585,7 +585,7 @@ def classify(output):
     if m:
         return m.group(1)
     base = os.path.basename(output)
-    if base in ("cpp_harness", "cpp_harness_tests"):
+    if base in ("pike", "pike_tests"):
         return base
     if base.startswith("cch_tests_"):
         return base

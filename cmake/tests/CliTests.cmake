@@ -3,8 +3,8 @@ include_guard(GLOBAL)
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
     # CLI and architecture. The only shard that launches the built binary
-    # (CliSmokeTest), so it carries the CCH_BINARY definition and a build
-    # dependency on cpp_harness.
+    # (CliSmokeTest), so it carries the PIKE_EXECUTABLE definition and a build
+    # dependency on pike.
     add_executable(cch_tests_cli_arch
         tests/Catch2Main.cpp
         tests/cli/CliParseTest.cpp
@@ -27,14 +27,14 @@ include_guard(GLOBAL)
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_cli_arch PRIVATE
-        CCH_BINARY="$<TARGET_FILE:cpp_harness>"
+        PIKE_EXECUTABLE="$<TARGET_FILE:pike>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         CCH_BUILD_DIR="${CMAKE_BINARY_DIR}"
         CCH_CMAKE_COMMAND="${CMAKE_COMMAND}"
         CCH_PYTHON3="${Python3_EXECUTABLE}"
 )
     target_compile_options(cch_tests_cli_arch PRIVATE ${CCH_WARNING_OPTIONS})
-    add_dependencies(cch_tests_cli_arch cpp_harness)
+    add_dependencies(cch_tests_cli_arch pike)
     # Sanitizer builds link the sanitizer runtimes and are not installable:
     # the relocation test skips itself under them (issue #473).
     if(NOT CCH_SANITIZER STREQUAL "")

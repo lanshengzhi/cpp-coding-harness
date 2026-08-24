@@ -294,7 +294,7 @@ std::string AgentSessionRuntime::rebuild_system_prompt() const {
     prompt_options.skills = skills_;
     // Identity delta: the C++ binary's own documentation paths (pi
     // `config.ts` `getReadmePath`/`getDocsPath`/`getExamplesPath` resolve the
-    // pi package; cch resolves its own source tree).
+    // pi package; pike resolves its own source tree).
 #ifndef CCH_SOURCE_DIR
     constexpr std::string_view kSourceDir = "";
 #else

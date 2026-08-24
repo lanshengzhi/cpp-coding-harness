@@ -79,7 +79,7 @@ run_step(build TRUE "${CMAKE_COMMAND}" --build "${build_dir}")
 run_step(install TRUE "${CMAKE_COMMAND}" --install "${build_dir}" --prefix "${stage_dir}")
 file(GLOB_RECURSE staged_files RELATIVE "${stage_dir}" "${stage_dir}/*")
 list(SORT staged_files)
-if(NOT staged_files STREQUAL "bin/cpp_harness;share/cpp_harness/licenses/fixture.txt")
+if(NOT staged_files STREQUAL "bin/pike;share/pike/licenses/fixture.txt")
     message(FATAL_ERROR
         "fixture install staged an unexpected file set: ${staged_files}")
 endif()

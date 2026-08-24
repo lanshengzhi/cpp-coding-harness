@@ -11,10 +11,10 @@ if [[ -z "${KIMI_API_KEY:-}" ]]; then
 	exit 2
 fi
 
-binary="${CCH_BINARY:-./build/cpp_harness}"
+binary="${PIKE_EXECUTABLE:-./build/pike}"
 if [[ ! -x "$binary" ]]; then
-	echo "harness binary is not executable: $binary" >&2
-	echo "build first, or set CCH_BINARY=/path/to/cpp_harness" >&2
+	echo "Pike executable is not executable: $binary" >&2
+	echo "build first, or set PIKE_EXECUTABLE=/path/to/pike" >&2
 	exit 2
 fi
 

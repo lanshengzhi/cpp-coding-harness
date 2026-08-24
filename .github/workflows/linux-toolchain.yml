@@ -328,7 +328,7 @@ jobs:
       - name: Audit the staged dependency closure
         run: |
           python3 cmake/install/audit_runtime_deps.py \
-            --binary "$RUNNER_TEMP/stage/bin/cpp_harness" \
+            --binary "$RUNNER_TEMP/stage/bin/pike" \
             --allowlist cmake/install/runtime-deps.json \
             --forbid-root "$PWD" \
             --forbid-root "$PWD/build/release-artifact" \
@@ -339,11 +339,11 @@ jobs:
         run: |
           scripts/ci/release-artifact-smoke.sh \
             "$RUNNER_TEMP/stage" \
-            "$PWD/build/release-artifact/cpp_harness" \
+            "$PWD/build/release-artifact/pike" \
             2>&1 | tee "$EVIDENCE_DIR/relocation-smoke.log"
 
       - name: Bind the evidence to the artifact digest
-        run: (cd "$RUNNER_TEMP/stage" && sha256sum bin/cpp_harness) > "$EVIDENCE_DIR/artifact.sha256"
+        run: (cd "$RUNNER_TEMP/stage" && sha256sum bin/pike) > "$EVIDENCE_DIR/artifact.sha256"
 
       - name: Verify release evidence (fail closed)
         run: |
@@ -351,12 +351,12 @@ jobs:
             --evidence-dir "$EVIDENCE_DIR" \
             --run-started-at "$RUN_STARTED_AT" \
             --vcpkg-baseline "$(python3 -c 'import json; print(json.load(open("vcpkg.json"))["builtin-baseline"])')" \
-            --artifact "$RUNNER_TEMP/stage/bin/cpp_harness"
+            --artifact "$RUNNER_TEMP/stage/bin/pike"
 
       - name: Upload the qualified Runtime artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cpp_harness-runtime-linux-x86_64
+          name: pike-runtime-linux-x86_64
           path: |
             ${{ runner.temp }}/stage
             ${{ runner.temp }}/release-evidence

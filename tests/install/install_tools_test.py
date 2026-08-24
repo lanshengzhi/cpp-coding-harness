@@ -220,7 +220,7 @@ class AuditCliTest(unittest.TestCase):
 
     def test_missing_binary_fails_closed(self):
         result = self.run_audit(
-            "--binary", "/nonexistent/cpp_harness", "--allowlist", str(ALLOWLIST_PATH)
+            "--binary", "/nonexistent/pike", "--allowlist", str(ALLOWLIST_PATH)
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("nonexistent", result.stderr + result.stdout)
@@ -267,7 +267,7 @@ class CheckFreshnessTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.binary = self.root / "cpp_harness"
+        self.binary = self.root / "pike"
         self.binary.write_bytes(b"elf")
         self.report = self.root / "parity-build-gate.json"
         self.report.write_text(json.dumps({"ok": True, "diagnostics": []}))
@@ -390,7 +390,7 @@ class FreshnessCliTest(unittest.TestCase):
                 "--depfiles",
                 "/nonexistent/depfiles.json",
                 "--binary",
-                "/nonexistent/cpp_harness",
+                "/nonexistent/pike",
             ],
             capture_output=True,
             text=True,

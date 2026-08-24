@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
 import verify_release_evidence as verifier  # noqa: E402
 
 VCPKG_BASELINE = "2f1d605400c8727cc00c15797aba796c88ccd523"
-ARTIFACT_BYTES = b"fake cpp_harness runtime bytes"
+ARTIFACT_BYTES = b"fake pike runtime bytes"
 
 
 class EvidenceVerifierTest(unittest.TestCase):
@@ -41,7 +41,7 @@ class EvidenceVerifierTest(unittest.TestCase):
         self.addCleanup(self.scratch.cleanup)
         self.evidence_dir = Path(self.scratch.name) / "evidence"
         self.evidence_dir.mkdir()
-        self.artifact = Path(self.scratch.name) / "cpp_harness"
+        self.artifact = Path(self.scratch.name) / "pike"
         self.artifact.write_bytes(ARTIFACT_BYTES)
         self._write_complete_evidence()
 
@@ -83,7 +83,7 @@ class EvidenceVerifierTest(unittest.TestCase):
             ),
         )
         digest = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
-        self._write("artifact.sha256", f"{digest}  bin/cpp_harness\n")
+        self._write("artifact.sha256", f"{digest}  bin/pike\n")
 
     def verify(self) -> list[str]:
         return verifier.verify_evidence(
@@ -233,7 +233,7 @@ class MainTest(unittest.TestCase):
     def test_cli_exit_codes(self):
         with tempfile.TemporaryDirectory() as scratch:
             evidence_dir = Path(scratch) / "evidence"
-            artifact = Path(scratch) / "cpp_harness"
+            artifact = Path(scratch) / "pike"
             artifact.write_bytes(ARTIFACT_BYTES)
             now = time.time()
 

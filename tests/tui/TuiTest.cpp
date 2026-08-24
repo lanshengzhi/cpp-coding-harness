@@ -640,14 +640,14 @@ TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
         [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
-    REQUIRE(terminal.set_title("cch - session - workspace"));
+    REQUIRE(terminal.set_title("pike - session - workspace"));
     REQUIRE(terminal.set_progress(true));
     REQUIRE(terminal.set_progress(false));
 
     const std::vector<std::string> expected_output{
-        "\x1b]0;cch - session - workspace\x07",
-        "\x1b]9;4;3\x07",
-        "\x1b]9;4;0;\x07",
+            "\x1b]0;pike - session - workspace\x07",
+            "\x1b]9;4;3\x07",
+            "\x1b]9;4;0;\x07",
     };
     CHECK(terminal.output() == expected_output);
     REQUIRE(terminal.stop());

@@ -490,7 +490,7 @@ endfunction()
 
 # Attaches the build-phase Parity Architecture Gate as a POST_BUILD step of a
 # production target. Used on the final composition executable so that a direct
-# `--target cpp_harness` production-target build still requires fresh
+# `--target pike` production-target build still requires fresh
 # successful Gate evidence: by the time the composition target's POST_BUILD
 # runs, every production source (including its own entry point) has compiled
 # and produced a fresh depfile, so the same evidence set is available that the

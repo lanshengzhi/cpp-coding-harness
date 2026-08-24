@@ -3987,8 +3987,7 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(screen.find("Saved trust decision: untrusted. Restart cch for this to take effect.") !=
-        std::string::npos);
+    CHECK(screen.find("Saved trust decision: untrusted. Restart pike for this to take effect.") != std::string::npos);
     CHECK(created->session->message_count() == 0);
 
     REQUIRE(terminal.inject_input("\x04"));

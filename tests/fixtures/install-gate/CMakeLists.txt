@@ -89,7 +89,7 @@ cch_parity_declare_target(
 target_include_directories(cch_coding_agent PUBLIC ${CCH_PARITY_FIXTURE_SRC}/coding_agent/include)
 
 cch_parity_declare_target(
-    TARGET cpp_harness
+    TARGET pike
     ROLE composition
     OWNER cch_coding_agent
     KIND executable
@@ -108,7 +108,7 @@ cch_parity_add_build_gate(
 )
 
 cch_runtime_install_rules(
-    TARGET cpp_harness
+    TARGET pike
     MANIFEST "${CCH_PARITY_MANIFEST}"
     PROJECT_ROOT "${CCH_PARITY_FIXTURE_ROOT}"
     LICENSE_FILES "fixture=${CMAKE_CURRENT_SOURCE_DIR}/NOTICE.txt"

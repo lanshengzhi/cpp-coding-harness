@@ -14,8 +14,8 @@
 
 #include <sys/wait.h>
 
-#ifndef CCH_BINARY
-#define CCH_BINARY "./cpp_harness"
+#ifndef PIKE_EXECUTABLE
+#define PIKE_EXECUTABLE "./pike"
 #endif
 #ifndef CCH_BUILD_DIR
 #define CCH_BUILD_DIR "./build"
@@ -68,14 +68,14 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
 /// development-surface leak.
 [[nodiscard]] std::vector<std::string> expected_staged_files() {
     return {
-        "bin/cpp_harness",
-        "share/cpp_harness/licenses/boost.txt",
-        "share/cpp_harness/licenses/glaze.txt",
-        "share/cpp_harness/licenses/libwebp.txt",
-        "share/cpp_harness/licenses/md4c.txt",
-        "share/cpp_harness/licenses/openssl.txt",
-        "share/cpp_harness/licenses/stb.txt",
-        "share/cpp_harness/licenses/utf8proc.txt",
+            "bin/pike",
+            "share/pike/licenses/boost.txt",
+            "share/pike/licenses/glaze.txt",
+            "share/pike/licenses/libwebp.txt",
+            "share/pike/licenses/md4c.txt",
+            "share/pike/licenses/openssl.txt",
+            "share/pike/licenses/stb.txt",
+            "share/pike/licenses/utf8proc.txt",
     };
 }
 
@@ -153,7 +153,7 @@ TEST_CASE(
     }
 
     // ── Dependency-closure audit on the staged Runtime ──
-    const auto staged_binary = stage / "bin" / "cpp_harness";
+    const auto staged_binary = stage / "bin" / "pike";
     const auto source_dir = fs::path(CCH_SOURCE_DIR);
     const auto audit = run_command(
         shell_quote(CCH_PYTHON3) + " " +
@@ -171,7 +171,7 @@ TEST_CASE(
     std::error_code rename_error;
     fs::rename(stage, relocated, rename_error);
     REQUIRE_FALSE(rename_error);
-    const auto relocated_binary = relocated / "bin" / "cpp_harness";
+    const auto relocated_binary = relocated / "bin" / "pike";
 
     // Scrubbed environment: no inherited credentials, proxies, or config.
     const auto home = root.path() / "home";
@@ -184,7 +184,7 @@ TEST_CASE(
         "cd " + shell_quote(root.path()) + " && " + clean_env + shell_quote(relocated_binary);
 
     // ── --version matches the build-tree Runtime ──
-    const auto build_version = run_command(shell_quote(CCH_BINARY) + " --version", captures);
+    const auto build_version = run_command(shell_quote(PIKE_EXECUTABLE) + " --version", captures);
     REQUIRE(build_version.exit_code == 0);
     const auto staged_version = run_command(relocated_run + " --version", captures);
     INFO(staged_version.stdout_text + staged_version.stderr_text);

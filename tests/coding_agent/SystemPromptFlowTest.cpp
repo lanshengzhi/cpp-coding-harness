@@ -1,7 +1,7 @@
 // P18 evidence (#414): the System Prompt is built at session construction in
 // pi's exact shape (ADR 0036 G4) and flows into every run through
 // `AgentContext.system_prompt`, exactly like pi's `agent.state.systemPrompt`
-// → `createContextSnapshot()`. The identity delta (the "cch" identity line
+// → `createContextSnapshot()`. The identity delta (the "pike" identity line
 // and the C++ binary's own docs paths) is pinned byte-for-byte by the
 // differential golden in `tests/fixtures/prompts/` (SystemPromptBuilderTest);
 // this test pins the flow end to end: a scripted provider records the request
@@ -96,10 +96,9 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     // Copy: the vector reallocates on the second recorded request below.
     const std::string prompt = *system_prompt;
 
-    // The cch identity line (the only identity delta from pi).
-    CHECK(prompt.find(
-              "You are an expert coding assistant operating inside cch, a "
-              "coding agent harness.") != std::string::npos);
+    // The Pike identity line (the only identity delta from pi).
+    CHECK(prompt.find("You are an expert coding assistant operating inside pike, a "
+                      "coding agent harness.") != std::string::npos);
 
     // The four fixed tools with pi's verbatim snippets.
     CHECK(prompt.find(

@@ -10,7 +10,7 @@
  * scenarios the C++ `SystemPromptBuilderTest` already pins as raw text
  * (default branch, custom branch, empty-tools edge). Each snapshot carries the
  * `identityDelta`: the identity line and the documentation block in both
- * forms (pi vs the C++ binary's own "cch"), which is exactly the delta the
+ * forms (pi vs the C++ binary's own "pike"), which is exactly the delta the
  * C++ System Prompt carries (ADR 0036 G4 / #392: structure byte-identical,
  * identity lines swapped). The custom branch carries no identity regions, so
  * its delta is empty and the two branches are pinned byte-identical.
@@ -24,7 +24,7 @@
  * The pi docs paths are scrubbed to `/pi/*` via `PI_PACKAGE_DIR=/pi` (the
  * same scrubbing rule the rest of the bundle applies), so the captured
  * message is deterministic across checkouts; the C++ side builds against the
- * scrubbed `/cch/*` paths. The script captures, then re-captures to a temp
+ * scrubbed `/pike/*` paths. The script captures, then re-captures to a temp
  * directory and byte-compares, so a nondeterministic capture fails loudly.
  *
  * Usage (from anywhere):
@@ -147,7 +147,7 @@ const SKILL = {
 
 // PI_PACKAGE_DIR scrubs pi's resolved docs paths to the deterministic
 // `/pi/*` form (the bundle's path-scrubbing rule), so the captured message is
-// checkout-independent; the C++ side builds against the `/cch/*` paths.
+// checkout-independent; the C++ side builds against the `/pike/*` paths.
 process.env.PI_PACKAGE_DIR = "/pi";
 
 const { buildSystemPrompt } = (await import(
@@ -156,12 +156,12 @@ const { buildSystemPrompt } = (await import(
 	).href,
 )) as { buildSystemPrompt: (options: unknown) => string };
 
-/// The cch identity forms of a region: the "pi" identity word becomes the
-/// C++ binary's own "cch", word-bounded so embedded "pi" substrings (e.g.
+/// The Pike identity forms of a region: the "pi" identity word becomes the
+/// C++ binary's own "pike", word-bounded so embedded "pi" substrings (e.g.
 /// "topics", "pipelines") are untouched, and the scrubbed `/pi/*` docs paths
-/// become `/cch/*` through the same word-boundary rule.
-function cchify(text: string): string {
-	return text.replace(/\bPi\b/g, "cch").replace(/\bpi\b/g, "cch");
+/// become `/pike/*` through the same word-boundary rule.
+function pikeify(text: string): string {
+	return text.replace(/\bPi\b/g, "pike").replace(/\bpi\b/g, "pike");
 }
 
 const DOCS_END_MARKER = "tui.md for TUI API details)";
@@ -181,8 +181,8 @@ function extractIdentityDelta(prompt: string) {
 	const docsEnd = prompt.indexOf(DOCS_END_MARKER) + DOCS_END_MARKER.length;
 	const docsBlockPi = prompt.slice(docsStart, docsEnd);
 	return {
-		identityLine: { pi: identityLinePi, cch: cchify(identityLinePi) },
-		docsBlock: { pi: docsBlockPi, cch: cchify(docsBlockPi) },
+		identityLine: { pi: identityLinePi, pike: pikeify(identityLinePi) },
+		docsBlock: { pi: docsBlockPi, pike: pikeify(docsBlockPi) },
 	};
 }
 

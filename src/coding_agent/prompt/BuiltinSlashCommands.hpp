@@ -23,7 +23,7 @@ struct BuiltinSlashCommand {
 /// router reports typed Deferred names as unknown-command errors; only
 /// host-recognized dynamic resources or compatible absolute paths are
 /// preserved as Agent Prompt submissions. The `/reload` description drops "extensions" (no extensions
-/// surface), and `/quit` uses the C++ binary's own ("cch") identity for pi's
+/// surface), and `/quit` uses Pike's identity for pi's
 /// `Quit ${APP_NAME}`.
 [[nodiscard]] const std::vector<BuiltinSlashCommand>& builtin_slash_commands();
 

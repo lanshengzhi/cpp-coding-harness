@@ -1,4 +1,4 @@
-# C++ Coding Harness
+# Pike
 
 An experimental C++23 coding-agent Runtime that preserves a selected pi capability set with idiomatic C++ interfaces. It is a learning and experimentation harness, not a production sandbox: prompts, selected files, and tool output may be sent to the configured model provider.
 
@@ -31,7 +31,7 @@ cmake --build --preset vcpkg-release
 ctest --preset vcpkg-release
 ```
 
-The Release executable is `build/release/cpp_harness`. Run the unfiltered CTest preset for final validation.
+The Pike Runtime is `build/release/pike`. Run the unfiltered CTest preset for final validation.
 
 ## Debug development loop
 
@@ -73,11 +73,11 @@ Every supported configure runs the Parity Architecture Gate fail-closed (ADR 003
 
 ## Install
 
-`cmake --install` installs the Runtime-only surface approved in [ADR 0039](docs/adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): the `cpp_harness` executable under `bin/` and the required third-party license/notice texts under `share/cpp_harness/licenses/`. No Owner Interface headers, static libraries, CMake package metadata, exported targets, or other development surface are installed; the install tree is intentionally unsuitable for external C++ consumers.
+`cmake --install` installs the Runtime-only surface approved in [ADR 0039](docs/adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): the `pike` executable under `bin/` and the required third-party license/notice texts under `share/pike/licenses/`. No Owner Interface headers, static libraries, CMake package metadata, exported targets, or other development surface are installed; the install tree is intentionally unsuitable for external C++ consumers.
 
 ```bash
 cmake --install build/release --prefix ~/.local
-~/.local/bin/cpp_harness --version
+~/.local/bin/pike --version
 ```
 
 The install path runs the fail-closed install gate before any file is staged: the build-phase Parity Architecture Gate, a Gate-evidence freshness check (a source or header edit without a rebuild fails the install), and a dependency-closure audit that rejects undeclared, build-tree, or unsupported runtime dependencies (cmake/install/). There is no opt-out.
@@ -89,7 +89,7 @@ The release seam is validated from a clean staging prefix by the `cch_install_to
 Issue #474 establishes the blocking release matrix in `.github/workflows/linux-toolchain.yml`:
 
 - **GCC 16.x Debug and Release** jobs build and test the complete supported product on Ubuntu 24.04; **Clang 22.x** is a blocking Debug conformance verifier over the same graph and suite and never produces release artifacts.
-- **GCC 16 Release artifact (IPO/LTO)** — the `vcpkg-release-artifact` preset builds the release Runtime with validated IPO/LTO (configure fails closed if the toolchain cannot do IPO). The job stages it into a clean prefix through the fail-closed install gate, audits the staged dependency closure, runs `scripts/ci/release-artifact-smoke.sh` (relocation, scrubbed-environment `--version`/`--help`, deterministic offline failure), binds the evidence to the artifact digest, and verifies the complete evidence directory with `scripts/ci/verify_release_evidence.py`. Missing, stale, contradictory, or incomplete evidence fails qualification with stable `REL-*` rule identifiers; nothing degrades to a warning. The qualified staged tree and its evidence upload as the `cpp_harness-runtime-linux-x86_64` run artifact.
+- **GCC 16 Release artifact (IPO/LTO)** — the `vcpkg-release-artifact` preset builds the release Runtime with validated IPO/LTO (configure fails closed if the toolchain cannot do IPO). The job stages it into a clean prefix through the fail-closed install gate, audits the staged dependency closure, runs `scripts/ci/release-artifact-smoke.sh` (relocation, scrubbed-environment `--version`/`--help`, deterministic offline failure), binds the evidence to the artifact digest, and verifies the complete evidence directory with `scripts/ci/verify_release_evidence.py`. Missing, stale, contradictory, or incomplete evidence fails qualification with stable `REL-*` rule identifiers; nothing degrades to a warning. The qualified staged tree and its evidence upload as the `pike-runtime-linux-x86_64` run artifact.
 - **Arch pinned (blocking)** — a digest-pinned `archlinux:base-devel` snapshot with pacman pinned to the matching Arch Linux Archive date runs the same declared dependency (pinned vcpkg) and Gate contracts. Toolchain drift (e.g. GCC leaving 16.x) fails the lane closed and forces a deliberate re-pin.
 - **Arch latest drift (advisory)** — `.github/workflows/arch-drift.yml` runs current Arch latest on a weekly schedule. It never triggers on pull requests or pushes, so it cannot gate qualification or substitute for the pinned blocking lane; a failure is the drift signal to re-pin.
 
@@ -98,8 +98,8 @@ The evidence verifier is covered by the `cch_release_evidence_unit` CTest case (
 ## Verify the build
 
 ```bash
-build/release/cpp_harness --version
-build/release/cpp_harness --help
+build/release/pike --version
+build/release/pike --help
 ```
 
 Default tests are deterministic, use fake Providers, and make no live-provider requests.

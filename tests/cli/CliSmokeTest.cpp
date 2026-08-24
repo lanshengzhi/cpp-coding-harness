@@ -28,8 +28,8 @@
 #include <thread>
 #include <format>
 
-#ifndef CCH_BINARY
-#define CCH_BINARY "./cpp_harness"
+#ifndef PIKE_EXECUTABLE
+#define PIKE_EXECUTABLE "./pike"
 #endif
 
 namespace {
@@ -76,7 +76,7 @@ SplitCommandResult run_command_split(const std::string& command) {
     return {exit_code, read_file(stdout_path), read_file(stderr_path)};
 }
 
-std::string bin() { return shell_quote(CCH_BINARY); }
+std::string bin() { return shell_quote(PIKE_EXECUTABLE); }
 
 void write_tiny_gif(const std::filesystem::path& path) {
     const auto bytes = cch::tests::decode_base64(cch::tests::kTinyGifBase64);
@@ -607,9 +607,7 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd", "[cli
         (void)::setenv("HOME", home.path().string().c_str(), 1);
         (void)::unsetenv("PI_CODING_AGENT_DIR");
         (void)::chdir(storage.path().string().c_str());
-        ::execl(
-            CCH_BINARY, "cpp_harness", "--session", session.string().c_str(),
-            static_cast<char*>(nullptr));
+        ::execl(PIKE_EXECUTABLE, "pike", "--session", session.string().c_str(), static_cast<char*>(nullptr));
         ::_exit(127);
     }
     const ChildReapGuard reap_child{pid};
@@ -687,7 +685,7 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal", "[cli]
         (void)::setenv("HOME", home.path().string().c_str(), 1);
         (void)::unsetenv("PI_CODING_AGENT_DIR");
         (void)::chdir(workspace.path().string().c_str());
-        ::execl(CCH_BINARY, "cpp_harness", "--print", "--resume", static_cast<char*>(nullptr));
+        ::execl(PIKE_EXECUTABLE, "pike", "--print", "--resume", static_cast<char*>(nullptr));
         ::_exit(127);
     }
     const ChildReapGuard reap_child{pid};

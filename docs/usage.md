@@ -1,9 +1,9 @@
-# Using C++ Coding Harness
+# Using Pike
 
 Examples below use the Release build:
 
 ```bash
-BIN=build/release/cpp_harness
+BIN=build/release/pike
 ```
 
 Run `$BIN --help` for the complete flag surface.

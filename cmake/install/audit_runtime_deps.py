@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime dependency-closure audit for the staged cpp_harness Runtime.
+"""Runtime dependency-closure audit for the staged Pike Runtime.
 
 Audits the dynamic dependency closure of the installed Runtime against the
 declared closure in cmake/install/runtime-deps.json: every resolved library

@@ -57,7 +57,7 @@ TEST_CASE(
 
     const auto* quit = by_name("quit");
     REQUIRE(quit != nullptr);
-    CHECK(quit->description == "Quit cch");
+    CHECK(quit->description == "Quit pike");
 }
 
 TEST_CASE(
