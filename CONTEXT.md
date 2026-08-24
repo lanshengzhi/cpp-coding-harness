@@ -86,10 +86,11 @@ architecture gate test; required once before delivering any code change.
 _Avoid_: fresh bootstrap, per-edit validation, release qualification
 
 **Fresh Validation**:
-The environment-level validation tier: `scripts/bootstrap.sh --test`, a from-
-scratch vcpkg bootstrap, `--fresh` configure, full build, and unfiltered suite,
-reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-
-orchestration changes, or explicit user request.
+The environment-level validation tier: `scripts/bootstrap.sh` (host precheck and
+from-scratch pinned vcpkg bootstrap) followed by `cmake --preset vcpkg --fresh`,
+a full build, and the unfiltered CTest suite, reserved for clean checkouts,
+vcpkg-baseline or toolchain changes, configure-orchestration changes, or
+explicit user request.
 _Avoid_: daily check, default development loop, standard test run
 
 **AsyncResult**:

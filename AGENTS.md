@@ -12,11 +12,11 @@ This is an experimental C++23 coding-agent Runtime that preserves selected pi se
 
 Dependencies use the pinned vcpkg manifest; system packages are unsupported. Three tiers (see `CONTEXT.md`):
 
-- **Focused Validation** — during implementation: `scripts/check.sh -R '<name>'` or `-L '<label>'` for the smallest CTest selection that can fail, with `--target <owning-shard>` to narrow the build. Architecture-sensitive changes additionally run `scripts/check.sh --architecture`.
+- **Focused Validation** — during implementation: `cmake --build --preset vcpkg --target <owning-shard>` to narrow the build, followed by `ctest --preset vcpkg -LE architecture -R '<name>'` (or `-L '<label>'`) for the smallest CTest selection that can fail. Architecture-sensitive changes additionally run `ctest --preset vcpkg -L architecture`.
 - **Full Validation** — once before delivery: incremental `cmake --build --preset vcpkg` followed by the complete unfiltered `ctest --preset vcpkg` (see [README.md](README.md)).
-- **Fresh Validation** — environment level: `scripts/bootstrap.sh --test`, reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request.
+- **Fresh Validation** — environment level: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`; reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request.
 
-Do not run `scripts/bootstrap.sh --test` for ordinary code edits.
+Do not run Fresh Validation for ordinary code edits.
 
 ## Task-specific context
 

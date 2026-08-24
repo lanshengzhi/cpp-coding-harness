@@ -8,19 +8,27 @@ The Supported Platform is native Linux x86-64 with glibc. Builds require GCC 16.
 
 ## Release build and test
 
-The bootstrap script checks the host tools, creates or reuses `.deps/vcpkg`, pins it to `vcpkg.json`, configures the Release preset, builds, and runs the offline test suite:
+The bootstrap script checks the host tools, creates or reuses `.deps/vcpkg`, pins it to the `vcpkg.json` baseline, and builds the pinned vcpkg binary. CMake then owns configure, build, and test:
 
 ```bash
-scripts/bootstrap.sh --release --test
+scripts/bootstrap.sh
+export VCPKG_ROOT="$PWD/.deps/vcpkg"
+cmake --preset vcpkg-release
+cmake --build --preset vcpkg-release
+ctest --preset vcpkg-release
 ```
 
-Useful variants:
+Debug Fresh Validation (environment level: pinned vcpkg, `--fresh` configure, full build, unfiltered suite) uses the default `vcpkg` preset instead:
 
 ```bash
-scripts/bootstrap.sh --test                    # Fresh Validation (environment level): Debug bootstrap, --fresh configure, build, and tests
-scripts/bootstrap.sh --release --no-build      # Release configure only
-scripts/bootstrap.sh --vcpkg-root /path/to/vcpkg --release --test
+scripts/bootstrap.sh
+export VCPKG_ROOT="$PWD/.deps/vcpkg"
+cmake --preset vcpkg --fresh
+cmake --build --preset vcpkg
+ctest --preset vcpkg
 ```
+
+`scripts/bootstrap.sh --vcpkg-root /path/to/vcpkg` prepares a vcpkg checkout outside the repository; export that path as `VCPKG_ROOT` instead.
 
 With an already bootstrapped checkout at the exact `vcpkg.json` baseline:
 
@@ -44,9 +52,17 @@ cmake --build --preset vcpkg       # incremental build
 ctest --preset vcpkg               # Full Validation: the complete unfiltered offline suite
 ```
 
-For during-implementation Focused Validation, `scripts/check.sh` wraps this loop: incremental build, CTest name/label selection passed straight through (`-R`, `-L`, ...), the architecture-labeled whole-graph gate tests excluded by default, `--architecture` selecting them, and `--target <shard>` narrowing the build. See [docs/agents/validation.md](docs/agents/validation.md).
+For during-implementation Focused Validation, build the owning shard and select with native CTest names and labels (CTest names and labels are the sole selection authority, ADR 0039):
 
-`scripts/bootstrap.sh --test` is Fresh Validation, the environment-level tier (vcpkg bootstrap, `--fresh` configure, full build, unfiltered suite); reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit request.
+```bash
+cmake --build --preset vcpkg --target cch_tests_coding_agent   # narrow the build to the owning shard
+ctest --preset vcpkg -LE architecture -R 'session assembly'    # focused name, architecture gate excluded
+ctest --preset vcpkg -LE architecture -L coding_agent          # owning module label
+```
+
+Exclude the architecture-labeled whole-graph gate tests with `-LE architecture` during the loop; architecture-sensitive changes select them with `ctest --preset vcpkg -L architecture`. The `vcpkg` test preset already treats an empty selection as an error, so a mistyped name or label never passes silently. See [docs/agents/validation.md](docs/agents/validation.md).
+
+Fresh Validation is the environment-level tier shown above (`scripts/bootstrap.sh` plus `--fresh` configure, full build, unfiltered suite); reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit request.
 
 The `dev-fast` preset is an optional local accelerator for the Debug loop and requires ccache; the supported default remains the `vcpkg` preset.
 
