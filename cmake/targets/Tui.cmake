@@ -11,6 +11,7 @@ cch_parity_declare_target(
         src/tui/CancellableLoader.cpp
         src/tui/Container.cpp
         src/tui/Editor.cpp
+        src/tui/EditorCompletionSession.cpp
         src/tui/Fuzzy.cpp
         src/tui/Image.cpp
         src/tui/Input.cpp

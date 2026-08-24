@@ -6,8 +6,10 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <format>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -687,6 +689,49 @@ private:
     std::move_only_function<cch::support::ExpectedVoid()> callback;
 };
 
+/// Timer double that retains callbacks after cancel so a queued stale due event
+/// can be delivered deterministically to exercise generation rejection.
+class QueuedDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {
+public:
+    std::vector<std::move_only_function<cch::support::ExpectedVoid()>> callbacks;
+    std::size_t start_count{0};
+    std::size_t cancel_count{0};
+
+    void start(std::chrono::milliseconds, std::move_only_function<cch::support::ExpectedVoid()> on_fire) override {
+        callbacks.push_back(std::move(on_fire));
+        ++start_count;
+    }
+
+    void cancel() override { ++cancel_count; }
+
+    void fire(std::size_t index) {
+        auto on_fire = std::move(callbacks[index]);
+        if (on_fire) (void)on_fire();
+    }
+};
+
+struct PersistentDebounceState {
+    std::vector<std::move_only_function<cch::support::ExpectedVoid()>> callbacks;
+
+    void fire(std::size_t index) {
+        auto on_fire = std::move(callbacks[index]);
+        if (on_fire) (void)on_fire();
+    }
+};
+
+/// Timer whose queued callback state outlives the timer object, allowing the
+/// #473 destruction path to fire a late due event without a dangling timer.
+class PersistentQueuedDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {
+public:
+    std::shared_ptr<PersistentDebounceState> state{std::make_shared<PersistentDebounceState>()};
+
+    void start(std::chrono::milliseconds, std::move_only_function<cch::support::ExpectedVoid()> on_fire) override {
+        state->callbacks.push_back(std::move(on_fire));
+    }
+
+    void cancel() override {}
+};
+
 /// Provider double with controllable sink delivery: `immediate` responds
 /// synchronously; otherwise the sink is held for manual firing in order.
 class HeldAutocompleteProvider final : public cch::tui::AutocompleteProvider {
@@ -749,6 +794,44 @@ cch::tui::AutocompleteSuggestions slash_suggestions() {
     };
 }
 
+struct EscapingSinkHolder {
+    std::optional<cch::tui::AutocompleteResultSink> sink;
+};
+
+class EscapingAutocompleteProvider final : public cch::tui::AutocompleteProvider {
+public:
+    explicit EscapingAutocompleteProvider(
+            std::shared_ptr<EscapingSinkHolder> holder, std::shared_ptr<std::size_t> request_count = {})
+        : holder_(std::move(holder)), request_count_(std::move(request_count)) {}
+
+    void get_suggestions(const cch::tui::AutocompleteRequest&, cch::tui::AutocompleteResultSink sink) override {
+        if (request_count_) ++*request_count_;
+        holder_->sink = std::move(sink);
+    }
+
+    cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem&,
+            std::string_view) override {
+        return {
+                .lines = lines,
+                .cursor_line = cursor_line,
+                .cursor_column = cursor_column,
+        };
+    }
+
+    bool should_trigger_file_completion(const std::vector<std::string>&, std::size_t, std::size_t) const override {
+        return true;
+    }
+
+    std::vector<std::string> trigger_characters() const override { return {}; }
+
+private:
+    std::shared_ptr<EscapingSinkHolder> holder_;
+    std::shared_ptr<std::size_t> request_count_;
+};
+
 } // namespace
 
 TEST_CASE("Editor debounces attachment autocomplete until the injected timer fires", "[tui][editor][autocomplete][issue383]") {
@@ -782,6 +865,161 @@ TEST_CASE("Editor debounces attachment autocomplete until the injected timer fir
     REQUIRE(provider_ptr->requests.size() == 2);
     REQUIRE(editor.autocomplete_open());
 }
+
+TEST_CASE("Editor samples current text and cursor when a debounce callback fires",
+        "[tui][editor][autocomplete][issue383][issue538]") {
+    auto timer = std::make_unique<ManualDebounceTimer>();
+    auto* timer_ptr = timer.get();
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@");
+    type(editor, " "); // No new trigger; the due callback must sample this view.
+    CHECK(provider_ptr->requests.empty());
+    timer_ptr->fire();
+
+    REQUIRE(provider_ptr->requests.size() == 1);
+    CHECK(provider_ptr->requests[0].lines == std::vector<std::string>{"@ "});
+    CHECK(provider_ptr->requests[0].cursor_line == 0);
+    CHECK(provider_ptr->requests[0].cursor_column == 2);
+}
+
+TEST_CASE("Editor rejects a queued debounce callback after a newer generation cancels it",
+        "[tui][editor][autocomplete][issue383][issue538]") {
+    auto timer = std::make_unique<QueuedDebounceTimer>();
+    auto* timer_ptr = timer.get();
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@");
+    REQUIRE(timer_ptr->callbacks.size() == 1);
+    editor.set_text("replacement");
+    timer_ptr->fire(0); // Simulates a callback already queued before cancel.
+
+    CHECK(provider_ptr->requests.empty());
+}
+
+TEST_CASE("Editor accepts only the first delivery from one completion request",
+        "[tui][editor][autocomplete][issue383][issue538]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    REQUIRE(provider_ptr->held_sinks.size() == 1);
+    (void)provider_ptr->held_sinks[0](slash_suggestions());
+    REQUIRE(editor.render(80));
+    REQUIRE(editor.autocomplete_open());
+
+    (void)provider_ptr->held_sinks[0](cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "history", .label = "history", .description = {}}},
+            .prefix = "/",
+    });
+    REQUIRE(editor.render(80));
+    REQUIRE(editor.autocomplete_items().size() == 1);
+    CHECK(editor.autocomplete_items()[0].value == "help");
+}
+
+TEST_CASE("Editor drops held completion callbacks after provider replacement and destruction",
+        "[tui][editor][autocomplete][issue383][issue473][issue538]") {
+    const auto holder = std::make_shared<EscapingSinkHolder>();
+    std::size_t render_requests = 0;
+    {
+        cch::tui::Editor editor(cch::tui::EditorOptions{.autocomplete_render_request =
+                                                                [&render_requests]() -> cch::support::ExpectedVoid {
+            ++render_requests;
+            return {};
+        }},
+                {},
+                {});
+        editor.set_autocomplete_provider(std::make_unique<EscapingAutocompleteProvider>(holder));
+        type(editor, "/");
+        REQUIRE(holder->sink);
+
+        editor.set_autocomplete_provider(nullptr);
+        (void)(*holder->sink)(slash_suggestions());
+        CHECK_FALSE(editor.autocomplete_open());
+    }
+
+    (void)(*holder->sink)(slash_suggestions());
+    CHECK(render_requests == 0);
+}
+
+TEST_CASE("Editor drops a queued debounce callback after destruction",
+        "[tui][editor][autocomplete][issue383][issue473][issue538]") {
+    auto timer = std::make_unique<PersistentQueuedDebounceTimer>();
+    const auto timer_state = timer->state;
+    const auto holder = std::make_shared<EscapingSinkHolder>();
+    const auto request_count = std::make_shared<std::size_t>(0);
+    {
+        cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+        editor.set_autocomplete_provider(std::make_unique<EscapingAutocompleteProvider>(holder, request_count));
+        type(editor, "@");
+        REQUIRE(timer_state->callbacks.size() == 1);
+    }
+
+    timer_state->fire(0);
+    CHECK(*request_count == 0);
+}
+
+TEST_CASE("Editor teardown from a synchronous render notification is safe",
+        "[tui][editor][autocomplete][issue473][issue538]") {
+    const auto owner = std::make_shared<std::unique_ptr<cch::tui::Editor>>();
+    *owner = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{
+            .autocomplete_render_request = [owner]() -> cch::support::ExpectedVoid {
+                owner->reset();
+                return {};
+            },
+    });
+    (*owner)->set_autocomplete_provider(std::make_unique<HeldAutocompleteProvider>());
+
+    type(**owner, "/");
+    CHECK_FALSE(*owner);
+}
+
+TEST_CASE("Editor deactivates a failed autocomplete render notification", "[tui][editor][autocomplete][issue538]") {
+    std::size_t render_requests = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    cch::tui::Editor editor(cch::tui::EditorOptions{
+            .autocomplete_render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                ++render_requests;
+                return std::unexpected(
+                        cch::support::make_error(cch::support::ErrorCode::Unknown, "render request failed"));
+            },
+    });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    CHECK(render_requests == 1);
+    type(editor, "h");
+    CHECK(render_requests == 1);
+}
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE("Editor deactivates a throwing autocomplete render notification", "[tui][editor][autocomplete][issue538]") {
+    std::size_t render_requests = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    cch::tui::Editor editor(cch::tui::EditorOptions{
+            .autocomplete_render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                ++render_requests;
+                throw std::runtime_error("render request failed");
+            },
+    });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    CHECK(render_requests == 1);
+    type(editor, "h");
+    CHECK(render_requests == 1);
+}
+#endif
 
 TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][editor][autocomplete][issue383]") {
     auto timer = std::make_unique<ManualDebounceTimer>();
