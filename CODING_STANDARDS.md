@@ -12,6 +12,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 1.4. Reviewers skip only exact violations that required validation rejects — see §14. A non-failing compiler diagnostic is not tool-enforced and remains a valid finding.
 
+1.5. This file stays small enough to read whole on every implementation and review: a new rule generalizes or displaces an existing one where it can, rather than only accreting. A rule that has never been cited in review and is fully validation-enforced (§14) is a pruning candidate; the removal is recorded in its issue.
+
 ## 2. Mechanical style
 
 Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or modified lines by `scripts/format-check.sh` (see §14). Untouched lines stay outside that gate.
@@ -206,10 +208,10 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 ## 14. Validation-enforced — reviewers skip exact violations
 
-- Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 conformance (ADR 0039).
+- Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 or §16 conformance (ADR 0039).
 - Compiler diagnostics remain review findings: `-Wall -Wextra -Wpedantic` are enabled without warnings-as-errors.
 - Formatting of added or modified lines is checked against `.clang-format` by `scripts/format-check.sh` (CI runs it as the formatting gate). Reviewers skip findings that duplicate its patch; untouched lines stay outside the gate.
-- For code changes that compile and pass the required suite, report remaining §2–§13 violations. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
+- For code changes that compile and pass the required suite, report remaining §2–§13 and §16 violations. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
 
 ## 15. Known exceptions and migrations
 
@@ -217,3 +219,17 @@ Sanctioned deviations are grandfathered only on untouched existing lines. Added 
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
 - **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.
+
+## 16. Minimal implementation
+
+Rules 16.1–16.5 are the diff-checkable minimal-implementation discipline: reuse what exists, prefer the standard library and pinned dependencies to new code and new packages, and keep deliberate shortcuts findable. They operate within the interfaces and seams the architecture mandates (§1.2, §13.3) and never argue against a mandated seam itself.
+
+16.1. Reuse before writing: A change reuses an existing project helper, `cch_support` utility, test support header, or established pattern rather than re-implementing it. A new helper that duplicates functionality already available in the owning package or `cch_support` is flagged.
+
+16.2. Standard library and pinned dependencies before hand-rolled code: Where the C++ standard library or an already-pinned dependency provides the operation, no hand-rolled equivalent appears. §9.2 and §9.3 are instances of this rule, not an exhaustive list. Between two standard-library approaches of equal size, the edge-case-correct one wins.
+
+16.3. New third-party dependencies carry justification: A new `vcpkg.json` entry cites its issue or ADR and enters only when the standard library or an already-pinned dependency does not reasonably cover the capability. A manifest baseline change runs Fresh Validation (`AGENTS.md` §Validation entry points).
+
+16.4. `debt:` markers: A deliberate simplification with a known ceiling (a global lock, an O(n²) scan, a naive heuristic) carries a `// debt: <ceiling>, <upgrade trigger>` comment naming both. §15 tracks sanctioned legacy deviations on untouched lines; `debt:` marks new deliberate shortcuts so "later" cannot quietly become "never".
+
+16.5. Bug fixes land at the shared seam: A fix that guards one caller when the defect lives in the shared callee its callers route through is flagged — the fix lands once in the shared code. Deliberate caller-side patching records in review why sibling callers are unaffected.
