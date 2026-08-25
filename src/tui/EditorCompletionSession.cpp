@@ -10,6 +10,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -53,10 +54,22 @@ struct RenderNotificationFrame {
 
 thread_local RenderNotificationFrame* current_render_notification = nullptr;
 
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+[[nodiscard]] support::Error provider_failure(std::string detail) {
+    return support::make_error(support::ErrorCode::Unknown, "Editor autocomplete provider failed", std::move(detail));
+}
+#endif
+
 } // namespace
 
 struct EditorCompletionSession::Impl {
     enum class MenuState { None, Regular, Force };
+
+    struct PendingDue {
+        std::size_t generation{0};
+        EditorCompletionIntent intent{};
+        bool ready{false};
+    };
 
     struct PendingDelivery {
         std::size_t request_id{0};
@@ -70,8 +83,8 @@ struct EditorCompletionSession::Impl {
     /// Provider and timer ownership stays in Impl, so a late callback cannot
     /// make either capability destruct on its own worker thread (#473).
     struct Control {
-        explicit Control(EditorCompletionDueSink due_sink, EditorRenderRequestSink render_sink)
-            : on_due(std::move(due_sink)), render_request(std::move(render_sink)) {}
+        explicit Control(EditorCompletionWakeSink wake_sink, EditorRenderRequestSink render_sink)
+            : on_wake(std::move(wake_sink)), render_request(std::move(render_sink)) {}
 
         std::mutex mutex;
         std::mutex callback_mutex;
@@ -86,6 +99,7 @@ struct EditorCompletionSession::Impl {
         std::optional<std::size_t> started_generation{};
         std::optional<std::size_t> delivered_request_id{};
         std::stop_source request_stop_source{};
+        std::optional<PendingDue> due{};
         std::optional<PendingDelivery> pending{};
         std::shared_ptr<AutocompleteProvider> provider{};
         std::vector<AutocompleteItem> items{};
@@ -95,7 +109,7 @@ struct EditorCompletionSession::Impl {
 
         // These sinks are installed once and remain immutable while Control
         // is live. Every callback invokes them without holding mutex.
-        EditorCompletionDueSink on_due;
+        EditorCompletionWakeSink on_wake;
         EditorRenderRequestSink render_request;
 
         [[nodiscard]] bool begin_render_notification() {
@@ -125,22 +139,78 @@ struct EditorCompletionSession::Impl {
             }
             callback_quiesced.wait(lock, [this] { return active_render_notifications == 0; });
         }
+
+        void clear_menu_locked() {
+            items.clear();
+            prefix.clear();
+            selected = 0;
+            menu_state = MenuState::None;
+        }
+
+        [[nodiscard]] EditorCompletionEffect effect_locked() const {
+            return EditorCompletionEffect{
+                    .menu =
+                            EditorCompletionMenuPresentation{
+                                    .open = menu_state != MenuState::None,
+                                    .forced = menu_state == MenuState::Force,
+                                    .items = items,
+                                    .prefix = prefix,
+                                    .selected_index = selected,
+                            },
+                    .application = std::nullopt,
+                    .submit = false,
+            };
+        }
     };
 
+    struct RequestAdmission {
+        std::size_t generation{0};
+        std::size_t request_id{0};
+        EditorCompletionIntent intent{};
+        bool start_immediately{false};
+    };
+
+    static void cancel_current_lifecycle(
+            const std::shared_ptr<Control>& control, const std::shared_ptr<AutocompleteDebounceTimer>& timer) noexcept;
+    [[nodiscard]] static std::optional<RequestAdmission> admit_request(const std::shared_ptr<Control>& control,
+            const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+            EditorCompletionRefresh refresh);
+    [[nodiscard]] static support::Expected<EditorCompletionEffect> drain_pending(
+            const std::shared_ptr<Control>& control,
+            const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+            const EditorCompletionView& view);
+    [[nodiscard]] static support::Expected<EditorCompletionEffect> start_request(
+            const std::shared_ptr<Control>& control,
+            const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+            const RequestAdmission& admission,
+            const EditorCompletionView& view);
+    [[nodiscard]] static support::Expected<EditorCompletionEffect> handle_refresh(
+            const std::shared_ptr<Control>& control,
+            const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+            EditorCompletionRefresh refresh,
+            const EditorCompletionView& view);
+    [[nodiscard]] static support::Expected<EditorCompletionEffect> handle_wake(const std::shared_ptr<Control>& control,
+            const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+            const EditorCompletionView& view);
+    [[nodiscard]] static support::Expected<EditorCompletionEffect> handle_menu(const std::shared_ptr<Control>& control,
+            const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+            EditorCompletionMenuInteraction interaction,
+            const EditorCompletionView& view);
+
     Impl(std::unique_ptr<AutocompleteDebounceTimer> timer,
-            EditorCompletionDueSink due_sink,
+            EditorCompletionWakeSink wake_sink,
             EditorRenderRequestSink render_sink)
         : debounce_timer(std::shared_ptr<AutocompleteDebounceTimer>(std::move(timer))),
-          control(std::make_shared<Control>(std::move(due_sink), std::move(render_sink))) {}
+          control(std::make_shared<Control>(std::move(wake_sink), std::move(render_sink))) {}
 
     std::shared_ptr<AutocompleteDebounceTimer> debounce_timer;
     std::shared_ptr<Control> control;
 };
 
 EditorCompletionSession::EditorCompletionSession(std::unique_ptr<AutocompleteDebounceTimer> debounce_timer,
-        EditorCompletionDueSink on_due,
+        EditorCompletionWakeSink on_wake,
         EditorRenderRequestSink render_request)
-    : impl_(std::make_unique<Impl>(std::move(debounce_timer), std::move(on_due), std::move(render_request))) {}
+    : impl_(std::make_unique<Impl>(std::move(debounce_timer), std::move(on_wake), std::move(render_request))) {}
 
 EditorCompletionSession::~EditorCompletionSession() { close(); }
 
@@ -152,57 +222,6 @@ EditorCompletionSession& EditorCompletionSession::operator=(EditorCompletionSess
         impl_ = std::move(other.impl_);
     }
     return *this;
-}
-
-std::vector<std::string> EditorCompletionSession::set_provider(std::unique_ptr<AutocompleteProvider> provider) {
-    if (!impl_ || !impl_->control) return {};
-    cancel();
-    const auto control = impl_->control;
-    if (!provider) {
-        std::shared_ptr<AutocompleteProvider> retired_provider;
-        {
-            std::lock_guard lock(control->mutex);
-            retired_provider = std::move(control->provider);
-        }
-        retired_provider.reset();
-        return {};
-    }
-
-    auto shared_provider = std::shared_ptr<AutocompleteProvider>(std::move(provider));
-    auto trigger_characters = shared_provider->trigger_characters();
-    std::shared_ptr<AutocompleteProvider> retired_provider;
-    {
-        std::lock_guard lock(control->mutex);
-        if (control->open) {
-            retired_provider = std::move(control->provider);
-            control->provider = std::move(shared_provider);
-        }
-    }
-    retired_provider.reset();
-    return trigger_characters;
-}
-
-void EditorCompletionSession::cancel() noexcept {
-    if (!impl_ || !impl_->control) return;
-    const auto control = impl_->control;
-    std::stop_source previous_stop_source;
-    {
-        std::lock_guard lock(control->mutex);
-        if (!control->open) return;
-        previous_stop_source = control->request_stop_source;
-        control->request_stop_source = std::stop_source{};
-        ++control->generation;
-        ++control->request_id;
-        control->started_generation.reset();
-        control->delivered_request_id.reset();
-        control->pending.reset();
-        control->items.clear();
-        control->prefix.clear();
-        control->selected = 0;
-        control->menu_state = Impl::MenuState::None;
-    }
-    request_stop(previous_stop_source);
-    cancel_timer(impl_->debounce_timer);
 }
 
 void EditorCompletionSession::close() noexcept {
@@ -221,12 +240,10 @@ void EditorCompletionSession::close() noexcept {
             control->request_stop_source = std::stop_source{};
             control->started_generation.reset();
             control->delivered_request_id.reset();
+            control->due.reset();
             retired_provider = std::move(control->provider);
             control->pending.reset();
-            control->items.clear();
-            control->prefix.clear();
-            control->selected = 0;
-            control->menu_state = Impl::MenuState::None;
+            control->clear_menu_locked();
         }
     }
     retired_provider.reset();
@@ -234,35 +251,67 @@ void EditorCompletionSession::close() noexcept {
     cancel_timer(impl_->debounce_timer);
 }
 
-bool EditorCompletionSession::has_provider() const {
-    if (!impl_ || !impl_->control) return false;
-    std::lock_guard lock(impl_->control->mutex);
-    return impl_->control->open && impl_->control->provider != nullptr;
-}
-
-bool EditorCompletionSession::should_trigger_file_completion(const EditorCompletionView& view) const {
-    if (!impl_ || !impl_->control) return false;
-    std::shared_ptr<AutocompleteProvider> provider;
-    {
-        std::lock_guard lock(impl_->control->mutex);
-        if (!impl_->control->open) return false;
-        provider = impl_->control->provider;
-    }
-    if (!provider) return false;
-    // Do not hold the control mutex across provider code.
-    return provider->should_trigger_file_completion(view.lines, view.cursor_line, view.cursor_column);
-}
-
-std::optional<EditorCompletionDue> EditorCompletionSession::request(
-        EditorCompletionIntent intent, std::chrono::milliseconds debounce) {
-    if (!impl_ || !impl_->control) return std::nullopt;
-    const auto control = impl_->control;
-    const auto timer = impl_->debounce_timer;
+void EditorCompletionSession::Impl::cancel_current_lifecycle(
+        const std::shared_ptr<Control>& control, const std::shared_ptr<AutocompleteDebounceTimer>& timer) noexcept {
     std::stop_source previous_stop_source;
-    EditorCompletionDue due;
+    {
+        std::lock_guard lock(control->mutex);
+        if (!control->open) return;
+        previous_stop_source = control->request_stop_source;
+        control->request_stop_source = std::stop_source{};
+        ++control->generation;
+        ++control->request_id;
+        control->started_generation.reset();
+        control->delivered_request_id.reset();
+        control->due.reset();
+        control->pending.reset();
+        control->clear_menu_locked();
+    }
+    request_stop(previous_stop_source);
+    cancel_timer(timer);
+}
+
+EditorCompletionProviderSetup EditorCompletionSession::set_provider(std::unique_ptr<AutocompleteProvider> provider) {
+    EditorCompletionProviderSetup setup;
+    if (!impl_ || !impl_->control) return setup;
+
+    const auto control = impl_->control;
+    Impl::cancel_current_lifecycle(control, impl_->debounce_timer);
+
+    if (!provider) {
+        std::shared_ptr<AutocompleteProvider> retired_provider;
+        {
+            std::lock_guard lock(control->mutex);
+            retired_provider = std::move(control->provider);
+        }
+        retired_provider.reset();
+        return setup;
+    }
+
+    auto shared_provider = std::shared_ptr<AutocompleteProvider>(std::move(provider));
+    setup.trigger_characters = shared_provider->trigger_characters();
+    std::shared_ptr<AutocompleteProvider> retired_provider;
+    {
+        std::lock_guard lock(control->mutex);
+        if (control->open) {
+            retired_provider = std::move(control->provider);
+            control->provider = std::move(shared_provider);
+        }
+    }
+    retired_provider.reset();
+    return setup;
+}
+
+[[nodiscard]] std::optional<EditorCompletionSession::Impl::RequestAdmission>
+EditorCompletionSession::Impl::admit_request(const std::shared_ptr<Control>& control,
+        const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+        EditorCompletionRefresh refresh) {
+    std::stop_source previous_stop_source;
+    std::optional<EditorCompletionSession::Impl::RequestAdmission> admission;
     {
         std::lock_guard lock(control->mutex);
         if (!control->open || !control->provider) return std::nullopt;
+
         previous_stop_source = control->request_stop_source;
         control->request_stop_source = std::stop_source{};
         ++control->generation;
@@ -270,71 +319,144 @@ std::optional<EditorCompletionDue> EditorCompletionSession::request(
         control->started_generation.reset();
         control->delivered_request_id.reset();
         control->pending.reset();
-        due = EditorCompletionDue{
+
+        admission = EditorCompletionSession::Impl::RequestAdmission{
                 .generation = control->generation,
-                .intent = intent,
+                .request_id = control->request_id,
+                .intent = refresh.intent,
+                .start_immediately = refresh.debounce <= std::chrono::milliseconds{} || !timer,
         };
+        if (!admission->start_immediately) {
+            control->due = EditorCompletionSession::Impl::PendingDue{
+                    .generation = admission->generation,
+                    .intent = refresh.intent,
+                    .ready = false,
+            };
+        }
     }
     request_stop(previous_stop_source);
     cancel_timer(timer);
-
-    if (debounce <= std::chrono::milliseconds{} || !timer) return due;
-
-    const auto weak_control = std::weak_ptr<Impl::Control>{control};
-    timer->start(debounce, [weak_control, due]() -> support::ExpectedVoid {
-        if (const auto state = weak_control.lock()) {
-            bool current = false;
-            {
-                std::lock_guard lock(state->mutex);
-                current = state->open && state->generation == due.generation;
-            }
-            if (current && state->on_due) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                try {
-#endif
-                    (void)state->on_due(due);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (...) {
-                    // A stale or unavailable serialized entry is a benign drop.
-                }
-#endif
-            }
-        }
-        return {};
-    });
-    return std::nullopt;
+    return admission;
 }
 
-support::ExpectedVoid EditorCompletionSession::start(EditorCompletionStart start) {
-    if (!impl_ || !impl_->control) return {};
-    const auto control = impl_->control;
+support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::drain_pending(
+        const std::shared_ptr<Control>& control,
+        const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+        const EditorCompletionView& view) {
+    EditorCompletionSession::Impl::PendingDelivery pending;
+    {
+        std::lock_guard lock(control->mutex);
+        if (!control->open || !control->pending) return control->effect_locked();
+        pending = std::move(*control->pending);
+        control->pending.reset();
+    }
+
+    // The result has already been accepted once into the pending slot. A
+    // changed text/cursor snapshot is a benign stale drop and retains the
+    // current menu projection.
+    if (pending.snapshot_text != view.text || pending.snapshot_cursor != view.cursor) {
+        std::lock_guard lock(control->mutex);
+        return control->effect_locked();
+    }
+    if (!pending.result || pending.result->items.empty()) {
+        cancel_current_lifecycle(control, timer);
+        std::lock_guard lock(control->mutex);
+        return control->effect_locked();
+    }
+
+    if (pending.intent.force && pending.intent.explicit_tab && pending.result->items.size() == 1) {
+        std::shared_ptr<AutocompleteProvider> provider;
+        {
+            std::lock_guard lock(control->mutex);
+            if (!control->open || control->request_id != pending.request_id) return control->effect_locked();
+            provider = control->provider;
+        }
+        if (!provider) {
+            cancel_current_lifecycle(control, timer);
+            std::lock_guard lock(control->mutex);
+            return control->effect_locked();
+        }
+
+        AutocompleteApplyResult result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        try {
+#endif
+            result = provider->apply_completion(view.lines,
+                    view.cursor_line,
+                    view.cursor_column,
+                    pending.result->items.front(),
+                    pending.result->prefix);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        } catch (...) {
+            cancel_current_lifecycle(control, timer);
+            return std::unexpected(provider_failure("the autocomplete application threw an exception"));
+        }
+#endif
+        cancel_current_lifecycle(control, timer);
+        return EditorCompletionEffect{
+                .menu = {},
+                .application =
+                        EditorCompletionApplication{
+                                .result = std::move(result),
+                                .prefix = pending.result->prefix,
+                                .notify = true,
+                        },
+                .submit = false,
+        };
+    }
+
+    {
+        std::lock_guard lock(control->mutex);
+        if (!control->open || control->request_id != pending.request_id) return control->effect_locked();
+        control->prefix = pending.result->prefix;
+        control->items = pending.result->items;
+        if (const auto best = best_match_index(control->items, control->prefix)) {
+            control->selected = *best;
+        } else {
+            control->selected = std::min(control->selected, control->items.size() - 1);
+        }
+        control->menu_state = pending.intent.force ? EditorCompletionSession::Impl::MenuState::Force
+                                                   : EditorCompletionSession::Impl::MenuState::Regular;
+        return control->effect_locked();
+    }
+}
+
+support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::start_request(
+        const std::shared_ptr<Control>& control,
+        const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+        const EditorCompletionSession::Impl::RequestAdmission& admission,
+        const EditorCompletionView& view) {
     std::shared_ptr<AutocompleteProvider> provider;
     std::size_t request_id = 0;
     std::stop_token stop_token;
     {
         std::lock_guard lock(control->mutex);
-        if (!control->open || control->generation != start.due.generation ||
-                (control->started_generation && *control->started_generation == start.due.generation)) {
-            return {};
+        if (!control->open || control->generation != admission.generation ||
+                (control->started_generation && *control->started_generation == admission.generation)) {
+            return control->effect_locked();
         }
-        control->started_generation = start.due.generation;
+        control->started_generation = admission.generation;
+        control->due.reset();
         provider = control->provider;
         request_id = control->request_id;
         stop_token = control->request_stop_source.get_token();
     }
-    if (!provider) return {};
+    if (!provider) {
+        std::lock_guard lock(control->mutex);
+        return control->effect_locked();
+    }
 
-    const auto snapshot_text = start.view.text;
-    const auto snapshot_cursor = start.view.cursor;
-    const auto intent = start.due.intent;
+    const auto snapshot_text = view.text;
+    const auto snapshot_cursor = view.cursor;
+    const auto intent = admission.intent;
     AutocompleteRequest request{
-            .lines = start.view.lines,
-            .cursor_line = start.view.cursor_line,
-            .cursor_column = start.view.cursor_column,
+            .lines = view.lines,
+            .cursor_line = view.cursor_line,
+            .cursor_column = view.cursor_column,
             .force = intent.force,
             .stop_token = stop_token,
     };
-    const auto weak_control = std::weak_ptr<Impl::Control>{control};
+    const auto weak_control = std::weak_ptr<EditorCompletionSession::Impl::Control>{control};
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
 #endif
@@ -348,7 +470,7 @@ support::ExpectedVoid EditorCompletionSession::start(EditorCompletionStart start
                             if (state->open && state->request_id == request_id &&
                                     (!state->delivered_request_id || *state->delivered_request_id != request_id)) {
                                 state->delivered_request_id = request_id;
-                                state->pending = Impl::PendingDelivery{
+                                state->pending = EditorCompletionSession::Impl::PendingDelivery{
                                         .request_id = request_id,
                                         .intent = intent,
                                         .snapshot_text = snapshot_text,
@@ -384,139 +506,187 @@ support::ExpectedVoid EditorCompletionSession::start(EditorCompletionStart start
                 });
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (...) {
-        cancel();
-        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
-                "Editor autocomplete provider failed",
-                "the autocomplete provider threw an exception"));
+        cancel_current_lifecycle(control, timer);
+        return std::unexpected(provider_failure("the autocomplete provider threw an exception"));
     }
 #endif
-    return {};
+    return drain_pending(control, timer, view);
 }
 
-std::optional<EditorCompletionApplication> EditorCompletionSession::drain(const EditorCompletionView& view) {
-    if (!impl_ || !impl_->control) return std::nullopt;
-    const auto control = impl_->control;
-    Impl::PendingDelivery pending;
+support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::handle_refresh(
+        const std::shared_ptr<Control>& control,
+        const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+        EditorCompletionRefresh refresh,
+        const EditorCompletionView& view) {
+    std::shared_ptr<AutocompleteProvider> provider;
     {
         std::lock_guard lock(control->mutex);
-        if (!control->open || !control->pending) return std::nullopt;
-        pending = std::move(*control->pending);
-        control->pending.reset();
+        if (!control->open || !control->provider) return control->effect_locked();
+        provider = control->provider;
     }
 
-    // The result has already been accepted once into the pending slot. A
-    // changed text/cursor snapshot is a benign stale drop and retains any
-    // existing menu until the next serialized request resolves.
-    if (pending.snapshot_text != view.text || pending.snapshot_cursor != view.cursor) {
-        return std::nullopt;
-    }
-    if (!pending.result || pending.result->items.empty()) {
-        cancel();
-        return std::nullopt;
-    }
-
-    if (pending.intent.force && pending.intent.explicit_tab && pending.result->items.size() == 1) {
-        std::shared_ptr<AutocompleteProvider> provider;
-        {
+    if (refresh.intent.force) {
+        bool allowed = false;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        try {
+#endif
+            allowed = provider->should_trigger_file_completion(view.lines, view.cursor_line, view.cursor_column);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        } catch (...) {
+            return std::unexpected(provider_failure("the file-completion gate threw an exception"));
+        }
+#endif
+        if (!allowed) {
             std::lock_guard lock(control->mutex);
-            if (!control->open || control->request_id != pending.request_id) return std::nullopt;
-            provider = control->provider;
+            return control->effect_locked();
         }
-        if (!provider) {
-            cancel();
-            return std::nullopt;
-        }
-        const auto result = provider->apply_completion(view.lines,
-                view.cursor_line,
-                view.cursor_column,
-                pending.result->items.front(),
-                pending.result->prefix);
-        cancel();
-        return EditorCompletionApplication{
-                .result = result,
-                .prefix = pending.result->prefix,
-                .notify = true,
-        };
     }
 
+    const auto admission = admit_request(control, timer, refresh);
+    if (!admission) {
+        std::lock_guard lock(control->mutex);
+        return control->effect_locked();
+    }
+    if (admission->start_immediately) {
+        return start_request(control, timer, *admission, view);
+    }
+
+    const auto weak_control = std::weak_ptr<EditorCompletionSession::Impl::Control>{control};
+    const auto generation = admission->generation;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        timer->start(refresh.debounce, [weak_control, generation]() -> support::ExpectedVoid {
+            if (const auto state = weak_control.lock()) {
+                bool current = false;
+                {
+                    std::lock_guard lock(state->mutex);
+                    if (state->open && state->due && state->due->generation == generation) {
+                        state->due->ready = true;
+                        current = true;
+                    }
+                }
+                if (current && state->on_wake) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                    try {
+#endif
+                        (void)state->on_wake();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                    } catch (...) {
+                        // A stale or unavailable serialized entry is a benign drop.
+                    }
+#endif
+                }
+            }
+            return {};
+        });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (...) {
+        cancel_current_lifecycle(control, timer);
+        return std::unexpected(provider_failure("the autocomplete debounce timer failed"));
+    }
+#endif
+    std::lock_guard lock(control->mutex);
+    return control->effect_locked();
+}
+
+support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::handle_wake(
+        const std::shared_ptr<Control>& control,
+        const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+        const EditorCompletionView& view) {
+    std::optional<EditorCompletionSession::Impl::RequestAdmission> admission;
     {
         std::lock_guard lock(control->mutex);
-        if (!control->open || control->request_id != pending.request_id) return std::nullopt;
-        control->prefix = pending.result->prefix;
-        control->items = pending.result->items;
-        if (const auto best = best_match_index(control->items, control->prefix)) {
-            control->selected = *best;
-        } else {
-            control->selected = std::min(control->selected, control->items.size() - 1);
+        if (!control->open) return control->effect_locked();
+        if (control->due && control->due->ready) {
+            admission = EditorCompletionSession::Impl::RequestAdmission{
+                    .generation = control->due->generation,
+                    .request_id = control->request_id,
+                    .intent = control->due->intent,
+                    .start_immediately = true,
+            };
+            control->due.reset();
         }
-        control->menu_state = pending.intent.force ? Impl::MenuState::Force : Impl::MenuState::Regular;
     }
-    return std::nullopt;
+    if (admission) return start_request(control, timer, *admission, view);
+    return drain_pending(control, timer, view);
 }
 
-bool EditorCompletionSession::open() const {
-    if (!impl_ || !impl_->control) return false;
-    std::lock_guard lock(impl_->control->mutex);
-    return impl_->control->menu_state != Impl::MenuState::None;
-}
-
-bool EditorCompletionSession::forced() const {
-    if (!impl_ || !impl_->control) return false;
-    std::lock_guard lock(impl_->control->mutex);
-    return impl_->control->menu_state == Impl::MenuState::Force;
-}
-
-std::vector<AutocompleteItem> EditorCompletionSession::items() const {
-    if (!impl_ || !impl_->control) return {};
-    std::lock_guard lock(impl_->control->mutex);
-    return impl_->control->items;
-}
-
-std::size_t EditorCompletionSession::selected_index() const {
-    if (!impl_ || !impl_->control) return 0;
-    std::lock_guard lock(impl_->control->mutex);
-    return impl_->control->selected;
-}
-
-bool EditorCompletionSession::prefix_starts_with(std::string_view prefix) const {
-    if (!impl_ || !impl_->control) return false;
-    std::lock_guard lock(impl_->control->mutex);
-    return impl_->control->prefix.starts_with(prefix);
-}
-
-void EditorCompletionSession::move_selection(bool down) {
-    if (!impl_ || !impl_->control) return;
-    std::lock_guard lock(impl_->control->mutex);
-    if (impl_->control->items.empty()) return;
-    if (down) {
-        impl_->control->selected = std::min(impl_->control->selected + 1, impl_->control->items.size() - 1);
-    } else if (impl_->control->selected > 0) {
-        --impl_->control->selected;
+support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::handle_menu(
+        const std::shared_ptr<Control>& control,
+        const std::shared_ptr<AutocompleteDebounceTimer>& timer,
+        EditorCompletionMenuInteraction interaction,
+        const EditorCompletionView& view) {
+    if (interaction.action == EditorCompletionMenuAction::MoveUp ||
+            interaction.action == EditorCompletionMenuAction::MoveDown) {
+        std::lock_guard lock(control->mutex);
+        if (control->open && !control->items.empty()) {
+            if (interaction.action == EditorCompletionMenuAction::MoveDown) {
+                control->selected = std::min(control->selected + 1, control->items.size() - 1);
+            } else if (control->selected > 0) {
+                --control->selected;
+            }
+        }
+        return control->effect_locked();
     }
-}
 
-std::optional<EditorCompletionApplication> EditorCompletionSession::accept(
-        const EditorCompletionView& view, bool fallthrough_submit) {
-    if (!impl_ || !impl_->control) return std::nullopt;
-    const auto control = impl_->control;
     std::shared_ptr<AutocompleteProvider> provider;
     AutocompleteItem item;
     std::string prefix;
+    bool submit = false;
     {
         std::lock_guard lock(control->mutex);
-        if (!control->open || !control->provider || control->items.empty()) return std::nullopt;
+        if (!control->open || !control->provider || control->items.empty()) return control->effect_locked();
         provider = control->provider;
         item = control->items[control->selected];
         prefix = control->prefix;
+        submit = interaction.action == EditorCompletionMenuAction::Confirm && prefix.starts_with("/");
     }
 
-    const auto result = provider->apply_completion(view.lines, view.cursor_line, view.cursor_column, item, prefix);
-    cancel();
-    return EditorCompletionApplication{
-            .result = result,
-            .prefix = std::move(prefix),
-            .notify = !fallthrough_submit,
+    AutocompleteApplyResult result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        result = provider->apply_completion(view.lines, view.cursor_line, view.cursor_column, item, prefix);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (...) {
+        cancel_current_lifecycle(control, timer);
+        return std::unexpected(provider_failure("the autocomplete application threw an exception"));
+    }
+#endif
+    cancel_current_lifecycle(control, timer);
+    return EditorCompletionEffect{
+            .menu = {},
+            .application =
+                    EditorCompletionApplication{
+                            .result = std::move(result),
+                            .prefix = std::move(prefix),
+                            .notify = !submit,
+                    },
+            .submit = submit,
     };
+}
+
+support::Expected<EditorCompletionEffect> EditorCompletionSession::handle(
+        EditorCompletionInteraction interaction, EditorCompletionView view) {
+    if (!impl_ || !impl_->control) return EditorCompletionEffect{};
+    const auto control = impl_->control;
+    return std::visit(
+            [this, &control, &view](auto&& value) -> support::Expected<EditorCompletionEffect> {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, EditorCompletionRefresh>) {
+                    return Impl::handle_refresh(control, impl_->debounce_timer, std::move(value), view);
+                } else if constexpr (std::is_same_v<Value, EditorCompletionWake>) {
+                    return Impl::handle_wake(control, impl_->debounce_timer, view);
+                } else if constexpr (std::is_same_v<Value, EditorCompletionCancel>) {
+                    Impl::cancel_current_lifecycle(control, impl_->debounce_timer);
+                    std::lock_guard lock(control->mutex);
+                    return control->effect_locked();
+                } else {
+                    return Impl::handle_menu(control, impl_->debounce_timer, std::move(value), view);
+                }
+            },
+            std::move(interaction));
 }
 
 } // namespace cch::tui::detail

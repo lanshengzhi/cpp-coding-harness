@@ -81,6 +81,7 @@ struct Editor::Impl {
     detail::TextBuffer buffer{detail::TextBufferOptions{.multiline = true, .enable_paste_markers = true}};
 
     std::unique_ptr<detail::EditorCompletionSession> completion_session;
+    detail::EditorCompletionMenuPresentation autocomplete_menu{};
     std::vector<std::string> autocomplete_trigger_characters{"@", "#"};
 
     /// Serializes every public entry point (input, render, and timer entry).
@@ -236,8 +237,33 @@ struct Editor::Impl {
                current.cursor_line == expected.cursor_line && current.cursor_column == expected.cursor_column;
     }
 
+    void update_completion_effect(detail::EditorCompletionEffect effect,
+            const detail::EditorCompletionView& request_view,
+            std::unique_lock<std::mutex>& lock) {
+        autocomplete_menu = std::move(effect.menu);
+        if (!effect.application || !completion_view_matches(request_view)) return;
+        const auto submit_after = effect.submit;
+        apply_completion_application(std::move(*effect.application));
+        if (submit_after) submit(lock);
+    }
+
+    void handle_completion_interaction(detail::EditorCompletionInteraction interaction,
+            const detail::EditorCompletionView& request_view,
+            std::unique_lock<std::mutex>& lock) {
+        auto result = outside_impl_lock(lock, [this, interaction = std::move(interaction), request_view]() mutable {
+            return completion_session->handle(std::move(interaction), request_view);
+        });
+        if (!result) {
+            callback_error = std::move(result.error());
+            return;
+        }
+        update_completion_effect(std::move(*result), request_view, lock);
+    }
+
     void cancel_autocomplete(std::unique_lock<std::mutex>& lock) {
-        outside_impl_lock(lock, [this] { completion_session->cancel(); });
+        const auto request_view = completion_view();
+        handle_completion_interaction(
+                detail::EditorCompletionInteraction{detail::EditorCompletionCancel{}}, request_view, lock);
     }
 
     /// Whether the text before the cursor ends in a token starting with one
@@ -323,61 +349,33 @@ struct Editor::Impl {
     }
 
     void request_autocomplete(bool force, bool explicit_tab, std::unique_lock<std::mutex>& lock) {
-        if (!completion_session->has_provider()) return;
         const auto request_view = completion_view();
-        if (force) {
-            bool allowed = false;
-            outside_impl_lock(lock, [this, &allowed, &request_view] {
-                allowed = completion_session->should_trigger_file_completion(request_view);
-            });
-            if (!allowed || !completion_view_matches(request_view)) return;
-        }
         const auto debounce_ms = get_autocomplete_debounce_ms(force, explicit_tab);
-        std::optional<detail::EditorCompletionDue> due;
-        outside_impl_lock(lock, [this, &due, force, explicit_tab, debounce_ms] {
-            due = completion_session->request(
-                    detail::EditorCompletionIntent{.force = force, .explicit_tab = explicit_tab}, debounce_ms);
-        });
-        if (due) start_autocomplete_request(*due, lock);
+        handle_completion_interaction(
+                detail::EditorCompletionInteraction{detail::EditorCompletionRefresh{
+                        .intent = detail::EditorCompletionIntent{.force = force, .explicit_tab = explicit_tab},
+                        .debounce = debounce_ms,
+                }},
+                request_view,
+                lock);
     }
 
-    void start_autocomplete_request(detail::EditorCompletionDue due, std::unique_lock<std::mutex>& lock) {
+    void wake_autocomplete(std::unique_lock<std::mutex>& lock) {
         const auto request_view = completion_view();
-        auto result = outside_impl_lock(lock, [this, &due, &request_view] {
-            return completion_session->start(detail::EditorCompletionStart{
-                    .due = due,
-                    .view = request_view,
-            });
-        });
-        if (auto completion = std::move(result); !completion) {
-            callback_error = std::move(completion.error());
-            cancel_autocomplete(lock);
-            return;
-        }
-        // A provider may deliver synchronously. Drain it at this serialized
-        // entry point rather than allowing a callback to mutate TextBuffer.
-        drain_autocomplete_result(lock);
+        handle_completion_interaction(
+                detail::EditorCompletionInteraction{detail::EditorCompletionWake{}}, request_view, lock);
     }
 
-    void on_completion_due(detail::EditorCompletionDue due, std::shared_ptr<Impl> owner) {
+    void on_completion_wake(std::shared_ptr<Impl> owner) {
         auto operation = serialized_operation(std::move(owner));
         auto& impl = operation.impl;
         std::unique_lock lock(impl.impl_mutex);
-        impl.start_autocomplete_request(std::move(due), lock);
-    }
-
-    void drain_autocomplete_result(std::unique_lock<std::mutex>& lock) {
-        const auto request_view = completion_view();
-        std::optional<detail::EditorCompletionApplication> application;
-        outside_impl_lock(
-                lock, [this, &application, &request_view] { application = completion_session->drain(request_view); });
-        if (!application || !completion_view_matches(request_view)) return;
-        apply_completion_application(*application);
+        impl.wake_autocomplete(lock);
     }
 
     void update_autocomplete(std::unique_lock<std::mutex>& lock) {
-        if (!completion_session->open()) return;
-        request_autocomplete(completion_session->forced(), false, lock);
+        if (!autocomplete_menu.open) return;
+        request_autocomplete(autocomplete_menu.forced, false, lock);
     }
 
     void try_trigger_autocomplete(std::unique_lock<std::mutex>& lock) { request_autocomplete(false, false, lock); }
@@ -387,7 +385,7 @@ struct Editor::Impl {
     /// characters inside a slash or attachment context; an open menu instead
     /// re-queries with its force mode.
     void maybe_trigger_autocomplete(char last_char, std::unique_lock<std::mutex>& lock) {
-        if (completion_session->open()) {
+        if (autocomplete_menu.open) {
             update_autocomplete(lock);
             return;
         }
@@ -413,7 +411,7 @@ struct Editor::Impl {
 
     /// pi handleBackspace/handleForwardDelete's autocomplete tail.
     void update_or_retrigger_after_erase(std::unique_lock<std::mutex>& lock) {
-        if (completion_session->open()) {
+        if (autocomplete_menu.open) {
             update_autocomplete(lock);
             return;
         }
@@ -424,7 +422,6 @@ struct Editor::Impl {
     }
 
     void handle_tab_completion(std::unique_lock<std::mutex>& lock) {
-        if (!completion_session->has_provider()) return;
         const auto text_before_cursor = line_prefix_before_cursor();
         if (in_slash_command_context(text_before_cursor) &&
             detail::trim_start_ascii(text_before_cursor).find(' ') == std::string_view::npos) {
@@ -432,6 +429,15 @@ struct Editor::Impl {
         } else {
             request_autocomplete(true, true, lock);
         }
+    }
+
+    void handle_completion_menu_action(detail::EditorCompletionMenuAction action, std::unique_lock<std::mutex>& lock) {
+        if (!autocomplete_menu.open) return;
+        const auto request_view = completion_view();
+        handle_completion_interaction(
+                detail::EditorCompletionInteraction{detail::EditorCompletionMenuInteraction{.action = action}},
+                request_view,
+                lock);
     }
 
     void apply_completion_result(const AutocompleteApplyResult& result, std::string_view prefix) {
@@ -501,17 +507,6 @@ struct Editor::Impl {
         if (application.notify) notify_change();
     }
 
-    void accept_selected_autocomplete(bool fallthrough_submit, std::unique_lock<std::mutex>& lock) {
-        if (!completion_session->open()) return;
-        const auto request_view = completion_view();
-        std::optional<detail::EditorCompletionApplication> application;
-        outside_impl_lock(lock, [this, &application, &request_view, fallthrough_submit] {
-            application = completion_session->accept(request_view, fallthrough_submit);
-        });
-        if (!application || !completion_view_matches(request_view)) return;
-        apply_completion_application(*application);
-    }
-
     void insert_character(std::string_view text, std::unique_lock<std::mutex>& lock) {
         if (text.empty()) return;
         exit_history_browsing();
@@ -543,12 +538,12 @@ struct Editor::Impl {
 
     void move_left(std::unique_lock<std::mutex>& lock) {
         buffer.move_left();
-        if (completion_session->open()) update_autocomplete(lock);
+        if (autocomplete_menu.open) update_autocomplete(lock);
     }
 
     void move_right(std::unique_lock<std::mutex>& lock) {
         buffer.move_right();
-        if (completion_session->open()) update_autocomplete(lock);
+        if (autocomplete_menu.open) update_autocomplete(lock);
     }
 
     void move_word(bool forward) {
@@ -803,7 +798,7 @@ struct Editor::Impl {
         const auto target_line = to.logical_line;
         const auto target_column = std::min(to.end, to.start + (cur.column - from.start));
         buffer.set_cursor(detail::BufferCursor{.line = target_line, .column = target_column});
-        if (completion_session->open()) update_autocomplete(lock);
+        if (autocomplete_menu.open) update_autocomplete(lock);
     }
 
     void jump_to(std::string_view target, JumpDirection direction) {
@@ -820,8 +815,8 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
     const auto weak_impl = std::weak_ptr<Impl>{impl_};
     impl_->completion_session = std::make_unique<detail::EditorCompletionSession>(
             std::move(impl_->options.autocomplete_debounce_timer),
-            [weak_impl](detail::EditorCompletionDue due) -> support::ExpectedVoid {
-                if (const auto impl = weak_impl.lock()) impl->on_completion_due(std::move(due), impl);
+            [weak_impl]() -> support::ExpectedVoid {
+                if (const auto impl = weak_impl.lock()) impl->on_completion_wake(impl);
                 return {};
             },
             std::move(impl_->options.autocomplete_render_request));
@@ -921,12 +916,13 @@ void Editor::set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> pro
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::unique_lock lock(impl.impl_mutex);
-    std::vector<std::string> trigger_characters;
-    impl.outside_impl_lock(lock,
-            [session = impl.completion_session.get(), &trigger_characters, provider = std::move(provider)]() mutable {
-                trigger_characters = session->set_provider(std::move(provider));
+    detail::EditorCompletionProviderSetup setup;
+    impl.outside_impl_lock(
+            lock, [session = impl.completion_session.get(), &setup, provider = std::move(provider)]() mutable {
+                setup = session->set_provider(std::move(provider));
             });
-    impl.set_autocomplete_trigger_characters(trigger_characters);
+    impl.set_autocomplete_trigger_characters(setup.trigger_characters);
+    impl.autocomplete_menu = std::move(setup.menu);
 }
 
 void Editor::set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings) {
@@ -943,28 +939,28 @@ bool Editor::autocomplete_open() const {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::lock_guard lock(impl.impl_mutex);
-    return impl.completion_session->open();
+    return impl.autocomplete_menu.open;
 }
 
 std::vector<AutocompleteItem> Editor::autocomplete_items() const {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::lock_guard lock(impl.impl_mutex);
-    return impl.completion_session->items();
+    return impl.autocomplete_menu.items;
 }
 
 std::size_t Editor::autocomplete_selected_index() const {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::lock_guard lock(impl.impl_mutex);
-    return impl.completion_session->selected_index();
+    return impl.autocomplete_menu.selected_index;
 }
 
 support::Expected<RenderResult> Editor::render(std::size_t width) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::unique_lock lock(impl.impl_mutex);
-    impl.drain_autocomplete_result(lock);
+    impl.wake_autocomplete(lock);
     if (impl.callback_error) return std::unexpected(*impl.callback_error);
     if (width == 0) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
@@ -1036,7 +1032,7 @@ void Editor::handle_input(const InputEventVariant& input) {
     auto operation = this->impl_->serialized_operation(this->impl_);
     auto& impl = operation.impl;
     std::unique_lock lock(impl.impl_mutex);
-    impl.drain_autocomplete_result(lock);
+    impl.wake_autocomplete(lock);
     if (const auto* paste = std::get_if<PasteEvent>(&input)) {
         impl.paste(paste->text, lock);
         return;
@@ -1060,27 +1056,26 @@ void Editor::handle_input(const InputEventVariant& input) {
         impl.jump_direction.reset();
     }
 
-    if (impl.completion_session->open()) {
+    if (impl.autocomplete_menu.open) {
         if (matches("tui.select.cancel")) {
             impl.cancel_autocomplete(lock);
             return;
         }
         if (matches("tui.select.up")) {
-            impl.completion_session->move_selection(false);
+            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveUp, lock);
             return;
         }
         if (matches("tui.select.down")) {
-            impl.completion_session->move_selection(true);
+            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveDown, lock);
             return;
         }
         if (matches("tui.input.tab")) {
-            impl.accept_selected_autocomplete(false, lock);
+            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Accept, lock);
             return;
         }
         if (matches("tui.select.confirm")) {
-            const bool fallthrough_submit = impl.completion_session->prefix_starts_with("/");
-            impl.accept_selected_autocomplete(fallthrough_submit, lock);
-            if (!fallthrough_submit) return;
+            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Confirm, lock);
+            return;
         }
     }
 
