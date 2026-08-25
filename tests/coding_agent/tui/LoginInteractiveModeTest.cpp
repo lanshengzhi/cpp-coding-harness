@@ -88,23 +88,21 @@ public:
         ai::OAuthAuth oauth;
         oauth.name = provider_name_ + " OAuth";
         oauth.login = [script = std::make_shared<LoginScript>(std::move(login_script))](
-                          ai::AuthInteraction interaction)
-            -> cch::support::AsyncResult<ai::OAuthCredential> {
-            return cch::ai::detail::make_async_result(
-                [script, interaction = std::move(interaction)]() mutable
-                    -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    co_return co_await (*script)(std::move(interaction));
-                });
+                              ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            return cch::support::detail::make_async_result(
+                    [script, interaction = std::move(interaction)]() mutable
+                            -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                        co_return co_await (*script)(std::move(interaction));
+                    });
         };
         if (refresh_script) {
             oauth.refresh = [script = std::make_shared<RefreshScript>(std::move(refresh_script))](
-                                ai::OAuthCredential credential)
-                -> cch::support::AsyncResult<ai::OAuthCredential> {
-                return cch::ai::detail::make_async_result(
-                    [script, credential = std::move(credential)]() mutable
-                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                        co_return co_await (*script)(std::move(credential));
-                    });
+                                    ai::OAuthCredential credential) -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::support::detail::make_async_result(
+                        [script, credential = std::move(credential)]() mutable
+                                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                            co_return co_await (*script)(std::move(credential));
+                        });
             };
         } else {
             oauth.refresh = [](ai::OAuthCredential credential)
@@ -296,9 +294,9 @@ struct InteractiveRun {
             .url = "https://auth.openai.example/authorize?client=abc",
             .instructions = "Complete sign-in in your browser.",
         }});
-        auto code = co_await cch::ai::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
-            .kind = ai::AuthPromptManualCode{.message = "Paste the authorization code"},
-            .stop_token = std::nullopt,
+        auto code = co_await cch::support::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
+                .kind = ai::AuthPromptManualCode{.message = "Paste the authorization code"},
+                .stop_token = std::nullopt,
         }));
         if (!code) co_return std::unexpected(std::move(code.error()));
         *submitted_code = *code;
@@ -408,9 +406,9 @@ TEST_CASE(
                 .user_code = "ABCD-EFGH",
                 .verification_uri = "https://kimi.example/device",
             }});
-            auto acknowledged = co_await cch::ai::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
-                .kind = ai::AuthPromptText{.message = "Press enter after approving"},
-                .stop_token = std::nullopt,
+            auto acknowledged = co_await cch::support::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
+                    .kind = ai::AuthPromptText{.message = "Press enter after approving"},
+                    .stop_token = std::nullopt,
             }));
             if (!acknowledged) co_return std::unexpected(std::move(acknowledged.error()));
             co_return dummy_oauth_credential();
@@ -622,9 +620,9 @@ TEST_CASE(
                 {.id = "account", .label = "Work account"},
                 {.id = "device", .label = "Device code"},
             };
-            auto selected = co_await cch::ai::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
-                .kind = std::move(select),
-                .stop_token = std::nullopt,
+            auto selected = co_await cch::support::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
+                    .kind = std::move(select),
+                    .stop_token = std::nullopt,
             }));
             if (!selected) co_return std::unexpected(std::move(selected.error()));
             *selected_id = *selected;

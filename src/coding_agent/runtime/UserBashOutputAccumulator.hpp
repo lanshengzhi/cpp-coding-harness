@@ -28,7 +28,7 @@ inline constexpr std::string_view kUtf8Replacement{"\xef\xbf\xbd"};
 
 // --- Stage 1: incremental UTF-8 safety -------------------------------------
 // Holds back a trailing incomplete-but-plausible multibyte prefix; every other
-// invalid byte becomes U+FFFD, matching ai::bounded_utf8 whole-buffer rules.
+// invalid byte becomes U+FFFD, matching support::bounded_utf8 whole-buffer rules.
 
 class Utf8Safety {
 public:

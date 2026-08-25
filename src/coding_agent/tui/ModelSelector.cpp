@@ -10,7 +10,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include <cch/support/Error.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
@@ -136,7 +136,7 @@ void ModelSelectorComponent::start_refresh() {
         boost::asio::co_spawn(
                 self->executor_,
                 [runtime, self, on_invalidate = std::move(on_invalidate)]() mutable -> boost::asio::awaitable<void> {
-                    auto available = co_await ai::detail::await_async_result(runtime->get_available());
+                    auto available = co_await support::detail::await_async_result(runtime->get_available());
                     {
                         std::lock_guard lock(self->mutex_);
                         if (self->closed_) co_return;

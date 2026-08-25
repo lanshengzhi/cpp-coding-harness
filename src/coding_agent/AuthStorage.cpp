@@ -1,7 +1,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 
 #include <cch/support/JsonValue.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
@@ -668,7 +668,7 @@ struct AuthStorage::Impl {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
-            next_result = co_await cch::ai::detail::await_async_result(modifier(current));
+            next_result = co_await cch::support::detail::await_async_result(modifier(current));
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const boost::system::system_error& exception) {
             if (exception.code() == boost::asio::error::operation_aborted) {
@@ -779,23 +779,19 @@ cch::support::AsyncResult<std::optional<ai::Credential>> AuthStorage::modify(
     // private completion bridge maps setup failure to the operation's typed
     // outcome.
     Impl* impl = impl_.get();
-    return cch::ai::detail::make_async_result_on(
-        impl->io_.get_executor(),
-        [impl, provider_id = std::move(provider_id), modifier = std::move(modifier)]() mutable
-            -> boost::asio::awaitable<support::Expected<std::optional<ai::Credential>>> {
-            co_return co_await impl->modify_awaitable(
-                std::move(provider_id), std::move(modifier));
-        });
+    return cch::support::detail::make_async_result_on(impl->io_.get_executor(),
+            [impl, provider_id = std::move(provider_id), modifier = std::move(modifier)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::optional<ai::Credential>>> {
+                co_return co_await impl->modify_awaitable(std::move(provider_id), std::move(modifier));
+            });
 }
 
 cch::support::AsyncResult<void> AuthStorage::remove(std::string provider_id) {
     Impl* impl = impl_.get();
-    return cch::ai::detail::make_async_result_on(
-        impl->io_.get_executor(),
-        [impl, provider_id = std::move(provider_id)]()
-            -> boost::asio::awaitable<support::ExpectedVoid> {
-            co_return co_await impl->remove_awaitable(std::move(provider_id));
-        });
+    return cch::support::detail::make_async_result_on(impl->io_.get_executor(),
+            [impl, provider_id = std::move(provider_id)]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await impl->remove_awaitable(std::move(provider_id));
+            });
 }
 
 } // namespace cch::coding_agent

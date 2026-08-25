@@ -36,8 +36,8 @@ VALID_MANIFEST = {
         "required_compile_flags": ["-fno-exceptions"],
         "forbidden_compile_flags": ["-fexceptions"],
         "allowed_exception_ptr_sources": [
-            "src/ai/AsyncResultBridge.hpp",
             "src/ai/ModelStreamBridge.hpp",
+            "src/support/AsyncResultBridge.hpp",
         ],
         "forbidden_exception_calls": ["std::rethrow_exception"],
     },

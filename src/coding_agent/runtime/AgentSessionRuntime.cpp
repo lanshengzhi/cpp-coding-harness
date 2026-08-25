@@ -10,7 +10,7 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "ai/ModelThinkingLevel.hpp"
 #include "ai/utils/RetryClassifier.hpp"
 #include "coding_agent/BoundedText.hpp"
@@ -118,8 +118,7 @@ void record_session_observer_diagnostic(
         detail += ": ";
         detail += failure.detail;
     }
-    detail = ai::bounded_redacted_text(
-        std::move(detail), kMaxSessionObserverDetailBytes, "...");
+    detail = support::bounded_redacted_text(std::move(detail), kMaxSessionObserverDetailBytes, "...");
     if (diagnostics.size() == kMaxSessionObserverDiagnostics) {
         diagnostics.erase(diagnostics.begin());
     }
@@ -514,7 +513,7 @@ AgentSessionRuntime::preflight_auth_guidance() {
     if (services_.model_runtime->has_configured_auth(model.provider)) {
         co_return support::ExpectedVoid{};
     }
-    auto checked = co_await ai::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
+    auto checked = co_await support::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
     if (!checked) {
         co_return std::unexpected(std::move(checked.error()));
     }
@@ -724,36 +723,32 @@ AgentSessionRuntime::run_user_bash(
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
 #endif
-        shell_result = co_await ai::detail::await_async_result(
-            services_.user_shell->execute(
+        shell_result = co_await support::detail::await_async_result(services_.user_shell->execute(
                 std::move(command),
-            [recorded_command, exclude_from_context, &output, &progress_sink](
-                std::string_view update) -> support::ExpectedVoid {
-                output.append(update);
-                if (!progress_sink) return {};
+                [recorded_command, exclude_from_context, &output, &progress_sink](
+                        std::string_view update) -> support::ExpectedVoid {
+                    output.append(update);
+                    if (!progress_sink) return {};
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                try {
+                    try {
 #endif
-                    return progress_sink(UserBashProgress{
-                        .command = recorded_command,
-                        .output = output.tail(),
-                        .exclude_from_context = exclude_from_context,
-                        .exit_code = {},
-                        .full_output_path = {},
-                    });
+                        return progress_sink(UserBashProgress{
+                                .command = recorded_command,
+                                .output = output.tail(),
+                                .exclude_from_context = exclude_from_context,
+                                .exit_code = {},
+                                .full_output_path = {},
+                        });
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (const std::exception& error) {
-                    return std::unexpected(support::make_error(
-                        support::ErrorCode::Unknown,
-                        "User Bash progress callback failed",
-                        error.what()));
-                } catch (...) {
-                    return std::unexpected(support::make_error(
-                        support::ErrorCode::Unknown,
-                        "User Bash progress callback failed"));
-                }
+                    } catch (const std::exception& error) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Unknown, "User Bash progress callback failed", error.what()));
+                    } catch (...) {
+                        return std::unexpected(
+                                support::make_error(support::ErrorCode::Unknown, "User Bash progress callback failed"));
+                    }
 #endif
-            },
+                },
                 active_user_bash_stop_source_->get_token()));
         if (shell_result) {
             output.finish();
@@ -907,12 +902,8 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_agent_loo
     };
 
     std::optional<support::ExpectedVoid> result;
-    result = co_await ai::detail::await_async_result(
-        agent::detail::AgentPromptAccess::prompt(
-            *agent_,
-            std::move(prompt),
-            make_retry_observing_sink(),
-            stop_source));
+    result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::prompt(
+            *agent_, std::move(prompt), make_retry_observing_sink(), stop_source));
     if (!result) {
         co_return co_await commitment.conclude(std::move(result));
     }
@@ -933,8 +924,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_agent_loo
         if (is_retryable_error(*last_assistant)) {
             if (co_await prepare_retry(
                     *last_assistant, stop_source.get_token())) {
-                result = co_await ai::detail::await_async_result(
-                    agent::detail::AgentPromptAccess::continue_run(
+                result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::continue_run(
                         *agent_, make_retry_observing_sink(), stop_source));
                 if (!result) {
                     break;
@@ -970,9 +960,8 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::run_agent_loo
         if (outcome != AutoCompactionOutcome::OverflowRetry) {
             break;
         }
-        result = co_await ai::detail::await_async_result(
-            agent::detail::AgentPromptAccess::continue_run(
-                *agent_, make_retry_observing_sink(), stop_source));
+        result = co_await support::detail::await_async_result(
+                agent::detail::AgentPromptAccess::continue_run(*agent_, make_retry_observing_sink(), stop_source));
         if (!result) {
             break;
         }
@@ -1257,7 +1246,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSessionRuntime::set_model(
     }
 
     // pi setModel: `if (!(await checkAuth(model.provider))) throw`.
-    auto checked = co_await ai::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
+    auto checked = co_await support::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
     if (!checked) {
         co_return std::unexpected(std::move(checked.error()));
     }
@@ -1350,8 +1339,8 @@ AgentSessionRuntime::cycle_model(std::string_view direction) {
     if (!scoped_models_.empty()) {
         std::vector<cch::coding_agent::ScopedModel> eligible;
         for (const auto& scoped : scoped_models_) {
-            auto checked =
-                    co_await ai::detail::await_async_result(services_.model_runtime->check_auth(scoped.model.provider));
+            auto checked = co_await support::detail::await_async_result(
+                    services_.model_runtime->check_auth(scoped.model.provider));
             if (!checked) {
                 co_return std::unexpected(std::move(checked.error()));
             }
@@ -1389,7 +1378,7 @@ AgentSessionRuntime::cycle_model(std::string_view direction) {
 
     // Available path (pi `_cycleAvailableModel`): cycle within the
     // auth-filtered availability snapshot.
-    auto available = co_await ai::detail::await_async_result(services_.model_runtime->get_available());
+    auto available = co_await support::detail::await_async_result(services_.model_runtime->get_available());
     if (!available) {
         co_return std::unexpected(std::move(available.error()));
     }
@@ -1842,8 +1831,7 @@ AgentSessionRuntime::execute_compaction(
             -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = factory(
             model, std::move(context), std::move(options));
-        co_return co_await cch::ai::detail::await_async_result(
-            std::move(stream).run({}));
+        co_return co_await cch::support::detail::await_async_result(std::move(stream).run({}));
     };
 
     harness::session::CompactionRunOptions run_options;
@@ -2420,7 +2408,7 @@ boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_active_wo
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
-            (void)co_await ai::detail::await_async_result(owned_env->cleanup());
+            (void)co_await support::detail::await_async_result(owned_env->cleanup());
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // cleanup() is best-effort and must not make close fallible.
@@ -2468,7 +2456,7 @@ void AgentSessionRuntime::finalize_close() noexcept {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 try {
 #endif
-                                    (void)co_await ai::detail::await_async_result(env->cleanup());
+                                    (void)co_await support::detail::await_async_result(env->cleanup());
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 } catch (...) {
                                     // cleanup() is best-effort and must not make close fallible.

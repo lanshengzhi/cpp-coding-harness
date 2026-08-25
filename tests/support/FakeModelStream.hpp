@@ -4,7 +4,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/support/Error.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "ai/ModelStreamBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -56,17 +56,12 @@ public:
                 self->calls.push_back(RecordedStreamSimpleCall{
                     std::move(model), std::move(context), std::move(options)});
                 return ai::ModelStream{ai::ModelStreamProducer{
-                    [self](
-                        ai::AssistantEventSink sink,
-                        ai::ModelStreamCompletion completion) mutable noexcept {
-                        boost::asio::post(
-                            cch::ai::detail::t_initiating_executor,
-                            [self,
-                             sink = std::move(sink),
-                             completion = std::move(completion)]() mutable {
-                                self->script(std::move(sink), std::move(completion));
-                            });
-                    }}};
+                        [self](ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) mutable noexcept {
+                            boost::asio::post(cch::support::detail::t_initiating_executor,
+                                    [self, sink = std::move(sink), completion = std::move(completion)]() mutable {
+                                        self->script(std::move(sink), std::move(completion));
+                                    });
+                        }}};
             }};
     }
 

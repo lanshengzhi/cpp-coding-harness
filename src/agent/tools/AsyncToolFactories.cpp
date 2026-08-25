@@ -1,8 +1,8 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 
 #include "agent/tools/EditDiff.hpp"
-#include "ai/AsyncResultBridge.hpp"
-#include "ai/BoundedText.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/BoundedText.hpp"
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
 #include "agent/harness/OutputLimiter.hpp"
@@ -135,24 +135,21 @@ template <typename Args>
 /// typed `Expected` channel without an exception path.
 template <typename Body>
 [[nodiscard]] agent::ToolExecuteResult make_tool_result(Body body) {
-    return agent::ToolExecuteResult{
-        [body = std::move(body)](
-            agent::ToolExecuteResult::completion_type completion) mutable noexcept {
-            auto executor = ai::detail::t_initiating_executor;
-            if (!executor) {
-                completion(std::unexpected(support::make_error(
-                    support::ErrorCode::Tool, "tool execution has no initiating executor")));
-                return;
-            }
-            auto bridged = ai::detail::make_async_result_on(
-                executor,
-                [body = std::move(body)]()
-                    -> boost::asio::awaitable<
-                           support::Expected<agent::AsyncToolExecutionResult>> {
+    return agent::ToolExecuteResult{[body = std::move(body)](
+                                            agent::ToolExecuteResult::completion_type completion) mutable noexcept {
+        auto executor = support::detail::t_initiating_executor;
+        if (!executor) {
+            completion(std::unexpected(
+                    support::make_error(support::ErrorCode::Tool, "tool execution has no initiating executor")));
+            return;
+        }
+        auto bridged = support::detail::make_async_result_on(executor,
+                [body = std::move(
+                         body)]() -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                     co_return co_await body();
                 });
-            std::move(bridged).start(std::move(completion));
-        }};
+        std::move(bridged).start(std::move(completion));
+    }};
 }
 
 // ---------------------------------------------------------------------------
@@ -170,8 +167,8 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
     if (!env) {
         co_return std::unexpected(missing_env_error());
     }
-    auto lines = co_await ai::detail::await_async_result(
-        env->readTextLines(parsed->path, std::nullopt, stop_token));
+    auto lines =
+            co_await support::detail::await_async_result(env->readTextLines(parsed->path, std::nullopt, stop_token));
     if (!lines) {
         co_return error_result_from(lines.error());
     }
@@ -226,8 +223,8 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> write
     if (!env) {
         co_return std::unexpected(missing_env_error());
     }
-    auto written = co_await ai::detail::await_async_result(
-        env->writeFile(parsed->path, parsed->content, stop_token));
+    auto written =
+            co_await support::detail::await_async_result(env->writeFile(parsed->path, parsed->content, stop_token));
     if (!written) {
         co_return error_result_from(written.error());
     }
@@ -255,8 +252,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
 
     // pi edit.ts: strip the BOM, detect and preserve the dominant line
     // ending, then apply every edit against the LF-normalized content.
-    auto read = co_await ai::detail::await_async_result(
-        env->readTextFile(parsed->path, stop_token));
+    auto read = co_await support::detail::await_async_result(env->readTextFile(parsed->path, stop_token));
     if (!read) {
         co_return error_result_from(read.error());
     }
@@ -284,8 +280,8 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
 
     const std::string final_content =
         bom + tools::restore_line_endings(applied->new_content, original_ending);
-    auto written = co_await ai::detail::await_async_result(
-        env->writeFile(parsed->path, final_content, stop_token));
+    auto written =
+            co_await support::detail::await_async_result(env->writeFile(parsed->path, final_content, stop_token));
     if (!written) {
         co_return error_result_from(written.error());
     }
@@ -364,8 +360,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         full_stderr.append(chunk);
         return {};
     };
-    auto shell = co_await ai::detail::await_async_result(
-        env->exec(parsed->command, std::move(exec_options)));
+    auto shell = co_await support::detail::await_async_result(env->exec(parsed->command, std::move(exec_options)));
     if (!shell) {
         co_return error_result_from(shell.error());
     }
@@ -380,7 +375,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         combine_output(stdout_source, stderr_source));
 
     // Redact the complete output before splitting between model-visible and spill.
-    std::string redacted_full = ai::redact_text(full_output);
+    std::string redacted_full = support::redact_text(full_output);
     auto limited_output = harness::limit_output_tail(redacted_full);
     bool truncated = limited_output.truncated;
     std::string output = std::move(limited_output.text);
@@ -388,8 +383,9 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         std::string full_output_path;
         auto ts = std::chrono::system_clock::now().time_since_epoch().count();
         full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-        if (auto write = co_await ai::detail::await_async_result(
-                env->writeFile(full_output_path, redacted_full, stop_token)); !write) {
+        if (auto write = co_await support::detail::await_async_result(
+                    env->writeFile(full_output_path, redacted_full, stop_token));
+                !write) {
             full_output_path.clear();
         }
         output = "[output truncated, showing last " +

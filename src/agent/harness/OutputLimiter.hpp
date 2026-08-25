@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 
 #include <sstream>
 #include <string>
@@ -49,23 +49,22 @@ struct OutputLimitResult {
                (static_cast<unsigned char>(input[start]) & 0xc0) == 0x80) {
             ++start;
         }
-        const auto marker = input.rfind(ai::kRedactionMarker, start);
-        if (marker != std::string::npos && marker < start &&
-            marker + ai::kRedactionMarker.size() > start) {
-            start = marker + ai::kRedactionMarker.size();
+        const auto marker = input.rfind(support::kRedactionMarker, start);
+        if (marker != std::string::npos && marker < start && marker + support::kRedactionMarker.size() > start) {
+            start = marker + support::kRedactionMarker.size();
         }
     }
 
     return OutputLimitResult{
-        .text = ai::bounded_utf8(std::string_view(input).substr(start), limit.max_bytes),
-        .truncated = start > 0,
+            .text = support::bounded_utf8(std::string_view(input).substr(start), limit.max_bytes),
+            .truncated = start > 0,
     };
 }
 
 [[nodiscard]] inline OutputLimitResult limit_output_tail_redacted(
     std::string input,
     OutputLimit limit = {}) {
-    return limit_output_tail(ai::redact_text(std::move(input)), limit);
+    return limit_output_tail(support::redact_text(std::move(input)), limit);
 }
 
 [[nodiscard]] inline OutputLimitResult limit_output(const std::string& input, OutputLimit limit = {}) {
@@ -88,7 +87,7 @@ struct OutputLimitResult {
     if (result.text.empty() && !input.empty()) {
         // The first line alone exceeds the byte budget; bound it without
         // splitting a UTF-8 multibyte sequence.
-        result.text = ai::bounded_utf8(input, limit.max_bytes);
+        result.text = support::bounded_utf8(input, limit.max_bytes);
         result.truncated = input.size() > limit.max_bytes;
     } else if (!input.empty() && input.back() != '\n' && !result.truncated && !result.text.empty()) {
         result.text.pop_back();

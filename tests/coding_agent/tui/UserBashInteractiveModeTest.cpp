@@ -18,7 +18,7 @@
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
-#include "ai/Redactor.hpp"
+#include "support/Redactor.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -575,7 +575,7 @@ TEST_CASE(
     // output's tail sits beyond the block's presentation bound.)
     const auto rendered_screen = visible_screen(terminal);
     CHECK(rendered_screen.find("$ " + raw_command) != std::string::npos);
-    CHECK(rendered_screen.find(ai::kRedactionMarker) == std::string::npos);
+    CHECK(rendered_screen.find(support::kRedactionMarker) == std::string::npos);
 
     // The spill artifact holds the complete sanitized stream and is never
     // substituted for the bounded model-context value.
@@ -1693,7 +1693,7 @@ TEST_CASE(
     auto screen = visible_screen(terminal);
     CHECK(screen.find("$ watch out") != std::string::npos);
     CHECK(screen.find("streamed partial api_key=" + secret) != std::string::npos);
-    CHECK(screen.find(ai::kRedactionMarker) == std::string::npos);
+    CHECK(screen.find(support::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") != std::string::npos);
     CHECK(screen.find("(escape to cancel)") != std::string::npos);
     CHECK(created->session->snapshot().agent_state.messages.empty());
@@ -1705,7 +1705,7 @@ TEST_CASE(
     screen = visible_screen(terminal);
     CHECK(count_occurrences(screen, "$ watch out") == 1);
     CHECK(screen.find("streamed partial api_key=" + secret) != std::string::npos);
-    CHECK(screen.find(ai::kRedactionMarker) == std::string::npos);
+    CHECK(screen.find(support::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") == std::string::npos);
     CHECK(screen.find("(exit") == std::string::npos);
     CHECK(created->session->snapshot().agent_state.messages.size() == 1);

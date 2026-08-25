@@ -1,6 +1,6 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -58,26 +58,25 @@ struct ShellRun {
         io,
         [&]() -> boost::asio::awaitable<void> {
             // Captures remain alive until io.run() drains this operation to completion.
-            run.result = co_await ai::detail::await_async_result(shell.execute(
-                std::move(command),
-                // The capture targets remain alive until io.run() drains this operation.
-                [&](std::string_view update) -> support::ExpectedVoid {
+            run.result = co_await support::detail::await_async_result(shell.execute(
+                    std::move(command),
+                    // The capture targets remain alive until io.run() drains this operation.
+                    [&](std::string_view update) -> support::ExpectedVoid {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    if (throw_updates) {
-                        throw std::runtime_error{"update sink threw"};
-                    }
+                        if (throw_updates) {
+                            throw std::runtime_error{"update sink threw"};
+                        }
 #else
-                    (void)throw_updates;
+                        (void)throw_updates;
 #endif
-                    if (fail_updates) {
-                        return std::unexpected(support::make_error(
-                            support::ErrorCode::Unknown,
-                            "update sink rejected output"));
-                    }
-                    run.updates.append(update);
-                    return {};
-                },
-                stop_source.get_token()));
+                        if (fail_updates) {
+                            return std::unexpected(
+                                    support::make_error(support::ErrorCode::Unknown, "update sink rejected output"));
+                        }
+                        run.updates.append(update);
+                        return {};
+                    },
+                    stop_source.get_token()));
             co_return;
         },
         boost::asio::detached);

@@ -6,7 +6,7 @@
 #include "agent/harness/ShellResolver.hpp"
 #include "agent/harness/SyncLocalExecutionEnv.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "agent/harness/Process.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -116,12 +116,12 @@ std::expected<T, E> run_awaitable_pi(support::AsyncResult<T, E> operation) {
     boost::asio::io_context io;
     std::optional<std::expected<T, E>> result;
     boost::asio::co_spawn(
-        io,
-        [operation = std::move(operation), &result]() mutable -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(std::move(operation));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [operation = std::move(operation), &result]() mutable -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(std::move(operation));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     REQUIRE(result.has_value());
     return std::move(*result);
@@ -223,19 +223,19 @@ TEST_CASE("async local execution env runs shell commands concurrently", "[harnes
     const auto started = std::chrono::steady_clock::now();
 
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            first = co_await ai::detail::await_async_result(env.exec("sleep 0.6; echo first"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                first = co_await support::detail::await_async_result(env.exec("sleep 0.6; echo first"));
+                co_return;
+            },
+            boost::asio::detached);
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            second = co_await ai::detail::await_async_result(env.exec("sleep 0.6; echo second"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                second = co_await support::detail::await_async_result(env.exec("sleep 0.6; echo second"));
+                co_return;
+            },
+            boost::asio::detached);
 
     io.run();
     const auto elapsed = std::chrono::steady_clock::now() - started;
@@ -475,14 +475,13 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
     boost::asio::io_context io;
     std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(env.exec(
-                "echo $$ > shell.pid; sleep 30 & echo $! > descendant.pid; wait",
-                std::move(options)));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(
+                        env.exec("echo $$ > shell.pid; sleep 30 & echo $! > descendant.pid; wait", std::move(options)));
+                co_return;
+            },
+            boost::asio::detached);
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
@@ -625,13 +624,12 @@ TEST_CASE(
     std::atomic<bool> input_fired{false};
     std::atomic<bool> timer_fired{false};
     boost::asio::co_spawn(
-        *io,
-        [&]() -> boost::asio::awaitable<void> {
-            shell_result = co_await ai::detail::await_async_result(
-                env.exec("sleep 1; echo done"));
-            co_return;
-        },
-        boost::asio::detached);
+            *io,
+            [&]() -> boost::asio::awaitable<void> {
+                shell_result = co_await support::detail::await_async_result(env.exec("sleep 1; echo done"));
+                co_return;
+            },
+            boost::asio::detached);
     boost::asio::post(*io, [&]() noexcept { input_fired.store(true, std::memory_order_release); });
     boost::asio::steady_timer timer(*io, std::chrono::milliseconds{50});
     timer.async_wait([&](const boost::system::error_code&) {

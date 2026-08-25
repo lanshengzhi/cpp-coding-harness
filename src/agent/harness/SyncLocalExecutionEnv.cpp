@@ -1,7 +1,7 @@
 #include "SyncLocalExecutionEnv.hpp"
 
 #include "ExecutionErrorClassification.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "ShellEnvironment.hpp"
 #include "ShellResolver.hpp"
 
@@ -28,9 +28,9 @@ struct SyncProcessOperation final {
 };
 
 [[nodiscard]] boost::asio::awaitable<void> run_sync_process(std::shared_ptr<SyncProcessOperation> operation) {
-    auto process = co_await ai::detail::invoke_awaitable<
-        SyncProcessOperation,
-        support::Expected<harness::ProcessResult>>(operation);
+    auto process =
+            co_await support::detail::invoke_awaitable<SyncProcessOperation, support::Expected<harness::ProcessResult>>(
+                    operation);
     operation->outcome = std::move(process);
     co_return;
 }

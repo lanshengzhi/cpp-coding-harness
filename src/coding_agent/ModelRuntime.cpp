@@ -3,7 +3,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "ModelConfig.hpp"
 #include "ModelRuntimeTestSupport.hpp"
 #include "ProcessAuthContext.hpp"
@@ -281,75 +281,77 @@ std::optional<ai::Model> ModelRuntime::model(
 }
 
 support::AsyncResult<std::vector<ai::Model>> ModelRuntime::get_available(std::optional<std::string> provider_id) {
-    return ai::detail::make_async_result([this, provider_id = std::move(provider_id)]() mutable
-                                                 -> boost::asio::awaitable<support::Expected<std::vector<ai::Model>>> {
-        if (provider_id) {
-            const auto selected = provider(*provider_id);
-            if (!selected) {
-                co_return std::vector<ai::Model>{};
-            }
-            CCH_TRY(check, co_await ai::detail::await_async_result(check_auth(std::string{*provider_id})));
-            if (!check) {
-                co_return std::vector<ai::Model>{};
-            }
-            co_return models(*provider_id);
-        }
+    return support::detail::make_async_result(
+            [this, provider_id = std::move(provider_id)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::vector<ai::Model>>> {
+                if (provider_id) {
+                    const auto selected = provider(*provider_id);
+                    if (!selected) {
+                        co_return std::vector<ai::Model>{};
+                    }
+                    CCH_TRY(check, co_await support::detail::await_async_result(check_auth(std::string{*provider_id})));
+                    if (!check) {
+                        co_return std::vector<ai::Model>{};
+                    }
+                    co_return models(*provider_id);
+                }
 
-        std::set<std::string, std::less<>> configured;
-        std::map<std::string, ai::AuthCheck, std::less<>> auth;
-        std::optional<std::string> failure;
-        for (const auto& provider_value : impl_->models->providers()) {
-            const std::string provider_id{provider_value->id()};
-            auto checked = co_await ai::detail::await_async_result(impl_->models->check_auth(provider_id));
-            if (!checked) {
-                failure = checked.error().message;
-                continue;
-            }
-            if (*checked) {
-                configured.insert(provider_id);
-                auth.emplace(provider_id, **checked);
-            }
-        }
-        CCH_TRY(stored, co_await ai::detail::await_async_result(impl_->credentials->list()));
+                std::set<std::string, std::less<>> configured;
+                std::map<std::string, ai::AuthCheck, std::less<>> auth;
+                std::optional<std::string> failure;
+                for (const auto& provider_value : impl_->models->providers()) {
+                    const std::string provider_id{provider_value->id()};
+                    auto checked = co_await support::detail::await_async_result(impl_->models->check_auth(provider_id));
+                    if (!checked) {
+                        failure = checked.error().message;
+                        continue;
+                    }
+                    if (*checked) {
+                        configured.insert(provider_id);
+                        auth.emplace(provider_id, **checked);
+                    }
+                }
+                CCH_TRY(stored, co_await support::detail::await_async_result(impl_->credentials->list()));
 
-        impl_->configured_providers = std::move(configured);
-        impl_->auth_snapshot = std::move(auth);
-        impl_->stored_providers.clear();
-        for (const auto& entry : stored) {
-            impl_->stored_providers.insert(entry.provider_id);
-        }
-        impl_->recompute_available_models();
-        impl_->availability_error = std::move(failure);
-        co_return impl_->available_models;
-    });
+                impl_->configured_providers = std::move(configured);
+                impl_->auth_snapshot = std::move(auth);
+                impl_->stored_providers.clear();
+                for (const auto& entry : stored) {
+                    impl_->stored_providers.insert(entry.provider_id);
+                }
+                impl_->recompute_available_models();
+                impl_->availability_error = std::move(failure);
+                co_return impl_->available_models;
+            });
 }
 
 std::vector<ai::Model> ModelRuntime::get_available_snapshot() const { return impl_->available_models; }
 
 support::AsyncResult<std::optional<ai::AuthCheck>> ModelRuntime::check_auth(std::string provider_id) {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id)]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> {
-                co_return co_await ai::detail::await_async_result(impl_->models->check_auth(std::move(provider_id)));
+                co_return co_await support::detail::await_async_result(
+                        impl_->models->check_auth(std::move(provider_id)));
             });
 }
 
 support::AsyncResult<std::optional<ai::AuthResult>> ModelRuntime::get_auth(
         std::string provider_id, std::optional<std::string> explicit_api_key) {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id), explicit_api_key = std::move(explicit_api_key)]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
-                co_return co_await ai::detail::await_async_result(
+                co_return co_await support::detail::await_async_result(
                         impl_->models->get_auth(std::move(provider_id), std::move(explicit_api_key)));
             });
 }
 
 support::AsyncResult<std::optional<ai::AuthResult>> ModelRuntime::get_auth(
         ai::Model model, std::optional<std::string> explicit_api_key) {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [this, model = std::move(model), explicit_api_key = std::move(explicit_api_key)]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
-                co_return co_await ai::detail::await_async_result(
+                co_return co_await support::detail::await_async_result(
                         impl_->models->get_auth(std::move(model), std::move(explicit_api_key)));
             });
 }
@@ -441,18 +443,18 @@ std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
 }
 
 support::AsyncResult<std::vector<ai::CredentialInfo>> ModelRuntime::list_credentials() {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [this]() -> boost::asio::awaitable<support::Expected<std::vector<ai::CredentialInfo>>> {
-                co_return co_await ai::detail::await_async_result(impl_->credentials->list());
+                co_return co_await support::detail::await_async_result(impl_->credentials->list());
             });
 }
 
 support::AsyncResult<ai::Credential> ModelRuntime::login(
         std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction) {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction)]() mutable
                     -> boost::asio::awaitable<support::Expected<ai::Credential>> {
-                auto credential = co_await ai::detail::await_async_result(
+                auto credential = co_await support::detail::await_async_result(
                         impl_->models->login(provider_id, type, std::move(interaction)));
                 if (credential) {
                     // Post-login refresh failures are recorded in the composition-errors
@@ -464,9 +466,9 @@ support::AsyncResult<ai::Credential> ModelRuntime::login(
 }
 
 support::AsyncResult<void> ModelRuntime::logout(std::string provider_id) {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id)]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                CCH_TRY_VOID(co_await ai::detail::await_async_result(impl_->models->logout(provider_id)));
+                CCH_TRY_VOID(co_await support::detail::await_async_result(impl_->models->logout(provider_id)));
                 // Credential-dependent composition is reset before the unconfigured
                 // provider is recomposed by refresh (pi: logout → recomposeProvider →
                 // refresh; order preserved).

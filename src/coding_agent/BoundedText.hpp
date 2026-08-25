@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 
 #include <cstddef>
 #include <string>
@@ -18,11 +18,7 @@ constexpr std::size_t kSecretBoundaryLookaheadBytes = 256;
 [[nodiscard]] inline std::string bounded_redacted_presentation(
     std::string text,
     std::size_t max_bytes = kMaxPresentationPayloadBytes) {
-    return ai::bounded_redacted_text(
-        std::move(text),
-        max_bytes,
-        {},
-        kSecretBoundaryLookaheadBytes);
+    return support::bounded_redacted_text(std::move(text), max_bytes, {}, kSecretBoundaryLookaheadBytes);
 }
 
 /// Bounds presentation text without redaction. User Bash command, output, and
@@ -31,7 +27,7 @@ constexpr std::size_t kSecretBoundaryLookaheadBytes = 256;
 [[nodiscard]] inline std::string bounded_presentation(
     std::string_view text,
     std::size_t max_bytes = kMaxPresentationPayloadBytes) {
-    return ai::bounded_text(text, max_bytes);
+    return support::bounded_text(text, max_bytes);
 }
 
 } // namespace cch::coding_agent

@@ -1,6 +1,6 @@
 #include "LocalUserShell.hpp"
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "agent/harness/ShellEnvironment.hpp"
 #include "agent/harness/ShellResolver.hpp"
 #include "agent/harness/Process.hpp"
@@ -112,21 +112,19 @@ support::AsyncResult<UserShellResult> LocalUserShell::execute(
     std::string command,
     UserShellUpdateSink update_sink,
     std::stop_token stop_token) {
-    return ai::detail::make_async_result(
-        [workspace = workspace_,
-         secret_environment_names = secret_environment_names_,
-         shell_config = shell_config_,
-         command = std::move(command),
-         update_sink = std::move(update_sink),
-         stop_token]() mutable {
-            return run_local_user_shell(
-                std::move(workspace),
+    return support::detail::make_async_result([workspace = workspace_,
+                                                      secret_environment_names = secret_environment_names_,
+                                                      shell_config = shell_config_,
+                                                      command = std::move(command),
+                                                      update_sink = std::move(update_sink),
+                                                      stop_token]() mutable {
+        return run_local_user_shell(std::move(workspace),
                 std::move(secret_environment_names),
                 std::move(shell_config),
                 std::move(command),
                 std::move(update_sink),
                 stop_token);
-        });
+    });
 }
 
 } // namespace cch::coding_agent::runtime

@@ -5,7 +5,7 @@
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <boost/asio/io_context.hpp>
 
@@ -425,12 +425,10 @@ support::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
     // completion bridge: the bridge owns the Asio `co_spawn` completion and
     // maps its staged-build exception pointer to the operation's typed
     // outcome, so no exception-shaped code survives outside the bridge.
-    auto bridged = ai::detail::make_async_result_on(
-        io.get_executor(),
-        [&session, model = std::move(model)]() mutable
-            -> boost::asio::awaitable<support::ExpectedVoid> {
-            co_return co_await set_model(session, std::move(model));
-        });
+    auto bridged = support::detail::make_async_result_on(io.get_executor(),
+            [&session, model = std::move(model)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await set_model(session, std::move(model));
+            });
     std::move(bridged).start([&result](support::ExpectedVoid completion) noexcept {
         result.emplace(std::move(completion));
     });
@@ -504,13 +502,11 @@ detail::AgentSessionPromptAccess::cycle_model_blocking(
     // Same private completion bridge as set_model_blocking: the temporary
     // executor drives the lazy coroutine and the bridge owns the Asio
     // `co_spawn` completion (ADR 0042).
-    auto bridged = ai::detail::make_async_result_on(
-        io.get_executor(),
-        [&session, direction = std::move(direction)]() mutable
-            -> boost::asio::awaitable<
-                support::Expected<std::optional<ModelCycleResult>>> {
-            co_return co_await cycle_model(session, std::move(direction));
-        });
+    auto bridged = support::detail::make_async_result_on(io.get_executor(),
+            [&session, direction = std::move(direction)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> {
+                co_return co_await cycle_model(session, std::move(direction));
+            });
     std::move(bridged).start(
         [&result](support::Expected<std::optional<ModelCycleResult>> completion) noexcept {
             result.emplace(std::move(completion));
@@ -567,21 +563,19 @@ support::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
     BlockingPromptWaitScope wait_scope{impl.get()};
 
     // Same private completion bridge as set_model_blocking / cycle_model_blocking.
-    auto bridged = ai::detail::make_async_result_on(
-        io.get_executor(),
-        [&session,
-         text = std::move(text),
-         images = std::move(images),
-         expand_prompt_templates,
-         on_preflight_accepted = std::move(on_preflight_accepted)]() mutable
-            -> boost::asio::awaitable<support::ExpectedVoid> {
-            co_return co_await prompt(
-                session,
-                std::move(text),
-                std::move(images),
-                expand_prompt_templates,
-                std::move(on_preflight_accepted));
-        });
+    auto bridged = support::detail::make_async_result_on(io.get_executor(),
+            [&session,
+                    text = std::move(text),
+                    images = std::move(images),
+                    expand_prompt_templates,
+                    on_preflight_accepted = std::move(
+                            on_preflight_accepted)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await prompt(session,
+                        std::move(text),
+                        std::move(images),
+                        expand_prompt_templates,
+                        std::move(on_preflight_accepted));
+            });
     std::move(bridged).start([&result](support::ExpectedVoid completion) noexcept {
         result.emplace(std::move(completion));
     });

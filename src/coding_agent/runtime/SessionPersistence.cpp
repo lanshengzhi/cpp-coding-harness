@@ -4,7 +4,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/support/AsyncResult.hpp>
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 
 #include <cstddef>
@@ -227,23 +227,22 @@ boost::asio::awaitable<void> SessionPersistence::drain() {
         }
         // Cross-executor resumption and abandonment are the designed
         // AsyncResult semantics (ADR 0040 / AsyncResultBridge).
-        (void)co_await ai::detail::await_async_result(support::AsyncResult<void>{
-            support::AsyncProducer<void, support::Error>{
-                [state = state_](
-                    support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
-                    bool fire_now = false;
-                    {
-                        std::lock_guard lock(state->mutex);
-                        if (!state->in_flight && state->queue.empty()) {
-                            fire_now = true;
-                        } else {
-                            state->drain_waiters.push_back(std::move(completion));
-                        }
-                    }
-                    if (fire_now) {
-                        std::move(completion)({});
-                    }
-                }}});
+        (void)co_await support::detail::await_async_result(
+                support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+                        [state = state_](support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                            bool fire_now = false;
+                            {
+                                std::lock_guard lock(state->mutex);
+                                if (!state->in_flight && state->queue.empty()) {
+                                    fire_now = true;
+                                } else {
+                                    state->drain_waiters.push_back(std::move(completion));
+                                }
+                            }
+                            if (fire_now) {
+                                std::move(completion)({});
+                            }
+                        }}});
     }
 }
 

@@ -323,7 +323,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
         if (explicit_env.contains(name)) {
             continue;
         }
-        CCH_TRY(value, co_await ai::detail::await_async_result(context.environment(name)));
+        CCH_TRY(value, co_await support::detail::await_async_result(context.environment(name)));
         if (value) {
             explicit_env[name] = *value;
         }
@@ -509,25 +509,23 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 
     ai::ApiKeyAuth result;
     result.name = inherited ? inherited->name : "API key";
-    result.login = [base](ai::AuthInteraction interaction)
-        -> cch::support::AsyncResult<ai::ApiKeyCredential> {
-        return ai::detail::make_async_result(
-            [base, interaction = std::move(interaction)]() mutable
-                -> boost::asio::awaitable<support::Expected<ai::ApiKeyCredential>> {
-                ai::ApiKeyAuth* inherited =
-                    base && base->auth().api_key ? &*base->auth().api_key : nullptr;
-                if (inherited && inherited->login) {
-                    co_return co_await ai::detail::await_async_result(
-                        inherited->login(std::move(interaction)));
-                }
-                CCH_TRY(key, co_await ai::detail::await_async_result(
-                    interaction.prompt(ai::AuthPrompt{
-                        .kind = ai::AuthPromptSecret{.message = "Enter API key"},
-                    })));
-                ai::ApiKeyCredential credential;
-                credential.key = std::move(key);
-                co_return credential;
-            });
+    result.login = [base](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
+        return support::detail::make_async_result(
+                [base, interaction = std::move(interaction)]() mutable
+                        -> boost::asio::awaitable<support::Expected<ai::ApiKeyCredential>> {
+                    ai::ApiKeyAuth* inherited = base && base->auth().api_key ? &*base->auth().api_key : nullptr;
+                    if (inherited && inherited->login) {
+                        co_return co_await support::detail::await_async_result(
+                                inherited->login(std::move(interaction)));
+                    }
+                    CCH_TRY(key,
+                            co_await support::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
+                                    .kind = ai::AuthPromptSecret{.message = "Enter API key"},
+                            })));
+                    ai::ApiKeyCredential credential;
+                    credential.key = std::move(key);
+                    co_return credential;
+                });
     };
 
     const bool is_command = raw_key ? config_value::is_command(*raw_key) : false;
@@ -545,66 +543,65 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     }
 
     result.check = [provider_id, base, raw_key, is_command, raw_key_env_names](
-                       const ai::AuthContext& context,
-                       std::optional<ai::ApiKeyCredential> credential)
-        -> cch::support::AsyncResult<std::optional<AuthCheck>> {
-        return ai::detail::make_async_result(
-            [&context, credential = std::move(credential), base, raw_key, is_command,
-             raw_key_env_names]()
-                -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
-                ai::ApiKeyAuth* inherited =
-                    base && base->auth().api_key ? &*base->auth().api_key : nullptr;
-                if (credential) {
+                           const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential)
+            -> cch::support::AsyncResult<std::optional<AuthCheck>> {
+        return support::detail::make_async_result(
+                [&context, credential = std::move(credential), base, raw_key, is_command, raw_key_env_names]()
+                        -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
+                    ai::ApiKeyAuth* inherited = base && base->auth().api_key ? &*base->auth().api_key : nullptr;
+                    if (credential) {
+                        if (inherited && inherited->check) {
+                            CCH_TRY(checked,
+                                    co_await support::detail::await_async_result(
+                                            inherited->check(context, credential)));
+                            co_return checked;
+                        }
+                        if (credential->key && !credential->key->empty()) {
+                            co_return AuthCheck{.source = "stored credential", .type = AuthType::ApiKey};
+                        }
+                        if (inherited && inherited->resolve) {
+                            CCH_TRY(resolved,
+                                    co_await support::detail::await_async_result(
+                                            inherited->resolve(context, credential)));
+                            if (resolved) {
+                                co_return AuthCheck{.source = resolved->source, .type = AuthType::ApiKey};
+                            }
+                        }
+                        co_return std::optional<AuthCheck>{};
+                    }
+                    if (raw_key) {
+                        if (is_command) {
+                            co_return AuthCheck{.source = "configured API key", .type = AuthType::ApiKey};
+                        }
+                        for (const auto& name : raw_key_env_names) {
+                            CCH_TRY(value, co_await support::detail::await_async_result(context.environment(name)));
+                            if (!value || value->empty()) {
+                                co_return std::optional<AuthCheck>{};
+                            }
+                        }
+                        co_return AuthCheck{.source = "configured API key", .type = AuthType::ApiKey};
+                    }
                     if (inherited && inherited->check) {
-                        CCH_TRY(checked, co_await ai::detail::await_async_result(
-                            inherited->check(context, credential)));
+                        CCH_TRY(checked,
+                                co_await support::detail::await_async_result(inherited->check(context, std::nullopt)));
                         co_return checked;
                     }
-                    if (credential->key && !credential->key->empty()) {
-                        co_return AuthCheck{.source = "stored credential", .type = AuthType::ApiKey};
-                    }
                     if (inherited && inherited->resolve) {
-                        CCH_TRY(resolved, co_await ai::detail::await_async_result(
-                            inherited->resolve(context, credential)));
+                        CCH_TRY(resolved,
+                                co_await support::detail::await_async_result(
+                                        inherited->resolve(context, std::nullopt)));
                         if (resolved) {
                             co_return AuthCheck{.source = resolved->source, .type = AuthType::ApiKey};
                         }
                     }
                     co_return std::optional<AuthCheck>{};
-                }
-                if (raw_key) {
-                    if (is_command) {
-                        co_return AuthCheck{.source = "configured API key", .type = AuthType::ApiKey};
-                    }
-                    for (const auto& name : raw_key_env_names) {
-                        CCH_TRY(value, co_await ai::detail::await_async_result(
-                            context.environment(name)));
-                        if (!value || value->empty()) {
-                            co_return std::optional<AuthCheck>{};
-                        }
-                    }
-                    co_return AuthCheck{.source = "configured API key", .type = AuthType::ApiKey};
-                }
-                if (inherited && inherited->check) {
-                    CCH_TRY(checked, co_await ai::detail::await_async_result(
-                        inherited->check(context, std::nullopt)));
-                    co_return checked;
-                }
-                if (inherited && inherited->resolve) {
-                    CCH_TRY(resolved, co_await ai::detail::await_async_result(
-                        inherited->resolve(context, std::nullopt)));
-                    if (resolved) {
-                        co_return AuthCheck{.source = resolved->source, .type = AuthType::ApiKey};
-                    }
-                }
-                co_return std::optional<AuthCheck>{};
-            });
+                });
     };
 
     result.resolve = [provider_id, base, raw_key, raw_key_env_names, config_headers, header_env_names, runner](
                              const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential)
             -> cch::support::AsyncResult<std::optional<AuthResult>> {
-        return ai::detail::make_async_result(
+        return support::detail::make_async_result(
                 [&context,
                         credential = std::move(credential),
                         provider_id,
@@ -619,7 +616,8 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                     if (credential) {
                         if (inherited && inherited->resolve) {
                             CCH_TRY(resolved,
-                                    co_await ai::detail::await_async_result(inherited->resolve(context, credential)));
+                                    co_await support::detail::await_async_result(
+                                            inherited->resolve(context, credential)));
                             resolved_result = std::move(resolved);
                         } else if (credential->key && !credential->key->empty()) {
                             ai::ProviderEnv credential_env;
@@ -641,7 +639,7 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                             ai::ApiKeyCredential configured;
                             configured.key = std::move(key);
                             CCH_TRY(resolved,
-                                    co_await ai::detail::await_async_result(
+                                    co_await support::detail::await_async_result(
                                             inherited->resolve(context, std::move(configured))));
                             resolved_result = std::move(resolved);
                         } else {
@@ -652,7 +650,8 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                         }
                     } else if (inherited && inherited->resolve) {
                         CCH_TRY(resolved,
-                                co_await ai::detail::await_async_result(inherited->resolve(context, std::nullopt)));
+                                co_await support::detail::await_async_result(
+                                        inherited->resolve(context, std::nullopt)));
                         resolved_result = std::move(resolved);
                     }
                     if (!resolved_result) {

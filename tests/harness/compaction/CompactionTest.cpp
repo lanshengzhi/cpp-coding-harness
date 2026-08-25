@@ -17,7 +17,7 @@
 #include "ai/glaze/AiJson.hpp"
 #include "agent/harness/compaction/Compaction.hpp"
 #include <cch/ai/Models.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -254,12 +254,10 @@ template <typename T>
     // Run the lazy coroutine on the temporary executor through the private
     // completion bridge so the awaitable's terminal outcome stays on the
     // typed `Expected` channel (ADR 0042; no exception path in test code).
-    auto bridged = ai::detail::make_async_result_on(
-        io.get_executor(),
-        [awaitable = std::move(awaitable)]() mutable
-            -> boost::asio::awaitable<T> {
-            co_return co_await std::move(awaitable);
-        });
+    auto bridged = support::detail::make_async_result_on(
+            io.get_executor(), [awaitable = std::move(awaitable)]() mutable -> boost::asio::awaitable<T> {
+                co_return co_await std::move(awaitable);
+            });
     std::move(bridged).start([&result](T completion) noexcept {
         result.emplace(std::move(completion));
     });
@@ -621,7 +619,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
+        co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
 
     harness::session::CompactionRunOptions run_options;
@@ -693,7 +691,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
+        co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
     harness::session::CompactionRunOptions run_options;
     run_options.summarization_stream = std::move(stream_fn);
@@ -739,7 +737,7 @@ TEST_CASE(
                    ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
             auto stream = runtime->factory()(tests::make_model("gpt-test"), std::move(context), std::move(options));
-            co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
+            co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
         };
     };
 
@@ -833,7 +831,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
+        co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
     harness::session::CompactionRunOptions run_options;
     run_options.summarization_stream = std::move(stream_fn);
@@ -901,7 +899,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
+        co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
     harness::session::CompactionRunOptions run_options;
     run_options.thinking_level = "medium";

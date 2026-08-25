@@ -4,7 +4,7 @@
 #include <cch/ai/Tool.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 
 #include <cstddef>
 #include <string>
@@ -17,7 +17,7 @@ namespace cch::agent {
     std::string text,
     std::size_t max_bytes,
     std::string_view suffix) {
-    return ai::bounded_text(text, max_bytes, suffix);
+    return support::bounded_text(text, max_bytes, suffix);
 }
 
 [[nodiscard]] inline std::string bounded_tool_argument_component(

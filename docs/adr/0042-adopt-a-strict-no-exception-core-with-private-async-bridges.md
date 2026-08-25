@@ -4,6 +4,8 @@ status: accepted
 
 # Adopt a strict no-exception core with private asynchronous bridges
 
+> Refined by [ADR 0046](0046-move-pi-neutral-mechanics-from-cch-ai-to-cch-support.md): the `AsyncResult` completion bridge moved from `src/ai/` to `src/support/` as a private support header, so bridge machinery no longer lives inside a capability Owner while being consumed across Owner boundaries. The Owner-Interface clause below is unchanged: no Owner contract exposes exception or Boost.Asio types.
+
 The project-owned production and test targets are moving to a strict no-exception core. Ordinary failure is represented by `cch::support::Expected<T>`, `ExpectedVoid`, and `std::error_code`; an exception is not a second error channel. Runtime invariant violations remain `std::terminate` contracts in every build mode.
 
 This decision records issue [#480](https://github.com/lanshengzhi/cpp-coding-harness/issues/480), under parent issue [#479](https://github.com/lanshengzhi/cpp-coding-harness/issues/479). It changes the failure mechanism, not the pi-observable lifecycle, cancellation, ordering, persistence, or observer semantics frozen by [ADR 0017](0017-keep-event-subscribers-as-weak-observers.md) and [ADR 0040](0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md). The strict policy is now the default build ([#487](https://github.com/lanshengzhi/cpp-coding-harness/issues/487)); turning `CCH_STRICT_NO_EXCEPTIONS` off is a deliberate, warned local deviation.

@@ -3,7 +3,7 @@
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "agent/ToolArgumentPreparation.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "support/Json.hpp"
 #include "agent/harness/OutputLimiter.hpp"
@@ -136,12 +136,12 @@ support::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
     loop.restart();
     std::optional<support::Expected<agent::AsyncToolExecutionResult>> result;
     boost::asio::co_spawn(
-        loop,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(start());
-            co_return;
-        },
-        boost::asio::detached);
+            loop,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(start());
+                co_return;
+            },
+            boost::asio::detached);
     while (!result) {
         loop.run_one();
     }

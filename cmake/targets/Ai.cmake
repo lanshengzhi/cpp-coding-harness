@@ -7,7 +7,6 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_ai
     SOURCES
-        src/ai/BoostExceptionHandler.cpp
         src/ai/ContentUtil.cpp
         src/ai/Model.cpp
         src/ai/Models.cpp
@@ -49,11 +48,3 @@ cch_parity_declare_target(
         cch_support
 )
 cch_owner_include_roots(cch_ai src/ai/include)
-# Boost's no-exception configuration leaves the application-owned
-# boost::throw_exception termination hook to the consuming target. Compile the
-# private hook without exceptions even if the strict policy is disabled locally
-# (ADR 0042).
-set_source_files_properties(src/ai/BoostExceptionHandler.cpp PROPERTIES
-    COMPILE_OPTIONS -fno-exceptions
-    COMPILE_DEFINITIONS BOOST_ASIO_NO_EXCEPTIONS
-)

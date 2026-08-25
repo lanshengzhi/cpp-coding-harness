@@ -1,7 +1,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/Error.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
@@ -333,7 +333,7 @@ AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventC
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await ai::detail::await_async_result(
+                result = co_await support::detail::await_async_result(
                         subject.prompt(std::move(prompt), std::move(commitment)));
                 co_return;
             },
@@ -1168,7 +1168,7 @@ AgentRun run_agent_on_pool(agent::Agent& subject, std::string prompt, agent::Age
     boost::asio::co_spawn(
             pool,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await ai::detail::await_async_result(
+                result = co_await support::detail::await_async_result(
                         subject.prompt(std::move(prompt), std::move(commitment)));
                 co_return;
             },
@@ -1382,7 +1382,7 @@ TEST_CASE("awaitable context policies suspend and resume in Agent executor order
                                         &stop_requested_after_resume,
                                         &gate](
                                         std::vector<ai::MessageVariant> messages, std::stop_token stop_token) mutable {
-        return ai::detail::make_async_result(
+        return support::detail::make_async_result(
                 [owned = std::move(owned),
                         &ordering,
                         &resumed_on_same_executor,
@@ -1415,7 +1415,7 @@ TEST_CASE("awaitable context policies suspend and resume in Agent executor order
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await ai::detail::await_async_result(subject.prompt("hello"));
+                result = co_await support::detail::await_async_result(subject.prompt("hello"));
                 co_return;
             },
             boost::asio::detached);
@@ -1512,7 +1512,7 @@ TEST_CASE("cancellation reaches a suspended tool and completes one ordinary abor
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await ai::detail::await_async_result(subject.prompt("cancel active tool"));
+                result = co_await support::detail::await_async_result(subject.prompt("cancel active tool"));
                 co_return;
             },
             boost::asio::detached);
@@ -1649,7 +1649,7 @@ TEST_CASE("awaitable policy failures after suspension stay in the existing error
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.transform_context = [](std::vector<ai::MessageVariant> messages, std::stop_token) {
-        return ai::detail::make_async_result(
+        return support::detail::make_async_result(
                 [messages = std::move(messages)]() mutable
                         -> boost::asio::awaitable<support::Expected<std::vector<ai::MessageVariant>>> {
                     auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor);

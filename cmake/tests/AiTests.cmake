@@ -5,7 +5,6 @@ include_guard(GLOBAL)
     # AI
     add_executable(cch_tests_ai
         tests/Catch2Main.cpp
-        tests/ai/BoundedTextTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/MessageConversionTest.cpp
@@ -13,7 +12,6 @@ include_guard(GLOBAL)
         tests/ai/ModelsTest.cpp
         tests/ai/ProviderPolicyTest.cpp
         tests/ai/RetryClassifierTest.cpp
-        tests/ai/RedactorTest.cpp
         tests/ai/SimpleOptionsTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
@@ -44,12 +42,13 @@ include_guard(GLOBAL)
     catch_discover_tests(cch_tests_ai ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_ai ${CCH_PARITY_BUILD_GATE_TARGET})
 
-    # Private Boost.Asio bridges carry the only exception-shaped detail in the
-    # strict policy (ADR 0042): this no-exception test target validates the
-    # bridge contract directly.
+    # The private Boost.Asio ModelStream bridge carries exception-shaped
+    # detail in the strict policy (ADR 0042): this no-exception test target
+    # validates the bridge contract directly. The AsyncResult bridge itself
+    # lives in cch_support and is covered by cch_tests_support_async_bridge.
     add_executable(cch_tests_ai_async_bridge
         tests/Catch2Main.cpp
-        tests/ai/AsyncBridgeTest.cpp
+        tests/ai/ModelStreamBridgeTest.cpp
     )
     target_include_directories(cch_tests_ai_async_bridge PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_ai_async_bridge

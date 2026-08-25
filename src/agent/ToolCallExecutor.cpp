@@ -2,8 +2,8 @@
 
 #include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
-#include "ai/AsyncResultBridge.hpp"
-#include "ai/BoundedText.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/BoundedText.hpp"
 #include "support/ExpectedMacros.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/support/Error.hpp>
@@ -50,8 +50,8 @@ execute_with_update_lifetime(
     std::stop_token stop_token,
     ToolUpdateSink update_sink,
     const std::shared_ptr<ToolUpdateGate>& gate) {
-    auto result = co_await ai::detail::await_async_result(
-        tool.execute(invocation, stop_token, std::move(update_sink)));
+    auto result =
+            co_await support::detail::await_async_result(tool.execute(invocation, stop_token, std::move(update_sink)));
     close_tool_updates(gate);
     co_return result;
 }
@@ -98,10 +98,7 @@ constexpr std::size_t kMaxToolFailureDiagnosticBytes = 4096;
 
 [[nodiscard]] std::string bounded_failure_text(const support::Error& error) {
     std::string diagnostic = error.detail.empty() ? error.message : error.detail;
-    return ai::bounded_redacted_text(
-        std::move(diagnostic),
-        kMaxToolFailureDiagnosticBytes,
-        "...");
+    return support::bounded_redacted_text(std::move(diagnostic), kMaxToolFailureDiagnosticBytes, "...");
 }
 
 void apply_after_result(

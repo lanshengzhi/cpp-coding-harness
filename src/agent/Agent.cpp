@@ -2,10 +2,10 @@
 
 #include "agent/AgentExecution.hpp"
 #include "agent/AgentMessageAccess.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -346,7 +346,7 @@ struct Agent::Impl {
             detail += ": ";
             detail += failure.detail;
         }
-        detail = ai::bounded_redacted_text(std::move(detail), kMaxDetailBytes, "...");
+        detail = support::bounded_redacted_text(std::move(detail), kMaxDetailBytes, "...");
 
         if (state.diagnostics.size() == kMaxDiagnostics) {
             state.diagnostics.erase(state.diagnostics.begin());
@@ -547,7 +547,7 @@ support::AsyncResult<void> Agent::prompt(
         return support::AsyncResult<void>{std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "agent is busy (prompt already in flight)"))};
     }
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [impl = impl_,
                     user_message = std::move(user_message),
                     commitment = std::move(commitment),
@@ -568,7 +568,7 @@ support::AsyncResult<void> Agent::prompt(
 }
 
 support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment, std::stop_source stop_source) {
-    return ai::detail::make_async_result(
+    return support::detail::make_async_result(
             [impl = impl_,
                     commitment = std::move(commitment),
                     stop_source = std::move(stop_source)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {

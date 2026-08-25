@@ -1,6 +1,6 @@
 #include "ShellResolver.hpp"
 
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 #include "agent/harness/OutputLimiter.hpp"
 
 #include <pwd.h>
@@ -121,11 +121,8 @@ std::expected<std::filesystem::path, ExecutionError> resolve_shell_executable(
         }
         const harness::OutputLimit output_limit;
         return std::unexpected(shell_unavailable(
-            "configured shell path is unavailable or not executable: " +
-            ai::bounded_redacted_text(
-                expanded->string(),
-                output_limit.max_bytes,
-                "...[truncated]")));
+                "configured shell path is unavailable or not executable: " +
+                support::bounded_redacted_text(expanded->string(), output_limit.max_bytes, "...[truncated]")));
     }
 
     if (executable_file(system_bash_candidate)) {

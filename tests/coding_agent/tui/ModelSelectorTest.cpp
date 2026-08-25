@@ -14,7 +14,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include <cch/support/Error.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
@@ -114,7 +114,7 @@ struct RuntimeFixture {
         boost::asio::co_spawn(
                 io,
                 [runtime = runtime]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                    auto available = co_await ai::detail::await_async_result(runtime->get_available());
+                    auto available = co_await support::detail::await_async_result(runtime->get_available());
                     if (!available) {
                         co_return std::unexpected(available.error());
                     }

@@ -1,5 +1,5 @@
-#include "ai/AsyncResultBridge.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/StreamEvent.hpp>
@@ -18,7 +18,7 @@
 #include <vector>
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-#error "Async bridge tests must compile Boost.Asio with exceptions disabled"
+#error "ModelStream bridge tests must compile Boost.Asio with exceptions disabled"
 #endif
 
 namespace {
@@ -52,45 +52,6 @@ SpawnResult<T> run_awaitable(boost::asio::awaitable<T> operation) {
 } // namespace
 
 TEST_CASE(
-    "the no-exception AsyncResult bridge delivers a successful terminal outcome",
-    "[ai][bridge][issue482]") {
-    auto operation = cch::ai::detail::make_async_result(
-        []() -> boost::asio::awaitable<cch::support::Expected<int>> {
-            co_return 42;
-        });
-
-    const auto run = run_awaitable(
-        cch::ai::detail::await_async_result(std::move(operation)));
-
-    REQUIRE(run.completed);
-    CHECK_FALSE(run.exception);
-    REQUIRE(run.value.has_value());
-    REQUIRE(run.value->has_value());
-    CHECK(run.value->value() == 42);
-}
-
-TEST_CASE(
-    "the no-exception AsyncResult bridge preserves an explicit terminal error",
-    "[ai][bridge][issue482]") {
-    auto operation = cch::ai::detail::make_async_result(
-        []() -> boost::asio::awaitable<cch::support::Expected<int>> {
-            co_return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Cancelled,
-                "cancelled by the producer"));
-        });
-
-    const auto run = run_awaitable(
-        cch::ai::detail::await_async_result(std::move(operation)));
-
-    REQUIRE(run.completed);
-    CHECK_FALSE(run.exception);
-    REQUIRE(run.value.has_value());
-    REQUIRE_FALSE(run.value->has_value());
-    CHECK(run.value->error().code == cch::support::ErrorCode::Cancelled);
-    CHECK(run.value->error().message == "cancelled by the producer");
-}
-
-TEST_CASE(
     "the no-exception ModelStream bridge forwards events and its terminal message",
     "[ai][bridge][issue482]") {
     auto stream = cch::ai::detail::make_model_stream(
@@ -110,7 +71,7 @@ TEST_CASE(
             return {};
         });
     const auto run = run_awaitable(
-        cch::ai::detail::await_async_result(std::move(result)));
+        cch::support::detail::await_async_result(std::move(result)));
 
     REQUIRE(run.completed);
     CHECK_FALSE(run.exception);

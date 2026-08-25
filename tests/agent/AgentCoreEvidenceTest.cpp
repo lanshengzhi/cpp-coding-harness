@@ -1,5 +1,5 @@
 // pi-agent-core fixture evidence for #351 (T02): the committed goldens under
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 // fixtures/pi-agent-core/ compared byte-for-byte against the C++ Agent's
 // observable behavior. Three evidence bundles:
 //
@@ -302,12 +302,12 @@ support::ExpectedVoid run_prompt(
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.prompt(std::move(prompt)));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     if (!result) {
         return std::unexpected(support::make_error(
@@ -337,7 +337,7 @@ AgentRun run_agent(agent::Agent& subject, std::string prompt) {
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
+                result = co_await support::detail::await_async_result(subject.prompt(std::move(prompt)));
                 co_return;
             },
             boost::asio::detached);
@@ -603,7 +603,7 @@ TEST_CASE(
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await ai::detail::await_async_result(subject.prompt("cancel me"));
+                result = co_await support::detail::await_async_result(subject.prompt("cancel me"));
                 co_return;
             },
             boost::asio::detached);

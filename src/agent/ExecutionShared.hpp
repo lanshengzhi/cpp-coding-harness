@@ -4,7 +4,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -70,8 +70,7 @@ invoke_agent_hook(
     Hook& hook,
     Args&&... args) {
     using Result = typename AsyncResultTerminal<std::invoke_result_t<Hook&, Args...>>::type;
-    auto result = co_await ai::detail::await_async_result(
-        hook(std::forward<Args>(args)...));
+    auto result = co_await support::detail::await_async_result(hook(std::forward<Args>(args)...));
     if (!result && result.error().message == "async operation failed") {
         co_return Result(std::unexpected(support::make_error(
             support::ErrorCode::Tool,

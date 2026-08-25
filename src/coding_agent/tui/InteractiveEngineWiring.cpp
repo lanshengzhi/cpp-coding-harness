@@ -7,7 +7,7 @@
 
 #include "InteractiveEngine.hpp"
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
@@ -42,12 +42,11 @@ void InteractiveEngine::spawn_flow(
     auto start_owner =
         std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(
             std::move(start));
-    auto bridged = ai::detail::make_async_result_on(
-        executor_,
-        [start_owner]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-            co_await (*start_owner)();
-            co_return support::ExpectedVoid{};
-        });
+    auto bridged = support::detail::make_async_result_on(
+            executor_, [start_owner]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_await (*start_owner)();
+                co_return support::ExpectedVoid{};
+            });
     std::move(bridged).start(
         [weak, failure_label = std::move(failure_label)](support::ExpectedVoid result) noexcept {
             if (const auto self = weak.lock()) {

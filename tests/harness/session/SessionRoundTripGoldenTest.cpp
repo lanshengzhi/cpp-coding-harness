@@ -13,7 +13,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "agent/harness/session/EntrySerializer.hpp"
 #include "support/FakeModelStream.hpp"
@@ -176,12 +176,12 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.prompt(std::move(prompt)));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     if (!result) {
         return std::unexpected(support::make_error(

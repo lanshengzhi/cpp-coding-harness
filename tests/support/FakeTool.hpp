@@ -4,7 +4,7 @@
 #include <cch/ai/Tool.hpp>
 #include <cch/support/Error.hpp>
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 
@@ -40,36 +40,30 @@ template <typename Body>
     tool.concurrency = concurrency;
     tool.prompt_snippet = std::move(prompt_snippet);
     tool.prompt_guidelines = std::move(prompt_guidelines);
-    tool.execute = [body_mutex, shared_body](
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink update_sink) -> agent::ToolExecuteResult {
-        return agent::ToolExecuteResult{
-            [body_mutex, shared_body,
-             invocation = std::move(invocation),
-             stop_token = std::move(stop_token),
-             update_sink = std::move(update_sink)](
-                agent::ToolExecuteResult::completion_type completion) mutable noexcept {
-                auto executor = cch::ai::detail::t_initiating_executor;
-                if (!executor) {
-                    completion(std::unexpected(support::make_error(
-                        support::ErrorCode::Tool, "tool execution has no initiating executor")));
-                    return;
-                }
-                boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> coro;
-                {
-                    std::lock_guard lock(*body_mutex);
-                    coro = (*shared_body)(
-                        std::move(invocation),
-                        std::move(stop_token),
-                        std::move(update_sink));
-                }
-                boost::asio::co_spawn(
-                    executor,
+    tool.execute = [body_mutex, shared_body](agent::ToolInvocation invocation,
+                           std::stop_token stop_token,
+                           agent::ToolUpdateSink update_sink) -> agent::ToolExecuteResult {
+        return agent::ToolExecuteResult{[body_mutex,
+                                                shared_body,
+                                                invocation = std::move(invocation),
+                                                stop_token = std::move(stop_token),
+                                                update_sink = std::move(update_sink)](
+                                                agent::ToolExecuteResult::completion_type completion) mutable noexcept {
+            auto executor = cch::support::detail::t_initiating_executor;
+            if (!executor) {
+                completion(std::unexpected(
+                        support::make_error(support::ErrorCode::Tool, "tool execution has no initiating executor")));
+                return;
+            }
+            boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> coro;
+            {
+                std::lock_guard lock(*body_mutex);
+                coro = (*shared_body)(std::move(invocation), std::move(stop_token), std::move(update_sink));
+            }
+            boost::asio::co_spawn(executor,
                     std::move(coro),
                     [completion = std::move(completion)](
-                        auto eptr,
-                        support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
+                            auto eptr, support::Expected<agent::AsyncToolExecutionResult> result) mutable noexcept {
                         if (eptr) {
                             completion(std::unexpected(support::make_error(
                                 support::ErrorCode::Tool, "tool execution failed")));
@@ -77,7 +71,7 @@ template <typename Body>
                             completion(std::move(result));
                         }
                     });
-            }};
+        }};
     };
     return tool;
 }

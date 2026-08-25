@@ -3,7 +3,7 @@
 #include "DevicePoll.hpp"
 #include "OAuthCallbackServer.hpp"
 #include "Pkce.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
@@ -394,8 +394,7 @@ OpenAICodexOAuth::login(ai::AuthInteraction interaction) {
             },
         },
     };
-    CCH_TRY(method, co_await cch::ai::detail::await_async_result(
-        interaction.prompt(std::move(method_prompt))));
+    CCH_TRY(method, co_await cch::support::detail::await_async_result(interaction.prompt(std::move(method_prompt))));
     if (method == kDeviceCodeMethod) {
         CCH_TRY(credential, co_await login_device_code(std::move(interaction)));
         co_return credential;
@@ -475,8 +474,8 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
 #endif
-                result = co_await cch::ai::detail::await_async_result(
-                    interaction_shared->prompt(std::move(manual_prompt)));
+                result = co_await cch::support::detail::await_async_result(
+                        interaction_shared->prompt(std::move(manual_prompt)));
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (const std::exception& error) {
                 result = std::unexpected(support::make_error(
@@ -699,29 +698,27 @@ ai::OAuthAuth make_openai_codex_oauth_auth(
         std::move(options));
     ai::OAuthAuth auth;
     auth.name = "OpenAI (ChatGPT Plus/Pro)";
-    auth.login = [impl](ai::AuthInteraction interaction)
-        -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::ai::detail::make_async_result(
-            [impl, interaction = std::move(interaction)]() mutable
-                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                co_return co_await impl->login(std::move(interaction));
-            });
+    auth.login = [impl](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::support::detail::make_async_result(
+                [impl, interaction = std::move(interaction)]() mutable
+                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                    co_return co_await impl->login(std::move(interaction));
+                });
     };
-    auth.refresh = [impl](ai::OAuthCredential credential)
-        -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::ai::detail::make_async_result(
-            [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                co_return co_await impl->refresh(std::move(credential));
-            });
+    auth.refresh = [impl](ai::OAuthCredential credential) -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::support::detail::make_async_result(
+                [impl, credential = std::move(credential)]()
+                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                    co_return co_await impl->refresh(std::move(credential));
+                });
     };
-    auth.to_auth = [impl](const ai::OAuthCredential& credential)
-        -> cch::support::AsyncResult<ai::ModelAuth> {
-        return cch::ai::detail::make_async_result(
-            [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
-                co_return co_await impl->to_auth(credential);
-            });
+    auth.to_auth = [impl](const ai::OAuthCredential& credential) -> cch::support::AsyncResult<ai::ModelAuth> {
+        return cch::support::detail::make_async_result(
+                [impl,
+                        credential =
+                                std::move(credential)]() -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
+                    co_return co_await impl->to_auth(credential);
+                });
     };
     return auth;
 }

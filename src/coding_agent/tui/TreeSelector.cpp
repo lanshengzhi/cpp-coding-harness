@@ -1,7 +1,7 @@
 #include "coding_agent/tui/TreeSelector.hpp"
 
 #include "coding_agent/tui/KeybindingHints.hpp"
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 #include "support/Json.hpp"
 
 #include <cch/tui/Utils.hpp>
@@ -27,7 +27,7 @@ constexpr std::size_t kMaxVisibleAnchorContentWidth = 20;
 constexpr std::size_t kMinAnchorContextWidth = 2;
 constexpr std::size_t kMaxAnchorContextWidth = 12;
 /// pi's tree display budgets: 200 chars for entry content, 50 for the bash
-/// command, 40 for tool-argument JSON (through ai::bounded_text).
+/// command, 40 for tool-argument JSON (through support::bounded_text).
 constexpr std::size_t kEntryContentDisplayBytes = 200;
 constexpr std::size_t kBashCommandDisplayBytes = 50;
 constexpr std::size_t kToolArgumentsDisplayBytes = 40;
@@ -911,7 +911,7 @@ std::string TreeSelectorComponent::extract_content(
     }
     // pi's 200-char display budget for entry content, through the bounded
     // helper (CODING_STANDARDS 10.3 — no ad-hoc substr truncation).
-    return ai::bounded_text(text, kEntryContentDisplayBytes);
+    return support::bounded_text(text, kEntryContentDisplayBytes);
 }
 
 std::string TreeSelectorComponent::format_tool_call(
@@ -969,8 +969,7 @@ std::string TreeSelectorComponent::format_tool_call(
             raw.clear();
         }
         // pi's 50-char command budget with the truncation suffix (10.3).
-        return std::format(
-            "[bash: {}]", ai::bounded_text(raw, kBashCommandDisplayBytes, "..."));
+        return std::format("[bash: {}]", support::bounded_text(raw, kBashCommandDisplayBytes, "..."));
     }
     if (name == "grep") {
         const auto pattern = argument_string(arguments, "pattern");
@@ -994,10 +993,7 @@ std::string TreeSelectorComponent::format_tool_call(
     if (auto serialized = support::write_json(arguments); serialized) {
         args = std::move(*serialized);
     }
-    return std::format(
-        "[{}: {}]",
-        name,
-        ai::bounded_text(args, kToolArgumentsDisplayBytes, "..."));
+    return std::format("[{}: {}]", name, support::bounded_text(args, kToolArgumentsDisplayBytes, "..."));
 }
 
 std::string TreeSelectorComponent::get_entry_display_text(

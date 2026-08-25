@@ -1,7 +1,7 @@
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
 #include <cch/support/Error.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -57,12 +57,12 @@ T run_async(Action action) {
     boost::asio::io_context io;
     std::optional<T> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result.emplace(co_await cch::ai::detail::await_async_result(action()));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result.emplace(co_await cch::support::detail::await_async_result(action()));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     REQUIRE(result.has_value());
     return std::move(*result);
@@ -148,43 +148,45 @@ TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding
     std::optional<cch::support::Expected<std::optional<cch::ai::Credential>>> second_result;
 
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            first_result = co_await cch::ai::detail::await_async_result(first.modify(
-                "anthropic",
-                [](std::optional<cch::ai::Credential>)
-                    -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
-                    return cch::ai::detail::make_async_result(
-                        []() -> boost::asio::awaitable<cch::support::Expected<std::optional<cch::ai::Credential>>> {
-                            auto executor = co_await boost::asio::this_coro::executor;
-                            boost::asio::steady_timer timer(executor, 75ms);
-                            boost::system::error_code timer_error;
-                            co_await timer.async_wait(
-                                boost::asio::redirect_error(boost::asio::use_awaitable, timer_error));
-                            if (timer_error) {
-                                co_return std::unexpected(cch::support::make_error(
-                                    cch::support::ErrorCode::Cancelled,
-                                    "test credential modification was cancelled"));
-                            }
-                            co_return std::optional<cch::ai::Credential>{
-                                api_key_credential("dummy-anthropic-key")};
-                        });
-                }));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                first_result = co_await cch::support::detail::await_async_result(first.modify("anthropic",
+                        [](std::optional<cch::ai::Credential>)
+                                -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
+                            return cch::support::detail::make_async_result(
+                                    []() -> boost::asio::awaitable<
+                                                 cch::support::Expected<std::optional<cch::ai::Credential>>> {
+                                        auto executor = co_await boost::asio::this_coro::executor;
+                                        boost::asio::steady_timer timer(executor, 75ms);
+                                        boost::system::error_code timer_error;
+                                        co_await timer.async_wait(
+                                                boost::asio::redirect_error(boost::asio::use_awaitable, timer_error));
+                                        if (timer_error) {
+                                            co_return std::unexpected(
+                                                    cch::support::make_error(cch::support::ErrorCode::Cancelled,
+                                                            "test credential modification was cancelled"));
+                                        }
+                                        co_return std::optional<cch::ai::Credential>{
+                                                api_key_credential("dummy-anthropic-key")};
+                                    });
+                        }));
+                co_return;
+            },
+            boost::asio::detached);
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            second_result = co_await cch::ai::detail::await_async_result(second.modify(
-                "deepseek",
-                [](std::optional<cch::ai::Credential>)
-                    -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
-                    return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(std::expected<std::optional<cch::ai::Credential>, cch::support::Error>{std::optional<cch::ai::Credential>{api_key_credential("dummy-deepseek-key")}});
-                }));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                second_result = co_await cch::support::detail::await_async_result(second.modify("deepseek",
+                        [](std::optional<cch::ai::Credential>)
+                                -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
+                            return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(
+                                    std::expected<std::optional<cch::ai::Credential>, cch::support::Error>{
+                                            std::optional<cch::ai::Credential>{
+                                                    api_key_credential("dummy-deepseek-key")}});
+                        }));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
 
     REQUIRE(first_result.has_value());

@@ -5,7 +5,7 @@
 
 #include "InteractiveMode.hpp"
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveEngine.hpp"
 #include "coding_agent/tui/ClipboardPaste.hpp"
@@ -105,18 +105,15 @@ void InteractiveEngine::dispatch(ClipboardPasteAction) {
     if (clipboard_reader_ == nullptr || clipboard_read_active_) return;
     clipboard_read_active_ = true;
     const auto self = shared_from_this();
-    auto bridged = ai::detail::make_async_result_on(
-        executor_,
-        [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-            auto content = co_await read_clipboard_insert_content(
-                *self->clipboard_reader_);
-            if (content && !content->empty() && self->running_ &&
-                self->view_ != nullptr) {
-                self->view_->insert_editor_text(std::move(*content));
-                self->tui_.invalidate();
-            }
-            co_return support::ExpectedVoid{};
-        });
+    auto bridged = support::detail::make_async_result_on(
+            executor_, [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                auto content = co_await read_clipboard_insert_content(*self->clipboard_reader_);
+                if (content && !content->empty() && self->running_ && self->view_ != nullptr) {
+                    self->view_->insert_editor_text(std::move(*content));
+                    self->tui_.invalidate();
+                }
+                co_return support::ExpectedVoid{};
+            });
     std::move(bridged).start(
         [weak = weak_from_this()](support::ExpectedVoid result) noexcept {
             const auto engine = weak.lock();
@@ -180,12 +177,11 @@ void InteractiveEngine::dispatch(SuspendAction) {
 
 void InteractiveEngine::dispatch(ExternalEditorAction) {
     const auto self = shared_from_this();
-    auto bridged = ai::detail::make_async_result_on(
-        executor_,
-        [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-            co_await self->handle_open_external_editor();
-            co_return support::ExpectedVoid{};
-        });
+    auto bridged = support::detail::make_async_result_on(
+            executor_, [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_await self->handle_open_external_editor();
+                co_return support::ExpectedVoid{};
+            });
     std::move(bridged).start([self](support::ExpectedVoid result) noexcept {
         if (!result) {
             // The bridge maps a launch/body failure to the generic
@@ -286,27 +282,22 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
     auto recall = trim_editor_submission(text);
     const auto self = shared_from_this();
     const std::size_t started_generation = action_generation_;
-    auto bridged = ai::detail::make_async_result_on(
-        executor_,
-        [self,
-         invocation = std::move(invocation),
-         recall = std::move(recall),
-         started_generation]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-            auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
-                *self->session_,
-                std::move(invocation->command),
-                invocation->exclude_from_context,
-                [self](
-                    const runtime::UserBashProgress& progress) -> support::ExpectedVoid {
-                    if (self->running_ && self->view_ != nullptr) {
-                        self->view_->set_user_bash_progress(progress);
-                        self->tui_.invalidate();
-                    }
-                    return {};
-                });
-            self->user_bash_finished(started_generation, std::move(result), recall);
-            co_return support::ExpectedVoid{};
-        });
+    auto bridged = support::detail::make_async_result_on(executor_,
+            [self, invocation = std::move(invocation), recall = std::move(recall), started_generation]() mutable
+                    -> boost::asio::awaitable<support::ExpectedVoid> {
+                auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(*self->session_,
+                        std::move(invocation->command),
+                        invocation->exclude_from_context,
+                        [self](const runtime::UserBashProgress& progress) -> support::ExpectedVoid {
+                            if (self->running_ && self->view_ != nullptr) {
+                                self->view_->set_user_bash_progress(progress);
+                                self->tui_.invalidate();
+                            }
+                            return {};
+                        });
+                self->user_bash_finished(started_generation, std::move(result), recall);
+                co_return support::ExpectedVoid{};
+            });
     std::move(bridged).start(
         [weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
             if (result) return;
@@ -424,33 +415,26 @@ void InteractiveEngine::submit(
     prompt_active_ = true;
     const auto self = shared_from_this();
     const std::size_t started_generation = action_generation_;
-    auto bridged = ai::detail::make_async_result_on(
-        executor_,
-        [self,
-         text = std::move(text),
-         options = std::move(options),
-         started_generation]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-            support::ExpectedVoid result;
+    auto bridged = support::detail::make_async_result_on(executor_,
+            [self, text = std::move(text), options = std::move(options), started_generation]() mutable
+                    -> boost::asio::awaitable<support::ExpectedVoid> {
+                support::ExpectedVoid result;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
+                try {
 #endif
-                result = co_await self->session_->prompt(text, std::move(options));
+                    result = co_await self->session_->prompt(text, std::move(options));
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (const std::exception& error) {
-                result = std::unexpected(support::make_error(
-                    support::ErrorCode::Unknown,
-                    "Native TUI prompt failed",
-                    error.what()));
-            } catch (...) {
-                result = std::unexpected(support::make_error(
-                    support::ErrorCode::Unknown,
-                    "Native TUI prompt failed",
-                    "unknown exception"));
-            }
+                } catch (const std::exception& error) {
+                    result = std::unexpected(
+                            support::make_error(support::ErrorCode::Unknown, "Native TUI prompt failed", error.what()));
+                } catch (...) {
+                    result = std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown, "Native TUI prompt failed", "unknown exception"));
+                }
 #endif
-            self->prompt_finished(started_generation, std::move(result), text);
-            co_return support::ExpectedVoid{};
-        });
+                self->prompt_finished(started_generation, std::move(result), text);
+                co_return support::ExpectedVoid{};
+            });
     std::move(bridged).start(
         [weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
             if (result) return;

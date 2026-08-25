@@ -1,7 +1,7 @@
 #pragma once
 
 #include "coding_agent/runtime/AsyncUserShell.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ReleaseGate.hpp"
 
 #include <boost/asio/redirect_error.hpp>
@@ -42,52 +42,48 @@ public:
         std::string command,
         coding_agent::runtime::UserShellUpdateSink update_sink,
         std::stop_token stop_token) override {
-        return ai::detail::make_async_result(
-            [this,
-             command = std::move(command),
-             update_sink = std::move(update_sink),
-             stop_token]() mutable
-            -> boost::asio::awaitable<support::Expected<coding_agent::runtime::UserShellResult>> {
-                commands.push_back(std::move(command));
-                const auto index = next_execution_++;
-                if (index >= executions_.size()) {
-                    co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Process,
-                        "fake User Shell has no queued execution"));
-                }
-
-                auto& execution = executions_[index];
-                for (const auto& update : execution.updates) {
-                    if (auto delivered = update_sink(update); !delivered) {
-                        co_return std::unexpected(delivered.error());
+        return support::detail::make_async_result(
+                [this, command = std::move(command), update_sink = std::move(update_sink), stop_token]() mutable
+                        -> boost::asio::awaitable<support::Expected<coding_agent::runtime::UserShellResult>> {
+                    commands.push_back(std::move(command));
+                    const auto index = next_execution_++;
+                    if (index >= executions_.size()) {
+                        co_return std::unexpected(support::make_error(
+                                support::ErrorCode::Process, "fake User Shell has no queued execution"));
                     }
-                }
-                ++started_count;
 
-                if (execution.gated) {
-                    std::stop_callback cancellation{stop_token, [this] {
-                        ++cancellation_request_count;
-                        gate_.interrupt();
-                    }};
-                    // The stop check must precede wait(): an interrupt
-                    // delivered before the gate is armed does not linger
-                    // (ReleaseGate contract).
-                    if (!stop_token.stop_requested()) {
-                        co_await gate_.wait();
+                    auto& execution = executions_[index];
+                    for (const auto& update : execution.updates) {
+                        if (auto delivered = update_sink(update); !delivered) {
+                            co_return std::unexpected(delivered.error());
+                        }
                     }
-                    if (stop_token.stop_requested()) {
-                        auto cancelled = execution.result;
-                        cancelled.exit_code.reset();
-                        cancelled.cancelled = true;
-                        co_return cancelled;
-                    }
-                }
+                    ++started_count;
 
-                if (execution.infrastructure_failure) {
-                    co_return std::unexpected(*execution.infrastructure_failure);
-                }
-                co_return execution.result;
-            });
+                    if (execution.gated) {
+                        std::stop_callback cancellation{stop_token, [this] {
+                                                            ++cancellation_request_count;
+                                                            gate_.interrupt();
+                                                        }};
+                        // The stop check must precede wait(): an interrupt
+                        // delivered before the gate is armed does not linger
+                        // (ReleaseGate contract).
+                        if (!stop_token.stop_requested()) {
+                            co_await gate_.wait();
+                        }
+                        if (stop_token.stop_requested()) {
+                            auto cancelled = execution.result;
+                            cancelled.exit_code.reset();
+                            cancelled.cancelled = true;
+                            co_return cancelled;
+                        }
+                    }
+
+                    if (execution.infrastructure_failure) {
+                        co_return std::unexpected(*execution.infrastructure_failure);
+                    }
+                    co_return execution.result;
+                });
     }
 
     // Observable state lives in shared storage: the Session uniquely owns the

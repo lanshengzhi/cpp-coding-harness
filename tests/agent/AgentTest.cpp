@@ -1,5 +1,5 @@
 #include <cch/agent/Agent.hpp>
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
@@ -54,12 +54,12 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(subject.prompt(std::move(prompt)));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.prompt(std::move(prompt)));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     if (!result) {
         return std::unexpected(support::make_error(
@@ -76,13 +76,13 @@ support::ExpectedVoid run_prompt(
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(
-                subject.prompt(std::move(prompt), std::move(commitment)));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(
+                        subject.prompt(std::move(prompt), std::move(commitment)));
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     if (!result) {
         return std::unexpected(support::make_error(
@@ -540,12 +540,12 @@ TEST_CASE(
     subject.abort();
     std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await ai::detail::await_async_result(subject.prompt("abort me"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.prompt("abort me"));
+                co_return;
+            },
+            boost::asio::detached);
 
     while (!client->started) {
         REQUIRE(io.poll_one() == 1);
@@ -1009,12 +1009,12 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
 
     std::optional<support::ExpectedVoid> first_prompt;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            first_prompt = co_await ai::detail::await_async_result(subject.prompt("first"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                first_prompt = co_await support::detail::await_async_result(subject.prompt("first"));
+                co_return;
+            },
+            boost::asio::detached);
 
     REQUIRE(io.run_one() == 1);
     REQUIRE(client->started);
@@ -1024,12 +1024,12 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
 
     std::optional<support::ExpectedVoid> second_prompt;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            second_prompt = co_await ai::detail::await_async_result(subject.prompt("second"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                second_prompt = co_await support::detail::await_async_result(subject.prompt("second"));
+                co_return;
+            },
+            boost::asio::detached);
 
     REQUIRE(io.run_one() == 1);
     REQUIRE(second_prompt.has_value());
@@ -1059,12 +1059,12 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
 
     std::optional<support::ExpectedVoid> prompted;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            prompted = co_await ai::detail::await_async_result(original.prompt("hello"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                prompted = co_await support::detail::await_async_result(original.prompt("hello"));
+                co_return;
+            },
+            boost::asio::detached);
     REQUIRE(io.run_one() == 1);
     REQUIRE(client->started);
 
@@ -1293,12 +1293,12 @@ TEST_CASE(
 
     std::optional<support::ExpectedVoid> prompted;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            prompted = co_await ai::detail::await_async_result(subject.prompt("first"));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                prompted = co_await support::detail::await_async_result(subject.prompt("first"));
+                co_return;
+            },
+            boost::asio::detached);
     while (!client->started) {
         REQUIRE(io.poll_one() == 1);
     }

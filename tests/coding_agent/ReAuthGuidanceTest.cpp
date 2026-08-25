@@ -257,9 +257,8 @@ struct GuidedRun {
                 std::move(inner),
                 "fake",
                 [is_using_oauth](std::string_view) { return is_using_oauth; });
-            out.result = co_await ai::detail::await_async_result(
-                std::move(decorated).run(
-                    [&out](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
+            out.result = co_await support::detail::await_async_result(
+                    std::move(decorated).run([&out](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
                         out.events.push_back(event);
                         return {};
                     }));

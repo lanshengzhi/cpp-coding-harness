@@ -3,7 +3,7 @@
 #include "ai/auth/OAuthHttpClient.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "support/EnvVarGuard.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -42,11 +42,11 @@ template <typename T, typename E>
 std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
-        io,
-        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
-            co_return co_await cch::ai::detail::await_async_result(std::move(op));
-        }(std::move(result)),
-        boost::asio::use_future);
+            io,
+            [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+                co_return co_await cch::support::detail::await_async_result(std::move(op));
+            }(std::move(result)),
+            boost::asio::use_future);
     io.run();
     return future.get();
 }

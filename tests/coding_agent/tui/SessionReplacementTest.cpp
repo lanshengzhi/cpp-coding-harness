@@ -17,7 +17,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
@@ -146,54 +146,49 @@ public:
         std::string command,
         coding_agent::runtime::UserShellUpdateSink update_sink,
         std::stop_token stop_token) override {
-        return ai::detail::make_async_result(
-            [state = state_,
-             command = std::move(command),
-             update_sink = std::move(update_sink),
-             stop_token]() mutable
-            -> boost::asio::awaitable<
-                support::Expected<coding_agent::runtime::UserShellResult>> {
-                state->commands.push_back(command);
-                ++state->started;
-                if (update_sink) {
-                    if (auto delivered =
-                            update_sink(std::format("$ {} starting\n", command));
-                        !delivered) {
-                        co_return std::unexpected(delivered.error());
-                    }
-                }
-                const auto executor = co_await boost::asio::this_coro::executor;
-                state->gate.emplace(executor);
-                state->gate->expires_at(
-                    std::chrono::steady_clock::time_point::max());
-                std::stop_callback cancellation{stop_token, [state] {
-                    ++state->cancellation_requests;
-                    if (state->gate) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        try {
-#endif
-                            (void)state->gate->cancel();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        } catch (...) {
+        return support::detail::make_async_result(
+                [state = state_,
+                        command = std::move(command),
+                        update_sink = std::move(update_sink),
+                        stop_token]() mutable
+                        -> boost::asio::awaitable<support::Expected<coding_agent::runtime::UserShellResult>> {
+                    state->commands.push_back(command);
+                    ++state->started;
+                    if (update_sink) {
+                        if (auto delivered = update_sink(std::format("$ {} starting\n", command)); !delivered) {
+                            co_return std::unexpected(delivered.error());
                         }
-#endif
                     }
-                }};
-                boost::system::error_code error;
-                if (!stop_token.stop_requested()) {
-                    co_await state->gate->async_wait(
-                        boost::asio::redirect_error(
-                            boost::asio::use_awaitable, error));
-                }
-                state->gate.reset();
-                coding_agent::runtime::UserShellResult result;
-                if (stop_token.stop_requested()) {
-                    result.cancelled = true;
-                } else {
-                    result.exit_code = 0;
-                }
-                co_return result;
-            });
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    state->gate.emplace(executor);
+                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                    std::stop_callback cancellation{stop_token, [state] {
+                                                        ++state->cancellation_requests;
+                                                        if (state->gate) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                                            try {
+#endif
+                                                                (void)state->gate->cancel();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                                            } catch (...) {
+                                                            }
+#endif
+                                                        }
+                                                    }};
+                    boost::system::error_code error;
+                    if (!stop_token.stop_requested()) {
+                        co_await state->gate->async_wait(
+                                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    }
+                    state->gate.reset();
+                    coding_agent::runtime::UserShellResult result;
+                    if (stop_token.stop_requested()) {
+                        result.cancelled = true;
+                    } else {
+                        result.exit_code = 0;
+                    }
+                    co_return result;
+                });
     }
 
     [[nodiscard]] std::shared_ptr<State> state() const { return state_; }

@@ -191,13 +191,9 @@ struct ValidationFailure {
     if (!parser_detail.empty()) {
         diagnostic += " (parser detail: " + std::move(parser_detail) + ")";
     }
-    return support::make_error(
-        support::ErrorCode::JsonParse,
-        "tool argument preparation failed",
-        ai::bounded_redacted_text(
-            std::move(diagnostic),
-            4096,
-            " [diagnostic truncated]"));
+    return support::make_error(support::ErrorCode::JsonParse,
+            "tool argument preparation failed",
+            support::bounded_redacted_text(std::move(diagnostic), 4096, " [diagnostic truncated]"));
 }
 
 [[nodiscard]] std::string child_path(std::string_view base, std::string_view key) {

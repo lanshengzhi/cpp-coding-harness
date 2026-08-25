@@ -41,11 +41,11 @@ template <typename T, typename E>
 std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
-        io,
-        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
-            co_return co_await cch::ai::detail::await_async_result(std::move(op));
-        }(std::move(result)),
-        boost::asio::use_future);
+            io,
+            [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+                co_return co_await cch::support::detail::await_async_result(std::move(op));
+            }(std::move(result)),
+            boost::asio::use_future);
     io.run();
     return future.get();
 }
@@ -460,30 +460,28 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
             std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
                 ai::AuthCheck{.source = "stored", .type = ai::AuthType::ApiKey}});
     };
-    api_key.resolve = [&resolved_keys](
-                          const ai::AuthContext& context,
-                          std::optional<ai::ApiKeyCredential> credential)
-        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        return cch::ai::detail::make_async_result(
-            [&resolved_keys, &context, credential = std::move(credential)]() mutable
-                -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
-                std::optional<std::string> key = credential ? credential->key : std::nullopt;
-                std::string source = credential ? "credential" : "ambient";
-                if (!key) {
-                    CCH_TRY(ambient, co_await cch::ai::detail::await_async_result(
-                        context.environment("API_KEY")));
-                    key = std::move(ambient);
-                }
-                if (!key) {
-                    co_return std::optional<ai::AuthResult>{};
-                }
-                resolved_keys.push_back(*key);
-                co_return ai::AuthResult{
-                    .auth = ai::ModelAuth{.api_key = *key},
-                    .env = {},
-                    .source = source,
-                };
-            });
+    api_key.resolve = [&resolved_keys](const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential)
+            -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::detail::make_async_result(
+                [&resolved_keys, &context, credential = std::move(credential)]() mutable
+                        -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
+                    std::optional<std::string> key = credential ? credential->key : std::nullopt;
+                    std::string source = credential ? "credential" : "ambient";
+                    if (!key) {
+                        CCH_TRY(ambient,
+                                co_await cch::support::detail::await_async_result(context.environment("API_KEY")));
+                        key = std::move(ambient);
+                    }
+                    if (!key) {
+                        co_return std::optional<ai::AuthResult>{};
+                    }
+                    resolved_keys.push_back(*key);
+                    co_return ai::AuthResult{
+                            .auth = ai::ModelAuth{.api_key = *key},
+                            .env = {},
+                            .source = source,
+                    };
+                });
     };
 
     auto models = make_models(credentials, auth_context);

@@ -1,5 +1,5 @@
 #include "agent/ToolCallExecutor.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include "support/FakeTool.hpp"
 #include "support/ToolArgumentCompatibilityFixture.hpp"
@@ -1884,15 +1884,14 @@ TEST_CASE(
 
     agent::AfterToolCallHook after_hook = [&](agent::AfterToolCallContext, std::stop_token) {
         enter_hook();
-        return ai::detail::make_async_result(
-            [&active_hooks]() -> boost::asio::awaitable<support::Expected<agent::AfterToolCallResult>> {
-                auto timer = boost::asio::steady_timer(
-                    co_await boost::asio::this_coro::executor,
-                    std::chrono::milliseconds{15});
-                co_await timer.async_wait(boost::asio::use_awaitable);
-                --active_hooks;
-                co_return agent::AfterToolCallResult{};
-            });
+        return support::detail::make_async_result(
+                [&active_hooks]() -> boost::asio::awaitable<support::Expected<agent::AfterToolCallResult>> {
+                    auto timer = boost::asio::steady_timer(
+                            co_await boost::asio::this_coro::executor, std::chrono::milliseconds{15});
+                    co_await timer.async_wait(boost::asio::use_awaitable);
+                    --active_hooks;
+                    co_return agent::AfterToolCallResult{};
+                });
     };
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{2};

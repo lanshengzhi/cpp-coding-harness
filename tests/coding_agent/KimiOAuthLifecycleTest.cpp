@@ -5,7 +5,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "ai/providers/ComposedProvider.hpp"
 #include "ai/providers/KimiCatalog.hpp"
 #include "support/TempWorkspace.hpp"
@@ -43,11 +43,11 @@ template <typename T, typename E>
 std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
-        io,
-        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
-            co_return co_await cch::ai::detail::await_async_result(std::move(op));
-        }(std::move(result)),
-        boost::asio::use_future);
+            io,
+            [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+                co_return co_await cch::support::detail::await_async_result(std::move(op));
+            }(std::move(result)),
+            boost::asio::use_future);
     io.run();
     return future.get();
 }

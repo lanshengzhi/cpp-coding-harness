@@ -2,7 +2,7 @@
 
 #include "DevicePoll.hpp"
 #include "Pkce.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
@@ -596,31 +596,29 @@ ai::OAuthAuth make_kimi_coding_oauth_auth(
         std::move(options));
     ai::OAuthAuth auth;
     auth.name = "Kimi Code (subscription)";
-    auth.login = [impl](ai::AuthInteraction interaction)
-        -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::ai::detail::make_async_result(
-            [impl, interaction = std::move(interaction)]() mutable
-                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                co_return co_await impl->login(std::move(interaction));
-            });
+    auth.login = [impl](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::support::detail::make_async_result(
+                [impl, interaction = std::move(interaction)]() mutable
+                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                    co_return co_await impl->login(std::move(interaction));
+                });
     };
     // The request-path refresh is uncancellable: no stop token is passed,
     // reproducing pi's frozen Kimi refresh-signal defect as no-divergence.
-    auth.refresh = [impl](ai::OAuthCredential credential)
-        -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::ai::detail::make_async_result(
-            [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                co_return co_await impl->refresh(std::move(credential));
-            });
+    auth.refresh = [impl](ai::OAuthCredential credential) -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::support::detail::make_async_result(
+                [impl, credential = std::move(credential)]()
+                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                    co_return co_await impl->refresh(std::move(credential));
+                });
     };
-    auth.to_auth = [impl](const ai::OAuthCredential& credential)
-        -> cch::support::AsyncResult<ai::ModelAuth> {
-        return cch::ai::detail::make_async_result(
-            [impl, credential = std::move(credential)]()
-                -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
-                co_return co_await impl->to_auth(credential);
-            });
+    auth.to_auth = [impl](const ai::OAuthCredential& credential) -> cch::support::AsyncResult<ai::ModelAuth> {
+        return cch::support::detail::make_async_result(
+                [impl,
+                        credential =
+                                std::move(credential)]() -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
+                    co_return co_await impl->to_auth(credential);
+                });
     };
     return auth;
 }

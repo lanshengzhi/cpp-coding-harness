@@ -2,7 +2,7 @@
 
 #include "ai/glaze/AiJson.hpp"
 #include "support/Json.hpp"
-#include "ai/Redactor.hpp"
+#include "support/Redactor.hpp"
 
 #include <chrono>
 #include <random>
@@ -586,7 +586,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
 
 [[nodiscard]] support::JsonValue redact_json_value(const support::JsonValue& value) {
     if (const auto* text = value.get_if<std::string>()) {
-        return support::JsonValue{ai::redact_text(*text)};
+        return support::JsonValue{support::redact_text(*text)};
     }
     if (const auto* values = value.get_if<support::JsonValue::array_t>()) {
         support::JsonValue::array_t redacted;
@@ -599,8 +599,8 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     if (const auto* object = value.get_if<support::JsonValue::object_t>()) {
         support::JsonValue::object_t redacted;
         for (const auto& [key, item] : *object) {
-            if (ai::looks_secret_key(key)) {
-                redacted.emplace(key, support::JsonValue{std::string{ai::kRedactionMarker}});
+            if (support::looks_secret_key(key)) {
+                redacted.emplace(key, support::JsonValue{std::string{support::kRedactionMarker}});
             } else {
                 redacted.emplace(key, redact_json_value(item));
             }
@@ -615,9 +615,9 @@ void redact_content(ai::Content& content) {
         [](auto& block) {
             using T = std::decay_t<decltype(block)>;
             if constexpr (std::is_same_v<T, ai::TextContent>) {
-                block.text = ai::redact_text(std::move(block.text));
+                block.text = support::redact_text(std::move(block.text));
             } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-                block.thinking = ai::redact_text(std::move(block.thinking));
+                block.thinking = support::redact_text(std::move(block.thinking));
             }
         },
         content);
@@ -625,13 +625,13 @@ void redact_content(ai::Content& content) {
 
 void redact_custom_message_entry_content(CustomMessageEntryContent& content) {
     if (auto* text = std::get_if<std::string>(&content)) {
-        *text = ai::redact_text(std::move(*text));
+        *text = support::redact_text(std::move(*text));
         return;
     }
 
     for (auto& block : std::get<std::vector<CustomMessageEntryContentBlock>>(content)) {
         if (auto* text = std::get_if<ai::TextContent>(&block)) {
-            text->text = ai::redact_text(std::move(text->text));
+            text->text = support::redact_text(std::move(text->text));
         }
     }
 }
@@ -641,16 +641,16 @@ void redact_assistant_content(ai::AssistantContent& content) {
         [](auto& block) {
             using T = std::decay_t<decltype(block)>;
             if constexpr (std::is_same_v<T, ai::TextContent>) {
-                block.text = ai::redact_text(std::move(block.text));
+                block.text = support::redact_text(std::move(block.text));
             } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-                block.thinking = ai::redact_text(std::move(block.thinking));
+                block.thinking = support::redact_text(std::move(block.thinking));
             } else if constexpr (std::is_same_v<T, ai::ToolCallContent>) {
                 if (block.arguments) {
                     block.arguments = redact_json_value(*block.arguments);
                 }
-                block.raw_arguments = ai::redact_text(std::move(block.raw_arguments));
+                block.raw_arguments = support::redact_text(std::move(block.raw_arguments));
                 if (block.argument_error) {
-                    block.argument_error = ai::redact_text(std::move(*block.argument_error));
+                    block.argument_error = support::redact_text(std::move(*block.argument_error));
                 }
             }
         },
@@ -663,16 +663,16 @@ void redact_assistant_content(ai::AssistantContent& content) {
         [](auto& concrete) {
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, ai::SystemMessage>) {
-                concrete.content = ai::redact_text(std::move(concrete.content));
+                concrete.content = support::redact_text(std::move(concrete.content));
             } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
                 for (auto& block : concrete.content) {
                     redact_assistant_content(block);
                 }
                 if (concrete.error_message) {
-                    concrete.error_message = ai::redact_text(std::move(*concrete.error_message));
+                    concrete.error_message = support::redact_text(std::move(*concrete.error_message));
                 }
             } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
-                concrete.output = ai::redact_text(std::move(concrete.output));
+                concrete.output = support::redact_text(std::move(concrete.output));
             } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
                 for (auto& block : concrete.content) {
                     redact_content(block);
@@ -686,7 +686,7 @@ void redact_assistant_content(ai::AssistantContent& content) {
                 // Summary text is already plain; no further redaction needed
             } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
                 if (auto* text = std::get_if<std::string>(&concrete.content)) {
-                    *text = ai::redact_text(std::move(*text));
+                    *text = support::redact_text(std::move(*text));
                 } else {
                     for (auto& block :
                          std::get<std::vector<ai::Content>>(concrete.content)) {

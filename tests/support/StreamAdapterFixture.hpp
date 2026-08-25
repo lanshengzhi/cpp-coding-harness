@@ -3,7 +3,7 @@
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include "ai/providers/StreamTransport.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -52,11 +52,11 @@ template <typename T, typename E>
 [[nodiscard]] std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
-        io,
-        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
-            co_return co_await cch::ai::detail::await_async_result(std::move(op));
-        }(std::move(result)),
-        boost::asio::use_future);
+            io,
+            [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+                co_return co_await cch::support::detail::await_async_result(std::move(op));
+            }(std::move(result)),
+            boost::asio::use_future);
     io.run();
     return future.get();
 }

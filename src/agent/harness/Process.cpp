@@ -1,6 +1,6 @@
 #include "Process.hpp"
 
-#include "ai/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <boost/asio/as_tuple.hpp>
@@ -160,7 +160,7 @@ void append_limited(
         // The byte cap can stop inside a multibyte UTF-8 character; re-bound
         // the captured text through the shared seam so model-visible output
         // never ends on a split sequence.
-        capture.data = ai::bounded_utf8(capture.data, limit.max_bytes);
+        capture.data = support::bounded_utf8(capture.data, limit.max_bytes);
     }
     co_return capture;
 }

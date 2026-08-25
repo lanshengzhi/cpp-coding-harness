@@ -3,7 +3,7 @@
 #include "ExecutionErrorClassification.hpp"
 #include "RuntimeRoot.hpp"
 #include "SyncLocalExecutionEnv.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "agent/harness/Process.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -294,9 +294,8 @@ struct ShellProcessOperation final {
             .runner = std::move(runner),
             .request = std::move(**state->request),
         });
-        auto process = co_await ai::detail::invoke_awaitable<
-            ShellProcessOperation,
-            support::Expected<harness::ProcessResult>>(std::move(operation));
+        auto process = co_await support::detail::invoke_awaitable<ShellProcessOperation,
+                support::Expected<harness::ProcessResult>>(std::move(operation));
         if (!process) {
             state->complete(std::unexpected(
                 classify_terminal_process_error(process.error())));

@@ -2,7 +2,7 @@
 
 #include "agent/ExecutionShared.hpp"
 #include "agent/ToolCallExecutor.hpp"
-#include "ai/AsyncResultBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 #include <cch/ai/Content.hpp>
@@ -206,7 +206,7 @@ boost::asio::awaitable<support::ExpectedVoid> run_agent_execution(RunPolicy& pol
             cancellation_completion_attempted = true;
         }
         auto stream = policy.stream_factory(model, std::move(request_context), std::move(stream_options));
-        auto assistant = co_await ai::detail::await_async_result(std::move(stream).run(
+        auto assistant = co_await support::detail::await_async_result(std::move(stream).run(
                 [emit, stream_event_state](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
                     if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
                         if (stream_event_state->assistant_start_emitted) {
