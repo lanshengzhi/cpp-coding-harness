@@ -1,5 +1,7 @@
 #include "Compaction.hpp"
 
+#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "support/Json.hpp"
@@ -11,7 +13,9 @@
 #include <optional>
 #include <random>
 #include <regex>
+#include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -21,6 +25,141 @@ namespace {
 
 constexpr std::size_t kEstimatedImageChars = 4800;
 constexpr std::size_t kToolResultMaxChars = 2000;
+
+/// Cut point selected for compaction (pi `CutPointResult`).
+struct CutPointResult {
+    /// Index of the first entry retained after compaction.
+    std::size_t first_kept_entry_index{0};
+    /// Index of the turn-start entry when the cut splits a turn, otherwise nullopt.
+    std::optional<std::size_t> turn_start_index{std::nullopt};
+    /// Whether the selected cut point splits an in-progress turn.
+    bool is_split_turn{false};
+};
+
+/// File paths touched by a session branch or compaction range (pi
+/// `FileOperations`).
+struct FileOperations {
+    /// Files read but not necessarily modified.
+    std::set<std::string> read;
+    /// Files written by full-file write operations.
+    std::set<std::string> written;
+    /// Files modified by edit operations.
+    std::set<std::string> edited;
+};
+
+/// Sorted read-only and modified file lists (pi `computeFileLists`).
+struct FileLists {
+    std::vector<std::string> read_files;
+    std::vector<std::string> modified_files;
+};
+
+/// Prepared inputs for a compaction run (pi `CompactionPreparation`).
+struct CompactionPreparation {
+    /// Entry id where retained history starts.
+    std::string first_kept_entry_id;
+    /// Messages summarized into the history summary.
+    std::vector<ai::MessageVariant> messages_to_summarize;
+    /// Prefix messages summarized separately when compaction splits a turn.
+    std::vector<ai::MessageVariant> turn_prefix_messages;
+    /// Recent messages retained after compaction and stored on the compaction
+    /// entry.
+    std::vector<ai::MessageVariant> retained_tail;
+    /// Whether compaction splits a turn.
+    bool is_split_turn{false};
+    /// Estimated context tokens before compaction.
+    std::size_t tokens_before{0};
+    /// Previous compaction summary used for iterative updates.
+    std::optional<std::string> previous_summary;
+    /// File operations extracted from summarized history.
+    FileOperations file_ops;
+    /// Settings used to prepare compaction.
+    CompactionSettings settings;
+};
+
+// ── Verbatim pi summarization prompts (harness/compaction/compaction.ts) ────
+
+constexpr std::string_view kSummarizationSystemPrompt =
+        "You are a context summarization assistant. Your task is to read a "
+        "conversation between a user and an AI assistant, then produce a "
+        "structured summary following the exact format specified.\n\n"
+        "Do NOT continue the conversation. Do NOT respond to any questions in the "
+        "conversation. ONLY output the structured summary.";
+
+constexpr std::string_view kSummarizationPrompt =
+        "The messages above are a conversation to summarize. Create a structured "
+        "context checkpoint summary that another LLM will use to continue the "
+        "work.\n\n"
+        "Use this EXACT format:\n\n"
+        "## Goal\n"
+        "[What is the user trying to accomplish? Can be multiple items if the "
+        "session covers different tasks.]\n\n"
+        "## Constraints & Preferences\n"
+        "- [Any constraints, preferences, or requirements mentioned by user]\n"
+        "- [Or \"(none)\" if none were mentioned]\n\n"
+        "## Progress\n"
+        "### Done\n"
+        "- [x] [Completed tasks/changes]\n\n"
+        "### In Progress\n"
+        "- [ ] [Current work]\n\n"
+        "### Blocked\n"
+        "- [Issues preventing progress, if any]\n\n"
+        "## Key Decisions\n"
+        "- **[Decision]**: [Brief rationale]\n\n"
+        "## Next Steps\n"
+        "1. [Ordered list of what should happen next]\n\n"
+        "## Critical Context\n"
+        "- [Any data, examples, or references needed to continue]\n"
+        "- [Or \"(none)\" if not applicable]\n\n"
+        "Keep each section concise. Preserve exact file paths, function names, "
+        "and error messages.";
+
+constexpr std::string_view kUpdateSummarizationPrompt =
+        "The messages above are NEW conversation messages to incorporate into the "
+        "existing summary provided in <previous-summary> tags.\n\n"
+        "Update the existing structured summary with new information. RULES:\n"
+        "- PRESERVE all existing information from the previous summary\n"
+        "- ADD new progress, decisions, and context from the new messages\n"
+        "- UPDATE the Progress section: move items from \"In Progress\" to "
+        "\"Done\" when completed\n"
+        "- UPDATE \"Next Steps\" based on what was accomplished\n"
+        "- PRESERVE exact file paths, function names, and error messages\n\n"
+        "Use this EXACT format:\n\n"
+        "## Goal\n"
+        "[Preserve existing goals, add new ones if the task expanded]\n\n"
+        "## Constraints & Preferences\n"
+        "- [Preserve constraints, add new ones discovered]\n"
+        "- [Or \"(none)\" if none were mentioned]\n\n"
+        "## Progress\n"
+        "### Done\n"
+        "- [x] [Include previously done items AND newly completed items]\n\n"
+        "### In Progress\n"
+        "- [ ] [Current work - update based on progress]\n\n"
+        "### Blocked\n"
+        "- [Current blockers - remove if resolved]\n\n"
+        "## Key Decisions\n"
+        "- **[Decision]**: [Brief rationale] (preserve all previous, add new)\n\n"
+        "## Next Steps\n"
+        "1. [Update based on current state]\n\n"
+        "## Critical Context\n"
+        "- [Preserve important context, add new if needed]\n\n"
+        "Keep each section concise. Preserve exact file paths, function names, "
+        "and error messages.";
+
+constexpr std::string_view kTurnPrefixSummarizationPrompt =
+        "This is the PREFIX of a turn that was too large to keep. The SUFFIX "
+        "(recent work) is retained.\n\n"
+        "Summarize the prefix to provide context for the retained suffix:\n\n"
+        "## Original Request\n"
+        "[What did the user ask for in this turn?]\n\n"
+        "## Early Progress\n"
+        "- [Key decisions and work done in the prefix]\n\n"
+        "## Context for Suffix\n"
+        "- [Information needed to understand the retained recent work]\n\n"
+        "Be concise. Focus on what's needed to understand the kept suffix.";
+
+/// pi `serializeConversation` is defined with the door's private mechanics
+/// below; `make_summarization_call` uses it.
+[[nodiscard]] std::string serialize_conversation(const std::vector<ai::MessageVariant>& messages);
 
 [[nodiscard]] support::Error compaction_error(
     support::ErrorCode code,
@@ -510,18 +649,6 @@ std::size_t estimate_tokens(const ai::MessageVariant& message) {
     return (chars + 3) / 4;
 }
 
-std::optional<ai::Usage> get_last_assistant_usage(
-    const std::vector<ai::MessageVariant>& messages) {
-    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
-        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&*it)) {
-            if (is_assistant_usage_valid(*assistant)) {
-                return assistant->usage;
-            }
-        }
-    }
-    return std::nullopt;
-}
-
 ContextUsageEstimate estimate_context_tokens(
     const std::vector<ai::MessageVariant>& messages) {
     std::optional<std::pair<ai::Usage, std::size_t>> usage_info;
@@ -583,39 +710,35 @@ namespace {
     return cut_points;
 }
 
-} // namespace
-
-std::ptrdiff_t find_turn_start_index(
-    const std::vector<const SessionEntry*>& path,
-    std::size_t entry_index,
-    std::size_t start_index) {
+/// pi `findTurnStartIndex`.
+[[nodiscard]] std::optional<std::size_t> find_turn_start_index(
+        const std::vector<const SessionEntry*>& path, std::size_t entry_index, std::size_t start_index) {
     for (std::size_t i = entry_index + 1; i > start_index; --i) {
         const auto* entry = path[i - 1];
         if (entry->kind == SessionEntryKind::BranchSummary ||
             entry->kind == SessionEntryKind::CustomMessage) {
-            return static_cast<std::ptrdiff_t>(i - 1);
+            return i - 1;
         }
         if (entry->kind == SessionEntryKind::Message) {
             const auto role = role_of_message(entry->message);
             if (role && is_turn_start_role(*role)) {
-                return static_cast<std::ptrdiff_t>(i - 1);
+                return i - 1;
             }
         }
     }
-    return -1;
+    return std::nullopt;
 }
 
-CutPointResult find_cut_point(
-    const std::vector<const SessionEntry*>& path,
-    std::size_t start_index,
-    std::size_t end_index,
-    std::size_t keep_recent_tokens) {
+[[nodiscard]] CutPointResult find_cut_point(const std::vector<const SessionEntry*>& path,
+        std::size_t start_index,
+        std::size_t end_index,
+        std::size_t keep_recent_tokens) {
     const auto cut_points = find_valid_cut_points(path, start_index, end_index);
     if (cut_points.empty()) {
         return CutPointResult{
-            .first_kept_entry_index = start_index,
-            .turn_start_index = -1,
-            .is_split_turn = false,
+                .first_kept_entry_index = start_index,
+                .turn_start_index = std::nullopt,
+                .is_split_turn = false,
         };
     }
 
@@ -655,13 +778,13 @@ CutPointResult find_cut_point(
     const auto* cut_entry = path[cut_index];
     const bool is_user_message = cut_entry->kind == SessionEntryKind::Message &&
         role_of_message(cut_entry->message) == "user";
-    const std::ptrdiff_t turn_start_index =
-        is_user_message ? -1 : find_turn_start_index(path, cut_index, start_index);
+    const std::optional<std::size_t> turn_start_index =
+            is_user_message ? std::nullopt : find_turn_start_index(path, cut_index, start_index);
 
     return CutPointResult{
-        .first_kept_entry_index = cut_index,
-        .turn_start_index = turn_start_index,
-        .is_split_turn = !is_user_message && turn_start_index != -1,
+            .first_kept_entry_index = cut_index,
+            .turn_start_index = turn_start_index,
+            .is_split_turn = !is_user_message && turn_start_index.has_value(),
     };
 }
 
@@ -699,7 +822,7 @@ void extract_file_ops_from_message(
     }
 }
 
-FileLists compute_file_lists(const FileOperations& file_ops) {
+[[nodiscard]] FileLists compute_file_lists(const FileOperations& file_ops) {
     std::set<std::string> modified{file_ops.edited};
     modified.insert(file_ops.written.begin(), file_ops.written.end());
 
@@ -719,9 +842,8 @@ FileLists compute_file_lists(const FileOperations& file_ops) {
     };
 }
 
-std::string format_file_operations(
-    const std::vector<std::string>& read_files,
-    const std::vector<std::string>& modified_files) {
+[[nodiscard]] std::string format_file_operations(
+        const std::vector<std::string>& read_files, const std::vector<std::string>& modified_files) {
     std::vector<std::string> sections;
     if (!read_files.empty()) {
         std::string section = "<read-files>\n";
@@ -758,8 +880,7 @@ std::string format_file_operations(
     return result;
 }
 
-std::string serialize_conversation(
-    const std::vector<ai::MessageVariant>& messages) {
+[[nodiscard]] std::string serialize_conversation(const std::vector<ai::MessageVariant>& messages) {
     std::vector<std::string> parts;
     for (const auto& message : messages) {
         if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
@@ -824,41 +945,38 @@ std::string serialize_conversation(
     return result;
 }
 
-support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
-    const std::vector<const SessionEntry*>& path,
-    CompactionSettings settings) {
+[[nodiscard]] support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
+        const std::vector<const SessionEntry*>& path, CompactionSettings settings) {
     if (path.empty() || path.back()->kind == SessionEntryKind::Compaction) {
         return std::nullopt;
     }
 
-    std::ptrdiff_t prev_compaction_index = -1;
+    std::optional<std::size_t> prev_compaction_index;
     for (std::size_t i = path.size(); i > 0; --i) {
         if (path[i - 1]->kind == SessionEntryKind::Compaction) {
-            prev_compaction_index = static_cast<std::ptrdiff_t>(i - 1);
+            prev_compaction_index = i - 1;
             break;
         }
     }
 
     std::optional<std::string> previous_summary;
     std::size_t boundary_start = 0;
-    if (prev_compaction_index >= 0) {
-        const auto* prev_compaction = path[static_cast<std::size_t>(prev_compaction_index)];
+    if (prev_compaction_index.has_value()) {
+        const auto* prev_compaction = path[*prev_compaction_index];
         const auto* value = std::get_if<CompactionEntryValue>(&prev_compaction->value);
         if (value != nullptr) {
             previous_summary = value->summary;
         }
-        std::ptrdiff_t first_kept_index = -1;
+        std::optional<std::size_t> first_kept_index;
         if (value != nullptr && value->first_kept_entry_id) {
             for (std::size_t j = 0; j < path.size(); ++j) {
                 if (path[j]->entry_id == *value->first_kept_entry_id) {
-                    first_kept_index = static_cast<std::ptrdiff_t>(j);
+                    first_kept_index = j;
                     break;
                 }
             }
         }
-        boundary_start = first_kept_index >= 0
-            ? static_cast<std::size_t>(first_kept_index)
-            : static_cast<std::size_t>(prev_compaction_index) + 1;
+        boundary_start = first_kept_index.value_or(*prev_compaction_index + 1);
     }
     const std::size_t boundary_end = path.size();
 
@@ -876,9 +994,7 @@ support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
     }
     const std::string first_kept_entry_id = first_kept_entry->entry_id;
 
-    const std::size_t history_end = cut_point.is_split_turn
-        ? static_cast<std::size_t>(cut_point.turn_start_index)
-        : cut_point.first_kept_entry_index;
+    const std::size_t history_end = cut_point.turn_start_index.value_or(cut_point.first_kept_entry_index);
 
     CompactionPreparation preparation;
     preparation.first_kept_entry_id = first_kept_entry_id;
@@ -892,14 +1008,19 @@ support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
             preparation.messages_to_summarize.push_back(std::move(*message));
         }
     }
-    if (cut_point.is_split_turn) {
-        for (std::size_t i = static_cast<std::size_t>(cut_point.turn_start_index);
-             i < cut_point.first_kept_entry_index; ++i) {
+    if (cut_point.turn_start_index.has_value()) {
+        for (std::size_t i = *cut_point.turn_start_index; i < cut_point.first_kept_entry_index; ++i) {
             if (auto message = message_from_entry_for_compaction(path[i])) {
                 preparation.turn_prefix_messages.push_back(std::move(*message));
             }
         }
     }
+    // pi `prepareCompaction`: when neither history nor turn prefix has
+    // messages to summarize, compaction is not applicable.
+    if (preparation.messages_to_summarize.empty() && preparation.turn_prefix_messages.empty()) {
+        return std::nullopt;
+    }
+
     for (std::size_t i = cut_point.first_kept_entry_index; i < boundary_end; ++i) {
         if (auto message = message_from_entry_for_compaction(path[i])) {
             preparation.retained_tail.push_back(std::move(*message));
@@ -909,8 +1030,8 @@ support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
     // File operations extracted from the summarized history and any previous
     // pi-generated compaction's details (pi `extractFileOperations`).
     auto& file_ops = preparation.file_ops;
-    if (prev_compaction_index >= 0) {
-        const auto* prev_compaction = path[static_cast<std::size_t>(prev_compaction_index)];
+    if (prev_compaction_index.has_value()) {
+        const auto* prev_compaction = path[*prev_compaction_index];
         const auto* value = std::get_if<CompactionEntryValue>(&prev_compaction->value);
         if (value != nullptr && !value->from_hook.value_or(false) &&
             value->details.has_value()) {
@@ -952,8 +1073,6 @@ support::Expected<std::optional<CompactionPreparation>> prepare_compaction(
 
     return preparation;
 }
-
-namespace {
 
 /// pi `generateSummaryWithUsage`: summarize `current_messages` into text plus
 /// usage through one `cacheRetention:"none"` + fresh-session-id request.
@@ -1055,22 +1174,12 @@ generate_turn_prefix_summary(
     return capped;
 }
 
-} // namespace
-
-boost::asio::awaitable<support::Expected<CompactionResult>> compact(
-    const CompactionPreparation& preparation,
-    const ai::Model& model,
-    CompactionRunOptions run_options) {
-    if (preparation.first_kept_entry_id.empty()) {
-        co_return std::unexpected(compaction_error(
-            support::ErrorCode::Session,
-            "First kept entry has no UUID - session may need migration"));
-    }
-    if (!run_options.summarization_stream) {
-        co_return std::unexpected(compaction_error(
-            support::ErrorCode::Validation,
-            "summarization stream is unavailable"));
-    }
+/// The summarization half of the door (pi harness `compact`): generate the
+/// summary through the injected stream seam and assemble the result with pi's
+/// file-operation tags and details. The door has already prepared the branch
+/// and validated the stream.
+[[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> summarize_compaction(
+        const CompactionPreparation& preparation, const ai::Model& model, CompactionRunOptions& run_options) {
     SummarizationSessionIdFactory session_id_factory =
         run_options.session_id_factory
             ? std::move(run_options.session_id_factory)
@@ -1156,6 +1265,56 @@ boost::asio::awaitable<support::Expected<CompactionResult>> compact(
     details_object.emplace("modifiedFiles", std::move(modified_array));
     result.details = support::JsonValue{std::move(details_object)};
     co_return result;
+}
+
+} // namespace
+
+boost::asio::awaitable<support::Expected<CompactionOutcomeVariant>> compact(
+        SessionStore& store, const ai::Model& model, CompactionRunOptions run_options) {
+    // The store's live tree answers the branch query from memory (pi
+    // `SessionManager.getBranch`); the session file is not re-read. pi's
+    // branch is root-to-leaf with the leaf last; the C++ tree walks
+    // leaf-to-root, so reverse for the machinery.
+    auto branch_entries = store.get_branch();
+    std::reverse(branch_entries.begin(), branch_entries.end());
+    std::vector<const SessionEntry*> branch;
+    branch.reserve(branch_entries.size());
+    for (const auto& entry : branch_entries) {
+        branch.push_back(&entry);
+    }
+
+    // pi's not-applicable outcomes, typed: pi's session re-inspected the
+    // branch tail after an undefined preparation; the door returns the reason.
+    if (branch.empty()) {
+        co_return CompactionOutcomeVariant{CompactionSkipped{.reason = CompactionSkipped::Reason::Empty}};
+    }
+    if (branch.back()->kind == SessionEntryKind::Compaction) {
+        co_return CompactionOutcomeVariant{CompactionSkipped{.reason = CompactionSkipped::Reason::AlreadyCompacted}};
+    }
+
+    auto preparation = prepare_compaction(branch, run_options.settings);
+    if (!preparation) {
+        co_return std::unexpected(preparation.error());
+    }
+    if (!*preparation) {
+        co_return CompactionOutcomeVariant{CompactionSkipped{.reason = CompactionSkipped::Reason::NothingToSummarize}};
+    }
+
+    // The auto trigger's `compaction_start` point (pi `_runAutoCompaction`):
+    // after a successful preparation, before the first summarization request.
+    if (run_options.on_compaction_start) {
+        run_options.on_compaction_start();
+    }
+    if (!run_options.summarization_stream) {
+        co_return std::unexpected(
+                compaction_error(support::ErrorCode::Validation, "summarization stream is unavailable"));
+    }
+
+    auto result = co_await summarize_compaction(**preparation, model, run_options);
+    if (!result) {
+        co_return std::unexpected(result.error());
+    }
+    co_return CompactionOutcomeVariant{std::move(*result)};
 }
 
 } // namespace cch::harness::session

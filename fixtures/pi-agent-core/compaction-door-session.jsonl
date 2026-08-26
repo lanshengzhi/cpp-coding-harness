@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"compaction-door-session","timestamp":"2026-08-26T00:00:00.000Z","cwd":"/workspace"}
+{"id":"bs000001","parentId":null,"timestamp":"2026-08-26T00:00:01.000Z","type":"branch_summary","fromId":"abandoned01","summary":"branch summary text"}
+{"id":"cm000001","parentId":"bs000001","timestamp":"2026-08-26T00:00:02.000Z","type":"custom_message","customType":"extension.msg","content":"injected custom content","display":true}
+{"id":"u0000001","parentId":"cm000001","timestamp":"2026-08-26T00:00:03.000Z","type":"message","message":{"role":"user","content":[{"type":"text","text":"recent question"}],"timestamp":1784678401000}}
+{"id":"a0000001","parentId":"u0000001","timestamp":"2026-08-26T00:00:04.000Z","type":"message","message":{"role":"assistant","content":[{"type":"text","text":"recent answer"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"stop","usage":{"input":10,"output":20,"cacheRead":0,"cacheWrite":0,"totalTokens":30,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1784678402000}}

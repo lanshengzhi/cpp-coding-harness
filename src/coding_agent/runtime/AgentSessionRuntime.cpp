@@ -1760,28 +1760,14 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
             support::ErrorCode::Validation,
             "compaction requires a persisted session file"));
     }
-    const auto session_path = *store_path;
-
-    const auto settings = effective_compaction_settings();
-    // The store's live tree answers the branch query from memory (pi
-    // `SessionManager.getBranch`); the session file is not re-read.
-    auto branch_entries = session_.store->get_branch();
-    // pi SessionManager.getBranch is root-to-leaf with the leaf last; the C++
-    // tree walks leaf-to-root, so reverse for the machinery.
-    std::reverse(branch_entries.begin(), branch_entries.end());
-    std::vector<const harness::session::SessionEntry*> branch;
-    branch.reserve(branch_entries.size());
-    for (const auto& entry : branch_entries) {
-        branch.push_back(&entry);
+    auto outcome = co_await attempt_compaction(std::move(custom_instructions), {});
+    if (!outcome) {
+        co_return std::unexpected(outcome.error());
     }
-
-    auto preparation = harness::session::prepare_compaction(branch, settings);
-    if (!preparation) {
-        co_return std::unexpected(preparation.error());
-    }
-    if (!*preparation) {
-        if (!branch.empty() &&
-            branch.back()->kind == harness::session::SessionEntryKind::Compaction) {
+    if (const auto* skipped = std::get_if<harness::session::CompactionSkipped>(&*outcome)) {
+        // pi `AgentSession.compact`'s verbatim refusals, mapped from the
+        // door's typed skip reason (pi re-inspected the branch tail).
+        if (skipped->reason == harness::session::CompactionSkipped::Reason::AlreadyCompacted) {
             co_return std::unexpected(support::make_error(
                 support::ErrorCode::Validation,
                 "Already compacted"));
@@ -1790,24 +1776,12 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
             support::ErrorCode::Validation,
             "Nothing to compact (session too small)"));
     }
-    const auto& prep = **preparation;
-    // pi AgentSession.compact refuses when neither history nor turn prefix has
-    // messages to summarize (a session that fits the keepRecentTokens budget).
-    if (prep.messages_to_summarize.empty() && prep.turn_prefix_messages.empty()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Nothing to compact (session too small)"));
-    }
-
-    co_return co_await execute_compaction(
-        prep, settings, std::move(custom_instructions));
+    co_return co_await commit_compaction(std::move(std::get<harness::session::CompactionResult>(*outcome)));
 }
 
-boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
-AgentSessionRuntime::execute_compaction(
-    const harness::session::CompactionPreparation& preparation,
-    const harness::session::CompactionSettings& /*settings*/,
-    std::string custom_instructions) {
+boost::asio::awaitable<support::Expected<harness::session::CompactionOutcomeVariant>>
+AgentSessionRuntime::attempt_compaction(
+        std::string custom_instructions, harness::session::CompactionStartHook on_compaction_start) {
     if (!agent_ || !session_.store) {
         co_return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
@@ -1821,7 +1795,6 @@ AgentSessionRuntime::execute_compaction(
             support::ErrorCode::Validation,
             "compaction requires a persisted session file"));
     }
-    const auto session_path = *store_path;
     const auto model = agent_->state().model;
 
     harness::session::SummarizationStreamFn summarization_stream =
@@ -1835,18 +1808,30 @@ AgentSessionRuntime::execute_compaction(
     };
 
     harness::session::CompactionRunOptions run_options;
+    run_options.settings = effective_compaction_settings();
     if (!custom_instructions.empty()) {
         run_options.custom_instructions = std::move(custom_instructions);
     }
     run_options.thinking_level = agent_->state().thinking_level;
     run_options.stop_token = std::stop_token{};
     run_options.summarization_stream = std::move(summarization_stream);
+    run_options.on_compaction_start = std::move(on_compaction_start);
 
-    auto result = co_await harness::session::compact(
-        preparation, model, std::move(run_options));
-    if (!result) {
-        co_return std::unexpected(result.error());
+    co_return co_await harness::session::compact(*session_.store, model, std::move(run_options));
+}
+
+boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>> AgentSessionRuntime::commit_compaction(
+        harness::session::CompactionResult result) {
+    if (!agent_ || !session_.store) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session Agent is unavailable"));
     }
+
+    coding_agent::CompactionResult compaction_result;
+    compaction_result.summary = result.summary;
+    compaction_result.first_kept_entry_id = result.first_kept_entry_id;
+    compaction_result.tokens_before = result.tokens_before;
+    compaction_result.usage = result.usage;
+    compaction_result.details = result.details;
 
     // Persist the CompactionEntry with pi's full field set (summary,
     // firstKeptEntryId, tokensBefore, retainedTail, details, usage; fromHook
@@ -1856,18 +1841,17 @@ AgentSessionRuntime::execute_compaction(
     if (persistence_) {
         co_await persistence_->drain();
     }
-    if (auto appended = session_.store->append_compaction(
-            std::nullopt,
-            harness::session::CompactionEntryValue{
-                .summary = result->summary,
-                .first_kept_entry_id = result->first_kept_entry_id,
-                .tokens_before = result->tokens_before,
-                .retained_tail = std::move(result->retained_tail),
-                .details = result->details,
-                .usage = result->usage,
-                .from_hook = false,
-            });
-        !appended) {
+    if (auto appended = session_.store->append_compaction(std::nullopt,
+                harness::session::CompactionEntryValue{
+                        .summary = std::move(result.summary),
+                        .first_kept_entry_id = std::move(result.first_kept_entry_id),
+                        .tokens_before = result.tokens_before,
+                        .retained_tail = std::move(result.retained_tail),
+                        .details = std::move(result.details),
+                        .usage = result.usage,
+                        .from_hook = false,
+                });
+            !appended) {
         co_return std::unexpected(appended.error());
     }
 
@@ -1883,25 +1867,15 @@ AgentSessionRuntime::execute_compaction(
         co_return std::unexpected(replaced.error());
     }
 
-    coding_agent::CompactionResult compaction_result;
-    compaction_result.summary = std::move(result->summary);
-    compaction_result.first_kept_entry_id =
-        std::move(result->first_kept_entry_id);
-    compaction_result.tokens_before = result->tokens_before;
     std::size_t estimated_after = 0;
     for (const auto& message : context.messages) {
         estimated_after += harness::session::estimate_tokens(message);
     }
     compaction_result.estimated_tokens_after = estimated_after;
-    compaction_result.usage = result->usage;
-    compaction_result.details = result->details;
     co_return compaction_result;
 }
 
-boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
-    bool will_retry,
-    std::string reason) {
-    const auto settings = effective_compaction_settings();
+boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(bool will_retry, std::string reason) {
     if (!agent_ || !session_.store) {
         co_return false;
     }
@@ -1918,36 +1892,32 @@ boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
 
     // The triggering turn's terminal commitment is submitted synchronously
     // but settles through the persistence channel's Runtime hops, so the
-    // branch read below can race the final append and cut the just-finished
-    // assistant answer out of the retained tail (issue #526). Drain the
-    // channel first: event-driven quiescence, not a wall-clock wait.
+    // branch read inside the door can race the final append and cut the
+    // just-finished assistant answer out of the retained tail (issue #526).
+    // Drain the channel first: event-driven quiescence, not a wall-clock wait.
     if (persistence_) {
         co_await persistence_->drain();
     }
 
-    auto branch_entries = session_.store->get_branch();
-    std::reverse(branch_entries.begin(), branch_entries.end());
-    std::vector<const harness::session::SessionEntry*> branch;
-    branch.reserve(branch_entries.size());
-    for (const auto& entry : branch_entries) {
-        branch.push_back(&entry);
-    }
-
-    auto preparation = harness::session::prepare_compaction(branch, settings);
-    if (!preparation || !*preparation) {
-        co_return false;
-    }
-    const auto& prep = **preparation;
-    // pi's coding-agent `prepareCompaction` returns undefined when there is
-    // nothing to summarize; the same guard skips the auto trigger.
-    if (prep.messages_to_summarize.empty() && prep.turn_prefix_messages.empty()) {
-        co_return false;
-    }
-
     // pi `_runAutoCompaction`: the auto trigger emits `compaction_start`
-    // with its reason before summarizing.
-    emit_session_event(CompactionStartEvent{.reason = reason});
-    auto result = co_await execute_compaction(prep, settings, {});
+    // with its reason after a successful preparation, before summarizing; a
+    // not-applicable preparation returns false without emitting any events.
+    harness::session::CompactionStartHook on_compaction_start = [this, reason] {
+        emit_session_event(CompactionStartEvent{.reason = reason});
+    };
+    auto outcome = co_await attempt_compaction({}, std::move(on_compaction_start));
+    if (!outcome) {
+        emit_session_event(CompactionEndEvent{
+                .reason = reason,
+                .aborted = false,
+                .error_message = outcome.error().message,
+        });
+        co_return false;
+    }
+    if (std::holds_alternative<harness::session::CompactionSkipped>(*outcome)) {
+        co_return false;
+    }
+    auto result = co_await commit_compaction(std::move(std::get<harness::session::CompactionResult>(*outcome)));
     if (!result) {
         emit_session_event(CompactionEndEvent{
             .reason = reason,

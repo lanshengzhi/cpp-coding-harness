@@ -498,15 +498,19 @@ private:
     [[nodiscard]] boost::asio::awaitable<bool> run_auto_compaction(
         bool will_retry,
         std::string reason);
-    /// Shared compaction execution for the manual trigger and the auto policy:
-    /// summarize `preparation` through the session's `ModelRuntime`, persist
-    /// the `compaction` entry, and rebuild the live Agent context as
-    /// compactionSummary + retained tail.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
-    execute_compaction(
-        const harness::session::CompactionPreparation& preparation,
-        const harness::session::CompactionSettings& settings,
-        std::string custom_instructions);
+    /// Shared compaction execution for the manual trigger and the auto
+    /// policy: run the harness compaction door over the session store. The
+    /// branch assembly, preparation, skip reasons, and summarization stay
+    /// inside the module; `on_compaction_start` fires inside the door after a
+    /// successful preparation (the auto trigger's `compaction_start` point;
+    /// the manual trigger emits before entering the door and passes nothing).
+    [[nodiscard]] boost::asio::awaitable<support::Expected<harness::session::CompactionOutcomeVariant>>
+    attempt_compaction(std::string custom_instructions, harness::session::CompactionStartHook on_compaction_start);
+    /// Persist a successful harness result as the `compaction` session entry
+    /// and rebuild the live Agent context as compactionSummary + retained
+    /// tail (the append/rebuild half of pi `AgentSession.compact`).
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>> commit_compaction(
+            harness::session::CompactionResult result);
     /// Resolve the effective compaction settings from the merged settings
     /// scope with pi's `DEFAULT_COMPACTION_SETTINGS` applied to missing fields.
     [[nodiscard]] harness::session::CompactionSettings effective_compaction_settings() const;
