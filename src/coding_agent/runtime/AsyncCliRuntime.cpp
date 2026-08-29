@@ -161,12 +161,13 @@ void print_session_diagnostics(
     };
 }
 
-[[nodiscard]] int run_native_tui_boot(
-    InitialMessageResult initial,
-    const CliConfig& config,
-    std::shared_ptr<ai::Models> models,
-    CliStreams streams,
-    coding_agent::runtime::AgentSessionCreationRequest request) {
+[[nodiscard]] int run_native_tui_boot(InitialMessageResult initial,
+        const CliConfig& config,
+        std::shared_ptr<ai::Models> models,
+        std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
+        bool model_runtime_cli_fake,
+        CliStreams streams,
+        coding_agent::runtime::AgentSessionCreationRequest request) {
     cch::tui::ProcessTerminal terminal;
     auto io = std::make_shared<boost::asio::io_context>();
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, kRuntimeLimits);
@@ -175,33 +176,32 @@ void print_session_diagnostics(
     // capacity, and model/auth resources are reused rather than reconstructed
     // for each Session, and closing one Session never releases the shared
     // Models resources the replacement Session needs. The injected test
-    // catalog path keeps its own per-Session wrapping (the same `ai::Models`
-    // is already shared there); a production runtime-creation failure falls
+    // runtime follows the same sharing rule; a production runtime-creation failure falls
     // back to per-Session construction so the boot reports the same
     // session-creation error it would have reported otherwise.
-    std::shared_ptr<coding_agent::ModelRuntime> shared_runtime;
-    if (!models) {
+    std::shared_ptr<coding_agent::ModelRuntime> shared_runtime = std::move(model_runtime);
+    if (!models && !shared_runtime) {
         if (auto created = coding_agent::ModelRuntime::create({}); created) {
             shared_runtime = std::move(*created);
         }
     }
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session_facts(config.session_facts)
-        .with_agent_config_directory(coding_agent::agent_config_dir())
-        .with_initial_prompt(
-            initial.initial_message.empty()
-                ? std::nullopt
-                : std::optional<std::string>{std::move(initial.initial_message)})
-        .with_initial_prompt_options(coding_agent::PromptOptions{
-            .expand_prompt_templates = true,
-            .images = std::move(initial.initial_images),
-        })
-        .with_defer_boot(std::move(request))
-        .with_runtime_root(runtime_root)
-        .with_shared_runtime(shared_runtime)
-        .with_models(models)
-        .with_error_stream(&streams.error)
-        .build();
+                       .with_session_facts(config.session_facts)
+                       .with_agent_config_directory(coding_agent::agent_config_dir())
+                       .with_initial_prompt(initial.initial_message.empty()
+                                                    ? std::nullopt
+                                                    : std::optional<std::string>{std::move(initial.initial_message)})
+                       .with_initial_prompt_options(coding_agent::PromptOptions{
+                               .expand_prompt_templates = true,
+                               .images = std::move(initial.initial_images),
+                       })
+                       .with_defer_boot(std::move(request))
+                       .with_runtime_root(runtime_root)
+                       .with_shared_runtime(shared_runtime)
+                       .with_model_runtime_cli_fake(model_runtime_cli_fake)
+                       .with_models(models)
+                       .with_error_stream(&streams.error)
+                       .build();
 
     auto future = boost::asio::co_spawn(
         *io,
@@ -250,13 +250,14 @@ void print_session_diagnostics(
 
 } // namespace
 
-[[nodiscard]] int run_async_cli(
-    const CliConfig& config,
-    Frontend frontend,
-    CliStreams streams,
-    FrontendEnvironment environment,
-    std::shared_ptr<ai::Models> models,
-    ResumePickerSink resume_picker) {
+[[nodiscard]] int run_async_cli(const CliConfig& config,
+        Frontend frontend,
+        CliStreams streams,
+        FrontendEnvironment environment,
+        std::shared_ptr<ai::Models> models,
+        std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
+        bool model_runtime_cli_fake,
+        ResumePickerSink resume_picker) {
     // pi main.ts boot order: the session-family flag guards run before any
     // session machinery, the cross-project fork prompt happens during session
     // selection (before piped stdin is read), and the `--name` guard follows
@@ -377,11 +378,12 @@ void print_session_diagnostics(
     // one of the two call sites below executes per run, so moving `models`
     // here is safe.
     const auto create_session = [&]() {
-        return coding_agent::create_agent_session(
-            std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                .models = std::move(models), .user_shell = nullptr});
+        return coding_agent::create_agent_session(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime),
+                        .cli_fake = model_runtime_cli_fake,
+                        .models = std::move(models),
+                        .user_shell = nullptr});
     };
 
     // pi main.ts: `--list-models` runs post-runtime pre-stdin and exits 0
@@ -463,12 +465,13 @@ void print_session_diagnostics(
         // pi main.ts: the interactive boot defers session creation until
         // after the boot trust prompt; the CLI passes the session factory
         // and the base request to the boot.
-        return run_native_tui_boot(
-            std::move(*initial),
-            config,
-            models,
-            streams,
-            std::move(request));
+        return run_native_tui_boot(std::move(*initial),
+                config,
+                models,
+                std::move(model_runtime),
+                model_runtime_cli_fake,
+                streams,
+                std::move(request));
     }
 
     auto runtime_io = std::make_shared<boost::asio::io_context>();
@@ -541,13 +544,14 @@ void print_session_diagnostics(
         streams.error << '\n';
         return 1;
     } else {
-        return run_async_cli(
-            config,
-            *frontend,
-            streams,
-            environment,
-            std::move(options.models),
-            std::move(options.resume_picker));
+        return run_async_cli(config,
+                *frontend,
+                streams,
+                environment,
+                std::move(options.models),
+                std::move(options.model_runtime),
+                options.model_runtime_cli_fake,
+                std::move(options.resume_picker));
     }
 }
 

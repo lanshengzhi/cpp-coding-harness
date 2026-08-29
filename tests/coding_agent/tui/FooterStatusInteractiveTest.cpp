@@ -13,7 +13,6 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "ai/providers/FakeProvider.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -720,8 +719,10 @@ TEST_CASE(
     request.model_runtime = fixture.runtime;
     auto created = coding_agent::create_agent_session(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .models = nullptr, .user_shell = std::make_unique<tests::FakeUserShell>()});
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
+                    .cli_fake = false,
+                    .models = nullptr,
+                    .user_shell = std::make_unique<tests::FakeUserShell>()});
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});

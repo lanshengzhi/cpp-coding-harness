@@ -1,12 +1,6 @@
 #include "ProviderComposer.hpp"
 
-#include "ai/providers/ComposedProvider.hpp"
-#include "ai/ModelStreamBridge.hpp"
-#include "ai/auth/KimiCodingOAuth.hpp"
-#include "ai/auth/OpenAICodexOAuth.hpp"
-#include "ai/providers/CodexCatalog.hpp"
-#include "ai/providers/EnvApiKeyAuth.hpp"
-#include "ai/providers/KimiCatalog.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -491,32 +485,56 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 }
 
 [[nodiscard]] std::optional<ai::ApiKeyAuth> compose_api_key_auth(
-    // Owning: the check/resolve closures below are stored on the composed
-    // Provider and invoked asynchronously, after the caller's provider-id
-    // string (e.g. the recompose loop's id set) is gone (ASan, issue #473).
-    std::string provider_id,
-    const std::shared_ptr<ai::Provider>& base,
-    const std::optional<ModelsJsonProvider>& config,
-    const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
-    ai::ApiKeyAuth* inherited =
-        base && base->auth().api_key ? &*base->auth().api_key : nullptr;
+        // The inherited hooks are moved into the corresponding closures. Each
+        // closure owns its hook so the resulting definition remains self-contained
+        // after the caller's base definition is consumed.
+        std::string provider_id,
+        std::optional<ai::ApiKeyAuth> inherited,
+        bool has_oauth,
+        const std::optional<ModelsJsonProvider>& config,
+        const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
     const std::optional<std::string> raw_key = config ? config->api_key : std::nullopt;
-    const bool has_oauth = base && base->auth().oauth.has_value();
-    if (inherited == nullptr && !raw_key && has_oauth) {
+    if (!inherited && !raw_key && has_oauth) {
         // OAuth-only providers get no fabricated API-key login method.
         return std::nullopt;
     }
 
+    const bool is_command = raw_key ? config_value::is_command(*raw_key) : false;
+    const std::vector<std::string> raw_key_env_names =
+            raw_key ? config_value::env_var_names(*raw_key) : std::vector<std::string>{};
+    const std::optional<ai::ModelHeaders> config_headers = config ? config->headers : std::nullopt;
+    std::vector<std::string> header_env_names;
+    if (config_headers) {
+        for (const auto& [_, value] : *config_headers) {
+            for (const auto& name : config_value::env_var_names(value)) {
+                header_env_names.push_back(name);
+            }
+        }
+    }
+
+    struct InheritedApiKeyHooks {
+        ai::ApiKeyLoginHook login{};
+        ai::ApiKeyCheckHook check{};
+        ai::ApiKeyResolveHook resolve{};
+    };
+
+    auto inherited_hooks = std::make_shared<InheritedApiKeyHooks>();
+    if (inherited) {
+        inherited_hooks->login = std::move(inherited->login);
+        inherited_hooks->check = std::move(inherited->check);
+        inherited_hooks->resolve = std::move(inherited->resolve);
+    }
+
     ai::ApiKeyAuth result;
     result.name = inherited ? inherited->name : "API key";
-    result.login = [base](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
+    result.login = [inherited_hooks](
+                           ai::AuthInteraction interaction) mutable -> cch::support::AsyncResult<ai::ApiKeyCredential> {
         return support::detail::make_async_result(
-                [base, interaction = std::move(interaction)]() mutable
+                [inherited_hooks, interaction = std::move(interaction)]() mutable
                         -> boost::asio::awaitable<support::Expected<ai::ApiKeyCredential>> {
-                    ai::ApiKeyAuth* inherited = base && base->auth().api_key ? &*base->auth().api_key : nullptr;
-                    if (inherited && inherited->login) {
+                    if (inherited_hooks->login) {
                         co_return co_await support::detail::await_async_result(
-                                inherited->login(std::move(interaction)));
+                                inherited_hooks->login(std::move(interaction)));
                     }
                     CCH_TRY(key,
                             co_await support::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
@@ -528,41 +546,31 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                 });
     };
 
-    const bool is_command = raw_key ? config_value::is_command(*raw_key) : false;
-    const std::vector<std::string> raw_key_env_names =
-        raw_key ? config_value::env_var_names(*raw_key) : std::vector<std::string>{};
-    const std::optional<ai::ModelHeaders> config_headers =
-        config ? config->headers : std::nullopt;
-    std::vector<std::string> header_env_names;
-    if (config_headers) {
-        for (const auto& [_, value] : *config_headers) {
-            for (const auto& name : config_value::env_var_names(value)) {
-                header_env_names.push_back(name);
-            }
-        }
-    }
-
-    result.check = [provider_id, base, raw_key, is_command, raw_key_env_names](
-                           const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential)
+    result.check = [raw_key, is_command, raw_key_env_names, inherited_hooks](
+                           const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential) mutable
             -> cch::support::AsyncResult<std::optional<AuthCheck>> {
         return support::detail::make_async_result(
-                [&context, credential = std::move(credential), base, raw_key, is_command, raw_key_env_names]()
+                [&context,
+                        credential = std::move(credential),
+                        raw_key,
+                        is_command,
+                        raw_key_env_names,
+                        inherited_hooks]() mutable
                         -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
-                    ai::ApiKeyAuth* inherited = base && base->auth().api_key ? &*base->auth().api_key : nullptr;
                     if (credential) {
-                        if (inherited && inherited->check) {
+                        if (inherited_hooks->check) {
                             CCH_TRY(checked,
                                     co_await support::detail::await_async_result(
-                                            inherited->check(context, credential)));
+                                            inherited_hooks->check(context, credential)));
                             co_return checked;
                         }
                         if (credential->key && !credential->key->empty()) {
                             co_return AuthCheck{.source = "stored credential", .type = AuthType::ApiKey};
                         }
-                        if (inherited && inherited->resolve) {
+                        if (inherited_hooks->resolve) {
                             CCH_TRY(resolved,
                                     co_await support::detail::await_async_result(
-                                            inherited->resolve(context, credential)));
+                                            inherited_hooks->resolve(context, credential)));
                             if (resolved) {
                                 co_return AuthCheck{.source = resolved->source, .type = AuthType::ApiKey};
                             }
@@ -581,15 +589,16 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                         }
                         co_return AuthCheck{.source = "configured API key", .type = AuthType::ApiKey};
                     }
-                    if (inherited && inherited->check) {
+                    if (inherited_hooks->check) {
                         CCH_TRY(checked,
-                                co_await support::detail::await_async_result(inherited->check(context, std::nullopt)));
+                                co_await support::detail::await_async_result(
+                                        inherited_hooks->check(context, std::nullopt)));
                         co_return checked;
                     }
-                    if (inherited && inherited->resolve) {
+                    if (inherited_hooks->resolve) {
                         CCH_TRY(resolved,
                                 co_await support::detail::await_async_result(
-                                        inherited->resolve(context, std::nullopt)));
+                                        inherited_hooks->resolve(context, std::nullopt)));
                         if (resolved) {
                             co_return AuthCheck{.source = resolved->source, .type = AuthType::ApiKey};
                         }
@@ -598,26 +607,27 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                 });
     };
 
-    result.resolve = [provider_id, base, raw_key, raw_key_env_names, config_headers, header_env_names, runner](
-                             const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential)
+    result.resolve =
+            [provider_id, raw_key, raw_key_env_names, config_headers, header_env_names, runner, inherited_hooks](
+                    const ai::AuthContext& context, std::optional<ai::ApiKeyCredential> credential) mutable
             -> cch::support::AsyncResult<std::optional<AuthResult>> {
         return support::detail::make_async_result(
                 [&context,
                         credential = std::move(credential),
                         provider_id,
-                        base,
                         raw_key,
                         raw_key_env_names,
                         config_headers,
                         header_env_names,
-                        runner]() -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
-                    ai::ApiKeyAuth* inherited = base && base->auth().api_key ? &*base->auth().api_key : nullptr;
+                        runner,
+                        inherited_hooks]() mutable
+                        -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
                     std::optional<AuthResult> resolved_result;
                     if (credential) {
-                        if (inherited && inherited->resolve) {
+                        if (inherited_hooks->resolve) {
                             CCH_TRY(resolved,
                                     co_await support::detail::await_async_result(
-                                            inherited->resolve(context, credential)));
+                                            inherited_hooks->resolve(context, credential)));
                             resolved_result = std::move(resolved);
                         } else if (credential->key && !credential->key->empty()) {
                             ai::ProviderEnv credential_env;
@@ -635,12 +645,12 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                                         "API key for provider \"" + std::string{provider_id} + "\"",
                                         env,
                                         runner));
-                        if (inherited && inherited->resolve) {
+                        if (inherited_hooks->resolve) {
                             ai::ApiKeyCredential configured;
                             configured.key = std::move(key);
                             CCH_TRY(resolved,
                                     co_await support::detail::await_async_result(
-                                            inherited->resolve(context, std::move(configured))));
+                                            inherited_hooks->resolve(context, std::move(configured))));
                             resolved_result = std::move(resolved);
                         } else {
                             resolved_result = AuthResult{
@@ -648,10 +658,10 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
                                     .source = "configured API key",
                             };
                         }
-                    } else if (inherited && inherited->resolve) {
+                    } else if (inherited_hooks->resolve) {
                         CCH_TRY(resolved,
                                 co_await support::detail::await_async_result(
-                                        inherited->resolve(context, std::nullopt)));
+                                        inherited_hooks->resolve(context, std::nullopt)));
                         resolved_result = std::move(resolved);
                     }
                     if (!resolved_result) {
@@ -674,18 +684,23 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
     return result;
 }
 
-[[nodiscard]] support::Expected<ai::ProviderAuth> compose_auth(
-    std::string_view provider_id,
-    const std::shared_ptr<ai::Provider>& base,
-    const std::optional<ModelsJsonProvider>& config,
-    const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
+[[nodiscard]] support::Expected<ai::ProviderAuth> compose_auth(std::string_view provider_id,
+        ai::ProviderDefinition* base,
+        const std::optional<ModelsJsonProvider>& config,
+        const std::shared_ptr<harness::AsyncProcessRunner>& runner) {
     ai::ProviderAuth auth;
-    auto api_key = compose_api_key_auth(std::string{provider_id}, base, config, runner);
+    const bool has_oauth = base && base->auth.oauth.has_value();
+    std::optional<ai::ApiKeyAuth> inherited_api_key;
+    if (base && base->auth.api_key) {
+        inherited_api_key.emplace(std::move(*base->auth.api_key));
+    }
+    auto api_key =
+            compose_api_key_auth(std::string{provider_id}, std::move(inherited_api_key), has_oauth, config, runner);
     if (api_key) {
         auth.api_key = std::move(*api_key);
     }
-    if (base && base->auth().oauth) {
-        auth.oauth = std::move(*base->auth().oauth);
+    if (base && base->auth.oauth) {
+        auth.oauth = std::move(*base->auth.oauth);
     }
     if (!auth.api_key && !auth.oauth) {
         return std::unexpected(support::make_error(
@@ -698,65 +713,36 @@ void append_literal(std::vector<TemplatePart>& parts, std::string_view value) {
 
 } // namespace
 
-std::map<std::string, std::shared_ptr<ai::Provider>, std::less<>>
-builtin_providers(const ProviderComposerOptions& options) {
-    std::map<std::string, std::shared_ptr<ai::Provider>, std::less<>> providers;
-
-    ai::ProviderAuth codex_auth;
-    codex_auth.oauth = ai::auth::make_openai_codex_oauth_auth();
-    providers.emplace(
-        "openai-codex",
-        ai::providers::make_composed_provider(
-            "openai-codex",
-            "OpenAI Codex",
-            ai::providers::codex_models(),
-            std::move(codex_auth),
-            options.http_transport,
-            options.ws_transport,
-            options.codex_cache_config));
-
-    ai::ProviderAuth kimi_auth;
-    auto kimi_api_key = ai::providers::make_env_api_key_auth(
-        "Kimi API key", std::vector<std::string>{"KIMI_API_KEY"});
-    kimi_auth.api_key = std::move(*kimi_api_key.api_key);
-    kimi_auth.oauth = ai::auth::make_kimi_coding_oauth_auth();
-    providers.emplace(
-        "kimi-coding",
-        ai::providers::make_composed_provider(
-            "kimi-coding",
-            "Kimi For Coding",
-            ai::providers::kimi_coding_models(),
-            std::move(kimi_auth),
-            options.http_transport,
-            options.ws_transport,
-            options.codex_cache_config));
-
-    return providers;
-}
-
-std::shared_ptr<ai::Provider> compose_provider(
-    std::string_view provider_id,
-    std::shared_ptr<ai::Provider> base,
-    const ModelConfig& config,
-    const ProviderComposerOptions& options,
-    std::optional<std::string>& error) {
-    const auto& config_entry = config.provider(provider_id);
+ai::ProviderChange compose_provider(std::string_view provider_id,
+        std::optional<ai::ProviderDefinition> base,
+        const ModelConfig& config,
+        const ProviderComposerOptions& options,
+        std::optional<std::string>& error) {
+    const auto config_entry = config.provider(provider_id);
+    const std::string id{provider_id};
     if (!base && !config_entry) {
-        return nullptr;
+        error.reset();
+        return ai::ProviderChange{
+                .provider_id = id,
+                .definition = std::nullopt,
+        };
     }
     if (base && !config_entry) {
-        // No overlays: use the built-in untouched so its auth/login/stream
+        // No overlays: install the built-in unchanged so its auth and model
         // behavior is exact (pi recomposeProvider).
         error.reset();
-        return base;
+        return ai::ProviderChange{
+                .provider_id = id,
+                .definition = std::move(base),
+        };
     }
-    auto models_result = apply_models_json(
-        provider_id,
-        base ? base->models() : std::vector<ai::Model>{},
-        config_entry);
+    auto models_result = apply_models_json(provider_id, base ? base->models : std::vector<ai::Model>{}, config_entry);
     if (!models_result) {
         error = models_result.error().message;
-        return base;
+        return ai::ProviderChange{
+                .provider_id = id,
+                .definition = std::move(base),
+        };
     }
     std::vector<ai::Model> models = std::move(*models_result);
     if (config_entry->model_overrides) {
@@ -767,24 +753,26 @@ std::shared_ptr<ai::Provider> compose_provider(
             }
         }
     }
-    std::string name = config_entry->name.value_or(
-        base ? std::string{base->name()} : std::string{provider_id});
-    auto auth_result = compose_auth(
-        provider_id, base, config_entry, options.process_runner);
+    std::string name = config_entry->name.value_or(base ? base->name : std::string{provider_id});
+    auto auth_result = compose_auth(provider_id, base ? &*base : nullptr, config_entry, options.process_runner);
     if (!auth_result) {
         error = auth_result.error().message;
-        return base;
+        return ai::ProviderChange{
+                .provider_id = id,
+                .definition = std::move(base),
+        };
     }
-    auto provider = ai::providers::make_composed_provider(
-        std::string{provider_id},
-        std::move(name),
-        std::move(models),
-        std::move(*auth_result),
-        options.http_transport,
-        options.ws_transport,
-        options.codex_cache_config);
     error.reset();
-    return provider;
+    return ai::ProviderChange{
+            .provider_id = id,
+            .definition =
+                    ai::ProviderDefinition{
+                            .id = id,
+                            .name = std::move(name),
+                            .models = std::move(models),
+                            .auth = std::move(*auth_result),
+                    },
+    };
 }
 
 std::vector<std::string> configured_api_key_env_names(const ModelConfig& config) {

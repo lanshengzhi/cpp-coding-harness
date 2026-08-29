@@ -5,8 +5,8 @@
 // `formatNoModelsAvailableMessage()` when no models exist — then exits 0
 // without touching session storage (the session manager is in-memory).
 
-#include "ai/ModelStreamBridge.hpp"
 #include "cli/ListModels.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
@@ -30,37 +30,6 @@ using namespace cch;
 
 namespace {
 
-/// One provider whose catalog is the test's models and whose API-key auth
-/// always resolves as configured, so every catalog model lands in the
-/// available snapshot.
-class CatalogProvider final : public ai::Provider {
-public:
-    CatalogProvider(std::string id, std::vector<ai::Model> catalog)
-        : id_(std::move(id)), catalog_(std::move(catalog)) {}
-
-    [[nodiscard]] std::string_view id() const noexcept override { return id_; }
-    [[nodiscard]] std::string_view name() const noexcept override { return id_; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return catalog_; }
-
-    [[nodiscard]] ai::ModelStream stream(
-        ai::Model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
-        return ai::detail::make_model_stream(
-                [](ai::AssistantEventSink) mutable -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                    co_return std::unexpected(
-                            support::make_error(support::ErrorCode::Stream, "catalog provider has no stream"));
-                });
-    }
-
-
-private:
-    std::string id_;
-    std::vector<ai::Model> catalog_;
-    ai::ProviderAuth auth_{tests::detail::fixture_auth()};
-};
-
 [[nodiscard]] ai::Model catalog_model(
     std::string provider,
     std::string id,
@@ -83,33 +52,56 @@ private:
     return model;
 }
 
-/// beta registered first so the provider-then-id sort is exercised.
-[[nodiscard]] std::shared_ptr<ai::Models> table_catalog_models() {
-    auto models = std::make_shared<ai::Models>(
-        std::make_shared<tests::detail::FixtureCredentialStore>(),
-        std::make_shared<tests::detail::FixtureAuthContext>());
-    (void)models->set_provider(std::make_shared<CatalogProvider>(
-        "beta",
-        std::vector<ai::Model>{catalog_model("beta", "beta-1", 999, 1500, false, true)}));
-    (void)models->set_provider(std::make_shared<CatalogProvider>(
-        "alpha",
-        std::vector<ai::Model>{
-            catalog_model("alpha", "alpha-1", 200000, 16000, false, false),
-            catalog_model("alpha", "alpha-2", 1000000, 2000000, true, true),
-        }));
-    return models;
+/// beta is listed first so the provider-then-id sort is exercised.
+[[nodiscard]] std::shared_ptr<coding_agent::ModelRuntime> table_catalog_runtime() {
+    std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
+    definitions.push_back(coding_agent::ModelRuntimeTestProvider{
+            .definition =
+                    ai::ProviderDefinition{
+                            .id = "beta",
+                            .name = "beta",
+                            .models = {catalog_model("beta", "beta-1", 999, 1500, false, true)},
+                            .auth = tests::detail::fixture_auth(),
+                    },
+    });
+    definitions.push_back(coding_agent::ModelRuntimeTestProvider{
+            .definition =
+                    ai::ProviderDefinition{
+                            .id = "alpha",
+                            .name = "alpha",
+                            .models =
+                                    {
+                                            catalog_model("alpha", "alpha-1", 200000, 16000, false, false),
+                                            catalog_model("alpha", "alpha-2", 1000000, 2000000, true, true),
+                                    },
+                            .auth = tests::detail::fixture_auth(),
+                    },
+    });
+    auto created = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .models_path = std::filesystem::path{},
+                    .credentials = std::make_shared<tests::detail::FixtureCredentialStore>(),
+            },
+            coding_agent::ModelRuntimeTestOptions{
+                    .providers = std::move(definitions),
+            });
+    REQUIRE(created);
+    return std::move(*created);
 }
 
 [[nodiscard]] tests::CliRunResult run_list_models(
-    std::vector<std::string> args,
-    std::shared_ptr<ai::Models> models) {
-    return tests::run_cli(tests::CliRunOptions{
-        .args = std::move(args),
-        .cwd = {},
-        .env = {},
-        .stdin_text = {},
-        .models = std::move(models),
-    });
+        std::vector<std::string> args, std::shared_ptr<coding_agent::ModelRuntime> runtime) {
+    tests::CliRunOptions options{
+            .args = std::move(args),
+            .cwd = {},
+            .env = {},
+            .stdin_text = {},
+            .models = nullptr,
+    };
+    if (!runtime) {
+        return tests::run_cli(std::move(options));
+    }
+    return tests::run_cli_with_runtime(std::move(options), std::move(runtime));
 }
 
 } // namespace
@@ -117,7 +109,7 @@ private:
 TEST_CASE(
     "list-models prints pi's six-column table with K/M formatting and sort",
     "[cli][list-models][issue404]") {
-    auto result = run_list_models({"--list-models"}, table_catalog_models());
+    auto result = run_list_models({"--list-models"}, table_catalog_runtime());
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
@@ -133,7 +125,7 @@ TEST_CASE(
 TEST_CASE(
     "list-models fuzzy search filters the table and keeps the header",
     "[cli][list-models][issue404]") {
-    auto result = run_list_models({"--list-models", "alpha"}, table_catalog_models());
+    auto result = run_list_models({"--list-models", "alpha"}, table_catalog_runtime());
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text ==
@@ -145,7 +137,7 @@ TEST_CASE(
 TEST_CASE(
     "list-models with no fuzzy matches prints pi's no-match message",
     "[cli][list-models][issue404]") {
-    auto result = run_list_models({"--list-models", "nomatch"}, table_catalog_models());
+    auto result = run_list_models({"--list-models", "nomatch"}, table_catalog_runtime());
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text == "No models matching \"nomatch\"\n");
@@ -157,7 +149,7 @@ TEST_CASE(
     "[cli][list-models][issue404]") {
     // The default scripted fake providers have empty catalogs, so the
     // available snapshot is empty.
-    auto result = run_list_models({"--list-models"}, nullptr);
+    auto result = run_list_models({"--list-models"}, {});
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text ==

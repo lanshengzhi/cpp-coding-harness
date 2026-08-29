@@ -2,7 +2,6 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
-#include "ai/providers/FakeProvider.hpp"
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/PumpUntil.hpp"
@@ -42,8 +41,7 @@ struct PersistentSession {
     tests::TempWorkspace workspace;
     std::filesystem::path session_path = workspace.path() / "session.jsonl";
 
-    [[nodiscard]] tests::ModelsSessionOptions options(
-        std::shared_ptr<ai::Provider> provider) const {
+    [[nodiscard]] tests::ModelsSessionOptions options(std::shared_ptr<tests::ScriptedProvider> provider) const {
         tests::ModelsSessionOptions options;
         options.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
@@ -78,9 +76,7 @@ public:
     AbortAwareGatedChatProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this,
              model = std::move(model),
@@ -136,8 +132,7 @@ TEST_CASE(
     "an admitted event advances live Session state before weak observers are notified",
     "[coding_agent][runtime][commitment][issue464]") {
     PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(created.has_value());
 
     auto* session = created->session.get();
@@ -166,8 +161,7 @@ TEST_CASE(
     "session event persistence executes off the interaction loop in admission order",
     "[coding_agent][runtime][commitment][issue464]") {
     PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
@@ -197,8 +191,7 @@ TEST_CASE(
     "a persistence failure keeps live state and rejects later prompts with a typed failure",
     "[coding_agent][runtime][commitment][issue464]") {
     PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
@@ -317,10 +310,8 @@ TEST_CASE(
     "[coding_agent][runtime][commitment][issue464]") {
     PersistentSession slow_fixture;
     PersistentSession fast_fixture;
-    auto slow_created = coding_agent::create_agent_session(
-        slow_fixture.options(ai::providers::make_scripted_fake_provider()));
-    auto fast_created = coding_agent::create_agent_session(
-        fast_fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto slow_created = coding_agent::create_agent_session(slow_fixture.options(tests::make_scripted_fake_provider()));
+    auto fast_created = coding_agent::create_agent_session(fast_fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(slow_created.has_value());
     REQUIRE(fast_created.has_value());
     auto& slow_session = *slow_created->session;

@@ -7,7 +7,6 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 
-#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/TempWorkspace.hpp"
@@ -53,11 +52,9 @@ struct TestPaths {
     return ai::MessageVariant{ai::user_text_message(std::move(text))};
 }
 
-[[nodiscard]] tests::ModelsSessionOptions new_session_options(
-    const TestPaths& paths,
-    coding_agent::SessionTarget target,
-    std::shared_ptr<ai::Provider> client =
-        ai::providers::make_scripted_fake_provider()) {
+[[nodiscard]] tests::ModelsSessionOptions new_session_options(const TestPaths& paths,
+        coding_agent::SessionTarget target,
+        std::shared_ptr<tests::ScriptedProvider> client = tests::make_scripted_fake_provider()) {
     tests::ModelsSessionOptions options;
     options.session_target = std::move(target);
     options.workspace = paths.workspace.path();
@@ -74,8 +71,7 @@ struct TestPaths {
     request.workspace = paths.workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
-    return coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    return coding_agent::create_agent_session_for_testing(std::move(request), tests::make_scripted_fake_models());
 }
 
 class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
@@ -83,9 +79,7 @@ public:
     GatedSnapshotChatProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink sink) mutable
@@ -118,7 +112,6 @@ public:
                 });
     }
 
-
     void release() {
         if (gate_) {
             gate_->cancel();
@@ -136,9 +129,7 @@ public:
     CapturingSnapshotChatProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
                 [model = std::move(model)](ai::AssistantEventSink) mutable
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
@@ -149,7 +140,6 @@ public:
                     co_return response;
                 });
     }
-
 };
 
 } // namespace

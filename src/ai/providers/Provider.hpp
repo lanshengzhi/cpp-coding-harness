@@ -63,10 +63,7 @@ public:
     /// boundaries and cooperative cancellation stay inside the provider.
     /// `stream` must not run concurrently on the same Provider; see the class
     /// concurrency contract.
-    [[nodiscard]] virtual ModelStream stream(
-        Model model,
-        AiContext context,
-        ProviderStreamOptions options) = 0;
+    [[nodiscard]] virtual ModelStream stream(Model model, AiContext context, ProviderStreamOptions options) = 0;
 };
 
 } // namespace cch::ai

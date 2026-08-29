@@ -7,6 +7,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_ai
     SOURCES
+        src/ai/BuiltinProviders.cpp
         src/ai/ContentUtil.cpp
         src/ai/Model.cpp
         src/ai/Models.cpp
@@ -31,7 +32,6 @@ cch_parity_declare_target(
         src/ai/providers/CodexCatalog.cpp
         src/ai/providers/ComposedProvider.cpp
         src/ai/providers/EnvApiKeyAuth.cpp
-        src/ai/providers/FakeProvider.cpp
         src/ai/providers/KimiCatalog.cpp
         src/ai/providers/RetryPolicy.cpp
         src/ai/providers/SseParser.cpp

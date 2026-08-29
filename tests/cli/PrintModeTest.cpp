@@ -4,7 +4,6 @@
 
 #include "cli/PrintMode.hpp"
 
-#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
@@ -48,9 +47,7 @@ public:
           partial_(std::move(partial)) {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink sink) mutable
@@ -78,7 +75,6 @@ public:
                 });
     }
 
-
     int request_count{0};
 
 private:
@@ -94,9 +90,7 @@ public:
     CapturingChatProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink sink) mutable
@@ -120,7 +114,6 @@ public:
                 });
     }
 
-
     std::vector<std::vector<ai::MessageVariant>> messages;
 };
 
@@ -132,9 +125,7 @@ public:
     SignalGateProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), options = std::move(options)](
                 ai::AssistantEventSink) mutable
@@ -162,7 +153,6 @@ public:
                 });
     }
 
-
     std::atomic<int> request_count{0};
 };
 
@@ -171,7 +161,7 @@ tests::ModelsSessionOptions fake_in_memory_options(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace;
-    options.models = ai::providers::make_scripted_fake_models();
+    options.models = tests::make_scripted_fake_models();
     return options;
 }
 
@@ -186,8 +176,7 @@ CreatedSession make_session(const tests::TempWorkspace& workspace) {
 }
 
 CreatedSession make_session(
-    const tests::TempWorkspace& workspace,
-    std::shared_ptr<ai::Provider> chat_client) {
+        const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> chat_client) {
     auto options = fake_in_memory_options(workspace.path());
     options.models = cch::tests::models_from_provider(std::move(chat_client));
     auto created = coding_agent::create_agent_session(std::move(options));

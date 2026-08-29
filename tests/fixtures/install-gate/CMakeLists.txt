@@ -59,7 +59,10 @@ cch_parity_declare_target(
     DEPENDS cch_support
     INTERFACE_DEPENDS cch_support
 )
-target_include_directories(cch_ai PUBLIC ${CCH_PARITY_FIXTURE_SRC}/ai/include)
+target_include_directories(cch_ai
+    PUBLIC ${CCH_PARITY_FIXTURE_SRC}/ai/include
+    PRIVATE ${CCH_PARITY_FIXTURE_SRC}
+)
 
 cch_parity_declare_target(
     TARGET cch_tui

@@ -3,15 +3,10 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include "ModelConfig.hpp"
 
-#include <cch/ai/Model.hpp>
-#include <cch/ai/Provider.hpp>
-#include "ai/providers/StreamTransport.hpp"
-#include "ai/providers/WebSocketTransport.hpp"
-#include "ai/api/OpenAICodexResponsesAdapter.hpp"
+#include <cch/ai/Models.hpp>
 #include <cch/support/Error.hpp>
 #include "agent/harness/Process.hpp"
 
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,37 +15,28 @@
 
 namespace cch::coding_agent {
 
-/// Dependencies shared by every composed Provider. Transports and the process
-/// runner are injectable so tests can script the wire and shell surfaces.
+/// The shell/process capability used to resolve executable models.json values.
+/// Provider assembly and transport construction stay inside cch_ai.
 struct ProviderComposerOptions {
-    std::shared_ptr<ai::providers::StreamTransport> http_transport{nullptr};
-    std::shared_ptr<ai::providers::WebSocketTransport> ws_transport{nullptr};
-    ai::providers::CodexWebSocketCacheConfig codex_cache_config{};
     std::shared_ptr<harness::AsyncProcessRunner> process_runner{nullptr};
 };
 
-/// Built-in Providers in the supported subset, keyed by provider id
-/// (`openai-codex` with the frozen Codex 7 catalog and OAuth auth,
-/// `kimi-coding` with the frozen Kimi 4 catalog and env API-key + OAuth auth).
-[[nodiscard]] std::map<std::string, std::shared_ptr<ai::Provider>, std::less<>>
-builtin_providers(const ProviderComposerOptions& options);
-
-/// Compose one provider from its built-in base (optional) plus the models.json
-/// `ModelConfig` entry (pi `composeModelProvider` subset): built-in
-/// Provider/models → models.json overlay/custom-model upsert (same-ID
-/// replaces) → model overrides. Config-only providers compose from config plus
-/// the privately registered API adapters; identities stay string-based.
+/// Compose one provider from its built-in definition (optional) plus the
+/// models.json `ModelConfig` entry (pi `composeModelProvider` subset): built-in
+/// models → models.json overlay/custom-model upsert (same-ID replaces) → model
+/// overrides. Config-only providers compose from config while protocol
+/// adapters and transports remain private to cch_ai.
 ///
-/// Returns nullptr when the provider is absent from both built-ins and config.
-/// On composition failure `error` carries the message and the built-in base is
-/// returned as fallback (removal when there is no base), per pi
-/// `recomposeProvider`.
-[[nodiscard]] std::shared_ptr<ai::Provider> compose_provider(
-    std::string_view provider_id,
-    std::shared_ptr<ai::Provider> base,
-    const ModelConfig& config,
-    const ProviderComposerOptions& options,
-    std::optional<std::string>& error);
+/// The returned Provider Change installs the composed definition, installs the
+/// built-in definition unchanged, or removes the provider when it is absent
+/// from both built-ins and config. On composition failure `error` carries the
+/// message and the built-in definition is returned as fallback (removal when
+/// there is no base), per pi `recomposeProvider`.
+[[nodiscard]] ai::ProviderChange compose_provider(std::string_view provider_id,
+        std::optional<ai::ProviderDefinition> base,
+        const ModelConfig& config,
+        const ProviderComposerOptions& options,
+        std::optional<std::string>& error);
 
 /// Env var names referenced by configured `apiKey` templates across all
 /// providers in the config (pi `getConfigValueEnvVarNames`). Used by the

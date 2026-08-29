@@ -2,6 +2,10 @@
 
 #include "support/AsyncResultBridge.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include "ai/providers/BoostBeastWebSocketTransport.hpp"
+#include "ai/providers/ComposedProvider.hpp"
+#include "ai/providers/ProviderTestAccess.hpp"
 #include "SimpleOptions.hpp"
 #include "support/BoundedText.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -130,6 +134,17 @@ invoke_async_operation(Operation operation) {
 #else
     return provider_value.models();
 #endif
+}
+
+[[nodiscard]] std::shared_ptr<Provider> make_default_provider(ProviderDefinition definition) {
+    auto http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
+    auto websocket_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
+    return providers::make_composed_provider(std::move(definition.id),
+            std::move(definition.name),
+            std::move(definition.models),
+            std::move(definition.auth),
+            std::move(http_transport),
+            std::move(websocket_transport));
 }
 
 [[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
@@ -390,6 +405,27 @@ struct Models::Impl {
     std::shared_ptr<AuthContext> auth_context;
     std::map<std::string, std::shared_ptr<Provider>, std::less<>> providers;
 
+    [[nodiscard]] std::shared_ptr<Provider> provider(std::string_view provider_id) const {
+        const auto found = providers.find(provider_id);
+        return found == providers.end() ? nullptr : found->second;
+    }
+
+    [[nodiscard]] support::ExpectedVoid install_provider(std::shared_ptr<Provider> provider_value) {
+        if (!provider_value || provider_value->id().empty()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
+        }
+        const auto& auth = provider_value->auth();
+        if (!auth.api_key && !auth.oauth) {
+            return std::unexpected(support::make_error(support::ErrorCode::Auth,
+                    "provider must define authentication",
+                    std::string{provider_value->id()}));
+        }
+        providers.insert_or_assign(std::string{provider_value->id()}, std::move(provider_value));
+        return {};
+    }
+
+    void remove_provider(std::string_view provider_id) { providers.erase(provider_id); }
+
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> resolve_api_key(
         const Provider& provider,
         ApiKeyAuth& auth,
@@ -474,6 +510,29 @@ struct Models::Impl {
     }
 };
 
+support::ExpectedVoid providers::ProviderTestAccess::install(Models& models, std::shared_ptr<Provider> provider) {
+    return models.impl_->install_provider(std::move(provider));
+}
+
+support::ExpectedVoid providers::ProviderTestAccess::replace_transports(Models& models,
+        std::shared_ptr<StreamTransport> http_transport,
+        std::shared_ptr<WebSocketTransport> ws_transport,
+        CodexWebSocketCacheConfig cache_config) {
+    for (const auto& [provider_id, provider] : models.impl_->providers) {
+        auto replacement = providers::make_composed_provider(provider_id,
+                std::string{provider->name()},
+                provider->models(),
+                std::move(provider->auth()),
+                http_transport,
+                ws_transport,
+                cache_config);
+        if (auto installed = models.impl_->install_provider(std::move(replacement)); !installed) {
+            return std::unexpected(installed.error());
+        }
+    }
+    return {};
+}
+
 Models::Models(
     std::shared_ptr<CredentialStore> credentials,
     std::shared_ptr<AuthContext> auth_context)
@@ -487,52 +546,63 @@ Models::Models(Models&&) noexcept = default;
 Models& Models::operator=(Models&&) noexcept = default;
 Models::~Models() = default;
 
-support::ExpectedVoid Models::set_provider(std::shared_ptr<Provider> provider_value) {
-    if (!provider_value || provider_value->id().empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Provider,
-            "provider id is required"));
+support::ExpectedVoid Models::apply_provider(ProviderChange change) {
+    if (change.definition) {
+        auto definition = std::move(*change.definition);
+        if (definition.id.empty()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
+        }
+        if (!change.provider_id.empty() && change.provider_id != definition.id) {
+            return std::unexpected(support::make_error(support::ErrorCode::Provider,
+                    "provider change id does not match provider definition",
+                    definition.id));
+        }
+        return impl_->install_provider(make_default_provider(std::move(definition)));
     }
-    const auto& auth = provider_value->auth();
-    if (!auth.api_key && !auth.oauth) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Auth,
-            "provider must define authentication",
-            std::string{provider_value->id()}));
+    if (change.provider_id.empty()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
     }
-    impl_->providers.insert_or_assign(
-        std::string{provider_value->id()}, std::move(provider_value));
+    impl_->remove_provider(change.provider_id);
     return {};
-}
-
-void Models::delete_provider(std::string_view provider_id) {
-    if (const auto found = impl_->providers.find(provider_id);
-        found != impl_->providers.end()) {
-        impl_->providers.erase(found);
-    }
 }
 
 void Models::clear_providers() {
     impl_->providers.clear();
 }
 
-std::vector<std::shared_ptr<Provider>> Models::providers() const {
-    std::vector<std::shared_ptr<Provider>> result;
+std::vector<ProviderInfo> Models::provider_info() const {
+    std::vector<ProviderInfo> result;
     result.reserve(impl_->providers.size());
     for (const auto& [_, provider_value] : impl_->providers) {
-        result.push_back(provider_value);
+        ProviderInfo info{
+                .id = std::string{provider_value->id()},
+                .name = std::string{provider_value->name()},
+                .auth_methods = {},
+        };
+        const auto& auth = provider_value->auth();
+        // Keep the existing login presentation order: OAuth before API key.
+        if (auth.oauth) {
+            info.auth_methods.push_back(AuthMethodInfo{
+                    .type = AuthType::OAuth,
+                    .name = auth.oauth->name,
+                    .has_login = static_cast<bool>(auth.oauth->login),
+            });
+        }
+        if (auth.api_key) {
+            info.auth_methods.push_back(AuthMethodInfo{
+                    .type = AuthType::ApiKey,
+                    .name = auth.api_key->name,
+                    .has_login = static_cast<bool>(auth.api_key->login),
+            });
+        }
+        result.push_back(std::move(info));
     }
     return result;
 }
 
-std::shared_ptr<Provider> Models::provider(std::string_view provider_id) const {
-    const auto found = impl_->providers.find(provider_id);
-    return found == impl_->providers.end() ? nullptr : found->second;
-}
-
 std::vector<Model> Models::models(std::optional<std::string_view> provider_id) const {
     if (provider_id) {
-        const auto selected = provider(*provider_id);
+        const auto selected = impl_->provider(*provider_id);
         return selected ? safe_provider_models(*selected) : std::vector<Model>{};
     }
     std::vector<Model> result;
@@ -565,7 +635,7 @@ cch::support::AsyncResult<std::optional<AuthCheck>> Models::check_auth(
     return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id)]()
                     -> boost::asio::awaitable<support::Expected<std::optional<AuthCheck>>> {
-                const auto selected = provider(provider_id);
+                const auto selected = impl_->provider(provider_id);
                 if (!selected) {
                     co_return std::optional<AuthCheck>{};
                 }
@@ -639,7 +709,7 @@ cch::support::AsyncResult<std::optional<AuthResult>> Models::get_auth(
     return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id), explicit_api_key = std::move(explicit_api_key)]()
                     -> boost::asio::awaitable<support::Expected<std::optional<AuthResult>>> {
-                const auto selected = provider(provider_id);
+                const auto selected = impl_->provider(provider_id);
                 if (!selected) {
                     co_return std::optional<AuthResult>{};
                 }
@@ -734,7 +804,7 @@ cch::support::AsyncResult<Credential> Models::login(
                                                       type,
                                                       interaction = std::move(interaction)]() mutable
                                                       -> boost::asio::awaitable<support::Expected<Credential>> {
-        const auto selected = provider(provider_id);
+        const auto selected = impl_->provider(provider_id);
         if (!selected) {
             co_return std::unexpected(
                     support::make_error(support::ErrorCode::Provider, "Unknown provider: " + provider_id));
@@ -798,13 +868,12 @@ namespace {
 /// event, delegates to the Provider's move-only `ModelStream`, and reaches
 /// exactly one terminal outcome. `self` keeps the Models Runtime alive for the
 /// whole stream.
-[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> stream_impl(
-    std::shared_ptr<Models> self,
-    Model model_value,
-    AiContext context,
-    SimpleStreamOptions options,
-    AssistantEventSink sink) {
-    const auto selected = self->provider(model_value.provider);
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> stream_impl(std::shared_ptr<Models> self,
+        std::shared_ptr<Provider> selected,
+        Model model_value,
+        AiContext context,
+        SimpleStreamOptions options,
+        AssistantEventSink sink) {
     if (!selected) {
         CCH_TRY(terminal, co_await terminal_failure(
             model_value,
@@ -965,19 +1034,16 @@ ModelStream Models::stream(
     SimpleStreamOptions options) {
     auto self = shared_from_this();
     return detail::make_model_stream(
-        [self,
-         model = std::move(model),
-         context = std::move(context),
-         options = std::move(options)](
-            AssistantEventSink sink) mutable
-            -> boost::asio::awaitable<support::Expected<AssistantMessage>> {
-            co_return co_await stream_impl(
-                self,
-                std::move(model),
-                std::move(context),
-                std::move(options),
-                std::move(sink));
-        });
+            [self, model = std::move(model), context = std::move(context), options = std::move(options)](
+                    AssistantEventSink sink) mutable -> boost::asio::awaitable<support::Expected<AssistantMessage>> {
+                auto selected = self->impl_->provider(model.provider);
+                co_return co_await stream_impl(self,
+                        std::move(selected),
+                        std::move(model),
+                        std::move(context),
+                        std::move(options),
+                        std::move(sink));
+            });
 }
 
 } // namespace cch::ai

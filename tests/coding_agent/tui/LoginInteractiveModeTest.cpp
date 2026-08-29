@@ -69,21 +69,19 @@ void drain_ready(boost::asio::io_context& io) {
 /// that plays a caller-supplied script against the Auth Interaction, and a
 /// fixed to_auth projection. `check_auth` needs no hook for a stored OAuth
 /// credential (`Models` derives it from the store), matching production.
-class ScriptedOAuthProvider final : public ai::Provider {
+class ScriptedOAuthProvider final : public tests::ScriptedProvider {
 public:
     using LoginScript = std::move_only_function<
         boost::asio::awaitable<support::Expected<ai::OAuthCredential>>(ai::AuthInteraction)>;
     using RefreshScript = std::move_only_function<
         boost::asio::awaitable<support::Expected<ai::OAuthCredential>>(ai::OAuthCredential)>;
 
-    ScriptedOAuthProvider(
-        std::string provider_id,
-        std::string provider_name,
-        std::vector<ai::Model> models,
-        LoginScript login_script,
-        RefreshScript refresh_script = {})
-        : provider_id_(std::move(provider_id)),
-          provider_name_(std::move(provider_name)),
+    ScriptedOAuthProvider(std::string provider_id,
+            std::string provider_name,
+            std::vector<ai::Model> models,
+            LoginScript login_script,
+            RefreshScript refresh_script = {})
+        : tests::ScriptedProvider(std::move(provider_id), ai::ProviderAuth{}), provider_name_(std::move(provider_name)),
           models_(std::move(models)) {
         ai::OAuthAuth oauth;
         oauth.name = provider_name_ + " OAuth";
@@ -117,7 +115,7 @@ public:
                 std::expected<ai::ModelAuth, cch::support::Error>{
                     ai::ModelAuth{.api_key = credential.access}});
         };
-        auth_.oauth = std::move(oauth);
+        provider_auth() = ai::ProviderAuth{.oauth = std::move(oauth)};
     }
 
     /// Install an environment-only api-key method without a login hook (pi's
@@ -137,18 +135,14 @@ public:
                 std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
                     std::optional<ai::AuthResult>{}});
         };
-        auth_.api_key = std::move(api_key);
+        provider_auth().api_key = std::move(api_key);
     }
 
-    [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return provider_name_; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
+            ai::Model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
                 [](ai::AssistantEventSink) mutable -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                     co_return std::unexpected(
@@ -156,12 +150,9 @@ public:
                 });
     }
 
-
 private:
-    std::string provider_id_;
     std::string provider_name_;
     std::vector<ai::Model> models_;
-    ai::ProviderAuth auth_;
 };
 
 [[nodiscard]] ai::OAuthCredential dummy_oauth_credential() {
@@ -191,21 +182,43 @@ struct LoginFixture {
 
     /// Create a real ModelRuntime over the fixture's agent dir (file-backed
     /// credential store, real composition and resolution chain), replacing
-    /// the given providers with scripted ones through the native-provider
-    /// registration seam.
+    /// the given providers with scripted definitions through the private
+    /// ModelRuntime test seam.
     [[nodiscard]] std::shared_ptr<coding_agent::ModelRuntime> create_runtime(
-        std::vector<std::shared_ptr<ai::Provider>> replacements = {}) {
-        auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-            .agent_dir = agent_dir.path(),
-        });
-        if (!runtime) return nullptr;
-        for (auto& provider : replacements) {
-            if (auto added = (*runtime)->register_native_provider(std::move(provider));
-                !added) {
-                return nullptr;
-            }
+            std::vector<std::shared_ptr<ScriptedOAuthProvider>> replacements = {}) {
+        if (replacements.empty()) {
+            auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
+                    .agent_dir = agent_dir.path(),
+            });
+            return runtime ? std::move(*runtime) : nullptr;
         }
-        return *runtime;
+
+        std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
+        definitions.reserve(replacements.size());
+        for (auto& provider : replacements) {
+            coding_agent::ModelRuntimeTestProvider definition;
+            definition.definition = ai::ProviderDefinition{
+                    .id = std::string{provider->id()},
+                    .name = std::string{provider->name()},
+                    .models = provider->models(),
+                    .auth = std::move(provider->auth()),
+            };
+            definition.stream = [provider = std::move(provider)](ai::Model model,
+                                        ai::AiContext context,
+                                        coding_agent::ModelRuntimeTestStreamOptions options) {
+                return provider->stream(std::move(model), std::move(context), std::move(options));
+            };
+            definitions.push_back(std::move(definition));
+        }
+
+        auto runtime = coding_agent::create_model_runtime_for_testing(
+                coding_agent::ModelRuntimeOptions{
+                        .agent_dir = agent_dir.path(),
+                },
+                coding_agent::ModelRuntimeTestOptions{
+                        .providers = std::move(definitions),
+                });
+        return runtime ? std::move(*runtime) : nullptr;
     }
 
     [[nodiscard]] std::filesystem::path auth_path() const {

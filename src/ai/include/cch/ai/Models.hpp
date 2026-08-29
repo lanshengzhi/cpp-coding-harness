@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cch/ai/Auth.hpp>
+#include <cch/ai/Context.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/ModelStream.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
@@ -17,6 +17,46 @@
 #include <vector>
 
 namespace cch::ai {
+namespace providers {
+struct ProviderTestAccess;
+}
+
+/// Complete pre-runtime description of one Provider. The authentication hooks
+/// make this value move-only; transports and stream capabilities are assembled
+/// privately by Models.
+struct ProviderDefinition {
+    std::string id{};
+    std::string name{};
+    std::vector<Model> models{};
+    ProviderAuth auth{};
+};
+
+/// One Provider installation or removal. A present definition installs or
+/// replaces the provider identified by `provider_id`; an absent definition
+/// removes that provider. The id is repeated for installation so a change has
+/// one explicit target in either form.
+struct ProviderChange {
+    std::string provider_id{};
+    std::optional<ProviderDefinition> definition{std::nullopt};
+};
+
+/// Passive summary of one authentication method exposed by Provider Info.
+struct AuthMethodInfo {
+    AuthType type{AuthType::ApiKey};
+    std::string name{};
+    bool has_login{false};
+};
+
+/// Passive projection of one installed Provider for hosts and frontends.
+struct ProviderInfo {
+    std::string id{};
+    std::string name{};
+    std::vector<AuthMethodInfo> auth_methods{};
+};
+
+/// Returns fresh definitions for the supported built-in providers. Each call
+/// creates independent model catalogs and authentication hooks.
+[[nodiscard]] std::vector<ProviderDefinition> builtin_provider_definitions();
 
 /// Runtime collection of long-lived Providers plus live authentication and
 /// request-time stream delegation.
@@ -39,12 +79,14 @@ public:
     Models(const Models&) = delete;
     Models& operator=(const Models&) = delete;
 
-    [[nodiscard]] cch::support::ExpectedVoid set_provider(std::shared_ptr<Provider> provider);
-    void delete_provider(std::string_view provider_id);
+    /// Install or remove one provider while keeping construction private to
+    /// the AI Owner. A missing provider removal succeeds as a no-op.
+    [[nodiscard]] cch::support::ExpectedVoid apply_provider(ProviderChange change);
+
+    /// Remove all installed providers before a full composition refresh.
     void clear_providers();
 
-    [[nodiscard]] std::vector<std::shared_ptr<Provider>> providers() const;
-    [[nodiscard]] std::shared_ptr<Provider> provider(std::string_view provider_id) const;
+    [[nodiscard]] std::vector<ProviderInfo> provider_info() const;
     [[nodiscard]] std::vector<Model> models(std::optional<std::string_view> provider_id = std::nullopt) const;
     [[nodiscard]] std::optional<Model> model(
         std::string_view provider_id,
@@ -93,6 +135,7 @@ public:
     struct Impl;
 
 private:
+    friend struct providers::ProviderTestAccess;
     std::unique_ptr<Impl> impl_;
 };
 

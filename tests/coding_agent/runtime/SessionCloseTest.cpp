@@ -14,7 +14,6 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include <cch/support/Error.hpp>
-#include "ai/providers/FakeProvider.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
@@ -85,13 +84,17 @@ struct CloseFixture {
     tests::TempWorkspace workspace;
     std::filesystem::path session_path = workspace.path() / "close.jsonl";
 
-    [[nodiscard]] tests::ModelsSessionOptions options(
-        std::shared_ptr<ai::Provider> provider) const {
+    [[nodiscard]] tests::ModelsSessionOptions options(std::shared_ptr<tests::ScriptedProvider> provider) const {
         tests::ModelsSessionOptions options;
         options.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
         options.workspace = workspace.path();
-        options.models = tests::models_from_provider(std::move(provider));
+        auto runtime = tests::runtime_from_provider(std::move(provider));
+        if (!runtime) {
+            std::terminate();
+        }
+        options.model_runtime = std::move(*runtime);
+        options.request_model = tests::scripted_request_model("fake", "fake-model");
         return options;
     }
 
@@ -123,9 +126,7 @@ public:
     GatedScriptedProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this,
              model = std::move(model),
@@ -271,8 +272,7 @@ TEST_CASE(
     "repeated Session Close is idempotent and rejects every work admission",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
@@ -308,8 +308,7 @@ TEST_CASE(
     "Session Close requested from an event subscriber finalizes after the run settles",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
 
@@ -467,8 +466,7 @@ TEST_CASE(
     "subscriptions and late callbacks after Close are suppressed or benignly dropped",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(
-        fixture.options(ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 

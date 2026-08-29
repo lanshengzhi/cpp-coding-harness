@@ -7,7 +7,6 @@
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Tool.hpp>
@@ -98,6 +97,13 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<agent::AgentInitialState>);
     static_assert(std::is_aggregate_v<ai::Model>);
     static_assert(std::is_aggregate_v<ai::SimpleStreamOptions>);
+    static_assert(std::is_aggregate_v<ai::ProviderDefinition>);
+    static_assert(std::is_move_constructible_v<ai::ProviderDefinition>);
+    static_assert(!std::is_copy_constructible_v<ai::ProviderDefinition>);
+    static_assert(std::is_aggregate_v<ai::ProviderChange>);
+    static_assert(std::is_aggregate_v<ai::AuthMethodInfo>);
+    static_assert(std::is_aggregate_v<ai::ProviderInfo>);
+    static_assert(std::is_copy_constructible_v<ai::ProviderInfo>);
     static_assert(std::is_copy_constructible_v<agent::AgentState>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const agent::Agent&>().state()),
@@ -115,7 +121,6 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
                   coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
-    static_assert(std::is_abstract_v<ai::Provider>);
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
     using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError>

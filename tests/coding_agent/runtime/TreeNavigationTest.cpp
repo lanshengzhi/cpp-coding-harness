@@ -131,9 +131,7 @@ public:
     QuietProvider() : tests::ScriptedProvider("fake") {}
 
     ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
                 [model = std::move(model), context = std::move(context), options = std::move(options)](
                         ai::AssistantEventSink sink) mutable
@@ -151,7 +149,6 @@ public:
                     co_return message;
                 });
     }
-
 };
 
 /// Open the session over the existing file (resume path).
@@ -195,9 +192,7 @@ public:
         : tests::ScriptedProvider("fake"), replies_(std::move(replies)) {}
 
     ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -214,7 +209,6 @@ public:
         co_return message;
                 });
     }
-
 
     std::deque<ai::AssistantMessage> replies_;
 };
@@ -235,9 +229,7 @@ public:
     GatedProvider() : tests::ScriptedProvider("fake") {}
 
     ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -265,7 +257,6 @@ public:
         co_return message;
                 });
     }
-
 
     std::atomic<bool> started{false};
     std::optional<boost::asio::steady_timer> release_timer_;

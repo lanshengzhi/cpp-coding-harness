@@ -117,9 +117,7 @@ public:
           content_(std::move(content)) {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model)](
                 ai::AssistantEventSink sink) mutable
@@ -144,7 +142,6 @@ public:
                 });
     }
 
-
     int request_count{0};
 
 private:
@@ -156,11 +153,10 @@ private:
 /// Session creation against the scripted-client seam (a real ModelRuntime
 /// composed over scripted providers, ADR 0034 "primary seam — Agent +
 /// session-assembly composition").
-[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
-create_scripted_session(
-    std::shared_ptr<ai::Provider> client,
-    const std::filesystem::path& session_file,
-    const std::filesystem::path& workspace) {
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_scripted_session(
+        std::shared_ptr<tests::ScriptedProvider> client,
+        const std::filesystem::path& session_file,
+        const std::filesystem::path& workspace) {
     tests::ModelsSessionOptions options;
     options.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};

@@ -23,7 +23,6 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -409,10 +408,9 @@ TEST_CASE(
             request.session_facts.no_skills = true;
             request.session_facts.no_prompt_templates = true;
             request.execution_runtime_target = tests::detail::fixture_runtime_target();
-            return coding_agent::create_agent_session_for_testing(
-                std::move(request),
-                ai::providers::make_scripted_fake_models(),
-                std::make_unique<SharedGateShell>(shell_state));
+            return coding_agent::create_agent_session_for_testing(std::move(request),
+                    tests::make_scripted_fake_models(),
+                    std::make_unique<SharedGateShell>(shell_state));
         };
     boot(fixture, running, actions);
 

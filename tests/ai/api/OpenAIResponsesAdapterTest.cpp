@@ -1,7 +1,6 @@
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include "ai/providers/StreamTransport.hpp"
-#include "ai/providers/ComposedProvider.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -72,10 +71,15 @@ struct RunResult {
     auto models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    auto provider = ai::providers::make_composed_provider(
-        "deepseek", "deepseek", {model},
-        ai::providers::make_env_api_key_auth("API key", {}), transport);
-    if (auto registered = models->set_provider(std::move(provider)); !registered) {
+    ai::providers::ScriptedProviderDefinition definition;
+    definition.definition = ai::ProviderDefinition{
+            .id = "deepseek",
+            .name = "deepseek",
+            .models = {model},
+            .auth = ai::providers::make_env_api_key_auth("API key", {}),
+    };
+    definition.transport.http_transport = transport;
+    if (auto registered = ai::providers::apply_scripted_provider(*models, std::move(definition)); !registered) {
         return nullptr;
     }
     return models;

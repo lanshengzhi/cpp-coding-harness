@@ -1,12 +1,10 @@
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "ai/providers/ComposedProvider.hpp"
 #include "ai/providers/KimiCatalog.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -184,10 +182,16 @@ struct LoginHarness {
         models = std::make_unique<ai::Models>(storage, auth_context);
         ai::ProviderAuth provider_auth;
         provider_auth.oauth = ai::auth::make_kimi_coding_oauth_auth(http);
-        auto provider = ai::providers::make_composed_provider(
-            "kimi-coding", "Kimi For Coding", ai::providers::kimi_coding_models(),
-            std::move(provider_auth), nullptr);
-        REQUIRE(models->set_provider(std::move(provider)));
+        REQUIRE(models->apply_provider(ai::ProviderChange{
+                .provider_id = "kimi-coding",
+                .definition =
+                        ai::ProviderDefinition{
+                                .id = "kimi-coding",
+                                .name = "Kimi For Coding",
+                                .models = ai::providers::kimi_coding_models(),
+                                .auth = std::move(provider_auth),
+                        },
+        }));
     }
 
     [[nodiscard]] ai::AuthInteraction interaction(std::stop_token token = {}) const {

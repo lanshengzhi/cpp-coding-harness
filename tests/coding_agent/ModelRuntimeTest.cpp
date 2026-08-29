@@ -3,6 +3,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
+#include "coding_agent/ModelRuntimeTransportTestSupport.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -98,80 +99,46 @@ public:
     std::map<std::string, ai::Credential, std::less<>> records;
 };
 
-/// Provider with a scripted api-key login that always succeeds and a resolve
-/// that returns the stored key.
-class LoginProvider final : public ai::Provider {
-public:
-    LoginProvider() {
-        ai::ApiKeyAuth api_key;
-        api_key.name = "scripted";
-        api_key.login = [](ai::AuthInteraction)
-            -> cch::support::AsyncResult<ai::ApiKeyCredential> {
-            ai::ApiKeyCredential credential;
-            credential.key = "dummy-login-key";
-            return cch::support::AsyncResult<ai::ApiKeyCredential>(
+/// Provider Definition with a scripted api-key login that always succeeds
+/// and a resolve hook that returns the stored key.
+ai::ProviderDefinition login_provider_definition() {
+    ai::ApiKeyAuth api_key;
+    api_key.name = "scripted";
+    api_key.login = [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
+        ai::ApiKeyCredential credential;
+        credential.key = "dummy-login-key";
+        return cch::support::AsyncResult<ai::ApiKeyCredential>(
                 std::expected<ai::ApiKeyCredential, cch::support::Error>{credential});
-        };
-        api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
+    };
+    api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
             -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
-            if (credential && credential->key) {
-                return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                        ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey}});
-            }
+        if (credential && credential->key) {
             return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                    std::optional<ai::AuthCheck>{}});
-        };
-        api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
+                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                            ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey}});
+        }
+        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{std::optional<ai::AuthCheck>{}});
+    };
+    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
             -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-            if (credential && credential->key) {
-                return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                        ai::AuthResult{
+        if (credential && credential->key) {
+            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{ai::AuthResult{
                             .auth = ai::ModelAuth{.api_key = *credential->key},
                             .source = "stored credential",
-                        }});
-            }
-            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                    std::optional<ai::AuthResult>{}});
-        };
-        auth_.api_key = std::move(api_key);
-    }
-
-    [[nodiscard]] std::string_view id() const noexcept override { return "login-provider"; }
-    [[nodiscard]] std::string_view name() const noexcept override { return "Login Provider"; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
-
-        [[nodiscard]] ai::ModelStream stream(
-        ai::Model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
-            return ai::detail::make_model_stream(
-                    [](ai::AssistantEventSink sink) mutable
-                            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                        ai::AssistantMessage message;
-                        message.api = "unknown";
-                        message.provider = "login-provider";
-                        message.model = "host-client";
-                        message.stop_reason = ai::AssistantStopReason::Stop;
-                        if (sink) {
-                            if (auto emitted = sink(
-                                        ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
-                                    !emitted) {
-                                co_return std::unexpected(emitted.error());
-                            }
-                        }
-                        co_return message;
-                    });
-    }
-
-
-private:
-    ai::ProviderAuth auth_;
-};
+                    }});
+        }
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{std::optional<ai::AuthResult>{}});
+    };
+    return ai::ProviderDefinition{
+            .id = "login-provider",
+            .name = "Login Provider",
+            .models = {},
+            .auth = ai::ProviderAuth{.api_key = std::move(api_key)},
+    };
+}
 
 [[nodiscard]] ai::AiContext request_context() {
     ai::AiContext context;
@@ -217,6 +184,17 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
     CHECK((*runtime)->model("openai-codex", "gpt-5.5").has_value());
     CHECK((*runtime)->model("kimi-coding", "kimi-for-coding").has_value());
     CHECK_FALSE((*runtime)->model("deepseek", "deepseek-v4-flash").has_value());
+
+    const auto providers = (*runtime)->providers();
+    REQUIRE(providers.size() == 2);
+    const auto codex = (*runtime)->provider("openai-codex");
+    REQUIRE(codex.has_value());
+    CHECK(codex->id == "openai-codex");
+    CHECK(codex->name == "OpenAI Codex");
+    REQUIRE(codex->auth_methods.size() == 1);
+    CHECK(codex->auth_methods.front().type == ai::AuthType::OAuth);
+    CHECK(codex->auth_methods.front().has_login);
+    CHECK_FALSE((*runtime)->provider("missing-provider").has_value());
 }
 
 TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics", "[coding_agent][model-runtime][issue345]") {
@@ -296,11 +274,13 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     REQUIRE_FALSE(models_json.empty());
     home.write(".pi/agent/models.json", models_json);
 
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-        coding_agent::ModelRuntimeOptions{},
-        coding_agent::ModelRuntimeTransportOptions{
-            .http_transport = transport,
-        });
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
+            coding_agent::ModelRuntimeTransportTestOptions{
+                    .transports =
+                            ai::providers::ScriptedTransportOptions{
+                                    .http_transport = transport,
+                            },
+            });
     REQUIRE(runtime);
     CHECK_FALSE((*runtime)->get_error().has_value());
 
@@ -367,7 +347,10 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
         .credentials = store,
     });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
+    REQUIRE((*runtime)->ai_models()->apply_provider(ai::ProviderChange{
+            .provider_id = "login-provider",
+            .definition = login_provider_definition(),
+    }));
 
     ai::AuthInteraction interaction;
     auto credential =
@@ -397,7 +380,10 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
         .credentials = store,
     });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
+    REQUIRE((*runtime)->ai_models()->apply_provider(ai::ProviderChange{
+            .provider_id = "login-provider",
+            .definition = login_provider_definition(),
+    }));
 
     REQUIRE(run_async_result((*runtime)->logout("login-provider")));
     const auto stored = run_async_result(store->read("login-provider"));
@@ -493,11 +479,13 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
       }
     })");
 
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-        coding_agent::ModelRuntimeOptions{},
-        coding_agent::ModelRuntimeTransportOptions{
-            .http_transport = transport,
-        });
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
+            coding_agent::ModelRuntimeTransportTestOptions{
+                    .transports =
+                            ai::providers::ScriptedTransportOptions{
+                                    .http_transport = transport,
+                            },
+            });
     REQUIRE(runtime);
     const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
     REQUIRE(model.has_value());
@@ -636,11 +624,13 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
       }
     })");
 
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-        coding_agent::ModelRuntimeOptions{},
-        coding_agent::ModelRuntimeTransportOptions{
-            .http_transport = transport,
-        });
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
+            coding_agent::ModelRuntimeTransportTestOptions{
+                    .transports =
+                            ai::providers::ScriptedTransportOptions{
+                                    .http_transport = transport,
+                            },
+            });
     REQUIRE(runtime);
     const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
     REQUIRE(model.has_value());

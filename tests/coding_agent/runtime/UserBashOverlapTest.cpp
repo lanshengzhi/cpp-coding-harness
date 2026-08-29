@@ -60,9 +60,7 @@ public:
           read_path_(std::move(read_path)) {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
@@ -94,7 +92,6 @@ public:
         co_return response;
                 });
     }
-
 
     void release() {
         gate_.release();

@@ -10,7 +10,6 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include "ai/providers/FakeProvider.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -142,7 +141,7 @@ TEST_CASE(
     owned_request.session_facts.no_prompt_templates = true;
     owned_request.execution_runtime_target = tests::detail::fixture_runtime_target();
     auto created_owned = coding_agent::create_agent_session_for_testing(
-        std::move(owned_request), ai::providers::make_scripted_fake_models());
+            std::move(owned_request), tests::make_scripted_fake_models());
     REQUIRE(created_owned);
     REQUIRE(created_owned->session->model_runtime() != nullptr);
     created_owned->session->close();

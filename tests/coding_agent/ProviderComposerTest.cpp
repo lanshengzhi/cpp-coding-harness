@@ -1,5 +1,4 @@
-#include <cch/ai/Model.hpp>
-#include <cch/ai/Provider.hpp>
+#include <cch/ai/Models.hpp>
 #include "ai/glaze/ModelJson.hpp"
 #include "coding_agent/ModelConfig.hpp"
 #include "coding_agent/ProviderComposer.hpp"
@@ -12,10 +11,10 @@
 
 #include <filesystem>
 #include <iostream>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace cch;
@@ -36,40 +35,48 @@ namespace {
     return coding_agent::ProviderComposerOptions{};
 }
 
+[[nodiscard]] std::optional<ai::ProviderDefinition> builtin_definition(std::string_view provider_id) {
+    for (auto&& definition : ai::builtin_provider_definitions()) {
+        if (definition.id == provider_id) {
+            return std::move(definition);
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProviderComposer: built-in/config composition (pi provider-composer subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("builtin_providers ships the Codex 7 and Kimi 4 catalogs", "[coding_agent][provider-composer][issue345]") {
-    const auto builtins = coding_agent::builtin_providers(composer_options());
-    REQUIRE(builtins.count("openai-codex") == 1);
-    REQUIRE(builtins.count("kimi-coding") == 1);
+TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs", "[coding_agent][provider-composer][issue546]") {
+    const auto builtins = ai::builtin_provider_definitions();
+    REQUIRE(builtins.size() == 2);
 
-    const auto codex = builtins.at("openai-codex");
-    CHECK(codex->name() == "OpenAI Codex");
-    CHECK(codex->auth().oauth.has_value());
-    CHECK_FALSE(codex->auth().api_key.has_value());
-    const auto codex_models = codex->models();
-    REQUIRE(codex_models.size() == 7);
-    CHECK(codex_models.front().id == "gpt-5.3-codex-spark");
-    CHECK(codex_models.back().id == "gpt-5.6-terra");
-    const auto gpt55 = std::find_if(codex_models.begin(), codex_models.end(),
-        [](const ai::Model& m) { return m.id == "gpt-5.5"; });
-    REQUIRE(gpt55 != codex_models.end());
+    const auto& codex = builtins[0];
+    CHECK(codex.id == "openai-codex");
+    CHECK(codex.name == "OpenAI Codex");
+    CHECK(codex.auth.oauth.has_value());
+    CHECK_FALSE(codex.auth.api_key.has_value());
+    REQUIRE(codex.models.size() == 7);
+    CHECK(codex.models.front().id == "gpt-5.3-codex-spark");
+    CHECK(codex.models.back().id == "gpt-5.6-terra");
+    const auto gpt55 = std::find_if(
+            codex.models.begin(), codex.models.end(), [](const ai::Model& m) { return m.id == "gpt-5.5"; });
+    REQUIRE(gpt55 != codex.models.end());
     CHECK(gpt55->api == "openai-codex-responses");
     CHECK(gpt55->base_url == "https://chatgpt.com/backend-api");
 
-    const auto kimi = builtins.at("kimi-coding");
-    CHECK(kimi->name() == "Kimi For Coding");
-    CHECK(kimi->auth().api_key.has_value());
-    CHECK(kimi->auth().oauth.has_value());
-    const auto kimi_models = kimi->models();
-    REQUIRE(kimi_models.size() == 4);
-    const auto kimi_coding = std::find_if(kimi_models.begin(), kimi_models.end(),
-        [](const ai::Model& m) { return m.id == "kimi-for-coding"; });
-    REQUIRE(kimi_coding != kimi_models.end());
+    const auto& kimi = builtins[1];
+    CHECK(kimi.id == "kimi-coding");
+    CHECK(kimi.name == "Kimi For Coding");
+    CHECK(kimi.auth.api_key.has_value());
+    CHECK(kimi.auth.oauth.has_value());
+    REQUIRE(kimi.models.size() == 4);
+    const auto kimi_coding = std::find_if(
+            kimi.models.begin(), kimi.models.end(), [](const ai::Model& m) { return m.id == "kimi-for-coding"; });
+    REQUIRE(kimi_coding != kimi.models.end());
     CHECK(kimi_coding->api == "anthropic-messages");
     CHECK(kimi_coding->compat.has_value());
     CHECK(kimi_coding->compat->allow_empty_signature == true);
@@ -118,23 +125,26 @@ TEST_CASE(
         }
     };
 
-    const auto builtins = coding_agent::builtin_providers(composer_options());
-    const auto codex = builtins.at("openai-codex");
-    check_shard(codex->models(), "models/openai-codex-shard.json", "openai-codex-responses");
-    const auto kimi = builtins.at("kimi-coding");
-    check_shard(kimi->models(), "models/kimi-coding-shard.json", "anthropic-messages");
+    const auto builtins = ai::builtin_provider_definitions();
+    REQUIRE(builtins.size() == 2);
+    check_shard(builtins[0].models, "models/openai-codex-shard.json", "openai-codex-responses");
+    check_shard(builtins[1].models, "models/kimi-coding-shard.json", "anthropic-messages");
 }
 
-TEST_CASE("built-in without models.json config is used untouched", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("built-in without models.json config is submitted unchanged", "[coding_agent][provider-composer][issue546]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({"providers": {}})");
-    const auto builtins = coding_agent::builtin_providers(composer_options());
+    auto base = builtin_definition("openai-codex");
+    REQUIRE(base.has_value());
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "openai-codex", builtins.at("openai-codex"), config, composer_options(), error);
+    auto change = coding_agent::compose_provider("openai-codex", std::move(base), config, composer_options(), error);
     CHECK_FALSE(error.has_value());
-    REQUIRE(composed != nullptr);
-    CHECK(composed.get() == builtins.at("openai-codex").get());
+    CHECK(change.provider_id == "openai-codex");
+    REQUIRE(change.definition.has_value());
+    CHECK(change.definition->id == "openai-codex");
+    CHECK(change.definition->name == "OpenAI Codex");
+    CHECK(change.definition->models.size() == 7);
+    CHECK(change.definition->auth.oauth.has_value());
 }
 
 TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a custom model", "[coding_agent][provider-composer][issue345]") {
@@ -151,14 +161,14 @@ TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a cust
         }
       }
     })");
-    const auto builtins = coding_agent::builtin_providers(composer_options());
+    auto base = builtin_definition("openai-codex");
+    REQUIRE(base.has_value());
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "openai-codex", builtins.at("openai-codex"), config, composer_options(), error);
+    auto change = coding_agent::compose_provider("openai-codex", std::move(base), config, composer_options(), error);
     CHECK_FALSE(error.has_value());
-    REQUIRE(composed != nullptr);
+    REQUIRE(change.definition.has_value());
 
-    const auto models = composed->models();
+    const auto& models = change.definition->models;
     // Same-id custom-model upsert replaces gpt-5.5.
     const auto gpt55 = std::find_if(models.begin(), models.end(),
         [](const ai::Model& m) { return m.id == "gpt-5.5"; });
@@ -172,7 +182,7 @@ TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a cust
     REQUIRE(gpt54 != models.end());
     CHECK(gpt54->base_url == "https://codex.example/v1");
     // The built-in OAuth auth is preserved.
-    CHECK(composed->auth().oauth.has_value());
+    CHECK(change.definition->auth.oauth.has_value());
 }
 
 TEST_CASE("model overrides apply last over the composed model", "[coding_agent][provider-composer][issue345]") {
@@ -186,13 +196,13 @@ TEST_CASE("model overrides apply last over the composed model", "[coding_agent][
         }
       }
     })");
-    const auto builtins = coding_agent::builtin_providers(composer_options());
+    auto base = builtin_definition("kimi-coding");
+    REQUIRE(base.has_value());
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "kimi-coding", builtins.at("kimi-coding"), config, composer_options(), error);
+    auto change = coding_agent::compose_provider("kimi-coding", std::move(base), config, composer_options(), error);
     CHECK_FALSE(error.has_value());
-    REQUIRE(composed != nullptr);
-    const auto models = composed->models();
+    REQUIRE(change.definition.has_value());
+    const auto& models = change.definition->models;
     const auto target = std::find_if(models.begin(), models.end(),
         [](const ai::Model& m) { return m.id == "kimi-for-coding"; });
     REQUIRE(target != models.end());
@@ -214,13 +224,12 @@ TEST_CASE("config-only provider composes from models.json plus the openai-respon
       }
     })");
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "deepseek", nullptr, config, composer_options(), error);
+    auto change = coding_agent::compose_provider("deepseek", std::nullopt, config, composer_options(), error);
     CHECK_FALSE(error.has_value());
-    REQUIRE(composed != nullptr);
-    CHECK(composed->name() == "DeepSeek");
-    CHECK(composed->auth().api_key.has_value());
-    const auto models = composed->models();
+    REQUIRE(change.definition.has_value());
+    CHECK(change.definition->name == "DeepSeek");
+    CHECK(change.definition->auth.api_key.has_value());
+    const auto& models = change.definition->models;
     REQUIRE(models.size() == 1);
     CHECK(models.front().id == "deepseek-v4-flash");
     CHECK(models.front().api == "openai-responses");
@@ -241,11 +250,10 @@ TEST_CASE("config-only provider without apiKey still composes but resolves no au
       }
     })");
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "deepseek", nullptr, config, composer_options(), error);
+    auto change = coding_agent::compose_provider("deepseek", std::nullopt, config, composer_options(), error);
     CHECK_FALSE(error.has_value());
-    REQUIRE(composed != nullptr);
-    REQUIRE(composed->auth().api_key.has_value());
+    REQUIRE(change.definition.has_value());
+    REQUIRE(change.definition->auth.api_key.has_value());
 }
 
 TEST_CASE("composition failure falls back to the built-in and records the error", "[coding_agent][provider-composer][issue345]") {
@@ -256,25 +264,29 @@ TEST_CASE("composition failure falls back to the built-in and records the error"
         "kimi-coding": {"name": "Broken Kimi"}
       }
     })");
-    const auto builtins = coding_agent::builtin_providers(composer_options());
+    auto base = builtin_definition("kimi-coding");
+    REQUIRE(base.has_value());
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "kimi-coding", builtins.at("kimi-coding"), config, composer_options(), error);
+    auto change = coding_agent::compose_provider("kimi-coding", std::move(base), config, composer_options(), error);
     REQUIRE(error.has_value());
     CHECK(error->find("must specify") != std::string::npos);
-    // Built-in fallback is returned.
-    REQUIRE(composed != nullptr);
-    CHECK(composed.get() == builtins.at("kimi-coding").get());
+    // The complete built-in definition is returned as the fallback.
+    REQUIRE(change.definition.has_value());
+    CHECK(change.definition->id == "kimi-coding");
+    CHECK(change.definition->name == "Kimi For Coding");
+    CHECK(change.definition->models.size() == 4);
+    CHECK(change.definition->auth.oauth.has_value());
+    CHECK(change.definition->auth.api_key.has_value());
 }
 
 TEST_CASE("absent provider with no config returns null", "[coding_agent][provider-composer][issue345]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({"providers": {}})");
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "deepseek", nullptr, config, composer_options(), error);
+    auto change = coding_agent::compose_provider("deepseek", std::nullopt, config, composer_options(), error);
     CHECK_FALSE(error.has_value());
-    CHECK(composed == nullptr);
+    CHECK(change.provider_id == "deepseek");
+    CHECK_FALSE(change.definition.has_value());
 }
 
 TEST_CASE("custom model requires an api and baseUrl", "[coding_agent][provider-composer][issue345]") {
@@ -288,11 +300,10 @@ TEST_CASE("custom model requires an api and baseUrl", "[coding_agent][provider-c
       }
     })");
     std::optional<std::string> error;
-    auto composed = coding_agent::compose_provider(
-        "deepseek", nullptr, config, composer_options(), error);
+    auto change = coding_agent::compose_provider("deepseek", std::nullopt, config, composer_options(), error);
     REQUIRE(error.has_value());
     CHECK(error->find("no \"api\" specified") != std::string::npos);
-    CHECK(composed == nullptr);
+    CHECK_FALSE(change.definition.has_value());
 }
 
 TEST_CASE("default-model table maps the supported provider subset", "[coding_agent][provider-composer][issue345]") {
