@@ -87,6 +87,19 @@ jobs:
           test "$(dpkg-query --show --showformat='${Version}' g++-16)" = "$GCC_PACKAGE_VERSION"
           test "$(g++-16 -dumpfullversion)" = "16.0.1"
 
+      - name: Make pinned GCC the default gcc/g++
+        # The vcpkg presets pin CMAKE_CXX_COMPILER to the plain g++ driver on
+        # PATH (bootstrap.sh precheck contract), so the pinned 16.x must be
+        # the default gcc/g++ — the runner image's default is GCC 13. The
+        # Clang lane pins clang++-22 in its preset and keeps the image
+        # defaults, so it is excluded here.
+        if: matrix.compiler == 'gcc'
+        run: |
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-16 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-16 100
+          test "$(gcc -dumpfullversion)" = "16.0.1"
+          test "$(g++ -dumpfullversion)" = "16.0.1"
+
       - name: Install pinned Clang
         if: matrix.compiler == 'clang'
         env:
@@ -254,6 +267,16 @@ jobs:
           test "$(dpkg-query --show --showformat='${Version}' gcc-16)" = "$GCC_PACKAGE_VERSION"
           test "$(dpkg-query --show --showformat='${Version}' g++-16)" = "$GCC_PACKAGE_VERSION"
           test "$(g++-16 -dumpfullversion)" = "16.0.1"
+
+      - name: Make pinned GCC the default gcc/g++
+        # The vcpkg presets pin CMAKE_CXX_COMPILER to the plain g++ driver on
+        # PATH (bootstrap.sh precheck contract), so the pinned 16.x must be
+        # the default gcc/g++ — the runner image's default is GCC 13.
+        run: |
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-16 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-16 100
+          test "$(gcc -dumpfullversion)" = "16.0.1"
+          test "$(g++ -dumpfullversion)" = "16.0.1"
 
       - name: Restore the shared vcpkg binary cache
         # Per-lane primary key + shared-prefix fallback (see build-and-test);
