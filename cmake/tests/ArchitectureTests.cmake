@@ -111,6 +111,17 @@ include_guard(GLOBAL)
     # regressions. Requires the build to have produced compile_commands.json;
     # the build-phase Gate custom target is already a prerequisite of every
     # test shard.
+    # Concurrency accounting: the gate's compile workers are a machine-wide
+    # load, so size them to the host and reserve the same width from CTest
+    # via PROCESSORS. Under a narrower `ctest -j N` the gate then runs
+    # exclusively once all N slots drain instead of stacking its workers on
+    # top of N sibling tests, keeping the host fully but never
+    # oversubscribed. Host core count is safe to query: cross-compilation is
+    # unsupported (ADR 0039).
+    cmake_host_system_information(RESULT CCH_WARNING_GATE_JOBS QUERY NUMBER_OF_LOGICAL_CORES)
+    if(NOT CCH_WARNING_GATE_JOBS)
+        set(CCH_WARNING_GATE_JOBS 4)
+    endif()
     add_test(
         NAME cch_warning_gate
         COMMAND
@@ -119,7 +130,9 @@ include_guard(GLOBAL)
             --compile-commands ${CMAKE_BINARY_DIR}/compile_commands.json
             --project-root ${CMAKE_CURRENT_SOURCE_DIR}
             --exclude-root ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
+            --jobs ${CCH_WARNING_GATE_JOBS}
     )
     set_tests_properties(cch_warning_gate PROPERTIES
         LABELS "architecture;build;issue492"
+        PROCESSORS ${CCH_WARNING_GATE_JOBS}
         TIMEOUT 900)
