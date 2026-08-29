@@ -125,6 +125,14 @@ _Avoid_: Model name string, client configuration, optional model
 The long-lived runtime capability that owns one provider identity's model catalog, authentication, and stream execution, delegating wire protocol work to the API the requested Model names.
 _Avoid_: Provider factory, per-request client, hard-coded provider list
 
+**Provider Definition**:
+The complete pre-runtime description of one Provider: its identity, display name, final model catalog, and authentication behavior. Built-in definitions originate with the AI capability; Models Runtime applies user model configuration and submits a complete definition for runtime ownership.
+_Avoid_: Provider factory options, adapter config bag, transport config
+
+**Provider Info**:
+The passive, queryable description of an installed Provider exposed to hosts and the Native TUI: identity, display name, and authentication-method summary. It carries no authentication hooks, transport, or stream capability.
+_Avoid_: Provider handle, runtime provider pointer, auth snapshot
+
 **Models Runtime**:
 The canonical model/authentication runtime for one Agent Config Directory: it composes built-in and configured providers, resolves live authentication, and delegates model requests to the owning Provider. It is shared across Agent Sessions and refreshed as a whole rather than reconstructed per session.
 _Avoid_: Provider registry, session-scoped client, configuration snapshot
