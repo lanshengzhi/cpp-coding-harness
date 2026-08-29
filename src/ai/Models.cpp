@@ -2,6 +2,9 @@
 
 #include "support/AsyncResultBridge.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include "ai/providers/BoostBeastWebSocketTransport.hpp"
+#include "ai/providers/ComposedProvider.hpp"
 #include "SimpleOptions.hpp"
 #include "support/BoundedText.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -130,6 +133,17 @@ invoke_async_operation(Operation operation) {
 #else
     return provider_value.models();
 #endif
+}
+
+[[nodiscard]] std::shared_ptr<Provider> make_default_provider(ProviderDefinition definition) {
+    auto http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
+    auto websocket_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
+    return providers::make_composed_provider(std::move(definition.id),
+            std::move(definition.name),
+            std::move(definition.models),
+            std::move(definition.auth),
+            std::move(http_transport),
+            std::move(websocket_transport));
 }
 
 [[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
@@ -487,6 +501,26 @@ Models::Models(Models&&) noexcept = default;
 Models& Models::operator=(Models&&) noexcept = default;
 Models::~Models() = default;
 
+support::ExpectedVoid Models::apply_provider(ProviderChange change) {
+    if (change.definition) {
+        auto definition = std::move(*change.definition);
+        if (definition.id.empty()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
+        }
+        if (!change.provider_id.empty() && change.provider_id != definition.id) {
+            return std::unexpected(support::make_error(support::ErrorCode::Provider,
+                    "provider change id does not match provider definition",
+                    definition.id));
+        }
+        return set_provider(make_default_provider(std::move(definition)));
+    }
+    if (change.provider_id.empty()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
+    }
+    delete_provider(change.provider_id);
+    return {};
+}
+
 support::ExpectedVoid Models::set_provider(std::shared_ptr<Provider> provider_value) {
     if (!provider_value || provider_value->id().empty()) {
         return std::unexpected(support::make_error(
@@ -514,6 +548,36 @@ void Models::delete_provider(std::string_view provider_id) {
 
 void Models::clear_providers() {
     impl_->providers.clear();
+}
+
+std::vector<ProviderInfo> Models::provider_info() const {
+    std::vector<ProviderInfo> result;
+    result.reserve(impl_->providers.size());
+    for (const auto& [_, provider_value] : impl_->providers) {
+        ProviderInfo info{
+                .id = std::string{provider_value->id()},
+                .name = std::string{provider_value->name()},
+                .auth_methods = {},
+        };
+        const auto& auth = provider_value->auth();
+        // Keep the existing login presentation order: OAuth before API key.
+        if (auth.oauth) {
+            info.auth_methods.push_back(AuthMethodInfo{
+                    .type = AuthType::OAuth,
+                    .name = auth.oauth->name,
+                    .has_login = static_cast<bool>(auth.oauth->login),
+            });
+        }
+        if (auth.api_key) {
+            info.auth_methods.push_back(AuthMethodInfo{
+                    .type = AuthType::ApiKey,
+                    .name = auth.api_key->name,
+                    .has_login = static_cast<bool>(auth.api_key->login),
+            });
+        }
+        result.push_back(std::move(info));
+    }
+    return result;
 }
 
 std::vector<std::shared_ptr<Provider>> Models::providers() const {

@@ -14,6 +14,7 @@
 #include <boost/asio/use_future.hpp>
 
 #include <chrono>
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <map>
@@ -374,6 +375,81 @@ ai::AuthInteraction empty_interaction() {
 }
 
 } // namespace
+
+TEST_CASE("Models installs Provider Definitions and projects passive Provider Info", "[ai][models][issue544]") {
+    static_assert(std::movable<ai::ProviderDefinition>);
+    static_assert(!std::copy_constructible<ai::ProviderDefinition>);
+
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+
+    ai::ApiKeyAuth api_key;
+    api_key.name = "API key";
+    api_key.login = [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
+        return cch::support::AsyncResult<ai::ApiKeyCredential>(
+                std::expected<ai::ApiKeyCredential, cch::support::Error>{ai::ApiKeyCredential{}});
+    };
+    ai::OAuthAuth oauth;
+    oauth.name = "Subscription";
+    ai::ProviderDefinition definition{
+            .id = "definition-provider",
+            .name = "Definition Provider",
+            .models = {tests::make_model("definition-model", "definition-provider", "private-api")},
+            .auth =
+                    ai::ProviderAuth{
+                            .api_key = std::move(api_key),
+                            .oauth = std::move(oauth),
+                    },
+    };
+
+    REQUIRE(models->apply_provider(ai::ProviderChange{
+            .provider_id = "definition-provider",
+            .definition = std::move(definition),
+    }));
+
+    const auto infos = models->provider_info();
+    REQUIRE(infos.size() == 1);
+    CHECK(infos.front().id == "definition-provider");
+    CHECK(infos.front().name == "Definition Provider");
+    REQUIRE(infos.front().auth_methods.size() == 2);
+    CHECK(infos.front().auth_methods[0].type == ai::AuthType::OAuth);
+    CHECK(infos.front().auth_methods[0].name == "Subscription");
+    CHECK_FALSE(infos.front().auth_methods[0].has_login);
+    CHECK(infos.front().auth_methods[1].type == ai::AuthType::ApiKey);
+    CHECK(infos.front().auth_methods[1].name == "API key");
+    CHECK(infos.front().auth_methods[1].has_login);
+
+    const auto available = models->models("definition-provider");
+    REQUIRE(available.size() == 1);
+    CHECK(available.front().id == "definition-model");
+    CHECK(models->provider("definition-provider") != nullptr);
+
+    REQUIRE(models->apply_provider(ai::ProviderChange{
+            .provider_id = "absent-provider",
+            .definition = std::nullopt,
+    }));
+    CHECK(models->provider_info().size() == 1);
+
+    REQUIRE(models->apply_provider(ai::ProviderChange{
+            .provider_id = "definition-provider",
+            .definition = std::nullopt,
+    }));
+    CHECK(models->provider_info().empty());
+
+    REQUIRE(models->apply_provider(ai::ProviderChange{
+            .provider_id = "clear-provider",
+            .definition =
+                    ai::ProviderDefinition{
+                            .id = "clear-provider",
+                            .name = "Clear Provider",
+                            .auth = keyless_auth(),
+                    },
+    }));
+    CHECK(models->provider_info().size() == 1);
+    models->clear_providers();
+    CHECK(models->provider_info().empty());
+}
 
 TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[ai][models][issue338]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();

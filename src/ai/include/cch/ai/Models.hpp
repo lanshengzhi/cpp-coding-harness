@@ -18,6 +18,39 @@
 
 namespace cch::ai {
 
+/// Complete pre-runtime description of one Provider. The authentication hooks
+/// make this value move-only; transports and stream capabilities are assembled
+/// privately by Models.
+struct ProviderDefinition {
+    std::string id{};
+    std::string name{};
+    std::vector<Model> models{};
+    ProviderAuth auth{};
+};
+
+/// One Provider installation or removal. A present definition installs or
+/// replaces the provider identified by `provider_id`; an absent definition
+/// removes that provider. The id is repeated for installation so a change has
+/// one explicit target in either form.
+struct ProviderChange {
+    std::string provider_id{};
+    std::optional<ProviderDefinition> definition{std::nullopt};
+};
+
+/// Passive summary of one authentication method exposed by Provider Info.
+struct AuthMethodInfo {
+    AuthType type{AuthType::ApiKey};
+    std::string name{};
+    bool has_login{false};
+};
+
+/// Passive projection of one installed Provider for hosts and frontends.
+struct ProviderInfo {
+    std::string id{};
+    std::string name{};
+    std::vector<AuthMethodInfo> auth_methods{};
+};
+
 /// Runtime collection of long-lived Providers plus live authentication and
 /// request-time stream delegation.
 ///
@@ -39,10 +72,17 @@ public:
     Models(const Models&) = delete;
     Models& operator=(const Models&) = delete;
 
+    /// Install or remove one provider while keeping construction private to
+    /// the AI Owner. A missing provider removal succeeds as a no-op.
+    [[nodiscard]] cch::support::ExpectedVoid apply_provider(ProviderChange change);
+
+    // Transitional Provider-pointer surface; removed once downstream callers
+    // migrate to ProviderDefinition and ProviderInfo (ADR 0047).
     [[nodiscard]] cch::support::ExpectedVoid set_provider(std::shared_ptr<Provider> provider);
     void delete_provider(std::string_view provider_id);
     void clear_providers();
 
+    [[nodiscard]] std::vector<ProviderInfo> provider_info() const;
     [[nodiscard]] std::vector<std::shared_ptr<Provider>> providers() const;
     [[nodiscard]] std::shared_ptr<Provider> provider(std::string_view provider_id) const;
     [[nodiscard]] std::vector<Model> models(std::optional<std::string_view> provider_id = std::nullopt) const;
