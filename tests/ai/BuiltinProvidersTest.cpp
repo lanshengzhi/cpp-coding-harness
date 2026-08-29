@@ -6,9 +6,7 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "Built-in provider definitions preserve the frozen catalogs and auth methods",
-    "[ai][providers][issue545]") {
+TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth methods", "[ai][providers][issue545]") {
     static_assert(std::movable<ai::ProviderDefinition>);
     static_assert(!std::copy_constructible<ai::ProviderDefinition>);
 
@@ -45,9 +43,7 @@ TEST_CASE(
     CHECK(static_cast<bool>(definitions[1].auth.oauth->to_auth));
 }
 
-TEST_CASE(
-    "Built-in provider definitions are fresh on every call",
-    "[ai][providers][issue545]") {
+TEST_CASE("Built-in provider definitions are fresh on every call", "[ai][providers][issue545]") {
     auto first = ai::builtin_provider_definitions();
     auto second = ai::builtin_provider_definitions();
 

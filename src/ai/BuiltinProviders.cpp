@@ -25,8 +25,7 @@ std::vector<ProviderDefinition> builtin_provider_definitions() {
     });
 
     ProviderAuth kimi_auth;
-    auto kimi_api_key = providers::make_env_api_key_auth(
-            "Kimi API key", {"KIMI_API_KEY"});
+    auto kimi_api_key = providers::make_env_api_key_auth("Kimi API key", {"KIMI_API_KEY"});
     kimi_auth.api_key = std::move(*kimi_api_key.api_key);
     kimi_auth.oauth = auth::make_kimi_coding_oauth_auth();
     definitions.push_back(ProviderDefinition{
