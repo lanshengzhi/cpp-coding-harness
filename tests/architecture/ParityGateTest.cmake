@@ -21,6 +21,18 @@ set(CCH_PARITY_LEGAL_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/legal")
 set(CCH_PARITY_ILLEGAL_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/illegal")
 set(CCH_PARITY_ILLEGAL_INCLUDE_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/illegal-include")
 set(CCH_PARITY_POISON_DIR "${CCH_PARITY_FIXTURE_ROOT}/poison")
+set(CCH_PARITY_AI_INTERFACE_ROOT "${CCH_PARITY_FIXTURE_ROOT}/src/ai/include/cch/ai")
+set(CCH_PARITY_AI_PRIVATE_PROVIDER "${CCH_PARITY_FIXTURE_ROOT}/src/ai/providers/Provider.hpp")
+
+# The fixture mirrors the real AI package boundary: Provider is a private
+# capability, not an Owner Interface header. Keep both sides explicit so a
+# future fixture update cannot silently put it back under the canonical root.
+if(EXISTS "${CCH_PARITY_AI_INTERFACE_ROOT}/Provider.hpp")
+    message(FATAL_ERROR "the parity fixture must not expose Provider.hpp from the cch_ai interface root")
+endif()
+if(NOT EXISTS "${CCH_PARITY_AI_PRIVATE_PROVIDER}")
+    message(FATAL_ERROR "the parity fixture must keep Provider.hpp under the private AI root")
+endif()
 
 find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
 
@@ -156,6 +168,11 @@ string(FIND "${legal_index_text}"
 if(public_visibility_position EQUAL -1)
     message(FATAL_ERROR
         "legal fixture index did not record cch_ai -> cch_support as interface-visible (public)")
+endif()
+file(READ "${legal_build_dir}/parity-direct-includes.json" legal_direct_includes_text)
+if(NOT legal_direct_includes_text MATCHES "\\\"path\\\"[ \\t]*:[ \\t]*\\\"ai/providers/Provider\\.hpp\\\"")
+    message(FATAL_ERROR
+        "legal fixture direct-include evidence did not retain the private Provider header")
 endif()
 execute_process(
     COMMAND

@@ -183,6 +183,20 @@ class ManifestSchemaTest(unittest.TestCase):
             {"cch_ai", "cch_agent_core", "cch_tui", "cch_coding_agent", "cch_support"},
         )
 
+    def test_provider_capability_is_outside_ai_interface_root(self):
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        ai_owner = manifest.owners["cch_ai"]
+        self.assertEqual(ai_owner.root, "src/ai")
+        self.assertEqual(ai_owner.interface_root, "src/ai/include/cch/ai")
+
+        interface_root = REPO_ROOT / ai_owner.interface_root
+        interface_headers = pg._walk_interface_headers(str(REPO_ROOT), ai_owner.interface_root)
+        self.assertNotIn("Provider.hpp", interface_headers)
+        public_text = "\n".join(path.read_text() for path in interface_root.rglob("*.hpp"))
+        self.assertNotIn("ProviderStreamOptions", public_text)
+        self.assertTrue((REPO_ROOT / ai_owner.root / "providers" / "Provider.hpp").is_file())
+
     def test_valid_manifest_parses(self):
         manifest = valid_manifest()
         self.assertEqual(manifest.schema_version, 2)
