@@ -200,8 +200,7 @@ struct LoginFixture {
         });
         if (!runtime) return nullptr;
         for (auto& provider : replacements) {
-            if (auto added = (*runtime)->register_native_provider(std::move(provider));
-                !added) {
+            if (auto added = (*runtime)->ai_models()->set_provider(std::move(provider)); !added) {
                 return nullptr;
             }
         }

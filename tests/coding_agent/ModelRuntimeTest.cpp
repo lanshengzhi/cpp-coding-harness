@@ -217,6 +217,17 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
     CHECK((*runtime)->model("openai-codex", "gpt-5.5").has_value());
     CHECK((*runtime)->model("kimi-coding", "kimi-for-coding").has_value());
     CHECK_FALSE((*runtime)->model("deepseek", "deepseek-v4-flash").has_value());
+
+    const auto providers = (*runtime)->providers();
+    REQUIRE(providers.size() == 2);
+    const auto codex = (*runtime)->provider("openai-codex");
+    REQUIRE(codex.has_value());
+    CHECK(codex->id == "openai-codex");
+    CHECK(codex->name == "OpenAI Codex");
+    REQUIRE(codex->auth_methods.size() == 1);
+    CHECK(codex->auth_methods.front().type == ai::AuthType::OAuth);
+    CHECK(codex->auth_methods.front().has_login);
+    CHECK_FALSE((*runtime)->provider("missing-provider").has_value());
 }
 
 TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics", "[coding_agent][model-runtime][issue345]") {
@@ -367,7 +378,7 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
         .credentials = store,
     });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
+    REQUIRE((*runtime)->ai_models()->set_provider(std::make_shared<LoginProvider>()));
 
     ai::AuthInteraction interaction;
     auto credential =
@@ -397,7 +408,7 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
         .credentials = store,
     });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
+    REQUIRE((*runtime)->ai_models()->set_provider(std::make_shared<LoginProvider>()));
 
     REQUIRE(run_async_result((*runtime)->logout("login-provider")));
     const auto stored = run_async_result(store->read("login-provider"));

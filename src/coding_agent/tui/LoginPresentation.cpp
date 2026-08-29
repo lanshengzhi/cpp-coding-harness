@@ -33,37 +33,27 @@ std::vector<AuthSelectorProvider> compute_login_provider_options(
     std::vector<AuthSelectorProvider> options;
     for (const auto& provider : runtime.providers()) {
         // pi: `getProviderAuthStatus` + `isUsingOAuth` for the row status.
-        const auto auth_status = runtime.get_provider_auth_status(provider->id());
+        const auto auth_status = runtime.get_provider_auth_status(provider.id);
         std::optional<AuthSelectorStatus> status;
         if (auth_status && auth_status->configured) {
             status = AuthSelectorStatus{
-                .type = runtime.is_using_oauth(provider->id())
-                    ? AuthSelectorType::OAuth
-                    : AuthSelectorType::ApiKey,
-                .source = auth_status->label ? auth_status->label : auth_status->source,
+                    .type = runtime.is_using_oauth(provider.id) ? AuthSelectorType::OAuth : AuthSelectorType::ApiKey,
+                    .source = auth_status->label ? auth_status->label : auth_status->source,
             };
         }
-        const std::string id{provider->id()};
-        const std::string name{provider->name()};
-        auto& auth = provider->auth();
-        if ((!filter || *filter == AuthSelectorType::OAuth) && auth.oauth) {
+        for (const auto& method : provider.auth_methods) {
+            const auto selector_type =
+                    method.type == ai::AuthType::OAuth ? AuthSelectorType::OAuth : AuthSelectorType::ApiKey;
+            if (filter && *filter != selector_type) {
+                continue;
+            }
             options.push_back(AuthSelectorProvider{
-                .id = id,
-                .name = name,
-                .auth_type = AuthSelectorType::OAuth,
-                .method_name = auth.oauth->name,
-                .status = status,
-                .has_login = static_cast<bool>(auth.oauth->login),
-            });
-        }
-        if ((!filter || *filter == AuthSelectorType::ApiKey) && auth.api_key) {
-            options.push_back(AuthSelectorProvider{
-                .id = std::move(id),
-                .name = std::move(name),
-                .auth_type = AuthSelectorType::ApiKey,
-                .method_name = auth.api_key->name,
-                .status = status,
-                .has_login = static_cast<bool>(auth.api_key->login),
+                    .id = provider.id,
+                    .name = provider.name,
+                    .auth_type = selector_type,
+                    .method_name = method.name,
+                    .status = status,
+                    .has_login = method.has_login,
             });
         }
     }
@@ -99,14 +89,15 @@ std::vector<AuthSelectorProvider> compute_logout_provider_options(
             : AuthSelectorType::ApiKey;
         const auto provider = runtime.provider(credential.provider_id);
         options.push_back(AuthSelectorProvider{
-            .id = credential.provider_id,
-            .name = provider ? std::string{provider->name()} : credential.provider_id,
-            .auth_type = type,
-            .method_name = std::nullopt,
-            .status = AuthSelectorStatus{
-                .type = type,
-                .source = "stored credential",
-            },
+                .id = credential.provider_id,
+                .name = provider ? provider->name : credential.provider_id,
+                .auth_type = type,
+                .method_name = std::nullopt,
+                .status =
+                        AuthSelectorStatus{
+                                .type = type,
+                                .source = "stored credential",
+                        },
         });
     }
     std::sort(options.begin(), options.end(), [](const auto& left, const auto& right) {

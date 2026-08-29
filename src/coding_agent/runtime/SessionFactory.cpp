@@ -1674,7 +1674,7 @@ support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create
         }
         const auto incoming_providers = overrides.models->providers();
         for (auto provider : incoming_providers) {
-            if (auto registered = (*wrapped)->register_native_provider(std::move(provider)); !registered) {
+            if (auto registered = (*wrapped)->ai_models()->set_provider(std::move(provider)); !registered) {
                 return std::unexpected(with_settings_fallback_context(registered.error(), snapshot));
             }
         }

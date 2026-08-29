@@ -4,7 +4,6 @@
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -89,11 +88,13 @@ public:
     /// Config, composition, and availability diagnostics. Empty when healthy.
     [[nodiscard]] std::optional<std::string> get_error() const;
 
-    // ── Provider / model lookup (live, delegating) ────────────────────────
+    // ── Provider / model lookup (passive, live) ──────────────────────────
 
-    [[nodiscard]] std::vector<std::shared_ptr<ai::Provider>> providers() const;
-    [[nodiscard]] std::shared_ptr<ai::Provider> provider(
-        std::string_view provider_id) const;
+    /// Installed provider metadata for hosts and frontends. No capability
+    /// pointer or authentication hook escapes this runtime.
+    [[nodiscard]] std::vector<ai::ProviderInfo> providers() const;
+    /// Installed provider metadata by identity, or no value when absent.
+    [[nodiscard]] std::optional<ai::ProviderInfo> provider(std::string_view provider_id) const;
     /// The AI-owned Models catalog this runtime composes and delegates to.
     /// The Agent's model-streaming seam is built from this catalog's
     /// `ModelStream` surface (ADR 0040 / #453), not from the runtime itself.
@@ -164,14 +165,6 @@ public:
     // resolution, authentication, and Provider composition; it no longer
     // exposes a streaming surface of its own.
 
-    // ── Provider registration ──────────────────────────────────────────────
-
-    /// Register a native provider used exactly as given (pi
-    /// `registerNativeProvider`). Replaces any built-in or composed provider
-    /// with the same id. Empty provider ids are rejected.
-    [[nodiscard]] support::ExpectedVoid register_native_provider(
-        std::shared_ptr<ai::Provider> provider);
-
     /// Env var names referenced by configured models.json `apiKey` templates
     /// (pi `getConfigValueEnvVarNames`). Used for execution environment secret
     /// filtering.
@@ -184,6 +177,7 @@ public:
 private:
     struct Impl;
 
+    [[nodiscard]] static support::Expected<std::shared_ptr<ModelRuntime>> create_impl(ModelRuntimeOptions options);
     explicit ModelRuntime(std::unique_ptr<Impl> impl);
 
     friend class runtime::SessionFactory;

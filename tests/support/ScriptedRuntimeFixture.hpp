@@ -239,7 +239,7 @@ private:
 
 /// Test fixture that owns a concrete ModelRuntime and separate scripted
 /// Provider/control state. Both the `fake` and `sdk-host` Providers are
-/// registered through `ModelRuntime::register_native_provider`.
+/// installed through the transitional AI Models provider seam.
 struct ScriptedRuntimeFixture final {
     std::shared_ptr<EnvVarGuard> kimi_api_key;
     std::shared_ptr<coding_agent::ModelRuntime> runtime;
@@ -257,7 +257,7 @@ struct ScriptedRuntimeFixture final {
         }
         runtime = std::move(*created);
         const auto register_provider = [this](std::string provider_id, bool configured) {
-            auto registered = runtime->register_native_provider(
+            auto registered = runtime->ai_models()->set_provider(
                     std::make_shared<ScriptedRuntimeProvider>(std::move(provider_id), control, configured));
             if (!registered) {
                 std::terminate();
