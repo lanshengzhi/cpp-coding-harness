@@ -12,7 +12,6 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -76,8 +75,7 @@ struct TestRunOptions {
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
-    const tests::TempWorkspace& workspace,
-    std::shared_ptr<ai::Provider> client) {
+        const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> client) {
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
@@ -155,8 +153,8 @@ struct RichThinkingSession {
         request.workspace = workspace.path();
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        auto resumed = coding_agent::create_agent_session_for_testing(
-            std::move(request), ai::providers::make_scripted_fake_models());
+        auto resumed =
+                coding_agent::create_agent_session_for_testing(std::move(request), tests::make_scripted_fake_models());
         REQUIRE(resumed);
         return resumed;
     }
@@ -207,9 +205,7 @@ class FailOnceChatProvider final : public tests::ScriptedProvider {
 public:
     FailOnceChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
@@ -230,7 +226,6 @@ public:
         co_return response;
                 });
     }
-
 
     std::size_t calls{0};
 };
@@ -344,9 +339,7 @@ public:
     AbortAwareInteractiveChatProvider& operator=(const AbortAwareInteractiveChatProvider&) = delete;
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -427,7 +420,6 @@ public:
                 });
     }
 
-
     bool started{false};
     bool recovery_uses_fresh_token{false};
     bool recovery_stop_requested{true};
@@ -449,9 +441,7 @@ public:
     GatedChatProvider& operator=(const GatedChatProvider&) = delete;
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -480,7 +470,6 @@ public:
                 });
     }
 
-
     void release() {
         if (gate_) (void)gate_->cancel();
     }
@@ -501,9 +490,7 @@ public:
     TurnGatedChatProvider& operator=(const TurnGatedChatProvider&) = delete;
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
@@ -536,7 +523,6 @@ public:
                 });
     }
 
-
     void release() {
         if (gate_) (void)gate_->cancel();
     }
@@ -553,9 +539,7 @@ class RepeatedReadCallChatProvider final : public tests::ScriptedProvider {
 public:
     RepeatedReadCallChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
                 [model = std::move(model), context = std::move(context), options = std::move(options)](
                         ai::AssistantEventSink sink) mutable
@@ -631,7 +615,6 @@ public:
                     co_return response;
                 });
     }
-
 };
 
 [[nodiscard]] agent::AsyncToolExecutionResult gated_partial_final_result(
@@ -818,9 +801,7 @@ class AbortThroughToolChatProvider final : public tests::ScriptedProvider {
 public:
     AbortThroughToolChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -877,7 +858,6 @@ public:
                 });
     }
 
-
     std::size_t request_count{0};
     std::optional<std::stop_token> first_stop_token;
     std::optional<std::stop_token> completion_stop_token;
@@ -887,9 +867,7 @@ class AcceptedOutcomeChatProvider final : public tests::ScriptedProvider {
 public:
     AcceptedOutcomeChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
                 [model = std::move(model), context = std::move(context), options = std::move(options)](
                         ai::AssistantEventSink) mutable
@@ -929,7 +907,6 @@ public:
                     co_return response;
                 });
     }
-
 };
 
 class IncrementalGatedChatProvider final : public tests::ScriptedProvider {
@@ -942,9 +919,7 @@ public:
     IncrementalGatedChatProvider& operator=(const IncrementalGatedChatProvider&) = delete;
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -1006,7 +981,6 @@ public:
                 });
     }
 
-
     void release() {
         if (gate_) (void)gate_->cancel();
     }
@@ -1027,9 +1001,7 @@ public:
     GatedCompactionChatProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this,
              model = std::move(model),
@@ -1141,7 +1113,7 @@ TEST_CASE(
     tests::ModelsSessionOptions resume_options;
     resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume_options.workspace = workspace.path();
-    resume_options.models = ai::providers::make_scripted_fake_models();
+    resume_options.models = tests::make_scripted_fake_models();
     auto resumed = coding_agent::create_agent_session(std::move(resume_options));
     REQUIRE(resumed);
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
@@ -1229,7 +1201,7 @@ TEST_CASE(
     tests::ModelsSessionOptions fallback_resume;
     fallback_resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     fallback_resume.workspace = workspace.path();
-    fallback_resume.models = ai::providers::make_scripted_fake_models();
+    fallback_resume.models = tests::make_scripted_fake_models();
     auto fallback_session = coding_agent::create_agent_session(std::move(fallback_resume));
     REQUIRE(fallback_session);
     const auto fallback_before = fallback_session->session->snapshot().agent_state.messages;
@@ -1361,7 +1333,7 @@ TEST_CASE(
     tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
-    resume.models = ai::providers::make_scripted_fake_models();
+    resume.models = tests::make_scripted_fake_models();
     auto created = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(created);
     tui::VirtualTerminal terminal({
@@ -1425,9 +1397,7 @@ TEST_CASE(
     "[coding_agent][tui][clipboard][issue63]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
-    auto options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1513,9 +1483,7 @@ TEST_CASE(
     "[coding_agent][tui][clipboard][issue63]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
-    auto options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1559,9 +1527,7 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
 
-    auto failed_options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto failed_options = session_options(workspace, tests::make_scripted_fake_provider());
     auto failed_session = coding_agent::create_agent_session(std::move(failed_options));
     REQUIRE(failed_session);
     auto failed_reader = std::make_unique<FakeClipboardReader>();
@@ -1679,8 +1645,8 @@ TEST_CASE(
     resume.workspace = workspace.path();
     resume.session_facts.no_skills = true;
     resume.session_facts.no_prompt_templates = true;
-    auto resumed = coding_agent::create_agent_session_for_testing(
-        std::move(resume), ai::providers::make_scripted_fake_models());
+    auto resumed =
+            coding_agent::create_agent_session_for_testing(std::move(resume), tests::make_scripted_fake_models());
     REQUIRE(resumed);
 
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
@@ -1768,9 +1734,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "equivalent-session.jsonl";
 
-    auto create = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto create = session_options(workspace, tests::make_scripted_fake_provider());
     create.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     auto fresh = coding_agent::create_agent_session(std::move(create));
     REQUIRE(fresh);
@@ -1798,7 +1762,7 @@ TEST_CASE(
     tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
-    resume.models = ai::providers::make_scripted_fake_models();
+    resume.models = tests::make_scripted_fake_models();
     auto resumed = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(resumed);
 
@@ -2118,9 +2082,7 @@ TEST_CASE(
     "[coding_agent][tui][diagnostics][issue61]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
@@ -2186,9 +2148,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "persistence-recovery.jsonl";
-    auto options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -2308,9 +2268,7 @@ TEST_CASE(
     "[coding_agent][tui][failure][issue58]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     FailingStartTerminal terminal;
@@ -2342,9 +2300,7 @@ TEST_CASE(
     "[coding_agent][tui][failure][issue58]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     FailingCleanupTerminal terminal;
@@ -2378,9 +2334,7 @@ TEST_CASE(
     "[coding_agent][tui][issue58]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
@@ -3004,9 +2958,7 @@ TEST_CASE(
     "[coding_agent][tui][hints][issue401]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 90, .rows = 26});
@@ -3200,9 +3152,7 @@ TEST_CASE(
     "[coding_agent][tui][commands][issue502]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -3308,9 +3258,7 @@ TEST_CASE(
         "description: Project prompt completion.\n"
         "---\n"
         "Expanded project prompt: $ARGUMENTS\n");
-    auto options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -3388,9 +3336,7 @@ TEST_CASE(
         "description: Project skill completion.\n"
         "---\n"
         "Project skill body.\n");
-    auto options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -3519,8 +3465,7 @@ TEST_CASE(
         "description: initial prompt description.\n"
         "---\n"
         "Initial prompt body: $ARGUMENTS\n");
-    auto options = session_options(
-        workspace, ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -3585,9 +3530,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.interrupt":"f6"})");
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
@@ -3631,9 +3574,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -3946,9 +3887,7 @@ TEST_CASE(
     "[coding_agent][tui][commands][issue419]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider()));
+    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -4081,9 +4020,7 @@ TEST_CASE(
         "description: Project prompt completion.\n"
         "---\n"
         "Expanded project prompt: $ARGUMENTS\n");
-    auto options = session_options(
-        workspace,
-        ai::providers::make_scripted_fake_provider());
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);

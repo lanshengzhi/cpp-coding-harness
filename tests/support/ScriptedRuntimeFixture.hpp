@@ -3,7 +3,6 @@
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/support/AsyncResult.hpp>
-#include "ai/providers/FakeProvider.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -49,7 +48,7 @@ namespace cch::tests {
 struct RecordedRuntimeCall {
     ai::Model model;
     ai::AiContext context;
-    ai::ProviderStreamOptions options;
+    coding_agent::ModelRuntimeTestStreamOptions options;
 };
 
 /// Mutable controls shared by the scripted Provider Definitions installed in
@@ -85,21 +84,19 @@ private:
 /// A concrete scripted Provider used by the runtime fixture. Its catalog
 /// contains the real `fake/fake-model` or `sdk-host/fake-model` identity, and
 /// its stream is controlled by the shared FIFO/gating state.
-class ScriptedRuntimeProvider final : public ai::Provider {
+class ScriptedRuntimeProvider final : public ScriptedProvider {
 public:
     ScriptedRuntimeProvider(std::string provider_id, std::shared_ptr<ScriptedProviderControl> control, bool configured)
-        : provider_id_(std::move(provider_id)), control_(std::move(control)),
-          auth_(configured ? detail::fixture_auth() : unconfigured_fixture_auth()) {}
+        : ScriptedProvider(std::move(provider_id), configured ? detail::fixture_auth() : unconfigured_fixture_auth()),
+          control_(std::move(control)) {}
 
-    [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
-    [[nodiscard]] std::string_view name() const noexcept override { return provider_id_; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
+    [[nodiscard]] std::string_view name() const noexcept override { return provider_id(); }
     [[nodiscard]] std::vector<ai::Model> models() const override {
         ai::Model model;
         model.id = "fake-model";
         model.name = "fake-model";
         model.api = "scripted-fake";
-        model.provider = provider_id_;
+        model.provider = provider_id();
         model.base_url = "";
         model.reasoning = false;
         model.thinking_level_map = std::nullopt;
@@ -113,7 +110,7 @@ public:
     }
 
     [[nodiscard]] ai::ModelStream stream(
-            ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
                 [control = control_,
                         model = std::move(model),
@@ -239,25 +236,15 @@ public:
     }
 
 private:
-    std::string provider_id_;
     std::shared_ptr<ScriptedProviderControl> control_;
-    ai::ProviderAuth auth_;
 };
 
-[[nodiscard]] inline ai::providers::ScriptedProviderDefinition scripted_runtime_definition(
+[[nodiscard]] inline coding_agent::ModelRuntimeTestProvider scripted_runtime_definition(
         std::shared_ptr<ScriptedRuntimeProvider> provider) {
-    ai::providers::ScriptedProviderDefinition definition;
-    definition.definition = ai::ProviderDefinition{
-            .id = std::string{provider->id()},
-            .name = std::string{provider->name()},
-            .models = provider->models(),
-            .auth = std::move(provider->auth()),
-    };
-    definition.stream = [provider = std::move(provider)](
-                                ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
-        return provider->stream(std::move(model), std::move(context), std::move(options));
-    };
-    return definition;
+    const std::string provider_id{provider->id()};
+    auto models = provider->models();
+    auto auth = std::move(provider->auth());
+    return make_test_provider_definition(std::move(provider), provider_id, std::move(models), std::move(auth));
 }
 
 /// Test fixture that owns a concrete ModelRuntime and separate scripted
@@ -274,7 +261,7 @@ struct ScriptedRuntimeFixture final {
         coding_agent::ModelRuntimeOptions options;
         options.models_path = std::filesystem::path{};
         options.credentials = std::make_shared<detail::FixtureCredentialStore>();
-        std::vector<ai::providers::ScriptedProviderDefinition> definitions;
+        std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
         definitions.push_back(
                 scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("fake", control, true)));
         definitions.push_back(

@@ -57,9 +57,7 @@ class RecordingChatProvider final : public tests::ScriptedProvider {
 public:
     RecordingChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
@@ -72,7 +70,6 @@ public:
         co_return response;
                 });
     }
-
 
     std::vector<tests::RecordedProviderRequest> requests;
 };
@@ -148,9 +145,7 @@ class AbortAwareGatedChatProvider final : public tests::ScriptedProvider {
 public:
     AbortAwareGatedChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -224,7 +219,6 @@ public:
                 });
     }
 
-
     bool started{false};
     std::size_t request_count{0};
     std::size_t stop_callback_count{0};
@@ -239,9 +233,7 @@ class ToolCallThenAbortChatProvider final : public tests::ScriptedProvider {
 public:
     ToolCallThenAbortChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -278,7 +270,6 @@ public:
         co_return response;
                 });
     }
-
 
     std::size_t request_count{0};
 };

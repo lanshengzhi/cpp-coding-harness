@@ -46,19 +46,8 @@ struct ScriptedProviderDefinition {
 /// Build the two aliases used by the vertical fake-provider fixture.
 [[nodiscard]] std::vector<ScriptedProviderDefinition> make_scripted_fake_provider_definitions();
 
-/// Transitional Provider-pointer helper for older test fixtures. It is
-/// implemented by this test-only source and is not part of the cch_ai
-/// production target; new vertical tests use scripted definitions instead.
-[[nodiscard]] std::shared_ptr<ai::Provider> make_scripted_fake_provider(
-    std::string provider_id = "fake");
-
-/// In-memory credential storage for scripted runtime tests. It avoids writing
-/// an auth.json file while preserving the real Models authentication path.
-[[nodiscard]] std::shared_ptr<ai::CredentialStore> make_scripted_credential_store();
-
-/// Legacy test helper retained while cch_ai contract tests migrate to the
-/// definition-oriented construction helper. It is implemented by this
-/// test-only source and is not part of the cch_ai production target.
+/// Build the cch_ai-only fake Models collection used by the Provider contract
+/// tests. Vertical tests use the coding-agent definition seam instead.
 [[nodiscard]] std::shared_ptr<ai::Models> make_scripted_fake_models();
 
 } // namespace cch::ai::providers

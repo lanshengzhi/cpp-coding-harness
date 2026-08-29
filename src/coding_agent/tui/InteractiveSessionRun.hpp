@@ -97,6 +97,7 @@ private:
 
         std::shared_ptr<harness::RuntimeRoot> runtime_root{nullptr};
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime{nullptr};
+        bool model_runtime_cli_fake{false};
         std::shared_ptr<ai::Models> models{nullptr};
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
         bool is_resume_target{false};
@@ -143,6 +144,7 @@ public:
         std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept;
     InteractiveSessionRunBuilder& with_shared_runtime(
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
+    InteractiveSessionRunBuilder& with_model_runtime_cli_fake(bool model_runtime_cli_fake) noexcept;
     InteractiveSessionRunBuilder& with_models(
         std::shared_ptr<ai::Models> models) noexcept;
     InteractiveSessionRunBuilder& with_error_stream(

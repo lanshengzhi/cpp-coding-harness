@@ -350,7 +350,7 @@ std::shared_ptr<ai::Models> make_models(
 }
 
 template <typename ProviderType>
-support::ExpectedVoid install_provider(
+[[nodiscard]] support::ExpectedVoid install_provider(
         const std::shared_ptr<ai::Models>& models, std::shared_ptr<ProviderType> provider) {
     ai::providers::ScriptedProviderDefinition definition;
     definition.definition = ai::ProviderDefinition{
@@ -439,7 +439,7 @@ TEST_CASE("Models installs Provider Definitions and projects passive Provider In
     const auto available = models->models("definition-provider");
     REQUIRE(available.size() == 1);
     CHECK(available.front().id == "definition-model");
-    CHECK(models->provider_info().front().id == "definition-provider");
+    CHECK(infos.front().id == "definition-provider");
 
     REQUIRE(models->apply_provider(ai::ProviderChange{
             .provider_id = "absent-provider",

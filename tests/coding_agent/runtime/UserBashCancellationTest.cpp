@@ -40,9 +40,7 @@ public:
     ImmediateChatProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink) mutable
@@ -56,15 +54,14 @@ public:
                 });
     }
 
-
     std::vector<tests::RecordedProviderRequest> requests;
 };
 
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> make_session(
-    const std::filesystem::path& workspace,
-    std::shared_ptr<ai::Provider> client,
-    std::unique_ptr<tests::FakeUserShell> shell,
-    std::optional<std::filesystem::path> session_path = std::nullopt) {
+        const std::filesystem::path& workspace,
+        std::shared_ptr<tests::ScriptedProvider> client,
+        std::unique_ptr<tests::FakeUserShell> shell,
+        std::optional<std::filesystem::path> session_path = std::nullopt) {
     tests::ModelsSessionOptions options;
     if (session_path) {
         options.session_target =

@@ -29,8 +29,6 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/ExpectedMacros.hpp"
 
-#include "ai/providers/FakeProvider.hpp"
-
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 

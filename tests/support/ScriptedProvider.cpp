@@ -247,6 +247,11 @@ public:
         : id_(std::move(definition.definition.id)), name_(std::move(definition.definition.name)),
           models_(std::move(definition.definition.models)), auth_(std::move(definition.definition.auth)),
           stream_(std::move(definition.stream)) {}
+    ScriptedDefinitionProvider(ScriptedDefinitionProvider&&) noexcept = default;
+    ScriptedDefinitionProvider& operator=(ScriptedDefinitionProvider&&) noexcept = default;
+    ~ScriptedDefinitionProvider() override = default;
+    ScriptedDefinitionProvider(const ScriptedDefinitionProvider&) = delete;
+    ScriptedDefinitionProvider& operator=(const ScriptedDefinitionProvider&) = delete;
 
     [[nodiscard]] std::string_view id() const noexcept override { return id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return name_; }
@@ -436,17 +441,9 @@ std::vector<ScriptedProviderDefinition> make_scripted_fake_provider_definitions(
     return definitions;
 }
 
-std::shared_ptr<ai::Provider> make_scripted_fake_provider(std::string provider_id) {
-    auto definition = make_scripted_fake_provider_definition(std::move(provider_id));
-    return make_scripted_provider(std::move(definition));
-}
-
-std::shared_ptr<ai::CredentialStore> make_scripted_credential_store() {
-    return std::make_shared<EmptyCredentialStore>();
-}
-
 std::shared_ptr<ai::Models> make_scripted_fake_models() {
-    auto models = std::make_shared<ai::Models>(make_scripted_credential_store(), std::make_shared<EmptyAuthContext>());
+    auto models = std::make_shared<ai::Models>(
+            std::make_shared<EmptyCredentialStore>(), std::make_shared<EmptyAuthContext>());
     for (auto&& definition : make_scripted_fake_provider_definitions()) {
         if (auto added = apply_scripted_provider(*models, std::move(definition)); !added) {
             return nullptr;

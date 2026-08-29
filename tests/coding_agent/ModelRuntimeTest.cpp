@@ -3,6 +3,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
+#include "coding_agent/ModelRuntimeTransportTestSupport.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -274,7 +275,7 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     home.write(".pi/agent/models.json", models_json);
 
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
-            coding_agent::ModelRuntimeTestOptions{
+            coding_agent::ModelRuntimeTransportTestOptions{
                     .transports =
                             ai::providers::ScriptedTransportOptions{
                                     .http_transport = transport,
@@ -479,7 +480,7 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
     })");
 
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
-            coding_agent::ModelRuntimeTestOptions{
+            coding_agent::ModelRuntimeTransportTestOptions{
                     .transports =
                             ai::providers::ScriptedTransportOptions{
                                     .http_transport = transport,
@@ -624,7 +625,7 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     })");
 
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
-            coding_agent::ModelRuntimeTestOptions{
+            coding_agent::ModelRuntimeTransportTestOptions{
                     .transports =
                             ai::providers::ScriptedTransportOptions{
                                     .http_transport = transport,

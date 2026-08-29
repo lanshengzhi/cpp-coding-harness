@@ -165,6 +165,7 @@ void print_session_diagnostics(
         const CliConfig& config,
         std::shared_ptr<ai::Models> models,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
+        bool model_runtime_cli_fake,
         CliStreams streams,
         coding_agent::runtime::AgentSessionCreationRequest request) {
     cch::tui::ProcessTerminal terminal;
@@ -185,22 +186,22 @@ void print_session_diagnostics(
         }
     }
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session_facts(config.session_facts)
-        .with_agent_config_directory(coding_agent::agent_config_dir())
-        .with_initial_prompt(
-            initial.initial_message.empty()
-                ? std::nullopt
-                : std::optional<std::string>{std::move(initial.initial_message)})
-        .with_initial_prompt_options(coding_agent::PromptOptions{
-            .expand_prompt_templates = true,
-            .images = std::move(initial.initial_images),
-        })
-        .with_defer_boot(std::move(request))
-        .with_runtime_root(runtime_root)
-        .with_shared_runtime(shared_runtime)
-        .with_models(models)
-        .with_error_stream(&streams.error)
-        .build();
+                       .with_session_facts(config.session_facts)
+                       .with_agent_config_directory(coding_agent::agent_config_dir())
+                       .with_initial_prompt(initial.initial_message.empty()
+                                                    ? std::nullopt
+                                                    : std::optional<std::string>{std::move(initial.initial_message)})
+                       .with_initial_prompt_options(coding_agent::PromptOptions{
+                               .expand_prompt_templates = true,
+                               .images = std::move(initial.initial_images),
+                       })
+                       .with_defer_boot(std::move(request))
+                       .with_runtime_root(runtime_root)
+                       .with_shared_runtime(shared_runtime)
+                       .with_model_runtime_cli_fake(model_runtime_cli_fake)
+                       .with_models(models)
+                       .with_error_stream(&streams.error)
+                       .build();
 
     auto future = boost::asio::co_spawn(
         *io,
@@ -464,8 +465,13 @@ void print_session_diagnostics(
         // pi main.ts: the interactive boot defers session creation until
         // after the boot trust prompt; the CLI passes the session factory
         // and the base request to the boot.
-        return run_native_tui_boot(
-                std::move(*initial), config, models, std::move(model_runtime), streams, std::move(request));
+        return run_native_tui_boot(std::move(*initial),
+                config,
+                models,
+                std::move(model_runtime),
+                model_runtime_cli_fake,
+                streams,
+                std::move(request));
     }
 
     auto runtime_io = std::make_shared<boost::asio::io_context>();

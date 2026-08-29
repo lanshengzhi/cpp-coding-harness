@@ -69,52 +69,42 @@ public:
 
   void add_model(ai::Model model) { models_.push_back(std::move(model)); }
 
-  [[nodiscard]] ai::ModelStream
-  stream(ai::Model model, ai::AiContext,
-         ai::ProviderStreamOptions) override {
-    return ai::detail::make_model_stream(
-        [this, model = std::move(model)](ai::AssistantEventSink sink) mutable
-            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-    REQUIRE(!turns_.empty());
-    auto response = std::move(turns_.front());
-    turns_.pop_front();
-    response.provider = "fake";
-    response.api = "fake";
-    response.model = model.id;
-    if (sink) {
-      if (auto emitted = sink(ai::AssistantStartEvent{response}); !emitted) {
-        co_return std::unexpected(emitted.error());
-      }
-      for (std::size_t index = 0; index < response.content.size(); ++index) {
-        const auto &block = response.content[index];
-        if (const auto *text = std::get_if<ai::TextContent>(&block)) {
-          if (auto emitted =
-                  sink(ai::TextDeltaEvent{index, text->text, response});
-              !emitted) {
-            co_return std::unexpected(emitted.error());
+  [[nodiscard]] ai::ModelStream stream(
+          ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
+      return ai::detail::make_model_stream([this, model = std::move(model)](ai::AssistantEventSink sink) mutable
+                                                   -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+          REQUIRE(!turns_.empty());
+          auto response = std::move(turns_.front());
+          turns_.pop_front();
+          response.provider = "fake";
+          response.api = "fake";
+          response.model = model.id;
+          if (sink) {
+              if (auto emitted = sink(ai::AssistantStartEvent{response}); !emitted) {
+                  co_return std::unexpected(emitted.error());
+              }
+              for (std::size_t index = 0; index < response.content.size(); ++index) {
+                  const auto& block = response.content[index];
+                  if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+                      if (auto emitted = sink(ai::TextDeltaEvent{index, text->text, response}); !emitted) {
+                          co_return std::unexpected(emitted.error());
+                      }
+                  } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+                      if (auto emitted = sink(ai::ThinkingDeltaEvent{index, thinking->thinking, response}); !emitted) {
+                          co_return std::unexpected(emitted.error());
+                      }
+                  } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                      if (auto emitted = sink(ai::ToolCallStartEvent{index, response}); !emitted) {
+                          co_return std::unexpected(emitted.error());
+                      }
+                      if (auto emitted = sink(ai::ToolCallEndEvent{index, *call, response}); !emitted) {
+                          co_return std::unexpected(emitted.error());
+                      }
+                  }
+              }
           }
-        } else if (const auto *thinking =
-                       std::get_if<ai::ThinkingContent>(&block)) {
-          if (auto emitted = sink(
-                  ai::ThinkingDeltaEvent{index, thinking->thinking, response});
-              !emitted) {
-            co_return std::unexpected(emitted.error());
-          }
-        } else if (const auto *call =
-                       std::get_if<ai::ToolCallContent>(&block)) {
-          if (auto emitted = sink(ai::ToolCallStartEvent{index, response});
-              !emitted) {
-            co_return std::unexpected(emitted.error());
-          }
-          if (auto emitted = sink(ai::ToolCallEndEvent{index, *call, response});
-              !emitted) {
-            co_return std::unexpected(emitted.error());
-          }
-        }
-      }
-    }
-    co_return response;
-        });
+          co_return response;
+      });
   }
 
 private:

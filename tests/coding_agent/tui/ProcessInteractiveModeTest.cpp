@@ -7,8 +7,6 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/tui/ProcessTerminal.hpp>
 
-#include "ai/providers/FakeProvider.hpp"
-
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -106,7 +104,7 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     cch::tests::ModelsSessionOptions options;
     options.session_target = cch::coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(cch::ai::providers::make_scripted_fake_provider());
+    options.models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
     auto created = cch::coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 

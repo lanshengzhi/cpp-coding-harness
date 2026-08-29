@@ -54,8 +54,8 @@ namespace {
 
 /// beta is listed first so the provider-then-id sort is exercised.
 [[nodiscard]] std::shared_ptr<coding_agent::ModelRuntime> table_catalog_runtime() {
-    std::vector<ai::providers::ScriptedProviderDefinition> definitions;
-    definitions.push_back(ai::providers::ScriptedProviderDefinition{
+    std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
+    definitions.push_back(coding_agent::ModelRuntimeTestProvider{
             .definition =
                     ai::ProviderDefinition{
                             .id = "beta",
@@ -64,7 +64,7 @@ namespace {
                             .auth = tests::detail::fixture_auth(),
                     },
     });
-    definitions.push_back(ai::providers::ScriptedProviderDefinition{
+    definitions.push_back(coding_agent::ModelRuntimeTestProvider{
             .definition =
                     ai::ProviderDefinition{
                             .id = "alpha",
@@ -80,7 +80,7 @@ namespace {
     auto created = coding_agent::create_model_runtime_for_testing(
             coding_agent::ModelRuntimeOptions{
                     .models_path = std::filesystem::path{},
-                    .credentials = ai::providers::make_scripted_credential_store(),
+                    .credentials = std::make_shared<tests::detail::FixtureCredentialStore>(),
             },
             coding_agent::ModelRuntimeTestOptions{
                     .providers = std::move(definitions),

@@ -18,7 +18,6 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "ai/providers/FakeProvider.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -149,7 +148,7 @@ TEST_CASE(
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
     // pi's prompt title and getProjectTrustOptions choices.
@@ -173,7 +172,7 @@ TEST_CASE(
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     // The first option ("Trust") is preselected; confirm it.
     run.type("\r");
@@ -205,7 +204,7 @@ TEST_CASE(
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     // Cancel the prompt (tui.select.cancel: escape/ctrl+c): the run
     // proceeds untrusted.
@@ -232,7 +231,7 @@ TEST_CASE(
     request.project_trust_override = true;
 
     BootTrustRun run;
-    run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models());
 
     // No prompt; the session binds trusted and the warning stays absent.
     const auto screen = visible_screen(run.terminal);
@@ -254,7 +253,7 @@ TEST_CASE(
     request.project_trust_override = false;
 
     BootTrustRun run;
-    run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
@@ -279,7 +278,7 @@ TEST_CASE(
     }}).has_value());
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
@@ -302,7 +301,7 @@ TEST_CASE(
         R"({"app.session.new":"f8"})");
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     // Pick "Trust (this session only)" (the third option): no store write,
     // yet the boot session binds trusted (no untrusted-project warning).
@@ -361,7 +360,7 @@ TEST_CASE(
         R"({"defaultProjectTrust": "always"})");
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
@@ -382,7 +381,7 @@ TEST_CASE(
         R"({"defaultProjectTrust": "never"})");
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
@@ -406,14 +405,12 @@ TEST_CASE(
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     coding_agent::tui::testing::ActionSinkRecorder recorder;
-    recorder.replace_session =
-        [models = ai::providers::make_scripted_fake_models()](
-            coding_agent::runtime::AgentSessionCreationRequest req)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            req.provide_user_shell = true;
-            return coding_agent::create_agent_session_for_testing(
-                std::move(req), models);
-        };
+    recorder.replace_session = [models = tests::make_scripted_fake_models()](
+                                       coding_agent::runtime::AgentSessionCreationRequest req)
+            -> support::Expected<coding_agent::CreateAgentSessionResult> {
+        req.provide_user_shell = true;
+        return coding_agent::create_agent_session_for_testing(std::move(req), models);
+    };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
         .with_agent_config_directory(fixture.agent_dir)
         .with_action_sink(recorder.make_sink())
@@ -455,7 +452,7 @@ TEST_CASE(
     request.session_facts.theme_paths = {"cli-theme.json"};
 
     BootTrustRun run;
-    run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models());
 
     // Open /settings, navigate to the Theme item (index 5), open the
     // single-mode ThemeSubmenu: the builtins plus every discovered theme are
@@ -525,7 +522,7 @@ TEST_CASE(
     request.session_facts.theme_paths = {"broken-theme.json"};
 
     BootTrustRun run;
-    run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
     // Under the main-screen scrollback flow (ADR 0037) the startup header and
@@ -571,7 +568,7 @@ TEST_CASE(
     agent_dir.set(fixture.agent_dir.string());
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     // No trust-requiring resources at boot: no prompt, the session binds
     // trusted (pi `NoProjectResources` → trusted), and pi main.ts arms
@@ -612,7 +609,7 @@ TEST_CASE(
     agent_dir.set(fixture.agent_dir.string());
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
     // The workspace never gains trust-requiring resources; /reload runs the
     // plain status (no "; saved project trust" suffix).

@@ -91,14 +91,11 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
     if (state_->runtime_root) {
         request.execution_runtime_target = state_->runtime_root->make_target();
     }
-    if (state_->shared_runtime) {
-        request.model_runtime = state_->shared_runtime;
-    }
     return coding_agent::create_agent_session(std::move(request),
             state_->session_facts,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr,
-                    .cli_fake = false,
+                    .model_runtime = state_->shared_runtime,
+                    .cli_fake = state_->model_runtime_cli_fake,
                     .models = state_->models,
                     .user_shell = nullptr,
             });
@@ -279,6 +276,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_runtime_root(
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_runtime(
     std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept {
     state_->shared_runtime = std::move(shared_runtime);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_runtime_cli_fake(
+        bool model_runtime_cli_fake) noexcept {
+    state_->model_runtime_cli_fake = model_runtime_cli_fake;
     return *this;
 }
 

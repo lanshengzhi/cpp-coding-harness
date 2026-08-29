@@ -141,10 +141,11 @@ TEST_CASE(
     facts.no_prompt_templates = true;
 
     auto run = InteractiveSessionRunBuilder{}
-        .with_session_facts(facts)
-        .with_runtime_root(runtime_root)
-        .with_shared_runtime(*shared_runtime)
-        .build();
+                       .with_session_facts(facts)
+                       .with_runtime_root(runtime_root)
+                       .with_shared_runtime(*shared_runtime)
+                       .with_model_runtime_cli_fake(true)
+                       .build();
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.workspace = workspace.path();
@@ -158,6 +159,8 @@ TEST_CASE(
     REQUIRE(session_result != nullptr);
     REQUIRE(session_result->has_value());
     CHECK((*session_result)->session != nullptr);
+    CHECK((*session_result)->resolved_identity.provider == "fake");
+    CHECK((*session_result)->resolved_identity.model == "fake-model");
 }
 
 TEST_CASE(

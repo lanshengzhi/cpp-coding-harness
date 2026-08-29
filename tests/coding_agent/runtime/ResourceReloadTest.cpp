@@ -43,9 +43,7 @@ public:
     ReloadRecordingProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink) mutable
@@ -59,7 +57,6 @@ public:
         co_return terminal;
                 });
     }
-
 
     std::vector<ai::AiContext> requests;
 };
@@ -345,9 +342,7 @@ public:
     GatedCompactionProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context)](
                 ai::AssistantEventSink sink) mutable
@@ -377,7 +372,6 @@ public:
         co_return response;
                 });
     }
-
 
     void release_gate() {
         if (gate_) {

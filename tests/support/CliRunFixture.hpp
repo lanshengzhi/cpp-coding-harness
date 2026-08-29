@@ -3,7 +3,7 @@
 #include "cli/CliParse.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cstdlib>
@@ -115,7 +115,7 @@ private:
 
 } // namespace detail
 
-inline CliRunResult run_cli_with_runtime(CliRunOptions options,
+[[nodiscard]] inline CliRunResult run_cli_with_runtime(CliRunOptions options,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake = false) {
     // Isolate ambient user configuration: when the test controls neither HOME
@@ -190,19 +190,19 @@ inline CliRunResult run_cli_with_runtime(CliRunOptions options,
     };
 }
 
-inline CliRunResult run_cli(CliRunOptions options) {
+[[nodiscard]] inline CliRunResult run_cli(CliRunOptions options) {
     auto runtime = coding_agent::create_model_runtime_for_testing(
             coding_agent::ModelRuntimeOptions{
                     .models_path = std::filesystem::path{},
-                    .credentials = ai::providers::make_scripted_credential_store(),
+                    .credentials = std::make_shared<detail::FixtureCredentialStore>(),
             },
             coding_agent::ModelRuntimeTestOptions{
-                    .providers = ai::providers::make_scripted_fake_provider_definitions(),
+                    .providers = make_scripted_fake_provider_definitions(),
             });
     if (runtime) {
         return run_cli_with_runtime(std::move(options), std::move(*runtime), true);
     }
-    options.models = ai::providers::make_scripted_fake_models();
+    options.models = make_scripted_fake_models();
     return run_cli_with_runtime(std::move(options), nullptr);
 }
 

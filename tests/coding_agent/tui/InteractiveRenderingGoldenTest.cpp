@@ -36,7 +36,6 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "ai/providers/FakeProvider.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <cch/support/Error.hpp>
@@ -220,8 +219,8 @@ struct PipelineSession {
     resume.workspace = fixture->workspace;
     resume.session_facts.no_skills = true;
     resume.session_facts.no_prompt_templates = true;
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(resume), ai::providers::make_scripted_fake_models());
+    auto created =
+            coding_agent::create_agent_session_for_testing(std::move(resume), tests::make_scripted_fake_models());
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;

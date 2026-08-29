@@ -83,9 +83,7 @@ public:
     CompactionScriptedProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -135,7 +133,6 @@ public:
         co_return response;
                 });
     }
-
 
     void release_gate() {
         if (gate_) {
@@ -448,9 +445,7 @@ public:
     TriggerPolicyScriptedProvider() : ScriptedProvider("sdk-host") {}
 
     [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
             [this, model = std::move(model), context = std::move(context), options = std::move(options)](
                 ai::AssistantEventSink sink) mutable
@@ -503,7 +498,6 @@ public:
         co_return response;
                 });
     }
-
 
     int request_count{0};
     /// Content for an aborted terminal response (deterministic partial text).

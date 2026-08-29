@@ -1,6 +1,5 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
-#include "ai/providers/FakeProvider.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
