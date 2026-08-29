@@ -51,6 +51,10 @@ struct ProviderInfo {
     std::vector<AuthMethodInfo> auth_methods{};
 };
 
+/// Returns fresh definitions for the supported built-in providers. Each call
+/// creates independent model catalogs and authentication hooks.
+[[nodiscard]] std::vector<ProviderDefinition> builtin_provider_definitions();
+
 /// Runtime collection of long-lived Providers plus live authentication and
 /// request-time stream delegation.
 ///
