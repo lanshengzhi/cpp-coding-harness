@@ -13,6 +13,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <exception>
 #include <map>
 #include <memory>
 #include <optional>
@@ -142,6 +143,38 @@ struct ModelRuntime::Impl {
 
 ModelRuntime::ModelRuntime(std::unique_ptr<Impl> impl)
     : impl_(std::move(impl)) {}
+
+ModelRuntime::ModelRuntime(std::shared_ptr<ai::Models> models)
+    : impl_(std::make_unique<Impl>(Impl{
+              .agent_dir = {},
+              .models_path = {},
+              .credentials = nullptr,
+              .auth_context = nullptr,
+              .models = std::move(models),
+              .config = {},
+              .builtins = {},
+              .composition_errors = {},
+              .composer_options = {},
+              .config_error = {},
+              .all_models = {},
+              .available_models = {},
+              .configured_providers = {},
+              .stored_providers = {},
+              .runtime_providers = {},
+              .auth_snapshot = {},
+              .availability_error = {},
+      })) {
+    if (!impl_->models) {
+        std::terminate();
+    }
+    impl_->all_models = impl_->models->models();
+    for (const auto& info : impl_->models->provider_info()) {
+        if (!info.auth_methods.empty()) {
+            impl_->configured_providers.insert(info.id);
+        }
+    }
+    impl_->recompute_available_models();
+}
 
 ModelRuntime::ModelRuntime(ModelRuntime&&) noexcept = default;
 ModelRuntime& ModelRuntime::operator=(ModelRuntime&&) noexcept = default;
@@ -297,7 +330,11 @@ support::AsyncResult<std::vector<ai::Model>> ModelRuntime::get_available(std::op
                         auth.emplace(provider_id, **checked);
                     }
                 }
-                CCH_TRY(stored, co_await support::detail::await_async_result(impl_->credentials->list()));
+                std::vector<ai::CredentialInfo> stored;
+                if (impl_->credentials) {
+                    CCH_TRY(stored_result, co_await support::detail::await_async_result(impl_->credentials->list()));
+                    stored = std::move(stored_result);
+                }
 
                 impl_->configured_providers = std::move(configured);
                 impl_->auth_snapshot = std::move(auth);

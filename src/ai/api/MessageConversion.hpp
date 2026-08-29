@@ -2,7 +2,7 @@
 
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Model.hpp>
-#include <cch/ai/Provider.hpp>
+#include "ai/providers/Provider.hpp"
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 

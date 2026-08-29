@@ -98,80 +98,46 @@ public:
     std::map<std::string, ai::Credential, std::less<>> records;
 };
 
-/// Provider with a scripted api-key login that always succeeds and a resolve
-/// that returns the stored key.
-class LoginProvider final : public ai::Provider {
-public:
-    LoginProvider() {
-        ai::ApiKeyAuth api_key;
-        api_key.name = "scripted";
-        api_key.login = [](ai::AuthInteraction)
-            -> cch::support::AsyncResult<ai::ApiKeyCredential> {
-            ai::ApiKeyCredential credential;
-            credential.key = "dummy-login-key";
-            return cch::support::AsyncResult<ai::ApiKeyCredential>(
+/// Provider Definition with a scripted api-key login that always succeeds
+/// and a resolve hook that returns the stored key.
+ai::ProviderDefinition login_provider_definition() {
+    ai::ApiKeyAuth api_key;
+    api_key.name = "scripted";
+    api_key.login = [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
+        ai::ApiKeyCredential credential;
+        credential.key = "dummy-login-key";
+        return cch::support::AsyncResult<ai::ApiKeyCredential>(
                 std::expected<ai::ApiKeyCredential, cch::support::Error>{credential});
-        };
-        api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
+    };
+    api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
             -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
-            if (credential && credential->key) {
-                return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                        ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey}});
-            }
+        if (credential && credential->key) {
             return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                    std::optional<ai::AuthCheck>{}});
-        };
-        api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
+                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                            ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey}});
+        }
+        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{std::optional<ai::AuthCheck>{}});
+    };
+    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
             -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-            if (credential && credential->key) {
-                return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                        ai::AuthResult{
+        if (credential && credential->key) {
+            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{ai::AuthResult{
                             .auth = ai::ModelAuth{.api_key = *credential->key},
                             .source = "stored credential",
-                        }});
-            }
-            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                    std::optional<ai::AuthResult>{}});
-        };
-        auth_.api_key = std::move(api_key);
-    }
-
-    [[nodiscard]] std::string_view id() const noexcept override { return "login-provider"; }
-    [[nodiscard]] std::string_view name() const noexcept override { return "Login Provider"; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
-
-        [[nodiscard]] ai::ModelStream stream(
-        ai::Model,
-        ai::AiContext,
-        ai::ProviderStreamOptions) override {
-            return ai::detail::make_model_stream(
-                    [](ai::AssistantEventSink sink) mutable
-                            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                        ai::AssistantMessage message;
-                        message.api = "unknown";
-                        message.provider = "login-provider";
-                        message.model = "host-client";
-                        message.stop_reason = ai::AssistantStopReason::Stop;
-                        if (sink) {
-                            if (auto emitted = sink(
-                                        ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
-                                    !emitted) {
-                                co_return std::unexpected(emitted.error());
-                            }
-                        }
-                        co_return message;
-                    });
-    }
-
-
-private:
-    ai::ProviderAuth auth_;
-};
+                    }});
+        }
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{std::optional<ai::AuthResult>{}});
+    };
+    return ai::ProviderDefinition{
+            .id = "login-provider",
+            .name = "Login Provider",
+            .models = {},
+            .auth = ai::ProviderAuth{.api_key = std::move(api_key)},
+    };
+}
 
 [[nodiscard]] ai::AiContext request_context() {
     ai::AiContext context;
@@ -380,7 +346,10 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
         .credentials = store,
     });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->ai_models()->set_provider(std::make_shared<LoginProvider>()));
+    REQUIRE((*runtime)->ai_models()->apply_provider(ai::ProviderChange{
+            .provider_id = "login-provider",
+            .definition = login_provider_definition(),
+    }));
 
     ai::AuthInteraction interaction;
     auto credential =
@@ -410,7 +379,10 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
         .credentials = store,
     });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->ai_models()->set_provider(std::make_shared<LoginProvider>()));
+    REQUIRE((*runtime)->ai_models()->apply_provider(ai::ProviderChange{
+            .provider_id = "login-provider",
+            .definition = login_provider_definition(),
+    }));
 
     REQUIRE(run_async_result((*runtime)->logout("login-provider")));
     const auto stored = run_async_result(store->read("login-provider"));

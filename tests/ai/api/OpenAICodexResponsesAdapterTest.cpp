@@ -1,7 +1,6 @@
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include "ai/providers/StreamTransport.hpp"
-#include "ai/providers/ComposedProvider.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
@@ -91,12 +90,19 @@ struct CodexHarness {
     harness.models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    auto provider = ai::providers::make_composed_provider(
-        "openai-codex", "openai-codex", {model},
-        ai::providers::make_env_api_key_auth("API key", {}),
-        harness.http, harness.ws, cache_config);
-    auto registered = harness.models->set_provider(std::move(provider));
-    REQUIRE(registered);
+    ai::providers::ScriptedProviderDefinition definition;
+    definition.definition = ai::ProviderDefinition{
+            .id = "openai-codex",
+            .name = "openai-codex",
+            .models = {model},
+            .auth = ai::providers::make_env_api_key_auth("API key", {}),
+    };
+    definition.transport = ai::providers::ScriptedTransportOptions{
+            .http_transport = harness.http,
+            .ws_transport = harness.ws,
+            .codex_cache_config = cache_config,
+    };
+    REQUIRE(ai::providers::apply_scripted_provider(*harness.models, std::move(definition)));
     return harness;
 }
 

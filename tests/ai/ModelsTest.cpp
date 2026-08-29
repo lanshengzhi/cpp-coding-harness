@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -349,6 +349,22 @@ std::shared_ptr<ai::Models> make_models(
     return std::make_shared<ai::Models>(credentials, auth_context);
 }
 
+template <typename ProviderType>
+support::ExpectedVoid install_provider(
+        const std::shared_ptr<ai::Models>& models, std::shared_ptr<ProviderType> provider) {
+    ai::providers::ScriptedProviderDefinition definition;
+    definition.definition = ai::ProviderDefinition{
+            .id = std::string{provider->id()},
+            .name = std::string{provider->name()},
+            .models = provider->models(),
+            .auth = std::move(provider->auth()),
+    };
+    definition.stream = [provider = std::move(provider)](
+                                ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
+        return provider->stream(std::move(model), std::move(context), std::move(options));
+    };
+    return ai::providers::apply_scripted_provider(*models, std::move(definition));
+}
 
 ai::ProviderAuth oauth_login_auth(
     ai::OAuthLoginHook login,
@@ -423,7 +439,7 @@ TEST_CASE("Models installs Provider Definitions and projects passive Provider In
     const auto available = models->models("definition-provider");
     REQUIRE(available.size() == 1);
     CHECK(available.front().id == "definition-model");
-    CHECK(models->provider("definition-provider") != nullptr);
+    CHECK(models->provider_info().front().id == "definition-provider");
 
     REQUIRE(models->apply_provider(ai::ProviderChange{
             .provider_id = "absent-provider",
@@ -457,8 +473,8 @@ TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[a
     auto models = make_models(credentials, auth_context);
     auto first = std::make_shared<RecordingProvider>("first");
     auto second = std::make_shared<RecordingProvider>("second");
-    REQUIRE(models->set_provider(first));
-    REQUIRE(models->set_provider(second));
+    REQUIRE(install_provider(models, first));
+    REQUIRE(install_provider(models, second));
 
     ai::Model request = tests::make_model("chosen-model", "second", "private-api");
     auto run = run_models(models, std::move(request));
@@ -476,10 +492,10 @@ TEST_CASE("Models isolates unavailable Provider catalogs per provider", "[ai][mo
     auto models = make_models(credentials, auth_context);
     auto available = std::make_shared<RecordingProvider>("available");
     available->catalog.push_back(tests::make_model("available-model", "available", "api"));
-    REQUIRE(models->set_provider(available));
+    REQUIRE(install_provider(models, available));
     auto unavailable = std::make_shared<RecordingProvider>("unavailable-catalog");
     unavailable->catalog_available = false;
-    REQUIRE(models->set_provider(unavailable));
+    REQUIRE(install_provider(models, unavailable));
 
     const auto all = models->models();
 
@@ -504,7 +520,7 @@ TEST_CASE("Models normalizes provider lookup and model validation failures", "[a
     CHECK(missing_terminal.error.error_message == missing.result->error_message);
 
     auto provider = std::make_shared<RecordingProvider>("known");
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
     ai::Model invalid_request = tests::make_model("", "known", "api");
     auto invalid = run_models(models, std::move(invalid_request));
     REQUIRE(invalid.result);
@@ -563,7 +579,7 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
         "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     ai::Model explicit_request = tests::make_model("model", "provider", "api");
     std::vector<ai::AssistantStreamEvent> explicit_events;
@@ -608,8 +624,8 @@ TEST_CASE("Models never falls back after a stored credential type mismatch", "[a
                 ai::AuthResult{}});
     };
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
-        "provider", ai::ProviderAuth{.api_key = std::move(api_key)})));
+    REQUIRE(install_provider(
+            models, std::make_shared<RecordingProvider>("provider", ai::ProviderAuth{.api_key = std::move(api_key)})));
 
     ai::Model request = tests::make_model("model", "provider", "api");
     auto run = run_models(models, std::move(request));
@@ -656,7 +672,7 @@ TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never r
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
         "provider", ai::ProviderAuth{.oauth = std::move(oauth)});
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto checked = run_async_result(models->check_auth("provider"));
     REQUIRE(checked);
@@ -700,8 +716,8 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
             std::expected<ai::ModelAuth, cch::support::Error>{ai::ModelAuth{}});
     };
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
-        "provider", ai::ProviderAuth{.oauth = std::move(oauth)})));
+    REQUIRE(install_provider(
+            models, std::make_shared<RecordingProvider>("provider", ai::ProviderAuth{.oauth = std::move(oauth)})));
 
     ai::Model request = tests::make_model("model", "provider", "api");
     auto run = run_models(models, std::move(request));
@@ -736,7 +752,7 @@ TEST_CASE("Models merges Model headers after resolved auth headers case insensit
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
         "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     ai::Model request = tests::make_model("model", "provider", "api");
     request.headers = ai::ModelHeaders{{"x-test", "model"}};
@@ -770,7 +786,7 @@ TEST_CASE("Models prepares the complete streamSimple request before Provider dis
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
         "deepseek", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto model = tests::make_model("reasoning", "deepseek", "openai-responses");
     model.reasoning = true;
@@ -849,7 +865,7 @@ TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue3
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
         "openai-codex", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
     auto model = tests::make_model(
         "gpt-5.5", "openai-codex", "openai-codex-responses");
     ai::SimpleStreamOptions options;
@@ -895,7 +911,7 @@ TEST_CASE(
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
         "kimi-coding", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
     auto model = tests::make_model(
         "kimi-for-coding", "kimi-coding", "anthropic-messages");
     ai::SimpleStreamOptions options;
@@ -925,9 +941,9 @@ TEST_CASE("Env-chain API key auth labels explicit credentials as stored credenti
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
-        "provider",
-        ai::providers::make_env_api_key_auth("API key", {"API_KEY"}))));
+    REQUIRE(install_provider(models,
+            std::make_shared<RecordingProvider>(
+                    "provider", ai::providers::make_env_api_key_auth("API key", {"API_KEY"}))));
 
     auto resolved = run_async_result(models->get_auth("provider", "explicit-key"));
 
@@ -957,9 +973,9 @@ TEST_CASE(
                     "explicit callback failure")});
     };
     auto auth_models = make_models(credentials, auth_context);
-    REQUIRE(auth_models->set_provider(std::make_shared<RecordingProvider>(
-        "auth-provider",
-        ai::ProviderAuth{.api_key = std::move(failing_auth)})));
+    REQUIRE(install_provider(auth_models,
+            std::make_shared<RecordingProvider>(
+                    "auth-provider", ai::ProviderAuth{.api_key = std::move(failing_auth)})));
     ai::Model auth_request = tests::make_model("model", "auth-provider", "api");
 
     auto auth_run = run_models(auth_models, std::move(auth_request));
@@ -975,7 +991,7 @@ TEST_CASE(
         support::ErrorCode::Stream,
         "provider stream failed",
         "explicit stream failure");
-    REQUIRE(provider_models->set_provider(failing_provider));
+    REQUIRE(install_provider(provider_models, failing_provider));
     ai::Model provider_request = tests::make_model("model", "provider", "api");
 
     auto provider_run = run_models(provider_models, std::move(provider_request));
@@ -986,7 +1002,7 @@ TEST_CASE(
     CHECK(provider_terminal.failure->code == support::ErrorCode::Stream);
 
     auto header_models = make_models(credentials, auth_context);
-    REQUIRE(header_models->set_provider(std::make_shared<RecordingProvider>("header-provider")));
+    REQUIRE(install_provider(header_models, std::make_shared<RecordingProvider>("header-provider")));
     ai::SimpleStreamOptions header_options;
     header_options.transform_headers = [](ai::RequestHeaders)
         -> support::Expected<ai::RequestHeaders> {
@@ -1006,7 +1022,7 @@ TEST_CASE(
     CHECK(header_terminal.failure->code == support::ErrorCode::Stream);
 
     auto sink_models = make_models(credentials, auth_context);
-    REQUIRE(sink_models->set_provider(std::make_shared<RecordingProvider>("sink-provider")));
+    REQUIRE(install_provider(sink_models, std::make_shared<RecordingProvider>("sink-provider")));
     ai::Model sink_request = tests::make_model("model", "sink-provider", "api");
     auto sink_result = run_async_result(
         sink_models->stream(
@@ -1031,7 +1047,7 @@ TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[a
     auto failing_store = std::make_shared<MemoryCredentialStore>();
     failing_store->read_failure = true;
     auto store_models = make_models(failing_store, auth_context);
-    REQUIRE(store_models->set_provider(std::make_shared<RecordingProvider>("store-provider")));
+    REQUIRE(install_provider(store_models, std::make_shared<RecordingProvider>("store-provider")));
     ai::Model store_request = tests::make_model("model", "store-provider", "api");
 
     auto store_run = run_models(store_models, std::move(store_request));
@@ -1062,9 +1078,9 @@ TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[a
         return cch::support::AsyncResult<ai::ModelAuth>(std::expected<ai::ModelAuth, cch::support::Error>{ai::ModelAuth{}});
     };
     auto refresh_models = make_models(refresh_credentials, auth_context);
-    REQUIRE(refresh_models->set_provider(std::make_shared<RecordingProvider>(
-        "refresh-provider",
-        ai::ProviderAuth{.oauth = std::move(refresh_auth)})));
+    REQUIRE(install_provider(refresh_models,
+            std::make_shared<RecordingProvider>(
+                    "refresh-provider", ai::ProviderAuth{.oauth = std::move(refresh_auth)})));
     ai::Model refresh_request = tests::make_model("model", "refresh-provider", "api");
 
     auto refresh_run = run_models(refresh_models, std::move(refresh_request));
@@ -1091,9 +1107,9 @@ TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[a
                     "explicit callback failure")});
     };
     auto derivation_models = make_models(derivation_credentials, auth_context);
-    REQUIRE(derivation_models->set_provider(std::make_shared<RecordingProvider>(
-        "derivation-provider",
-        ai::ProviderAuth{.oauth = std::move(derivation_auth)})));
+    REQUIRE(install_provider(derivation_models,
+            std::make_shared<RecordingProvider>(
+                    "derivation-provider", ai::ProviderAuth{.oauth = std::move(derivation_auth)})));
     ai::Model derivation_request = tests::make_model("model", "derivation-provider", "api");
 
     auto derivation_run = run_models(derivation_models, std::move(derivation_request));
@@ -1110,7 +1126,7 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>("provider");
     provider->stream_failure = support::make_error(support::ErrorCode::Stream, "serialization failed");
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     ai::Model request = tests::make_model("model", "provider", "api");
     auto normalized = run_models(models, request);
@@ -1138,7 +1154,7 @@ TEST_CASE("Models cancellation is one aborted terminal value", "[ai][models][iss
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>("provider");
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
     std::stop_source stop;
     stop.request_stop();
 
@@ -1171,8 +1187,8 @@ TEST_CASE("Models checkAuth falls back to API key resolution when no check hook 
                 ai::AuthResult{.source = "resolved fallback"}});
     };
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
-        "provider", ai::ProviderAuth{.api_key = std::move(api_key)})));
+    REQUIRE(install_provider(
+            models, std::make_shared<RecordingProvider>("provider", ai::ProviderAuth{.api_key = std::move(api_key)})));
 
     auto checked = run_async_result(models->check_auth("provider"));
     REQUIRE(checked);
@@ -1185,7 +1201,7 @@ TEST_CASE("Models sanitizes Provider-emitted terminal errors", "[ai][models][iss
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models->set_provider(std::make_shared<UnsafeTerminalProvider>()));
+    REQUIRE(install_provider(models, std::make_shared<UnsafeTerminalProvider>()));
 
     ai::Model request = tests::make_model("model", "unsafe-terminal", "api");
     auto run = run_models(models, std::move(request));
@@ -1207,7 +1223,7 @@ TEST_CASE("Models suppresses duplicate Provider terminals and returns the first 
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models->set_provider(std::make_shared<DuplicateTerminalProvider>()));
+    REQUIRE(install_provider(models, std::make_shared<DuplicateTerminalProvider>()));
 
     ai::Model request = tests::make_model("model", "duplicate", "api");
     auto run = run_models(models, std::move(request));
@@ -1225,7 +1241,7 @@ TEST_CASE("Models live lookup and logout use owned Provider and CredentialStore 
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>("provider");
     provider->catalog.push_back(tests::make_model("catalog-model", "provider", "api"));
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     REQUIRE(models->model("provider", "catalog-model"));
     CHECK(models->model("provider", "missing") == std::nullopt);
@@ -1254,7 +1270,7 @@ TEST_CASE("Models login persists the provider OAuth credential via CredentialSto
                             .account_id = "account-xyz",
                         }});
             }));
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto result = run_async_result(models->login(
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
@@ -1285,7 +1301,7 @@ TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][mo
                         "provider flow failed",
                         "detail")));
             }));
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto result = run_async_result(models->login(
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
@@ -1312,7 +1328,7 @@ TEST_CASE("Models login wraps CredentialStore modify failures as the auth catego
                         ai::OAuthCredential{
                             .refresh = "r", .access = "a", .expires = 1, .account_id = "acct"}});
             }));
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto result = run_async_result(models->login(
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
@@ -1340,7 +1356,7 @@ TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][m
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>("key-only", keyless_auth());
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto result = run_async_result(models->login(
         "key-only", ai::AuthType::OAuth, empty_interaction()));
@@ -1364,7 +1380,7 @@ TEST_CASE("Models login persists an api-key credential through modify", "[ai][mo
                 return cch::support::AsyncResult<ai::ApiKeyCredential>(
                     std::expected<ai::ApiKeyCredential, cch::support::Error>{credential});
             }));
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto result = run_async_result(models->login(
         "api-provider", ai::AuthType::ApiKey, empty_interaction()));
@@ -1392,7 +1408,7 @@ TEST_CASE("Models login rejects a provider without api-key login support", "[ai]
                     std::expected<ai::OAuthCredential, cch::support::Error>{
                         ai::OAuthCredential{}});
             }));
-    REQUIRE(models->set_provider(provider));
+    REQUIRE(install_provider(models, provider));
 
     auto result = run_async_result(models->login(
         "oauth-only", ai::AuthType::ApiKey, empty_interaction()));

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/Message.hpp>
-#include <cch/ai/Provider.hpp>
+#include "ai/providers/Provider.hpp"
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/providers/SseParser.hpp"

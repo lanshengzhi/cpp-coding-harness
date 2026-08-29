@@ -2,7 +2,7 @@
 
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/Model.hpp>
-#include <cch/ai/Provider.hpp>
+#include "ai/providers/Provider.hpp"
 #include "ai/providers/StreamTransport.hpp"
 #include "ai/providers/WebSocketTransport.hpp"
 

@@ -2,11 +2,11 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "ai/providers/ComposedProvider.hpp"
+#include "ai/providers/ProviderTestAccess.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -302,7 +302,7 @@ support::ExpectedVoid apply_scripted_provider(ai::Models& models, ScriptedProvid
     const std::string provider_id = definition.definition.id;
     if (definition.stream || definition.transport.http_transport || definition.transport.ws_transport ||
             has_custom_cache_config(definition.transport)) {
-        return models.set_provider(make_scripted_provider(std::move(definition)));
+        return ProviderTestAccess::install(models, make_scripted_provider(std::move(definition)));
     }
     return models.apply_provider(ai::ProviderChange{
             .provider_id = provider_id,
@@ -325,19 +325,8 @@ support::ExpectedVoid apply_scripted_transport_options(ai::Models& models, Scrip
         ws_transport = std::make_shared<BoostBeastWebSocketTransport>();
     }
 
-    for (auto& provider : models.providers()) {
-        auto replacement = make_composed_provider(std::string{provider->id()},
-                std::string{provider->name()},
-                provider->models(),
-                std::move(provider->auth()),
-                http_transport,
-                ws_transport,
-                options.codex_cache_config);
-        if (auto installed = models.set_provider(std::move(replacement)); !installed) {
-            return std::unexpected(installed.error());
-        }
-    }
-    return {};
+    return ProviderTestAccess::replace_transports(
+            models, std::move(http_transport), std::move(ws_transport), options.codex_cache_config);
 }
 
 ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string provider_id) {

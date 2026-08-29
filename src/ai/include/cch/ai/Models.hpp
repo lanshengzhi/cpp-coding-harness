@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cch/ai/Auth.hpp>
+#include <cch/ai/Context.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/ModelStream.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
@@ -17,6 +17,9 @@
 #include <vector>
 
 namespace cch::ai {
+namespace providers {
+struct ProviderTestAccess;
+}
 
 /// Complete pre-runtime description of one Provider. The authentication hooks
 /// make this value move-only; transports and stream capabilities are assembled
@@ -80,15 +83,10 @@ public:
     /// the AI Owner. A missing provider removal succeeds as a no-op.
     [[nodiscard]] cch::support::ExpectedVoid apply_provider(ProviderChange change);
 
-    // Transitional Provider-pointer surface; removed once downstream callers
-    // migrate to ProviderDefinition and ProviderInfo (ADR 0047).
-    [[nodiscard]] cch::support::ExpectedVoid set_provider(std::shared_ptr<Provider> provider);
-    void delete_provider(std::string_view provider_id);
+    /// Remove all installed providers before a full composition refresh.
     void clear_providers();
 
     [[nodiscard]] std::vector<ProviderInfo> provider_info() const;
-    [[nodiscard]] std::vector<std::shared_ptr<Provider>> providers() const;
-    [[nodiscard]] std::shared_ptr<Provider> provider(std::string_view provider_id) const;
     [[nodiscard]] std::vector<Model> models(std::optional<std::string_view> provider_id = std::nullopt) const;
     [[nodiscard]] std::optional<Model> model(
         std::string_view provider_id,
@@ -137,6 +135,7 @@ public:
     struct Impl;
 
 private:
+    friend struct providers::ProviderTestAccess;
     std::unique_ptr<Impl> impl_;
 };
 

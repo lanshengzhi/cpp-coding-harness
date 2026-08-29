@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/Models.hpp>
-#include <cch/ai/Provider.hpp>
+#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"

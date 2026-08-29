@@ -68,6 +68,10 @@ public:
     [[nodiscard]] static support::Expected<std::shared_ptr<ModelRuntime>> create(
         ModelRuntimeOptions options = {});
 
+    /// Test-only wrapper for an already-composed Models value. Production
+    /// callers use create() so Models Runtime owns provider composition.
+    explicit ModelRuntime(std::shared_ptr<ai::Models> models);
+
     ModelRuntime(ModelRuntime&&) noexcept;
     ModelRuntime& operator=(ModelRuntime&&) noexcept;
     ~ModelRuntime();

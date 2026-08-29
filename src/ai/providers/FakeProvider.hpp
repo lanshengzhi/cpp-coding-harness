@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/ai/Models.hpp>
+#include "ai/providers/Provider.hpp"
 #include "ai/providers/StreamTransport.hpp"
 #include "ai/providers/WebSocketTransport.hpp"
 
