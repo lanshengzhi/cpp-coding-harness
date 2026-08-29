@@ -48,10 +48,11 @@ struct ModelRuntime::Impl {
     std::shared_ptr<ai::AuthContext> auth_context;
     std::shared_ptr<ai::Models> models;
     ModelConfig config;
-    std::map<std::string, std::shared_ptr<ai::Provider>, std::less<>> builtins;
+    std::map<std::string, ai::ProviderDefinition, std::less<>> builtins;
     std::map<std::string, std::shared_ptr<ai::Provider>, std::less<>> native_extensions;
     std::map<std::string, std::string, std::less<>> composition_errors;
     ProviderComposerOptions composer_options;
+    ModelRuntimeTransportOptions transport_options;
     std::optional<std::string> config_error;
 
     // Availability snapshot.
@@ -77,41 +78,55 @@ struct ModelRuntime::Impl {
         return ids;
     }
 
-    [[nodiscard]] std::shared_ptr<ai::Provider> base_provider(
-        std::string_view provider_id) const {
-        if (const auto found = native_extensions.find(provider_id);
-            found != native_extensions.end()) {
-            return found->second;
+    void load_builtin_definitions() {
+        builtins.clear();
+        for (auto&& definition : ai::builtin_provider_definitions()) {
+            const std::string id = definition.id;
+            builtins.emplace(id, std::move(definition));
         }
-        if (const auto found = builtins.find(provider_id);
-            found != builtins.end()) {
-            return found->second;
+    }
+
+    [[nodiscard]] std::optional<ai::ProviderDefinition> take_builtin_definition(std::string_view provider_id) {
+        if (const auto found = builtins.find(provider_id); found != builtins.end()) {
+            auto definition = std::move(found->second);
+            builtins.erase(found);
+            return definition;
         }
-        return nullptr;
+        for (auto&& definition : ai::builtin_provider_definitions()) {
+            if (definition.id == provider_id) {
+                return std::move(definition);
+            }
+        }
+        return std::nullopt;
     }
 
     void recompose_provider(std::string_view provider_id) {
-        const auto base = base_provider(provider_id);
+        if (const auto found = native_extensions.find(provider_id); found != native_extensions.end()) {
+            if (auto added = models->set_provider(found->second); !added) {
+                composition_errors[std::string{provider_id}] = added.error().message;
+            } else {
+                composition_errors.erase(std::string{provider_id});
+            }
+            return;
+        }
+
+        auto base = take_builtin_definition(provider_id);
         std::optional<std::string> error;
-        auto composed = compose_provider(
-            provider_id, base, config, composer_options, error);
+        auto change = compose_provider(provider_id, std::move(base), config, composer_options, error);
         if (error) {
             composition_errors[std::string{provider_id}] = *error;
         } else {
             composition_errors.erase(std::string{provider_id});
         }
-        if (composed) {
-            if (auto added = models->set_provider(std::move(composed)); !added) {
-                composition_errors[std::string{provider_id}] = added.error().message;
-            }
-        } else {
-            models->delete_provider(provider_id);
+        if (auto applied = models->apply_provider(std::move(change)); !applied) {
+            composition_errors[std::string{provider_id}] = applied.error().message;
         }
     }
 
     void rebuild_providers() {
         models->clear_providers();
         composition_errors.clear();
+        load_builtin_definitions();
         for (const auto& provider_id : provider_ids()) {
             recompose_provider(provider_id);
         }
@@ -193,32 +208,34 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
         std::make_shared<harness::DefaultAsyncProcessRunner>();
 
     auto impl = std::make_unique<ModelRuntime::Impl>(ModelRuntime::Impl{
-        .agent_dir = std::move(agent_dir),
-        .models_path = std::move(models_path),
-        .credentials = credentials_with_overlay,
-        .auth_context = auth_context,
-        .models = models,
-        .config = {},
-        .builtins = {},
-        .native_extensions = {},
-        .composition_errors = {},
-        .composer_options = ProviderComposerOptions{
-            .http_transport = http_transport,
-            .ws_transport = ws_transport,
-            .codex_cache_config = transports.codex_cache_config,
-            .process_runner = process_runner,
-        },
-        .config_error = {},
-        .all_models = {},
-        .available_models = {},
-        .configured_providers = {},
-        .stored_providers = {},
-        .runtime_providers = {},
-        .auth_snapshot = {},
-        .availability_error = {},
+            .agent_dir = std::move(agent_dir),
+            .models_path = std::move(models_path),
+            .credentials = credentials_with_overlay,
+            .auth_context = auth_context,
+            .models = models,
+            .config = {},
+            .builtins = {},
+            .native_extensions = {},
+            .composition_errors = {},
+            .composer_options =
+                    ProviderComposerOptions{
+                            .process_runner = process_runner,
+                    },
+            .transport_options =
+                    ModelRuntimeTransportOptions{
+                            .http_transport = std::move(http_transport),
+                            .ws_transport = std::move(ws_transport),
+                            .codex_cache_config = transports.codex_cache_config,
+                    },
+            .config_error = {},
+            .all_models = {},
+            .available_models = {},
+            .configured_providers = {},
+            .stored_providers = {},
+            .runtime_providers = {},
+            .auth_snapshot = {},
+            .availability_error = {},
     });
-    impl->builtins = builtin_providers(impl->composer_options);
-
     auto runtime = std::shared_ptr<ModelRuntime>(new ModelRuntime(std::move(impl)));
     static_cast<void>(runtime->refresh());
     return runtime;
