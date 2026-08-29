@@ -258,8 +258,7 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     hooks.rebuild_chat = [weak] {
         if (const auto self = weak.lock()) self->rebuild_chat();
     };
-    hooks.apply_reload_result = [weak](runtime::AgentSessionReloadResult result)
-        -> support::ExpectedVoid {
+    hooks.apply_reload_result = [weak](AgentSessionReloadResult result) -> support::ExpectedVoid {
         const auto self = weak.lock();
         if (!self) {
             return std::unexpected(support::make_error(

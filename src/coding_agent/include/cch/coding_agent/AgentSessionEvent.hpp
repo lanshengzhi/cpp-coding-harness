@@ -9,10 +9,6 @@
 #include <string>
 #include <variant>
 
-namespace cch::coding_agent::runtime {
-class AgentSessionRuntime;
-} // namespace cch::coding_agent::runtime
-
 namespace cch::coding_agent {
 
 /// pi `AgentSessionEvent` `auto_retry_start` — emitted before each turn
@@ -98,7 +94,9 @@ public:
     struct Impl;
 
 private:
-    friend class runtime::AgentSessionRuntime;
+    /// The Agent Session implementation owns the observer registry this
+    /// handle unregisters from.
+    friend class AgentSession;
     std::unique_ptr<Impl> impl_;
 };
 

@@ -44,13 +44,10 @@
 namespace cch::coding_agent {
 namespace detail {
 class AgentSessionInteractiveAccess;
-class AgentSessionPromptAccess;
-class AgentSessionRuntimeAccess;
 }
 namespace runtime {
 class AsyncUserShell;
-class AgentSessionRuntime;
-struct AgentSessionReloadResult;
+struct AgentSessionAssembly;
 class SessionFactory;
 struct AssemblyOverrides;
 }
@@ -145,6 +142,18 @@ struct CompactionResult {
     std::optional<ai::Usage> usage{std::nullopt};
     /// pi `CompactionDetails`: `{readFiles, modifiedFiles}`.
     std::optional<support::JsonValue> details{std::nullopt};
+};
+
+// ── AgentSessionReloadResult ───────────────────────────────────────────────
+
+/// Result of one `/reload` resource re-read (pi `resourceLoader.reload()`
+/// results): the per-kind diagnostics and the re-discovered theme documents
+/// the TUI re-registers through `discover_themes` (#418).
+struct AgentSessionReloadResult {
+    std::vector<ResourceDiagnostic> skill_diagnostics;
+    std::vector<ResourceDiagnostic> prompt_diagnostics;
+    std::vector<ResourceDiagnostic> theme_diagnostics;
+    std::vector<LoadedThemeResource> themes;
 };
 
 // ── EventSubscription ────────────────────────────────────────────────────────
@@ -535,9 +544,7 @@ public:
     /// the TUI re-registers. The caller (the TUI) refuses while
     /// `is_streaming()`/`is_compacting()`; User Bash does not block reload.
     /// Same `impl_` copying contract as `prompt()`.
-    [[nodiscard]] boost::asio::awaitable<
-        support::Expected<runtime::AgentSessionReloadResult>>
-    reload();
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> reload();
 
     /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
     /// NOT block `/reload`).
@@ -570,20 +577,17 @@ public:
 
 private:
     friend class detail::AgentSessionInteractiveAccess;
-    friend class detail::AgentSessionPromptAccess;
-    friend class detail::AgentSessionRuntimeAccess;
     friend class runtime::SessionFactory;
 
     // Shared only with an active prompt frame so reentrant close/destruction
-    // cannot invalidate runtime capabilities before callbacks quiesce.
+    // cannot invalidate session capabilities before callbacks quiesce.
     std::shared_ptr<Impl> impl_;
 
-    /// Session Assembly's publication step: bind one assembled runtime into a
-    /// session handle. Friend-owned (runtime::SessionFactory); defined in the
-    /// implementation where Impl is complete.
-    [[nodiscard]] static std::unique_ptr<AgentSession> bind_runtime(
-        std::unique_ptr<runtime::AgentSessionRuntime> runtime,
-        std::optional<std::filesystem::path> session_path);
+    /// Session Assembly's publication step: construct the session handle's
+    /// own Impl from the assembled value. Friend-owned
+    /// (runtime::SessionFactory); defined in the implementation where Impl
+    /// is complete.
+    [[nodiscard]] static std::unique_ptr<AgentSession> bind_assembly(runtime::AgentSessionAssembly assembly);
 };
 
 // ── Factory ──────────────────────────────────────────────────────────────────

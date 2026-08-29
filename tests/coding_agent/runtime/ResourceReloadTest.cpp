@@ -10,7 +10,6 @@
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -22,6 +21,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <chrono>
@@ -66,10 +66,10 @@ public:
 
 /// Drives one `AgentSession::reload()` on a temporary executor and returns
 /// the outcome.
-[[nodiscard]] support::Expected<coding_agent::runtime::AgentSessionReloadResult> run_reload(
-    coding_agent::AgentSession& session) {
+[[nodiscard]] support::Expected<coding_agent::AgentSessionReloadResult> run_reload(
+        coding_agent::AgentSession& session) {
     boost::asio::io_context io;
-    std::optional<support::Expected<coding_agent::runtime::AgentSessionReloadResult>> result;
+    std::optional<support::Expected<coding_agent::AgentSessionReloadResult>> result;
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {

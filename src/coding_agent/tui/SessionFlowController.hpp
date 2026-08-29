@@ -2,7 +2,6 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
-#include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 
@@ -83,9 +82,7 @@ struct SessionFlowHostHooks {
     /// Apply one successful `/reload` result: re-catalog keybindings,
     /// re-register themes, re-apply settings, rebuild autocomplete, refresh
     /// loaded resources, and surface the models.json diagnostic.
-    std::move_only_function<support::ExpectedVoid(
-        runtime::AgentSessionReloadResult)>
-        apply_reload_result{nullptr};
+    std::move_only_function<support::ExpectedVoid(AgentSessionReloadResult)> apply_reload_result{nullptr};
     /// Mark the manual compaction as admitted or completed so host shutdown
     /// waits for it exactly like prompt/User Bash work.
     std::move_only_function<void(bool)> set_compaction_active{nullptr};

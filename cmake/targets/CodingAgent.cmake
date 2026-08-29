@@ -18,6 +18,9 @@ cch_parity_declare_target(
     SOURCES
         src/coding_agent/AgentConfigDir.cpp
         src/coding_agent/AgentSession.cpp
+        src/coding_agent/AgentSessionCompaction.cpp
+        src/coding_agent/AgentSessionExecution.cpp
+        src/coding_agent/AgentSessionInteraction.cpp
         src/coding_agent/AuthStorage.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
@@ -40,7 +43,6 @@ cch_parity_declare_target(
         src/coding_agent/prompt/PromptExpansion.cpp
         src/coding_agent/prompt/PromptTemplateExpander.cpp
         src/coding_agent/prompt/SystemPromptBuilder.cpp
-        src/coding_agent/runtime/AgentSessionRuntime.cpp
         src/coding_agent/runtime/AsyncCliRuntime.cpp
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp

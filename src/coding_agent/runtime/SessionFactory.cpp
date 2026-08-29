@@ -16,7 +16,7 @@
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "coding_agent/runtime/AgentSessionRuntime.hpp"
+#include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
@@ -1525,32 +1525,30 @@ struct SessionTargetNormalizationOptions {
     // Capture the merged settings values first: the manager moves into the
     // runtime below so it can persist later defaults with the same
     // project-trust state (pi `AgentSession.settingsManager`).
-    AgentSessionRuntimeConfig runtime_config;
-    runtime_config.max_queued_messages = plan.max_queued_messages;
-    runtime_config.max_queued_bytes = plan.max_queued_bytes;
-    runtime_config.model = std::move(request_model);
-    runtime_config.scoped_models = std::move(scoped_models);
+    AgentSessionConfig session_config;
+    session_config.max_queued_messages = plan.max_queued_messages;
+    session_config.max_queued_bytes = plan.max_queued_bytes;
+    session_config.model = std::move(request_model);
+    session_config.scoped_models = std::move(scoped_models);
     // pi main.ts `buildSessionOptions`: a scoped entry's explicit `:level`
     // seeds the new-session thinking level (CLI `--thinking` precedence
     // lands with the flag's session plumbing).
-    runtime_config.default_thinking_level =
-        scoped_thinking_level ? scoped_thinking_level : settings.default_thinking_level;
+    session_config.default_thinking_level =
+            scoped_thinking_level ? scoped_thinking_level : settings.default_thinking_level;
     // pi `_rebuildSystemPrompt` inputs resolved by the resource loader (P20):
     // the custom prompt, the append strings, and the Project Context Files.
-    runtime_config.custom_prompt = std::move(system_prompt_text);
-    runtime_config.append_system_prompt = std::move(append_system_prompt_texts);
-    runtime_config.context_files = std::move(agents_files);
+    session_config.custom_prompt = std::move(system_prompt_text);
+    session_config.append_system_prompt = std::move(append_system_prompt_texts);
+    session_config.context_files = std::move(agents_files);
     // Loaded-resources presentation + `/reload` (pi `resourceLoader`
     // getters): the SYSTEM/APPEND sources, the per-kind diagnostics, and the
     // retained loading request (#418).
-    runtime_config.system_prompt_source = std::move(system_prompt_source);
-    runtime_config.append_system_prompt_sources =
-        std::move(append_system_prompt_sources);
-    runtime_config.skill_diagnostics = std::move(skill_diagnostics);
-    runtime_config.prompt_diagnostics = std::move(prompt_diagnostics);
-    runtime_config.theme_diagnostics = std::move(theme_diagnostics);
-    runtime_config.resource_loading_request =
-        std::move(retained_resource_request);
+    session_config.system_prompt_source = std::move(system_prompt_source);
+    session_config.append_system_prompt_sources = std::move(append_system_prompt_sources);
+    session_config.skill_diagnostics = std::move(skill_diagnostics);
+    session_config.prompt_diagnostics = std::move(prompt_diagnostics);
+    session_config.theme_diagnostics = std::move(theme_diagnostics);
+    session_config.resource_loading_request = std::move(retained_resource_request);
     const auto shell_path = settings.shell_path;
     const auto shell_command_prefix = settings.shell_command_prefix;
 
@@ -1576,12 +1574,14 @@ struct SessionTargetNormalizationOptions {
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;
-    auto runtime_handle = std::make_unique<AgentSessionRuntime>(
-        std::move(services),
-        std::move(open),
-        std::move(skills),
-        std::move(templates),
-        std::move(runtime_config));
+    AgentSessionAssembly assembly{
+            .services = std::move(services),
+            .session = std::move(open),
+            .skills = std::move(skills),
+            .templates = std::move(templates),
+            .config = std::move(session_config),
+            .session_path = session_path,
+    };
 
     coding_agent::ResolvedSessionIdentity identity{
         .provider = resolved_provider,
@@ -1591,13 +1591,11 @@ struct SessionTargetNormalizationOptions {
         .workspace = workspace,
         .metadata = metadata,
     };
-    return SessionFactory::publish(
-        std::move(runtime_handle),
-        std::move(session_path),
-        std::move(diagnostics),
-        std::move(model_fallback_message),
-        std::move(theme_documents),
-        std::move(identity));
+    return SessionFactory::publish(std::move(assembly),
+            std::move(diagnostics),
+            std::move(model_fallback_message),
+            std::move(theme_documents),
+            std::move(identity));
 }
 
 /// Shared creation tail: normalize produced a plan (or the attempt's first
@@ -1620,20 +1618,17 @@ struct SessionTargetNormalizationOptions {
 
 } // namespace
 
-coding_agent::CreateAgentSessionResult SessionFactory::publish(
-    std::unique_ptr<AgentSessionRuntime> runtime,
-    std::optional<std::filesystem::path> session_path,
-    std::vector<coding_agent::SessionDiagnostic> diagnostics,
-    std::optional<std::string> model_fallback_message,
-    std::vector<coding_agent::LoadedThemeResource> theme_resources,
-    coding_agent::ResolvedSessionIdentity identity) {
+coding_agent::CreateAgentSessionResult SessionFactory::publish(AgentSessionAssembly assembly,
+        std::vector<coding_agent::SessionDiagnostic> diagnostics,
+        std::optional<std::string> model_fallback_message,
+        std::vector<coding_agent::LoadedThemeResource> theme_resources,
+        coding_agent::ResolvedSessionIdentity identity) {
     return coding_agent::CreateAgentSessionResult{
-        .session = coding_agent::AgentSession::bind_runtime(
-            std::move(runtime), std::move(session_path)),
-        .diagnostics = std::move(diagnostics),
-        .model_fallback_message = std::move(model_fallback_message),
-        .theme_resources = std::move(theme_resources),
-        .resolved_identity = std::move(identity),
+            .session = coding_agent::AgentSession::bind_assembly(std::move(assembly)),
+            .diagnostics = std::move(diagnostics),
+            .model_fallback_message = std::move(model_fallback_message),
+            .theme_resources = std::move(theme_resources),
+            .resolved_identity = std::move(identity),
     };
 }
 

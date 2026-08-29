@@ -21,7 +21,7 @@ namespace cch::harness::session {
 /// — so the owning SessionStore can mirror them into its live SessionTree
 /// exactly like a persisted session (pi's non-persisting SessionManager
 /// keeps the same in-memory entries). Live Session State remains owned
-/// exclusively by AgentSessionRuntime.
+/// exclusively by the Agent Session implementation.
 class InMemorySessionStore final {
 public:
     /// pi `appendMessage`: the message hangs under the current leaf (the

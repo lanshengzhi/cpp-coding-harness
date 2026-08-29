@@ -1,18 +1,20 @@
 #pragma once
 
-#include <cch/agent/Agent.hpp>
-#include <cch/coding_agent/AgentSessionEvent.hpp>
-#include <cch/coding_agent/AgentSessionSnapshot.hpp>
-#include <cch/coding_agent/PromptTemplate.hpp>
+// ─────────────────────────────────────────────────────────────────────────────
+// Private implementation machinery for AgentSession: the complete
+// AgentSession::Impl definition shared by the AgentSession translation units
+// (AgentSession.cpp, AgentSessionExecution.cpp, AgentSessionCompaction.cpp,
+// AgentSessionInteraction.cpp). This is not a second callable interface: only
+// the session implementation units include it; hosts and tests drive the
+// AgentSession interface.
+// ─────────────────────────────────────────────────────────────────────────────
+
 #include "coding_agent/AgentSession.hpp"
-#include <cch/coding_agent/Skill.hpp>
-#include <cch/support/Error.hpp>
-#include "coding_agent/prompt/SystemPromptBuilder.hpp"
-#include "coding_agent/runtime/RuntimeServices.hpp"
-#include "coding_agent/runtime/SessionEventCommitment.hpp"
-#include "coding_agent/runtime/SessionLifecycle.hpp"
+
+#include <cch/agent/Agent.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
+#include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/SessionPersistence.hpp"
-#include "coding_agent/runtime/SessionStats.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 #include "agent/harness/compaction/Compaction.hpp"
 
@@ -29,58 +31,7 @@
 #include <string>
 #include <vector>
 
-namespace cch::coding_agent::runtime {
-
-struct AgentSessionRuntimeConfig {
-    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
-    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
-    /// Explicit turn cap forwarded to the Agent; std::nullopt imposes no cap
-    /// (ADR 0015).
-    std::optional<int> max_turns{std::nullopt};
-    ai::Model model{};
-    /// pi `scopedModels`: the `--models` scope carried into the session for
-    /// Ctrl+P cycling. Session-only state; the interactive scoped-models
-    /// selector replaces it at runtime.
-    std::vector<coding_agent::ScopedModel> scoped_models{};
-    /// pi `defaultThinkingLevel` from the merged settings scope. Used as the
-    /// fresh-session and resumed-without-entry thinking level before the
-    /// Agent's creation clamp (pi sdk.ts
-    /// `settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL`);
-    /// a resumed `thinking_level_change` entry wins over it (T04).
-    std::optional<std::string> default_thinking_level{std::nullopt};
-    /// pi `_rebuildSystemPrompt` inputs from the resource loader
-    /// (`resourceLoader.getSystemPrompt()`): the custom system prompt text
-    /// (`--system-prompt` text-or-file, else the discovered SYSTEM.md
-    /// content) rendering as the custom-prompt branch.
-    std::optional<std::string> custom_prompt{std::nullopt};
-    /// pi `resourceLoader.getAppendSystemPrompt()`: the resolved append
-    /// strings in source order; joined with `"\n\n"` into the append
-    /// section (pi `_rebuildSystemPrompt`).
-    std::vector<std::string> append_system_prompt;
-    /// pi `resourceLoader.getAgentsFiles().agentsFiles`: the Project Context
-    /// Files rendering as `<project_context>`/`<project_instructions
-    /// path="...">`. Not Project Trust gated (pinned fact).
-    std::vector<prompt::ProjectContextFile> context_files;
-    /// pi `resourceLoader.getSystemPromptSource()`: the SYSTEM.md source
-    /// path when the resolved custom prompt came from a file (loaded-resources
-    /// Context presentation).
-    std::optional<std::string> system_prompt_source{std::nullopt};
-    /// pi `resourceLoader.getAppendSystemPromptSources()`: the
-    /// APPEND_SYSTEM.md source paths when the append strings came from files.
-    std::vector<std::string> append_system_prompt_sources;
-    /// Per-kind loader diagnostics (pi `skillDiagnostics`/
-    /// `promptDiagnostics`/`themeDiagnostics`) for the loaded-resources
-    /// presentation and the `/reload` refresh.
-    std::vector<ResourceDiagnostic> skill_diagnostics;
-    std::vector<ResourceDiagnostic> prompt_diagnostics;
-    std::vector<ResourceDiagnostic> theme_diagnostics;
-    /// The resolved `ProjectResourceLoadingRequest` the session was assembled
-    /// under (pi's retained `DefaultResourceLoader` options): `/reload`
-    /// re-runs the same discovery with the creation-time trust state
-    /// preserved.
-    std::optional<ProjectResourceLoadingRequest> resource_loading_request{
-        std::nullopt};
-};
+namespace cch::coding_agent {
 
 /// Resolved turn auto-retry settings (pi `settings-manager.ts`
 /// `getRetrySettings`): `settings.retry` fields with pi's defaults applied
@@ -92,32 +43,17 @@ struct RetrySettings {
     std::size_t base_delay_ms{2000};
 };
 
-/// Result of one `/reload` resource re-read (pi `resourceLoader.reload()`
-/// results): the per-kind diagnostics and the re-discovered theme documents
-/// the TUI re-registers through `discover_themes` (#418).
-struct AgentSessionReloadResult {
-    std::vector<ResourceDiagnostic> skill_diagnostics;
-    std::vector<ResourceDiagnostic> prompt_diagnostics;
-    std::vector<ResourceDiagnostic> theme_diagnostics;
-    std::vector<LoadedThemeResource> themes;
-};
-
-/// Internal runtime behind AgentSession. Composes the stateful Agent with
+/// The Agent Session implementation: the stateful Agent composed with
 /// session persistence, the pi-shaped System Prompt (built at session
-/// construction), resources, and session presentation.
-class AgentSessionRuntime {
-public:
-    AgentSessionRuntime(
-        RuntimeServices services,
-        OpenSession session,
-        std::vector<Skill> skills,
-        std::vector<PromptTemplate> templates,
-        AgentSessionRuntimeConfig config);
-
-    AgentSessionRuntime(const AgentSessionRuntime&) = delete;
-    AgentSessionRuntime& operator=(const AgentSessionRuntime&) = delete;
-    AgentSessionRuntime(AgentSessionRuntime&&) = delete;
-    AgentSessionRuntime& operator=(AgentSessionRuntime&&) = delete;
+/// construction), resources, and session presentation. Owned through the
+/// AgentSession handle's shared_ptr so a lazy coroutine admitted before the
+/// public handle moves or is destroyed keeps the implementation alive.
+struct AgentSession::Impl {
+    explicit Impl(runtime::AgentSessionAssembly assembly);
+    Impl(const Impl&) = delete;
+    Impl& operator=(const Impl&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
 
     /// Reject the prompt at admission when the current model's provider has
     /// no configured auth (pi `agent-session.ts` `prompt()` preflight): a real
@@ -127,16 +63,12 @@ public:
     /// not an auth failure, and streaming it fails through normal provider
     /// lookup ("Unknown provider: unknown") exactly like pi. `checkAuth`
     /// failures propagate unchanged.
-    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid>
-    preflight_auth_guidance();
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> preflight_auth_guidance();
 
     /// Run one prompt on the awaiting host executor through optional prompt
     /// interpretation, the stateful Agent, persistence, and event fanout.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_prompt(
-        std::string prompt,
-        std::vector<ai::ImageContent> images,
-        bool expand_prompt_templates,
-        std::move_only_function<support::ExpectedVoid()> on_preflight_accepted = {});
+            std::string prompt, std::vector<ai::ImageContent> images, bool expand_prompt_templates);
 
     /// Private Native TUI path for one direct-user Shell execution. User Bash
     /// may overlap an active Agent run; a result completed mid-run stays
@@ -146,39 +78,18 @@ public:
     /// `settingsManager.isProjectTrusted()`): false when assembly had no
     /// settings surface.
     [[nodiscard]] bool is_project_trusted() const {
-        return services_.settings_manager &&
-            services_.settings_manager->is_project_trusted();
+        return services_.settings_manager && services_.settings_manager->is_project_trusted();
     }
-    [[nodiscard]] boost::asio::awaitable<support::Expected<UserBashCompletion>> run_user_bash(
-        std::string command,
-        bool exclude_from_context,
-        UserBashProgressSink progress_sink);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>> run_user_bash(
+            std::string command, bool exclude_from_context, runtime::UserBashProgressSink progress_sink);
     void cancel_user_bash();
-
-    // ── Subscriptions ──────────────────────────────────────────────────────
-
-    /// Subscribe through the authoritative stateful Agent weak-observer path.
-    [[nodiscard]] support::Expected<agent::AgentEventSubscription> subscribe(
-        agent::AgentEventSink sink);
-
-    /// Subscribe a weak observer for session-assembly events (pi
-    /// `AgentSessionEvent`): currently the turn auto-retry
-    /// `auto_retry_start`/`auto_retry_end` events. Observer failures are
-    /// diagnostic observations and deactivate the observer without vetoing
-    /// retry progress (ADR 0017).
-    [[nodiscard]] support::Expected<SessionEventSubscription> subscribe_session(
-        AgentSessionEventSink sink);
 
     // ── Input queues ───────────────────────────────────────────────────────
 
     [[nodiscard]] support::ExpectedVoid steer(
-        std::string text,
-        std::vector<ai::ImageContent> images,
-        bool expand_prompt_templates);
+            std::string text, std::vector<ai::ImageContent> images, bool expand_prompt_templates);
     [[nodiscard]] support::ExpectedVoid follow_up(
-        std::string text,
-        std::vector<ai::ImageContent> images,
-        bool expand_prompt_templates);
+            std::string text, std::vector<ai::ImageContent> images, bool expand_prompt_templates);
     [[nodiscard]] support::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
     [[nodiscard]] support::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
     [[nodiscard]] support::ExpectedVoid clear_steering_queue();
@@ -197,8 +108,7 @@ public:
     /// failure. Live Agent state advances first; a persistence failure is
     /// reported without rolling the change back (Session Event Commitment
     /// philosophy).
-    [[nodiscard]] support::Expected<std::string> set_thinking_level(
-        std::string_view level);
+    [[nodiscard]] support::Expected<std::string> set_thinking_level(std::string_view level);
 
     /// Runtime model switch (pi `AgentSession.setModel`, G3 decision 5):
     /// validates that the target model's provider resolves auth (`No API key
@@ -210,8 +120,7 @@ public:
     /// sequence). Live Agent state advances first; a persistence failure is
     /// reported without rolling the change back (Session Event Commitment
     /// philosophy).
-    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(
-        ai::Model model);
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(ai::Model model);
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`, G3 decision 5):
     /// when the session carries scoped models, cycle within the auth-filtered
@@ -222,8 +131,8 @@ public:
     /// yields `std::nullopt`. Each cycle applies the model, appends the
     /// `model_change` entry, writes the global settings default, and re-clamps
     /// the thinking level, exactly like `set_model`.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
-    cycle_model(std::string_view direction);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> cycle_model(
+            std::string_view direction);
 
     /// Cycle the thinking level through the active model's supported set (pi
     /// `AgentSession.cycleThinkingLevel`): the next level after the current
@@ -235,11 +144,9 @@ public:
     /// Replace the session's scoped-model set (pi `setScopedModels`;
     /// session-only, never persisted). An empty set restores un-scoped
     /// cycling over the available models.
-    void set_scoped_models(std::vector<coding_agent::ScopedModel> models);
+    void set_scoped_models(std::vector<ScopedModel> models);
     /// The session's scoped-model set (pi `scopedModels`).
-    [[nodiscard]] const std::vector<coding_agent::ScopedModel>& scoped_models() const {
-        return scoped_models_;
-    }
+    [[nodiscard]] const std::vector<ScopedModel>& scoped_models() const { return scoped_models_; }
 
     // ── Tree navigation (pi navigateTree, G2 decision 13) ──────────────────
 
@@ -255,8 +162,7 @@ public:
     /// the in-memory store keeps the same entries pi's non-persisting
     /// SessionManager keeps, so no tree surface synthesizes topology from
     /// the live context.
-    [[nodiscard]] support::Expected<coding_agent::SessionTreeTopology>
-    session_tree() const;
+    [[nodiscard]] support::Expected<SessionTreeTopology> session_tree() const;
 
     /// pi `AgentSession.navigateTree` subset (G2 decision 13): switch the
     /// active path to `target_id` with the leaf/active-path semantics of the
@@ -268,17 +174,14 @@ public:
     /// alternatives. Branch summarization generation stays Deferred: no
     /// `branch_summary` is ever produced. Rejects an active Agent run with
     /// pi's verbatim error.
-    [[nodiscard]] support::Expected<coding_agent::TreeNavigationResult>
-    navigate_tree(std::string_view target_id);
+    [[nodiscard]] support::Expected<TreeNavigationResult> navigate_tree(std::string_view target_id);
 
     /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
     /// append a `label` entry targeting `entry_id` under the current leaf.
     /// Both persistence alternatives mirror the entry into the store's live
     /// tree; persisted sessions also write it durably. Verbatim pi errors:
     /// `Entry <id> not found` for an unknown target.
-    [[nodiscard]] support::ExpectedVoid set_entry_label(
-        std::string_view entry_id,
-        std::optional<std::string> label);
+    [[nodiscard]] support::ExpectedVoid set_entry_label(std::string_view entry_id, std::optional<std::string> label);
 
     // ── Compaction ────────────────────────────────────────────────────────
 
@@ -289,8 +192,7 @@ public:
     /// `compaction` session entry, and rebuilds the live Agent context as
     /// compactionSummary + retained tail. Only persisted sessions (with a
     /// session file) have a tree/entry surface for compaction.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
-    compact(std::string custom_instructions);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> compact(std::string custom_instructions);
 
     /// Outcome of the automatic compaction trigger policy (pi
     /// `AgentSession._checkCompaction`), consulted after each completed loop
@@ -317,13 +219,11 @@ public:
     /// pre-prompt check does not (so an aborted response still triggers the
     /// threshold path before the next prompt). Requires an idle Agent.
     [[nodiscard]] boost::asio::awaitable<AutoCompactionOutcome> check_auto_compaction(
-        const ai::AssistantMessage& assistant_message,
-        bool skip_aborted_check);
+            const ai::AssistantMessage& assistant_message, bool skip_aborted_check);
 
     // ── State accessors ────────────────────────────────────────────────────
 
-    [[nodiscard]] AgentSessionSnapshot snapshot(
-        const std::optional<std::filesystem::path>& session_path) const;
+    [[nodiscard]] AgentSessionSnapshot snapshot() const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
 
@@ -338,26 +238,15 @@ public:
     /// current leaf. The `session_info` surface stays scoped to persisted
     /// sessions; the in-memory change is dropped. Returns the stored
     /// (sanitized) name.
-    [[nodiscard]] support::Expected<std::optional<std::string>> set_session_name(
-        std::string name);
+    [[nodiscard]] support::Expected<std::optional<std::string>> set_session_name(std::string name);
 
     /// pi `getSessionStats` subset: per-role message counts and usage/token
     /// totals for the `/session` command.
-    [[nodiscard]] SessionStats session_stats() const;
+    [[nodiscard]] runtime::SessionStats session_stats() const;
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
-    [[nodiscard]] std::optional<std::filesystem::path> session_path() const {
-        return session_.store ? session_.store->path() : std::nullopt;
-    }
-    /// The session's store (shared ownership; the in-session fork flow reads
-    /// an in-memory session's live tree through it).
-    [[nodiscard]] std::shared_ptr<harness::session::SessionStore> session_store() const {
-        return session_.store;
-    }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }
-    [[nodiscard]] std::shared_ptr<ModelRuntime> model_runtime() const {
-        return services_.model_runtime;
-    }
+    [[nodiscard]] std::shared_ptr<ModelRuntime> model_runtime() const { return services_.model_runtime; }
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
     [[nodiscard]] const std::vector<Skill>& skills() const;
     [[nodiscard]] const std::vector<PromptTemplate>& templates() const;
@@ -373,20 +262,14 @@ public:
     }
     /// pi `resourceLoader.getAgentsFiles().agentsFiles`: the Project Context
     /// Files.
-    [[nodiscard]] const std::vector<prompt::ProjectContextFile>& context_files() const {
-        return config_.context_files;
-    }
+    [[nodiscard]] const std::vector<prompt::ProjectContextFile>& context_files() const { return config_.context_files; }
     /// pi `resourceLoader` per-kind diagnostics (`skillDiagnostics`/
     /// `promptDiagnostics`/`themeDiagnostics`).
-    [[nodiscard]] const std::vector<ResourceDiagnostic>& skill_diagnostics() const {
-        return config_.skill_diagnostics;
-    }
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& skill_diagnostics() const { return config_.skill_diagnostics; }
     [[nodiscard]] const std::vector<ResourceDiagnostic>& prompt_diagnostics() const {
         return config_.prompt_diagnostics;
     }
-    [[nodiscard]] const std::vector<ResourceDiagnostic>& theme_diagnostics() const {
-        return config_.theme_diagnostics;
-    }
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& theme_diagnostics() const { return config_.theme_diagnostics; }
 
     // ── Resource reload (pi `/reload`, #418) ───────────────────────────────
 
@@ -398,8 +281,7 @@ public:
     /// `std::unexpected` (the TUI shows `Reload failed: ...`). Requires an
     /// idle session (streaming/compaction refusal is the TUI's job via
     /// `is_streaming`/`is_compacting`).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>>
-    reload();
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> reload();
 
     /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
     /// NOT block `/reload`).
@@ -413,12 +295,9 @@ public:
     /// no-op while idle.
     void abort();
 
-    [[nodiscard]] bool is_open() const {
-        return lifecycle_ == Lifecycle::Open;
-    }
+    [[nodiscard]] bool is_open() const { return lifecycle_ == Lifecycle::Open; }
     [[nodiscard]] bool is_busy() const {
-        return lifecycle_ == Lifecycle::Closing || prompt_active_ ||
-            user_bash_active_ || compaction_active_;
+        return lifecycle_ == Lifecycle::Closing || prompt_active_ || user_bash_active_ || compaction_active_;
     }
     /// Idempotent Close request (ADR 0011/0040, issue #467): stops new work
     /// admission first, then requests cancellation of the active prompt and
@@ -429,7 +308,6 @@ public:
     /// an admitted callback returns without waiting on that callback.
     void close() noexcept;
 
-private:
     /// Session lifecycle, tracked independently from the active-work facts so
     /// User Bash may overlap an Agent run (ADR 0026).
     enum class Lifecycle { Open, Closing, Closed };
@@ -439,7 +317,7 @@ private:
     /// release the awaiting run_user_bash coroutine, which then returns the
     /// completion or the commitment failure.
     struct PendingUserBashCommit {
-        UserBashCompletion completion;
+        runtime::UserBashCompletion completion;
         boost::asio::steady_timer committed_signal;
         support::ExpectedVoid commit_result;
     };
@@ -455,14 +333,12 @@ private:
     /// wins; otherwise a current model without thinking support falls back to
     /// the merged settings default (then pi's DEFAULT_THINKING_LEVEL);
     /// otherwise the current level is kept (re-clamped by the caller).
-    [[nodiscard]] std::string resolve_thinking_level_for_switch(
-        const std::optional<std::string>& explicit_level) const;
+    [[nodiscard]] std::string resolve_thinking_level_for_switch(const std::optional<std::string>& explicit_level) const;
     /// Shared model-switch tail (pi `setModel`/`cycleModel` after the auth
     /// decision): swap the live Agent model, append the `model_change` entry,
     /// write the global settings default, and re-clamp the thinking level.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> apply_model_switch(
-        ai::Model model,
-        std::string thinking_level);
+            ai::Model model, std::string thinking_level);
     /// Shared preflight outcome for entry points that reject a concurrent prompt.
     [[nodiscard]] support::ExpectedVoid reject_if_busy() const;
     /// pi `_rebuildSystemPrompt`: build the System Prompt in pi's exact shape
@@ -477,27 +353,23 @@ private:
     /// Session Store. Store failure is reported on the completion diagnostic
     /// without rolling back Live Session State; a Live Session State failure
     /// is returned so the caller can reject the completion outright.
-    [[nodiscard]] support::ExpectedVoid commit_user_bash_completion(
-        UserBashCompletion& completion);
+    [[nodiscard]] support::ExpectedVoid commit_user_bash_completion(runtime::UserBashCompletion& completion);
     /// Commit and release every deferred Bash completion in completion order.
     void flush_pending_user_bash();
 
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_agent_loop(
-        ai::UserMessage prompt,
-        std::stop_source stop_source);
+            ai::UserMessage prompt, std::stop_source stop_source);
     /// The compaction body with `compaction_active_` already set; the public
     /// `compact` wrapper resets the flag on every exit path.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>>
-    compact_impl(std::string custom_instructions);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> compact_impl(
+            std::string custom_instructions);
     /// Auto-compaction body (pi `_runAutoCompaction`): prepare, summarize
     /// through the session's `ModelRuntime`, persist, and rebuild context.
     /// Returns whether the run should continue (`will_retry`). Skips silently
     /// when the session is unpersisted, has no model, has nothing to compact,
     /// or summarization fails (pi returns false in every such case). `reason`
     /// feeds the emitted `compaction_start`/`compaction_end` events.
-    [[nodiscard]] boost::asio::awaitable<bool> run_auto_compaction(
-        bool will_retry,
-        std::string reason);
+    [[nodiscard]] boost::asio::awaitable<bool> run_auto_compaction(bool will_retry, std::string reason);
     /// Shared compaction execution for the manual trigger and the auto
     /// policy: run the harness compaction door over the session store. The
     /// branch assembly, preparation, skip reasons, and summarization stay
@@ -509,7 +381,7 @@ private:
     /// Persist a successful harness result as the `compaction` session entry
     /// and rebuild the live Agent context as compactionSummary + retained
     /// tail (the append/rebuild half of pi `AgentSession.compact`).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>> commit_compaction(
+    [[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> commit_compaction(
             harness::session::CompactionResult result);
     /// Resolve the effective compaction settings from the merged settings
     /// scope with pi's `DEFAULT_COMPACTION_SETTINGS` applied to missing fields.
@@ -521,8 +393,7 @@ private:
     /// auto-retry policy (pi `_isRetryableError`): context overflow is never
     /// retryable (compaction owns it, T10), otherwise pi's
     /// `isRetryableAssistantError` classification applies.
-    [[nodiscard]] bool is_retryable_error(
-        const ai::AssistantMessage& message) const;
+    [[nodiscard]] bool is_retryable_error(const ai::AssistantMessage& message) const;
     /// pi `_prepareRetry`: increment the attempt budget, emit
     /// `auto_retry_start`, remove the failed assistant message from live
     /// state (it stays in session history), and wait an abort-interruptible
@@ -530,8 +401,7 @@ private:
     /// the agent; an aborted sleep emits `auto_retry_end` with pi's
     /// "Retry cancelled" and returns false (exactly one terminal outcome).
     [[nodiscard]] boost::asio::awaitable<bool> prepare_retry(
-        const ai::AssistantMessage& message,
-        std::stop_token stop_token);
+            const ai::AssistantMessage& message, std::stop_token stop_token);
     /// Deliver one session-assembly event to every registered observer.
     void emit_session_event(const AgentSessionEvent& event);
     /// Timestamp of the latest `compaction` entry on the active branch, or
@@ -546,13 +416,13 @@ private:
     /// factory; the Agent and the summarization seam each hold one.
     [[nodiscard]] ai::ModelStreamFactory make_stream_factory();
 
-    RuntimeServices services_;
-    OpenSession session_;
+    runtime::RuntimeServices services_;
+    runtime::OpenSession session_;
     /// The session's off-loop Session Event Commitment channel (ADR 0040):
     /// admitted message appends persist on Runtime workers and their outcomes
     /// return through the session's serialized mailbox in FIFO order. Null
     /// for in-memory sessions and sessions without a persistent store.
-    std::shared_ptr<SessionPersistence> persistence_;
+    std::shared_ptr<runtime::SessionPersistence> persistence_;
     /// Immutable skill/template snapshots loaded at session creation (pi
     /// `_resourceLoader` results the session was assembled under). The
     /// System Prompt is built from the skills at construction; `/skill:`
@@ -569,7 +439,11 @@ private:
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
 
-    AgentSessionRuntimeConfig config_;
+    runtime::AgentSessionConfig config_;
+    /// The resolved session path recorded at assembly (bind time); unlike
+    /// `session_.store`, it is retained through Session Close so the
+    /// handle's session_path()/snapshot() introspection keeps answering.
+    std::optional<std::filesystem::path> session_path_;
     Lifecycle lifecycle_{Lifecycle::Open};
     bool prompt_active_{false};
     bool user_bash_active_{false};
@@ -582,22 +456,18 @@ private:
     /// pi `_scopedModels`: the session's scoped-model set for Ctrl+P cycling,
     /// seeded from the `--models` CLI scope and replaced session-only by the
     /// scoped-models selector. Empty = cycle over the available models.
-    std::vector<coding_agent::ScopedModel> scoped_models_{};
+    std::vector<ScopedModel> scoped_models_{};
     /// pi `_retryAttempt`: the in-flight turn auto-retry attempt count, reset
     /// by a non-error assistant message completion, by the final-failure
     /// emission, or by an aborted backoff.
     int retry_attempt_{0};
     /// Weak session-event observer registry (pi `AgentSessionEvent`
     /// listeners). Failing observers are deactivated; the shared anchor keeps
-    /// subscription handles safe after the runtime is destroyed.
+    /// subscription handles safe after the session is destroyed.
     struct SessionSubscriptionAnchor {
-        AgentSessionRuntime* runtime{nullptr};
+        Impl* impl{nullptr};
     };
-    /// The session-event subscription handle unregisters its observer from
-    /// the registry below.
-    friend class coding_agent::SessionEventSubscription;
-    std::shared_ptr<SessionSubscriptionAnchor> session_event_anchor_{
-        std::make_shared<SessionSubscriptionAnchor>(this)};
+    std::shared_ptr<SessionSubscriptionAnchor> session_event_anchor_{std::make_shared<SessionSubscriptionAnchor>(this)};
     struct SessionSubscriber {
         std::size_t id{0};
         AgentSessionEventSink sink;
@@ -619,4 +489,51 @@ private:
     std::optional<boost::asio::steady_timer> prompt_settled_signal_;
 };
 
-} // namespace cch::coding_agent::runtime
+namespace detail {
+
+// ── Lazy-coroutine session entries ──────────────────────────────────────────
+// Each entry is the coroutine half of an AgentSession async operation. The
+// public handle's ordinary (non-coroutine) member passes its impl_ copy as
+// the by-value first argument, so the shared_ptr enters the coroutine frame
+// synchronously at the call: moving or destroying the public handle before
+// the first co_await cannot invalidate the returned lazy awaitable.
+
+/// Prompt entry (defined in AgentSessionExecution.cpp).
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> session_prompt(std::shared_ptr<AgentSession::Impl> impl,
+        std::string text,
+        std::vector<ai::ImageContent> images,
+        bool expand_prompt_templates);
+
+/// pi `waitForIdle` entry (defined in AgentSessionExecution.cpp).
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> session_wait_for_idle(
+        std::shared_ptr<AgentSession::Impl> impl);
+
+/// Manual compaction entry (defined in AgentSessionCompaction.cpp).
+[[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> session_compact(
+        std::shared_ptr<AgentSession::Impl> impl, std::string custom_instructions);
+
+/// Runtime model switch entry (defined in AgentSessionInteraction.cpp).
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> session_set_model(
+        std::shared_ptr<AgentSession::Impl> impl, ai::Model model);
+
+/// Runtime model cycle entry (defined in AgentSessionInteraction.cpp).
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> session_cycle_model(
+        std::shared_ptr<AgentSession::Impl> impl, std::string direction);
+
+/// Resource reload entry (defined in AgentSessionInteraction.cpp).
+[[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> session_reload(
+        std::shared_ptr<AgentSession::Impl> impl);
+
+/// One admission shaping for every user input path (Prompt, steering,
+/// follow-up): optional skill/prompt-template expansion, then image content
+/// appended to one complete user Agent Message. Defined in
+/// AgentSessionExecution.cpp; shared with the input-queue admissions.
+[[nodiscard]] ai::UserMessage make_admitted_user_message(std::string text,
+        const std::vector<Skill>& skills,
+        const std::vector<PromptTemplate>& templates,
+        std::vector<ai::ImageContent> images,
+        bool expand_prompt_templates);
+
+} // namespace detail
+
+} // namespace cch::coding_agent

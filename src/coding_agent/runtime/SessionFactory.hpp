@@ -4,8 +4,8 @@
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
+#include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
-#include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
@@ -27,7 +27,7 @@ struct AssemblyOverrides {
     std::unique_ptr<AsyncUserShell> user_shell;
 };
 
-/// Assembles an AgentSessionRuntime (and its supporting services) from the
+/// Assembles one Agent Session (and its supporting services) from the
 /// internal CLI creation request and publishes it as the one publication
 /// bundle (`coding_agent::CreateAgentSessionResult`). Each creation attempt
 /// loads User Settings at most once and assembles the session from that
@@ -55,18 +55,16 @@ public:
         AgentSessionCreationRequest& request,
         const InteractiveSessionFacts& facts);
 
-    /// Publication step used by the assembly implementation: bind the
-    /// assembled runtime into the session handle and carry the bundle
-    /// together. The class itself is the private implementation of the
-    /// `create_agent_session` boundary, so this member is Owner-internal by
-    /// construction.
-    [[nodiscard]] static coding_agent::CreateAgentSessionResult publish(
-        std::unique_ptr<AgentSessionRuntime> runtime,
-        std::optional<std::filesystem::path> session_path,
-        std::vector<coding_agent::SessionDiagnostic> diagnostics,
-        std::optional<std::string> model_fallback_message,
-        std::vector<coding_agent::LoadedThemeResource> theme_resources,
-        coding_agent::ResolvedSessionIdentity identity);
+    /// Publication step used by the assembly implementation: hand the one
+    /// assembled value to the session handle (which constructs its own Impl)
+    /// and carry the bundle together. The class itself is the private
+    /// implementation of the `create_agent_session` boundary, so this member
+    /// is Owner-internal by construction.
+    [[nodiscard]] static coding_agent::CreateAgentSessionResult publish(AgentSessionAssembly assembly,
+            std::vector<coding_agent::SessionDiagnostic> diagnostics,
+            std::optional<std::string> model_fallback_message,
+            std::vector<coding_agent::LoadedThemeResource> theme_resources,
+            coding_agent::ResolvedSessionIdentity identity);
 };
 
 } // namespace cch::coding_agent::runtime
