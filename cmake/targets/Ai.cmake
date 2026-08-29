@@ -32,7 +32,6 @@ cch_parity_declare_target(
         src/ai/providers/CodexCatalog.cpp
         src/ai/providers/ComposedProvider.cpp
         src/ai/providers/EnvApiKeyAuth.cpp
-        src/ai/providers/FakeProvider.cpp
         src/ai/providers/KimiCatalog.cpp
         src/ai/providers/RetryPolicy.cpp
         src/ai/providers/SseParser.cpp

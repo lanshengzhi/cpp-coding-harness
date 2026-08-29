@@ -1,10 +1,11 @@
 #pragma once
 
 #include <cch/ai/Content.hpp>
-#include <cch/ai/Provider.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/support/AsyncResult.hpp>
+#include "ai/providers/FakeProvider.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/ModelsFixture.hpp"
@@ -51,9 +52,9 @@ struct RecordedRuntimeCall {
     ai::ProviderStreamOptions options;
 };
 
-/// Mutable controls shared by the scripted Providers registered in one
-/// concrete ModelRuntime. The state is separate from the runtime so tests can
-/// vary provider responses without manufacturing a ModelRuntime subtype.
+/// Mutable controls shared by the scripted Provider Definitions installed in
+/// one concrete ModelRuntime. The state is separate from the runtime so tests
+/// can vary provider responses without manufacturing a ModelRuntime subtype.
 struct ScriptedProviderControl final {
     /// Release the gated call, if any. Idempotent.
     void release() { gate_.release(); }
@@ -70,9 +71,15 @@ struct ScriptedProviderControl final {
     /// Scripted assistant responses consumed in FIFO order.
     std::deque<ai::AssistantMessage> responses;
 
+    /// Wake a gated stream for stop-token cancellation without recording a
+    /// release permit.
+    void interrupt() { gate_.interrupt(); }
+
+    /// Wait for one release permit or an interrupt.
+    [[nodiscard]] boost::asio::awaitable<void> wait() { co_await gate_.wait(); }
+
 private:
     tests::ReleaseGate gate_;
-    friend class ScriptedRuntimeProvider;
 };
 
 /// A concrete scripted Provider used by the runtime fixture. Its catalog
@@ -153,9 +160,9 @@ public:
                         // stop token. The stop check must precede wait(): an
                         // interrupt delivered before the gate is armed does not
                         // linger (ReleaseGate contract).
-                        std::stop_callback release_on_stop{stop_token, [control] { control->gate_.interrupt(); }};
+                        std::stop_callback release_on_stop{stop_token, [control] { control->interrupt(); }};
                         if (!stop_token.stop_requested()) {
-                            co_await control->gate_.wait();
+                            co_await control->wait();
                         }
                     }
 
@@ -237,9 +244,25 @@ private:
     ai::ProviderAuth auth_;
 };
 
+[[nodiscard]] inline ai::providers::ScriptedProviderDefinition scripted_runtime_definition(
+        std::shared_ptr<ScriptedRuntimeProvider> provider) {
+    ai::providers::ScriptedProviderDefinition definition;
+    definition.definition = ai::ProviderDefinition{
+            .id = std::string{provider->id()},
+            .name = std::string{provider->name()},
+            .models = provider->models(),
+            .auth = std::move(provider->auth()),
+    };
+    definition.stream = [provider = std::move(provider)](
+                                ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
+        return provider->stream(std::move(model), std::move(context), std::move(options));
+    };
+    return definition;
+}
+
 /// Test fixture that owns a concrete ModelRuntime and separate scripted
-/// Provider/control state. Both the `fake` and `sdk-host` Providers are
-/// installed through the transitional AI Models provider seam.
+/// Provider/control state. Both the `fake` and `sdk-host` definitions are
+/// installed through the ModelRuntime test seam.
 struct ScriptedRuntimeFixture final {
     std::shared_ptr<EnvVarGuard> kimi_api_key;
     std::shared_ptr<coding_agent::ModelRuntime> runtime;
@@ -251,20 +274,19 @@ struct ScriptedRuntimeFixture final {
         coding_agent::ModelRuntimeOptions options;
         options.models_path = std::filesystem::path{};
         options.credentials = std::make_shared<detail::FixtureCredentialStore>();
-        auto created = coding_agent::ModelRuntime::create(std::move(options));
+        std::vector<ai::providers::ScriptedProviderDefinition> definitions;
+        definitions.push_back(
+                scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("fake", control, true)));
+        definitions.push_back(
+                scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("sdk-host", control, false)));
+        auto created = coding_agent::create_model_runtime_for_testing(std::move(options),
+                coding_agent::ModelRuntimeTestOptions{
+                        .providers = std::move(definitions),
+                });
         if (!created) {
             std::terminate();
         }
         runtime = std::move(*created);
-        const auto register_provider = [this](std::string provider_id, bool configured) {
-            auto registered = runtime->ai_models()->set_provider(
-                    std::make_shared<ScriptedRuntimeProvider>(std::move(provider_id), control, configured));
-            if (!registered) {
-                std::terminate();
-            }
-        };
-        register_provider("fake", true);
-        register_provider("sdk-host", false);
 
         if (!runtime->model("fake", "fake-model") || !runtime->model("sdk-host", "fake-model")) {
             std::terminate();

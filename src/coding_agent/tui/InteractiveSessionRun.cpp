@@ -94,13 +94,14 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
     if (state_->shared_runtime) {
         request.model_runtime = state_->shared_runtime;
     }
-    return coding_agent::create_agent_session(
-        std::move(request),
-        state_->session_facts,
-        coding_agent::runtime::AssemblyOverrides{
-            .models = state_->models,
-            .user_shell = nullptr,
-        });
+    return coding_agent::create_agent_session(std::move(request),
+            state_->session_facts,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr,
+                    .cli_fake = false,
+                    .models = state_->models,
+                    .user_shell = nullptr,
+            });
 }
 
 void InteractiveSessionRun::report_boot_diagnostics(

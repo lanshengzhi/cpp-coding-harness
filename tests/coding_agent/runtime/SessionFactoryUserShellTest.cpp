@@ -3,7 +3,6 @@
 #include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "ai/providers/FakeProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
@@ -32,8 +31,13 @@ namespace {
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
-    return coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    auto runtime = tests::detail::scripted_fake_runtime();
+    if (!runtime) {
+        return std::unexpected(runtime.error());
+    }
+    request.model_runtime = std::move(*runtime);
+    request.request_model = tests::scripted_request_model("fake", "fake-model");
+    return coding_agent::create_agent_session(std::move(request));
 }
 
 [[nodiscard]] std::vector<const ai::ToolResultMessage*> tool_results(

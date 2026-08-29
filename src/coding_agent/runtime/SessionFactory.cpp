@@ -21,7 +21,6 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
-#include "ai/providers/FakeProvider.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -1661,10 +1660,21 @@ support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create
         apply_cli_facts(request, *session_facts);
     }
     auto snapshot = load_settings_snapshot(request.workspace);
+    if (overrides.model_runtime) {
+        auto plan = normalize_cli(std::move(request), snapshot.manager);
+        if (!plan) {
+            return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
+        }
+        if (!plan->model_runtime) {
+            plan->model_runtime = std::move(overrides.model_runtime);
+            plan->model_runtime_owned = false;
+            plan->cli_fake = overrides.cli_fake;
+        }
+        return finish_creation(std::move(plan), snapshot, std::move(overrides.user_shell));
+    }
     if (overrides.models) {
-        // The assembly override contributes concrete Providers only. The
-        // SessionFactory owns the concrete ModelRuntime that receives them;
-        // no alternate Models Runtime construction path exists.
+        // Transitional assembly override for tests that still own a Models
+        // object directly. New scripted vertical tests use model_runtime.
         ModelRuntimeOptions wrap_options;
         wrap_options.models_path = std::filesystem::path{};
         auto wrapped = ModelRuntime::create(std::move(wrap_options));

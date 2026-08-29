@@ -3,6 +3,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -11,6 +12,7 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -96,6 +98,17 @@ public:
     }
 };
 
+inline support::Expected<std::shared_ptr<coding_agent::ModelRuntime>> scripted_fake_runtime() {
+    return coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .models_path = std::filesystem::path{},
+                    .credentials = ai::providers::make_scripted_credential_store(),
+            },
+            coding_agent::ModelRuntimeTestOptions{
+                    .providers = ai::providers::make_scripted_fake_provider_definitions(),
+            });
+}
+
 inline ai::ProviderAuth fixture_auth() {
     ai::ApiKeyAuth api_key;
     api_key.name = "test fixture";
@@ -116,9 +129,13 @@ inline ai::ProviderAuth fixture_auth() {
 
 } // namespace detail
 
-/// One recorded provider request — the post-`streamSimple` shape: the concrete
+inline support::Expected<std::shared_ptr<coding_agent::ModelRuntime>> scripted_fake_runtime() {
+    return detail::scripted_fake_runtime();
+}
+
+/// One recorded scripted request — the post-`streamSimple` shape: the concrete
 /// Model argument, the conversation context, and the per-turn options. The
-/// legacy request aggregate is gone (ADR 0034 / #362); scripted provider fakes
+/// legacy request aggregate is gone (ADR 0034 / #362); scripted definitions
 /// record this instead.
 struct RecordedProviderRequest {
     ai::Model model;
@@ -126,9 +143,9 @@ struct RecordedProviderRequest {
     ai::ProviderStreamOptions options;
 };
 
-/// Base for scripted `ai::Provider` fakes used across the session/TUI/CLI
-/// test suites: fixed identity and an always-configured API-key auth.
-/// Subclasses implement the frozen `Provider::stream` surface only.
+/// Transitional base for scripted stream fakes used across the session/TUI/CLI
+/// test suites. `models_from_provider` converts these fakes into scripted
+/// Provider Definitions before installing them in Models.
 class ScriptedProvider : public ai::Provider {
 public:
     explicit ScriptedProvider(std::string provider_id)
@@ -148,57 +165,75 @@ private:
     ai::ProviderAuth auth_;
 };
 
-namespace detail {
+inline support::Expected<std::shared_ptr<coding_agent::ModelRuntime>> runtime_from_provider(
+        std::shared_ptr<ai::Provider> provider, coding_agent::ModelRuntimeOptions options = {}) {
+    const std::string provider_id{provider->id()};
+    const std::string provider_name{provider->name()};
+    const auto models = provider->models();
+    auto provider_state = std::move(provider);
 
-/// Registers one scripted provider under an alias id. `Models::set_provider`
-/// keys by `provider->id()`, so the canonical "sdk-host"/"fake" aliases the
-/// session layer may query share the same underlying fake provider.
-class IdAliasProvider final : public ai::Provider {
-public:
-    IdAliasProvider(std::string id, std::shared_ptr<ai::Provider> inner)
-        : id_(std::move(id)), inner_(std::move(inner)) {}
-
-    [[nodiscard]] std::string_view id() const noexcept override { return id_; }
-    [[nodiscard]] std::string_view name() const noexcept override { return inner_->name(); }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return inner_->auth(); }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return inner_->models(); }
-
-    [[nodiscard]] ai::ModelStream stream(
-        ai::Model model,
-        ai::AiContext context,
-        ai::ProviderStreamOptions options) override {
-        return inner_->stream(
-            std::move(model), std::move(context), std::move(options));
+    std::vector<ai::providers::ScriptedProviderDefinition> definitions;
+    const auto definition_for = [&provider_state, &models, &provider_name](std::string id) {
+        ai::providers::ScriptedProviderDefinition definition;
+        definition.definition = ai::ProviderDefinition{
+                .id = std::move(id),
+                .name = provider_name,
+                .models = models,
+                .auth = detail::fixture_auth(),
+        };
+        definition.stream = [provider_state](
+                                    ai::Model model, ai::AiContext context, ai::ProviderStreamOptions stream_options) {
+            return provider_state->stream(std::move(model), std::move(context), std::move(stream_options));
+        };
+        return definition;
+    };
+    definitions.push_back(definition_for(provider_id));
+    if (provider_id != "sdk-host") {
+        definitions.push_back(definition_for("sdk-host"));
     }
-
-private:
-    std::string id_;
-    std::shared_ptr<ai::Provider> inner_;
-};
-
-} // namespace detail
+    if (provider_id != "fake") {
+        definitions.push_back(definition_for("fake"));
+    }
+    return coding_agent::create_model_runtime_for_testing(std::move(options),
+            coding_agent::ModelRuntimeTestOptions{
+                    .providers = std::move(definitions),
+            });
+}
 
 inline std::shared_ptr<ai::Models> models_from_provider(
     std::shared_ptr<ai::Provider> provider) {
     auto models = std::make_shared<ai::Models>(
         std::make_shared<detail::FixtureCredentialStore>(),
         std::make_shared<detail::FixtureAuthContext>());
-    // Registered under the canonical ids the session layer may query; aliases
-    // share the same underlying fake provider.
-    std::vector<std::string> provider_ids{
-        std::string{provider->id()},
-        "sdk-host",
-        "fake",
+    const std::string provider_id{provider->id()};
+    const std::string provider_name{provider->name()};
+    const auto provider_models = provider->models();
+    auto provider_state = std::move(provider);
+    const auto apply_definition = [&](std::string id, ai::ProviderAuth auth) {
+        ai::providers::ScriptedProviderDefinition definition;
+        definition.definition = ai::ProviderDefinition{
+                .id = std::move(id),
+                .name = provider_name,
+                .models = provider_models,
+                .auth = std::move(auth),
+        };
+        definition.stream = [provider_state](
+                                    ai::Model model, ai::AiContext context, ai::ProviderStreamOptions stream_options) {
+            return provider_state->stream(std::move(model), std::move(context), std::move(stream_options));
+        };
+        return ai::providers::apply_scripted_provider(*models, std::move(definition));
     };
-    for (const auto& id : provider_ids) {
-        if (models->provider(id)) {
+
+    // The stream callback preserves the scripted provider state; fixture auth
+    // is enough for the model-only test seam and keeps aliases independent.
+    if (auto applied = apply_definition(provider_id, detail::fixture_auth()); !applied) {
+        return nullptr;
+    }
+    for (const auto& id : {std::string{"sdk-host"}, std::string{"fake"}}) {
+        if (id == provider_id) {
             continue;
         }
-        auto to_register =
-            id == provider->id()
-                ? provider
-                : std::make_shared<detail::IdAliasProvider>(id, provider);
-        if (auto added = models->set_provider(std::move(to_register)); !added) {
+        if (auto applied = apply_definition(id, detail::fixture_auth()); !applied) {
             return nullptr;
         }
     }
@@ -211,6 +246,7 @@ inline std::shared_ptr<ai::Models> models_from_provider(
 /// deterministic scripted provider catalog.
 struct ModelsSessionOptions : coding_agent::runtime::AgentSessionCreationRequest {
     std::shared_ptr<ai::Models> models;
+    std::shared_ptr<coding_agent::ModelRuntime> model_runtime;
 };
 
 /// Request Model for focused session tests that no longer set `provider_config`:
@@ -239,32 +275,48 @@ inline ai::Model scripted_request_model(
 inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options) {
     auto models = std::move(options.models);
+    auto model_runtime = std::move(options.model_runtime);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     if (!request.execution_runtime_target) {
         request.execution_runtime_target = detail::fixture_runtime_target();
     }
-    return coding_agent::create_agent_session(
-        std::move(request),
-        std::nullopt,
-        coding_agent::runtime::AssemblyOverrides{
-            .models = std::move(models),
-            .user_shell = nullptr});
+    if (model_runtime) {
+        request.model_runtime = std::move(model_runtime);
+        return coding_agent::create_agent_session(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .cli_fake = false, .models = nullptr, .user_shell = nullptr});
+    }
+    return coding_agent::create_agent_session(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .cli_fake = false, .models = std::move(models), .user_shell = nullptr});
 }
 
 inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options,
     std::unique_ptr<coding_agent::runtime::AsyncUserShell> user_shell) {
     auto models = std::move(options.models);
+    auto model_runtime = std::move(options.model_runtime);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     if (!request.execution_runtime_target) {
         request.execution_runtime_target = detail::fixture_runtime_target();
     }
-    return coding_agent::create_agent_session(
-        std::move(request),
-        std::nullopt,
-        coding_agent::runtime::AssemblyOverrides{
-            .models = std::move(models),
-            .user_shell = std::move(user_shell)});
+    if (model_runtime) {
+        request.model_runtime = std::move(model_runtime);
+        return coding_agent::create_agent_session(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
+                        .cli_fake = false,
+                        .models = nullptr,
+                        .user_shell = std::move(user_shell)});
+    }
+    return coding_agent::create_agent_session(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
+                    .cli_fake = false,
+                    .models = std::move(models),
+                    .user_shell = std::move(user_shell)});
 }
 
 } // namespace cch::tests

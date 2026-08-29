@@ -14,7 +14,6 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include <cch/support/Error.hpp>
-#include "ai/providers/FakeProvider.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
@@ -91,7 +90,12 @@ struct CloseFixture {
         options.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
         options.workspace = workspace.path();
-        options.models = tests::models_from_provider(std::move(provider));
+        auto runtime = tests::runtime_from_provider(std::move(provider));
+        if (!runtime) {
+            std::terminate();
+        }
+        options.model_runtime = std::move(*runtime);
+        options.request_model = tests::scripted_request_model("fake", "fake-model");
         return options;
     }
 

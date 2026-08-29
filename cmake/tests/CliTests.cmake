@@ -7,6 +7,8 @@ include_guard(GLOBAL)
     # dependency on pike.
     add_executable(cch_tests_cli_arch
         tests/Catch2Main.cpp
+        tests/support/ScriptedProvider.cpp
+        tests/support/ModelRuntimeTestSupport.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/cli/FrontendSelectionTest.cpp

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cli/CliParse.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 #include "ai/providers/FakeProvider.hpp"
 #include "support/TempWorkspace.hpp"
@@ -20,8 +21,9 @@ namespace cch::tests {
 /// In-process CLI run options. `args` are the argv tokens after the program
 /// name; `cwd` chdirs for the run (restored after); `env` applies environment
 /// overrides for the run (nullopt value unsets); `stdin_text` feeds the piped
-/// stream; `models` injects the deterministic fake provider catalog (the
-/// surface the deleted `--fake` flag used to drive); `resume_picker` injects
+/// stream; `models` is the transitional direct-Models override used by older
+/// tests; the default path builds scripted Provider Definitions through the
+/// ModelRuntime test seam. `resume_picker` injects
 /// the scripted startup-TUI picker (pi `selectSession` host) so the test
 /// process's terminal is never touched.
 struct CliRunOptions {
@@ -113,7 +115,9 @@ private:
 
 } // namespace detail
 
-inline CliRunResult run_cli(CliRunOptions options) {
+inline CliRunResult run_cli_with_runtime(CliRunOptions options,
+        std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
+        bool model_runtime_cli_fake = false) {
     // Isolate ambient user configuration: when the test controls neither HOME
     // nor PI_CODING_AGENT_DIR, point the agent config directory at a fresh
     // temp root so no real user settings/sessions are consulted or written.
@@ -163,29 +167,43 @@ inline CliRunResult run_cli(CliRunOptions options) {
     std::ostringstream error;
 
     std::shared_ptr<ai::Models> models = std::move(options.models);
-    if (!models) {
-        models = ai::providers::make_scripted_fake_models();
-    }
 
     const cli::FrontendEnvironment environment{
         .stdin_is_terminal = options.stdin_is_terminal,
         .stdout_is_terminal = options.stdout_is_terminal,
     };
-    const int exit_code = cli::run_cli_entry(
-        static_cast<int>(argv.size()),
-        argv.data(),
-        cli::CliStreams{input, output, error},
-        cli::CliRuntimeOptions{
-            .environment = environment,
-            .environment_explicit = true,
-            .models = std::move(models),
-            .resume_picker = std::move(options.resume_picker),
-        });
+    const int exit_code = cli::run_cli_entry(static_cast<int>(argv.size()),
+            argv.data(),
+            cli::CliStreams{input, output, error},
+            cli::CliRuntimeOptions{
+                    .environment = environment,
+                    .environment_explicit = true,
+                    .models = std::move(models),
+                    .model_runtime = std::move(model_runtime),
+                    .model_runtime_cli_fake = model_runtime_cli_fake,
+                    .resume_picker = std::move(options.resume_picker),
+            });
     return CliRunResult{
         .exit_code = exit_code,
         .stdout_text = output.str(),
         .stderr_text = error.str(),
     };
+}
+
+inline CliRunResult run_cli(CliRunOptions options) {
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .models_path = std::filesystem::path{},
+                    .credentials = ai::providers::make_scripted_credential_store(),
+            },
+            coding_agent::ModelRuntimeTestOptions{
+                    .providers = ai::providers::make_scripted_fake_provider_definitions(),
+            });
+    if (runtime) {
+        return run_cli_with_runtime(std::move(options), std::move(*runtime), true);
+    }
+    options.models = ai::providers::make_scripted_fake_models();
+    return run_cli_with_runtime(std::move(options), nullptr);
 }
 
 } // namespace cch::tests

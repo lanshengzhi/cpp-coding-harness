@@ -191,20 +191,42 @@ struct LoginFixture {
 
     /// Create a real ModelRuntime over the fixture's agent dir (file-backed
     /// credential store, real composition and resolution chain), replacing
-    /// the given providers with scripted ones through the native-provider
-    /// registration seam.
+    /// the given providers with scripted definitions through the private
+    /// ModelRuntime test seam.
     [[nodiscard]] std::shared_ptr<coding_agent::ModelRuntime> create_runtime(
-        std::vector<std::shared_ptr<ai::Provider>> replacements = {}) {
-        auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-            .agent_dir = agent_dir.path(),
-        });
-        if (!runtime) return nullptr;
-        for (auto& provider : replacements) {
-            if (auto added = (*runtime)->ai_models()->set_provider(std::move(provider)); !added) {
-                return nullptr;
-            }
+            std::vector<std::shared_ptr<ScriptedOAuthProvider>> replacements = {}) {
+        if (replacements.empty()) {
+            auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
+                    .agent_dir = agent_dir.path(),
+            });
+            return runtime ? std::move(*runtime) : nullptr;
         }
-        return *runtime;
+
+        std::vector<ai::providers::ScriptedProviderDefinition> definitions;
+        definitions.reserve(replacements.size());
+        for (auto& provider : replacements) {
+            ai::providers::ScriptedProviderDefinition definition;
+            definition.definition = ai::ProviderDefinition{
+                    .id = std::string{provider->id()},
+                    .name = std::string{provider->name()},
+                    .models = provider->models(),
+                    .auth = std::move(provider->auth()),
+            };
+            definition.stream = [provider = std::move(provider)](
+                                        ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
+                return provider->stream(std::move(model), std::move(context), std::move(options));
+            };
+            definitions.push_back(std::move(definition));
+        }
+
+        auto runtime = coding_agent::create_model_runtime_for_testing(
+                coding_agent::ModelRuntimeOptions{
+                        .agent_dir = agent_dir.path(),
+                },
+                coding_agent::ModelRuntimeTestOptions{
+                        .providers = std::move(definitions),
+                });
+        return runtime ? std::move(*runtime) : nullptr;
     }
 
     [[nodiscard]] std::filesystem::path auth_path() const {

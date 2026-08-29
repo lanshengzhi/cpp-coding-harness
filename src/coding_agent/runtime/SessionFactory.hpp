@@ -19,10 +19,13 @@
 namespace cch::coding_agent::runtime {
 
 /// Private test-support assembly seam carried as one value: an injected
-/// Models (the deterministic scripted provider catalog) and/or a Session-
-/// owned User Shell (User Bash overlap/cancellation tests). Production
-/// assembly passes nothing.
+/// ModelRuntime built from scripted Provider Definitions and/or a Session-
+/// owned User Shell (User Bash overlap/cancellation tests). The legacy Models
+/// member remains only for tests that have not yet migrated to the runtime
+/// seam. Production assembly passes neither override.
 struct AssemblyOverrides {
+    std::shared_ptr<ModelRuntime> model_runtime;
+    bool cli_fake{false};
     std::shared_ptr<ai::Models> models;
     std::unique_ptr<AsyncUserShell> user_shell;
 };

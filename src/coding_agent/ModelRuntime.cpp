@@ -5,7 +5,6 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "ModelConfig.hpp"
-#include "ModelRuntimeTestSupport.hpp"
 #include "ProcessAuthContext.hpp"
 #include "ProviderComposer.hpp"
 #include "RuntimeApiKeyOverlay.hpp"
@@ -204,19 +203,6 @@ support::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create_impl(Model
     return runtime;
 }
 
-support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
-        ModelRuntimeOptions options, ModelRuntimeTransportOptions transports) {
-    auto runtime = ModelRuntime::create_impl(std::move(options));
-    if (!runtime) {
-        return std::unexpected(runtime.error());
-    }
-    if (auto transport_setup = apply_test_transport_options(*(*runtime)->ai_models(), transports); !transport_setup) {
-        return std::unexpected(transport_setup.error());
-    }
-    (*runtime)->impl_->update_snapshot();
-    return runtime;
-}
-
 const std::filesystem::path& ModelRuntime::agent_dir() const noexcept {
     return impl_->agent_dir;
 }
@@ -292,6 +278,10 @@ support::AsyncResult<std::vector<ai::Model>> ModelRuntime::get_available(std::op
                     co_return models(*provider_id);
                 }
 
+                // The Models test seam may replace the installed collection
+                // after construction; availability always snapshots the live
+                // catalog before filtering it by authentication.
+                impl_->all_models = impl_->models->models();
                 std::set<std::string, std::less<>> configured;
                 std::map<std::string, ai::AuthCheck, std::less<>> auth;
                 std::optional<std::string> failure;

@@ -5,6 +5,7 @@ include_guard(GLOBAL)
     # AI
     add_executable(cch_tests_ai
         tests/Catch2Main.cpp
+        tests/support/ScriptedProvider.cpp
         tests/ai/BuiltinProvidersTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp

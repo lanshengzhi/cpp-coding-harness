@@ -307,11 +307,13 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     REQUIRE_FALSE(models_json.empty());
     home.write(".pi/agent/models.json", models_json);
 
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-        coding_agent::ModelRuntimeOptions{},
-        coding_agent::ModelRuntimeTransportOptions{
-            .http_transport = transport,
-        });
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
+            coding_agent::ModelRuntimeTestOptions{
+                    .transports =
+                            ai::providers::ScriptedTransportOptions{
+                                    .http_transport = transport,
+                            },
+            });
     REQUIRE(runtime);
     CHECK_FALSE((*runtime)->get_error().has_value());
 
@@ -504,11 +506,13 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
       }
     })");
 
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-        coding_agent::ModelRuntimeOptions{},
-        coding_agent::ModelRuntimeTransportOptions{
-            .http_transport = transport,
-        });
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
+            coding_agent::ModelRuntimeTestOptions{
+                    .transports =
+                            ai::providers::ScriptedTransportOptions{
+                                    .http_transport = transport,
+                            },
+            });
     REQUIRE(runtime);
     const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
     REQUIRE(model.has_value());
@@ -647,11 +651,13 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
       }
     })");
 
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-        coding_agent::ModelRuntimeOptions{},
-        coding_agent::ModelRuntimeTransportOptions{
-            .http_transport = transport,
-        });
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
+            coding_agent::ModelRuntimeTestOptions{
+                    .transports =
+                            ai::providers::ScriptedTransportOptions{
+                                    .http_transport = transport,
+                            },
+            });
     REQUIRE(runtime);
     const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
     REQUIRE(model.has_value());

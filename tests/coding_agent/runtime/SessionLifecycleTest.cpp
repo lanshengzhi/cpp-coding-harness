@@ -162,8 +162,11 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
 
-    auto session_result = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    auto runtime = tests::scripted_fake_runtime();
+    REQUIRE(runtime);
+    request.model_runtime = std::move(*runtime);
+    request.request_model = tests::scripted_request_model("fake", "fake-model");
+    auto session_result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(session_result);
     auto prompt_result = session_result->session->prompt_blocking("continue branch");
     REQUIRE(prompt_result);
@@ -206,8 +209,11 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
     request.execution_runtime_target = tests::detail::fixture_runtime_target();
 
-    auto session_result = coding_agent::create_agent_session_for_testing(
-        std::move(request), ai::providers::make_scripted_fake_models());
+    auto runtime = tests::scripted_fake_runtime();
+    REQUIRE(runtime);
+    request.model_runtime = std::move(*runtime);
+    request.request_model = tests::scripted_request_model("fake", "fake-model");
+    auto session_result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(session_result);
     auto& session = session_result->session;
 

@@ -35,6 +35,8 @@ include_guard(GLOBAL)
     # coding-agent composition (Session, Runtime, Models Runtime)
     add_executable(cch_tests_coding_agent
         tests/Catch2Main.cpp
+        tests/support/ScriptedProvider.cpp
+        tests/support/ModelRuntimeTestSupport.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
@@ -104,6 +106,8 @@ include_guard(GLOBAL)
     # repository-private cch_coding_agent library (#468).
     add_executable(cch_tests_coding_agent_interactive
         tests/Catch2Main.cpp
+        tests/support/ScriptedProvider.cpp
+        tests/support/ModelRuntimeTestSupport.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
