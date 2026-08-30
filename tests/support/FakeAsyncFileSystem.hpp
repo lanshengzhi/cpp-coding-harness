@@ -33,7 +33,7 @@ public:
         const auto key = key_for(path);
         if (!key) return;
         add_parent_directories(*key);
-        nodes_[*key] = Node{.kind = harness::FileKind::File, .content = std::move(content)};
+        nodes_[*key] = Node{.kind = harness::FileKind::File, .content = std::move(content), .target = {}};
     }
 
     void add_directory(std::string path) {
@@ -41,7 +41,7 @@ public:
         const auto key = key_for(path);
         if (!key) return;
         add_parent_directories(*key);
-        nodes_[*key] = Node{.kind = harness::FileKind::Directory};
+        nodes_[*key] = Node{.kind = harness::FileKind::Directory, .content = {}, .target = {}};
     }
 
     /// Add a symlink without following it for metadata/listing. Reads through
@@ -54,6 +54,7 @@ public:
         add_parent_directories(*key);
         nodes_[*key] = Node{
                 .kind = harness::FileKind::Symlink,
+                .content = {},
                 .target = std::move(target),
         };
     }
@@ -173,6 +174,7 @@ public:
                                 return text;
                             },
                             content),
+                    .target = {},
             };
         }
         return ready();
@@ -296,7 +298,7 @@ public:
             const auto key = key_for(path);
             if (!key) return failed<void>(permission_error(path));
             if (recursive) add_parent_directories(*key);
-            nodes_[*key] = Node{.kind = harness::FileKind::Directory};
+            nodes_[*key] = Node{.kind = harness::FileKind::Directory, .content = {}, .target = {}};
         }
         return ready();
     }
@@ -398,9 +400,9 @@ private:
             parent = parent.parent_path();
         }
         for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
-            nodes_.try_emplace(it->string(), Node{.kind = harness::FileKind::Directory});
+            nodes_.try_emplace(it->string(), Node{.kind = harness::FileKind::Directory, .content = {}, .target = {}});
         }
-        nodes_.try_emplace(".", Node{.kind = harness::FileKind::Directory});
+        nodes_.try_emplace(".", Node{.kind = harness::FileKind::Directory, .content = {}, .target = {}});
     }
 
     [[nodiscard]] harness::FileInfo info_for(const std::string& key, const Node& node) const {

@@ -135,6 +135,11 @@ void append_unique_skill(
     SkillLoadResult& result,
     Skill skill,
     std::optional<std::string> real_path) {
+    // Match pi `addSkills`: an already-seen real file is silently skipped
+    // before checking names, so a symlink alias does not become a collision.
+    if (real_path && seenRealPaths.contains(*real_path)) {
+        return;
+    }
     if (auto it = seenNames.find(skill.name); it != seenNames.end()) {
         result.diagnostics.push_back(skill_collision_diagnostic(
             skill.name,
@@ -142,11 +147,10 @@ void append_unique_skill(
             skill.filePath));
         return;
     }
-    // The real path joins the set only when the skill is kept (pi `addSkills`
-    // records it in the else branch), so a collision loser never shadows a
-    // later distinct-named skill that shares its real file.
-    if (real_path && !seenRealPaths.insert(*real_path).second) {
-        return;
+    // The real path joins the set only when the skill is kept, so a collision
+    // loser never shadows a later distinct-named skill that shares its real file.
+    if (real_path) {
+        seenRealPaths.insert(*real_path);
     }
     seenNames.emplace(skill.name, skill.filePath);
     result.skills.push_back(std::move(skill));
@@ -415,30 +419,37 @@ namespace {
 /// the root must never be passed back to a filesystem operation as a fallback.
 [[nodiscard]] std::optional<std::string> contained_async_path(
         const harness::AsyncFileSystem& fs, std::string_view file_path) {
-    const std::filesystem::path path{file_path};
-    if (!path.is_absolute()) {
-        return std::string{file_path};
-    }
     std::error_code ec;
-    auto root = std::filesystem::absolute(fs.workspace(), ec);
+    const auto root = std::filesystem::absolute(fs.workspace(), ec).lexically_normal();
     if (ec) {
         return std::nullopt;
     }
-    return strip_workspace_root(root.lexically_normal(), path.lexically_normal().string());
+
+    const std::filesystem::path path{file_path};
+    const auto absolute_path = path.is_absolute() ? path.lexically_normal() : (root / path).lexically_normal();
+    auto relative_path = strip_workspace_root(root, absolute_path.string());
+    if (!relative_path) {
+        return std::nullopt;
+    }
+    if (relative_path->empty()) {
+        return std::string{"."};
+    }
+    return relative_path;
 }
 
 [[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skill_from_file_task(
         harness::AsyncFileSystem& fs,
-        std::string file_path,
+        std::string read_file_path,
+        std::string display_file_path,
         SkillSourceContext source_context,
         std::stop_token stop_token) {
     SkillLoadResult result;
     if (stop_token.stop_requested()) {
-        co_return std::unexpected(async_aborted_error(file_path));
+        co_return std::unexpected(async_aborted_error(display_file_path));
     }
 
-    const auto read_path = async_read_path(fs, file_path);
-    const auto absolute_path = async_absolute_path(fs, file_path);
+    const auto read_path = async_read_path(fs, read_file_path);
+    const auto absolute_path = async_absolute_path(fs, display_file_path);
     auto content = co_await std::move(fs.readTextFile(read_path, stop_token));
     if (!content) {
         if (async_aborted(content.error())) {
@@ -448,7 +459,7 @@ namespace {
                 .type = "warning",
                 .code = SkillDiagnosticCode::read_failed,
                 .message = content.error().message,
-                .path = file_path,
+                .path = display_file_path,
                 .collision = std::nullopt,
         });
         co_return result;
@@ -460,7 +471,7 @@ namespace {
                 .type = "warning",
                 .code = SkillDiagnosticCode::parse_failed,
                 .message = parsed.error().message,
-                .path = file_path,
+                .path = display_file_path,
                 .collision = std::nullopt,
         });
         co_return result;
@@ -471,14 +482,14 @@ namespace {
     if (const auto name_it = fields.find("name"); name_it != fields.end()) {
         name = name_it->second;
     } else {
-        name = parentDirName(file_path);
+        name = parentDirName(display_file_path);
     }
     for (const auto& error : validateName(name)) {
         result.diagnostics.push_back(SkillDiagnostic{
                 .type = "warning",
                 .code = SkillDiagnosticCode::invalid_metadata,
                 .message = error,
-                .path = file_path,
+                .path = display_file_path,
                 .collision = std::nullopt,
         });
     }
@@ -501,7 +512,7 @@ namespace {
                 .type = "warning",
                 .code = SkillDiagnosticCode::invalid_metadata,
                 .message = error,
-                .path = file_path,
+                .path = display_file_path,
                 .collision = std::nullopt,
         });
     }
@@ -528,6 +539,7 @@ namespace {
 [[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skills_from_dir_task(
         harness::AsyncFileSystem& fs,
         std::string dir_path,
+        std::string display_dir_path,
         const SkillDirSpec& spec,
         std::string root,
         IgnoreMatcher matcher,
@@ -538,7 +550,7 @@ namespace {
     }
 
     const auto prefix = [&]() -> std::string {
-        const auto relative = relative_posix(root, dir_path);
+        const auto relative = relative_posix(root, display_dir_path);
         return relative.empty() ? std::string{} : relative + "/";
     }();
     const auto addressed_dir = dir_path == "." ? std::string{} : dir_path + "/";
@@ -598,8 +610,9 @@ namespace {
         if (entry.name != "SKILL.md") {
             continue;
         }
+        std::string actual_file_path = async_read_path(fs, entry.path);
         if (entry.kind == harness::FileKind::Symlink) {
-            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, entry.path), stop_token));
+            auto canonical = co_await std::move(fs.canonicalPath(actual_file_path, stop_token));
             if (!canonical) {
                 if (async_aborted(canonical.error())) {
                     co_return std::unexpected(std::move(canonical.error()));
@@ -620,16 +633,18 @@ namespace {
             if (target_info->kind != harness::FileKind::File) {
                 continue;
             }
+            actual_file_path = std::move(*target_path);
         } else if (entry.kind != harness::FileKind::File) {
             continue;
         }
 
-        const auto relative_path = relative_posix(root, dir_path + "/" + entry.name);
+        const auto display_file_path = async_absolute_path(fs, display_dir_path + "/" + entry.name);
+        const auto relative_path = relative_posix(root, display_dir_path + "/" + entry.name);
         if (matcher.ignores(relative_path, false)) {
             continue;
         }
-        auto file_result = co_await std::move(
-                to_async_result(load_skill_from_file_task(fs, entry.path, spec.source_context, stop_token)));
+        auto file_result = co_await std::move(to_async_result(load_skill_from_file_task(
+                fs, std::move(actual_file_path), display_file_path, spec.source_context, stop_token)));
         if (!file_result) {
             co_return std::unexpected(std::move(file_result.error()));
         }
@@ -651,9 +666,9 @@ namespace {
             continue;
         }
         harness::FileKind kind = entry.kind;
-        std::string entry_name = entry.name;
+        std::string actual_entry_path = async_read_path(fs, entry.path);
         if (kind == harness::FileKind::Symlink) {
-            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, entry.path), stop_token));
+            auto canonical = co_await std::move(fs.canonicalPath(actual_entry_path, stop_token));
             if (!canonical) {
                 if (async_aborted(canonical.error())) {
                     co_return std::unexpected(std::move(canonical.error()));
@@ -672,16 +687,17 @@ namespace {
                 continue;
             }
             kind = target_info->kind;
+            actual_entry_path = std::move(*target_path);
         }
 
-        const auto child_path = dir_path + "/" + entry_name;
-        const auto relative_path = relative_posix(root, dir_path + "/" + entry.name);
+        const auto display_entry_path = display_dir_path + "/" + entry.name;
+        const auto relative_path = relative_posix(root, display_entry_path);
         if (kind == harness::FileKind::Directory) {
             if (matcher.ignores(relative_path, true)) {
                 continue;
             }
-            auto child_result = co_await std::move(
-                    to_async_result(load_skills_from_dir_task(fs, child_path, spec, root, matcher, stop_token)));
+            auto child_result = co_await std::move(to_async_result(load_skills_from_dir_task(
+                    fs, std::move(actual_entry_path), display_entry_path, spec, root, matcher, stop_token)));
             if (!child_result) {
                 co_return std::unexpected(std::move(child_result.error()));
             }
@@ -695,10 +711,11 @@ namespace {
             result.diagnostics.insert(result.diagnostics.end(),
                     std::make_move_iterator(child_result->diagnostics.begin()),
                     std::make_move_iterator(child_result->diagnostics.end()));
-        } else if (kind == harness::FileKind::File && dir_path == root && spec.include_root_files &&
-                   entry_name.size() > 3 && entry_name.ends_with(".md") && !matcher.ignores(relative_path, false)) {
-            auto file_result = co_await std::move(
-                    to_async_result(load_skill_from_file_task(fs, child_path, spec.source_context, stop_token)));
+        } else if (kind == harness::FileKind::File && display_dir_path == root && spec.include_root_files &&
+                   entry.name.size() > 3 && entry.name.ends_with(".md") && !matcher.ignores(relative_path, false)) {
+            const auto display_file_path = async_absolute_path(fs, display_entry_path);
+            auto file_result = co_await std::move(to_async_result(load_skill_from_file_task(
+                    fs, std::move(actual_entry_path), display_file_path, spec.source_context, stop_token)));
             if (!file_result) {
                 co_return std::unexpected(std::move(file_result.error()));
             }
@@ -784,8 +801,9 @@ namespace {
                 });
                 continue;
             }
-            auto file_result = co_await std::move(
-                    to_async_result(load_skill_from_file_task(fs, spec_path, dir_spec.source_context, stop_token)));
+            const auto display_file_path = async_absolute_path(fs, *dir_path);
+            auto file_result = co_await std::move(to_async_result(
+                    load_skill_from_file_task(fs, spec_path, display_file_path, dir_spec.source_context, stop_token)));
             if (!file_result) {
                 co_return std::unexpected(std::move(file_result.error()));
             }
@@ -810,7 +828,7 @@ namespace {
         }
 
         auto dir_result = co_await std::move(to_async_result(
-                load_skills_from_dir_task(fs, *dir_path, dir_spec, *dir_path, IgnoreMatcher{}, stop_token)));
+                load_skills_from_dir_task(fs, spec_path, *dir_path, dir_spec, *dir_path, IgnoreMatcher{}, stop_token)));
         if (!dir_result) {
             co_return std::unexpected(std::move(dir_result.error()));
         }
@@ -839,7 +857,7 @@ support::AsyncResult<SkillLoadResult, harness::FileError> loadSkillFromFile(harn
         SkillSourceContext source_context,
         std::stop_token stop_token) {
     return detail::to_async_result(
-            load_skill_from_file_task(fs, std::move(file_path), std::move(source_context), stop_token));
+            load_skill_from_file_task(fs, file_path, file_path, std::move(source_context), stop_token));
 }
 
 support::AsyncResult<SkillLoadResult, harness::FileError> loadSkills(

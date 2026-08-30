@@ -1,10 +1,24 @@
 #include "coding_agent/SkillLoader.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/FakeAsyncFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/agent/harness/LocalFileSystem.hpp>
+
 #include <catch2/catch_test_macros.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <expected>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <thread>
 
 using namespace cch;
 
@@ -29,6 +43,56 @@ struct SkillTestFixture {
         // WorkspaceFileSystem::readTextFile requires workspace-relative paths.
         return coding_agent::loadSkillFromFile(fs, relativePath);
     }
+};
+
+class AsyncSkillTestRuntime final {
+public:
+    AsyncSkillTestRuntime()
+        : loop_(std::make_shared<boost::asio::io_context>()),
+          root_(loop_, harness::RuntimeLimits{.max_admitted_bytes = 8 * 1024 * 1024}) {}
+
+    ~AsyncSkillTestRuntime() { close(); }
+
+    template <typename T, typename E> std::expected<T, E> run(support::AsyncResult<T, E> operation) {
+        loop_->restart();
+        std::optional<std::expected<T, E>> result;
+        boost::asio::co_spawn(
+                *loop_,
+                [operation = std::move(operation), &result]() mutable -> boost::asio::awaitable<void> {
+                    result = co_await support::detail::await_async_result(std::move(operation));
+                    co_return;
+                },
+                boost::asio::detached);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+        while (!result && std::chrono::steady_clock::now() < deadline) {
+            if (loop_->stopped()) {
+                loop_->restart();
+            }
+            (void)loop_->poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+        REQUIRE(result.has_value());
+        while (loop_->poll() != 0) {
+        }
+        return std::move(*result);
+    }
+
+    void close() noexcept {
+        if (closed_) {
+            return;
+        }
+        root_.close();
+        while (loop_->poll() != 0) {
+        }
+        closed_ = true;
+    }
+
+    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() { return root_.make_target(); }
+
+private:
+    std::shared_ptr<boost::asio::io_context> loop_;
+    harness::RuntimeRoot root_;
+    bool closed_{false};
 };
 
 } // namespace
@@ -631,4 +695,104 @@ TEST_CASE("loadSkills deduplicates the same real file reached via symlink", "[co
         if (d.code == coding_agent::SkillDiagnosticCode::collision) collision = true;
     }
     CHECK_FALSE(collision);
+}
+
+TEST_CASE("async loadSkills resolves a renamed in-root symlink directory", "[coding_agent][skill][async][issue559]") {
+    tests::FakeAsyncFileSystem filesystem("/workspace");
+    filesystem.add_file(
+            "real-skill/SKILL.md", "---\nname: real-skill\ndescription: Loaded through an alias.\n---\nBody.\n");
+    filesystem.add_directory("scan");
+    filesystem.add_symlink("scan/renamed-skill", "../real-skill");
+
+    AsyncSkillTestRuntime runtime;
+    const auto source_context = coding_agent::SkillSourceContext{
+            .source = "cli",
+            .scope = coding_agent::SourceScope::Temporary,
+            .base_dir = std::nullopt,
+    };
+    auto result = runtime.run(coding_agent::loadSkills(filesystem,
+            std::vector<coding_agent::SkillDirSpec>{
+                    {.path = "scan", .include_root_files = false, .source_context = source_context},
+            }));
+
+    REQUIRE(result);
+    REQUIRE(result->skills.size() == 1);
+    const auto& skill = result->skills.front();
+    CHECK(skill.name == "real-skill");
+    CHECK(skill.filePath == "/workspace/scan/renamed-skill/SKILL.md");
+    CHECK(skill.baseDir == "/workspace/scan/renamed-skill");
+    CHECK(skill.sourceInfo.path == skill.filePath);
+    CHECK(skill.sourceInfo.source == "cli");
+    CHECK(skill.sourceInfo.scope == coding_agent::SourceScope::Temporary);
+    CHECK_FALSE(skill.sourceInfo.base_dir.has_value());
+    CHECK(result->diagnostics.empty());
+}
+
+TEST_CASE("async loadSkills reads a renamed in-root symlink file", "[coding_agent][skill][async][issue559]") {
+    tests::FakeAsyncFileSystem filesystem("/workspace");
+    filesystem.add_file(
+            "real-skill.md", "---\nname: real-file\ndescription: Loaded through a file alias.\n---\nBody.\n");
+    filesystem.add_directory("scan");
+    filesystem.add_symlink("scan/SKILL.md", "../real-skill.md");
+
+    AsyncSkillTestRuntime runtime;
+    auto result = runtime.run(coding_agent::loadSkills(filesystem,
+            std::vector<coding_agent::SkillDirSpec>{
+                    {.path = "scan", .include_root_files = false},
+            }));
+
+    REQUIRE(result);
+    REQUIRE(result->skills.size() == 1);
+    CHECK(result->skills.front().name == "real-file");
+    CHECK(result->skills.front().filePath == "/workspace/scan/SKILL.md");
+    CHECK(result->skills.front().baseDir == "/workspace/scan");
+    CHECK(result->diagnostics.empty());
+}
+
+TEST_CASE("async loadSkills rejects an outside symlink target", "[coding_agent][skill][async][issue559]") {
+    tests::FakeAsyncFileSystem filesystem("/workspace");
+    filesystem.add_directory("scan");
+    filesystem.add_symlink("scan/SKILL.md", "/outside/SKILL.md");
+    filesystem.add_symlink("scan/outside-directory", "/outside/skills");
+
+    AsyncSkillTestRuntime runtime;
+    auto result = runtime.run(coding_agent::loadSkills(filesystem,
+            std::vector<coding_agent::SkillDirSpec>{
+                    {.path = "scan", .include_root_files = false},
+            }));
+
+    REQUIRE(result);
+    CHECK(result->skills.empty());
+    CHECK(result->diagnostics.empty());
+}
+
+TEST_CASE("async loadSkills reads a renamed in-root symlink with the local adapter",
+        "[coding_agent][skill][async][local][issue559]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside_workspace;
+    workspace.write("real-skill/SKILL.md", "---\nname: real-skill\ndescription: Loaded locally.\n---\nBody.\n");
+    outside_workspace.write(
+            "outside-skill/SKILL.md", "---\nname: outside-skill\ndescription: Must not load.\n---\nBody.\n");
+    std::error_code error;
+    std::filesystem::create_directories(workspace.path() / "scan", error);
+    REQUIRE_FALSE(error);
+    std::filesystem::create_directory_symlink(
+            workspace.path() / "real-skill", workspace.path() / "scan" / "renamed-skill", error);
+    REQUIRE_FALSE(error);
+    std::filesystem::create_directory_symlink(
+            outside_workspace.path() / "outside-skill", workspace.path() / "scan" / "outside-skill", error);
+    REQUIRE_FALSE(error);
+
+    AsyncSkillTestRuntime runtime;
+    harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
+    auto result = runtime.run(coding_agent::loadSkills(filesystem,
+            std::vector<coding_agent::SkillDirSpec>{
+                    {.path = "scan", .include_root_files = false},
+            }));
+
+    REQUIRE(result);
+    REQUIRE(result->skills.size() == 1);
+    CHECK(result->skills.front().filePath == (workspace.path() / "scan" / "renamed-skill" / "SKILL.md").string());
+    CHECK(result->skills.front().baseDir == (workspace.path() / "scan" / "renamed-skill").string());
+    CHECK(result->diagnostics.empty());
 }
