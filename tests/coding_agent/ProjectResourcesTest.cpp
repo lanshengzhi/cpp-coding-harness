@@ -1,10 +1,22 @@
 #include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/agent/harness/LocalFileSystem.hpp>
+#include "agent/harness/RuntimeRoot.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/FakeAsyncFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+
+#include <chrono>
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <thread>
 
 using namespace cch;
 
@@ -25,6 +37,46 @@ const std::filesystem::path kTestUserAgentsSkills =
 bool detected(const coding_agent::ProjectResourceDetectionResult& result, coding_agent::ProjectResourceKind kind) {
     return coding_agent::has_detected_kind(result, kind);
 }
+
+class AsyncDetectionRuntime final {
+public:
+    AsyncDetectionRuntime()
+        : loop_(std::make_shared<boost::asio::io_context>()), root_(loop_, harness::RuntimeLimits{}) {}
+
+    ~AsyncDetectionRuntime() {
+        root_.close();
+        while (loop_->poll() != 0) {
+        }
+    }
+
+    template <typename T, typename E> std::expected<T, E> run(support::AsyncResult<T, E> operation) {
+        loop_->restart();
+        std::optional<std::expected<T, E>> outcome;
+        boost::asio::co_spawn(
+                *loop_,
+                [operation = std::move(operation), &outcome]() mutable -> boost::asio::awaitable<void> {
+                    outcome = co_await support::detail::await_async_result(std::move(operation));
+                    co_return;
+                },
+                boost::asio::detached);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+        while (!outcome && std::chrono::steady_clock::now() < deadline) {
+            if (loop_->stopped()) {
+                loop_->restart();
+            }
+            (void)loop_->poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+        REQUIRE(outcome.has_value());
+        return std::move(*outcome);
+    }
+
+    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() { return root_.make_target(); }
+
+private:
+    std::shared_ptr<boost::asio::io_context> loop_;
+    harness::RuntimeRoot root_;
+};
 
 } // namespace
 
@@ -208,4 +260,37 @@ TEST_CASE(
 
     CHECK_FALSE(detected(result, coding_agent::ProjectResourceKind::ProjectAgentsSkills));
     CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
+}
+
+TEST_CASE("async project resource detection uses a fake filesystem",
+        "[coding_agent][project_resources][async][issue560]") {
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>("/workspace");
+    filesystem->add_directory(".pi");
+    filesystem->add_file(".pi/SYSTEM.md", "system");
+    filesystem->add_directory(".pi/skills");
+
+    coding_agent::ProjectResourceFileSystems filesystems;
+    filesystems.workspace = filesystem;
+    AsyncDetectionRuntime runtime;
+    auto result =
+            runtime.run(coding_agent::detect_project_resources(std::move(filesystems), "/user/.agents/skills", {}));
+
+    REQUIRE(result);
+    CHECK(detected(*result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
+    CHECK(detected(*result, coding_agent::ProjectResourceKind::ProjectSkills));
+}
+
+TEST_CASE("async project resource detection works through the local adapter",
+        "[coding_agent][project_resources][async][local][issue560]") {
+    tests::TempWorkspace workspace;
+    workspace.write(".pi/SYSTEM.md", "system");
+
+    AsyncDetectionRuntime runtime;
+    coding_agent::ProjectResourceFileSystems filesystems;
+    filesystems.workspace = std::make_shared<harness::AsyncLocalFileSystem>(runtime.make_target(), workspace.path());
+    auto result = runtime.run(coding_agent::detect_project_resources(
+            std::move(filesystems), workspace.path() / ".agents" / "skills", {}));
+
+    REQUIRE(result);
+    CHECK(detected(*result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
 }

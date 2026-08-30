@@ -185,6 +185,12 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         const auto self = weak.lock();
         return self != nullptr ? self->terminal_.dimensions().rows : 0;
     };
+    hooks.project_resource_filesystems = [weak](std::filesystem::path workspace) {
+        if (const auto self = weak.lock()) {
+            return self->project_resource_filesystems_for(std::move(workspace));
+        }
+        return ProjectResourceFileSystems{};
+    };
     hooks.action_generation = [weak] {
         const auto self = weak.lock();
         return self != nullptr ? self->action_generation_ : 0;

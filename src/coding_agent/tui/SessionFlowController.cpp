@@ -123,6 +123,7 @@ void SessionFlowController::open_trust() {
 
 void SessionFlowController::close() {
     if (closed_.exchange(true)) return;
+    stop_source_.request_stop();
     // Resolve every admitted prompt slot so each detached flow reaches a
     // terminal outcome and finish() can await quiescence (ADR 0040); a
     // second `/trust`/missing-cwd prompt may have admitted a concurrent
@@ -698,7 +699,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_reload() {
         co_return;
     }
 
-    const bool saved_implicit_trust = maybe_save_implicit_project_trust_after_reload();
+    const bool saved_implicit_trust = co_await maybe_save_implicit_project_trust_after_reload();
     presenter_->show_status(
         saved_implicit_trust
             ? "Reloaded keybindings, skills, prompts, themes, and context files; saved project trust"

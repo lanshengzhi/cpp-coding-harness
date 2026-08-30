@@ -530,6 +530,8 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
             // message).
             co_return std::unexpected(booted.error());
         }
+    } else {
+        (void)co_await engine->append_project_trust_warning_if_needed();
     }
 
     boost::system::error_code wait_error;

@@ -47,6 +47,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -103,6 +104,12 @@ public:
     /// `boot_request`/`action_sink` with the decided trust, then binds
     /// it (subscribe, initialize view, render, initial prompt).
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> boot_session();
+
+    /// Detect the canonical project resources for the bound Session and append
+    /// the Native TUI warning when the Session is untrusted. The detection is
+    /// awaited on the serialized runtime path so a replaced Session cannot
+    /// receive a stale warning.
+    [[nodiscard]] boost::asio::awaitable<bool> append_project_trust_warning_if_needed();
 
     /// The exit wait: released by `signal_exit` once the run may tear down.
     [[nodiscard]] boost::asio::steady_timer& exit_wait() {
@@ -173,10 +180,10 @@ private:
 
     void initialize_view(const InteractiveStartupDiagnostics& diagnostics);
 
-    /// pi `renderProjectTrustWarningIfNeeded` condition: the session's
-    /// project scope is untrusted AND a trust-requiring resource exists in
-    /// the session workspace.
-    [[nodiscard]] bool project_trust_warning_needed();
+    /// Return the capability collection for one current Session workspace.
+    /// The boot collection is reused when it matches; a replacement gets a
+    /// fresh collection from the same composition helper.
+    [[nodiscard]] ProjectResourceFileSystems project_resource_filesystems_for(const std::filesystem::path& workspace);
 
     [[nodiscard]] support::ExpectedVoid fail_start(const support::Error& error);
 
@@ -458,6 +465,8 @@ private:
     // ── State ────────────────────────────────────────────────────────────
 
     AgentSession* session_; // must outlive this interactive run.
+    std::shared_ptr<harness::RuntimeRoot> runtime_root_;
+    ProjectResourceFileSystems project_resource_filesystems_;
     /// Owned replacement session (pi `AgentSessionRuntime.switchSession` /
     /// `newSession` / `fork`): the in-session flows recreate the session
     /// through the config factory and keep the replacement alive here. The
@@ -554,6 +563,7 @@ private:
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
+    std::stop_source stop_source_;
     std::atomic<bool> prompt_active_{false};
     std::atomic<bool> user_bash_active_{false};
     /// A manual /compact flow was admitted and has not returned yet. Exit

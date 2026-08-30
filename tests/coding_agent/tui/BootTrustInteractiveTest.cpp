@@ -19,6 +19,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -95,11 +96,14 @@ struct BootTrustRun {
                 return coding_agent::create_agent_session_for_testing(
                     std::move(req), models);
             };
+        auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
+        auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
         auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_agent_config_directory(fixture.agent_dir)
-            .with_action_sink(recorder.make_sink())
-            .with_defer_boot(std::move(request))
-            .build();
+                           .with_agent_config_directory(fixture.agent_dir)
+                           .with_action_sink(recorder.make_sink())
+                           .with_defer_boot(std::move(request))
+                           .with_runtime_root(std::move(runtime_root))
+                           .build();
         boost::asio::co_spawn(
             io,
             coding_agent::tui::run_interactive_mode(

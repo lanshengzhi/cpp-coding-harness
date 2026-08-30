@@ -4,14 +4,75 @@
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 
+#include <cch/agent/harness/LocalFileSystem.hpp>
+#include <cch/coding_agent/AgentConfigDir.hpp>
+
 #include <csignal>
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <variant>
 
 namespace cch::coding_agent::tui {
+namespace {
+
+[[nodiscard]] std::filesystem::path normalized_capability_root(const std::filesystem::path& path) {
+    return path.lexically_normal();
+}
+
+[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> make_local_capability(
+        const std::shared_ptr<harness::RuntimeTarget>& target, const std::filesystem::path& root) {
+    if (!target || root.empty()) {
+        return {};
+    }
+    return std::make_shared<harness::AsyncLocalFileSystem>(target, normalized_capability_root(root));
+}
+
+[[nodiscard]] std::filesystem::path intent_workspace(const SessionIntentVariant& intent) {
+    return std::visit(
+            [](const auto& value) -> std::filesystem::path {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, BindExistingSession>) {
+                    return value.session != nullptr ? value.session->workspace() : std::filesystem::path{};
+                } else {
+                    return value.request.workspace;
+                }
+            },
+            intent);
+}
+
+} // namespace
+
+ProjectResourceFileSystems make_authorized_project_resource_filesystems(
+        std::shared_ptr<harness::RuntimeRoot> runtime_root,
+        std::filesystem::path workspace,
+        std::filesystem::path agent_config_directory,
+        std::filesystem::path home_directory) {
+    ProjectResourceFileSystems result;
+    if (!runtime_root || workspace.empty()) {
+        return result;
+    }
+
+    workspace = normalized_capability_root(workspace);
+    const auto target = runtime_root->make_target();
+    result.workspace = make_local_capability(target, workspace);
+    auto current = workspace;
+    while (true) {
+        const auto parent = current.parent_path();
+        if (parent == current || parent == parent.root_path()) {
+            break;
+        }
+        current = parent;
+        result.ancestor_roots.push_back(make_local_capability(target, current));
+    }
+    result.agent_config_directory = make_local_capability(target, agent_config_directory);
+    if (!home_directory.empty()) {
+        result.user_agents_root = make_local_capability(target, normalized_capability_root(home_directory) / ".agents");
+    }
+    return result;
+}
 
 InteractiveSessionRun::InteractiveSessionRun(std::shared_ptr<State> state)
     : state_(std::move(state)) {}
@@ -28,6 +89,17 @@ const runtime::InteractiveSessionFacts& InteractiveSessionRun::session_facts() c
 const std::filesystem::path& InteractiveSessionRun::agent_config_directory() const noexcept {
     static const std::filesystem::path kEmptyPath{};
     return state_ ? state_->agent_config_directory : kEmptyPath;
+}
+
+std::shared_ptr<harness::RuntimeRoot> InteractiveSessionRun::runtime_root() const noexcept {
+    return state_ ? state_->runtime_root : nullptr;
+}
+
+ProjectResourceFileSystems InteractiveSessionRun::take_project_resource_filesystems() noexcept {
+    if (!state_) {
+        return {};
+    }
+    return std::exchange(state_->project_resource_filesystems, {});
 }
 
 const std::optional<std::string>& InteractiveSessionRun::initial_prompt() const noexcept {
@@ -273,6 +345,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_runtime_root(
     return *this;
 }
 
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_project_resource_filesystems(
+        ProjectResourceFileSystems filesystems) noexcept {
+    state_->project_resource_filesystems = std::move(filesystems);
+    return *this;
+}
+
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_runtime(
     std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept {
     state_->shared_runtime = std::move(shared_runtime);
@@ -310,6 +388,13 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_action_sink(
 }
 
 InteractiveSessionRun InteractiveSessionRunBuilder::build() {
+    if (!state_->project_resource_filesystems.workspace && state_->runtime_root) {
+        const auto workspace = intent_workspace(state_->session_intent);
+        if (!workspace.empty()) {
+            state_->project_resource_filesystems = make_authorized_project_resource_filesystems(
+                    state_->runtime_root, workspace, state_->agent_config_directory, coding_agent::home_directory());
+        }
+    }
     return InteractiveSessionRun(std::move(state_));
 }
 
