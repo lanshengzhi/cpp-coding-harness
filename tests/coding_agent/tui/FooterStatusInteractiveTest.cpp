@@ -2,6 +2,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include "support/EnvVarGuard.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/ModelsFixture.hpp"
@@ -37,6 +38,8 @@
 #include <vector>
 
 using namespace cch;
+using tests::drain_ready;
+using tests::pump_until;
 
 namespace {
 
@@ -47,12 +50,6 @@ namespace {
         .with_session(session)
         .with_agent_config_directory(config_dir)
         .build();
-}
-
-void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
 }
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
@@ -543,6 +540,10 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
     // Drive a manual compaction on the same executor: it blocks on the gated
     // summarization, so the session reports `isCompacting` with no active
     // Agent run.
@@ -553,9 +554,9 @@ TEST_CASE(
             co_return;
         },
         boost::asio::detached);
-    while (!created->session->is_compacting() && io.poll() != 0) {
-    }
-    REQUIRE(created->session->is_compacting());
+    // The compaction status animation ticks render work on a fixed cadence;
+    // wait on the observable state instead of spinning on one poll pass.
+    REQUIRE(tests::pump_until(io, [&] { return created->session->is_compacting(); }));
     CHECK_FALSE(created->session->is_streaming());
 
     // pi `handleReloadCommand` refusal: `isCompacting` (with `isStreaming`
@@ -572,12 +573,12 @@ TEST_CASE(
         std::string::npos);
 
     gated.control->release();
-    drain_ready(io);
-    REQUIRE(compact_result.has_value());
+    // Compaction completion and the deferred exit both cross persistence and
+    // close hops; wait on each outcome instead of asserting after one drain.
+    REQUIRE(tests::pump_until(io, [&] { return compact_result.has_value(); }));
     REQUIRE(compact_result->has_value());
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 

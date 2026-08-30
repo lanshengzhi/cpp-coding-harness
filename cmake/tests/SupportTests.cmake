@@ -11,6 +11,7 @@ include_guard(GLOBAL)
         tests/support/ExpectedErrorTest.cpp
         tests/support/ExpectedMacrosTest.cpp
         tests/support/JsonValueIoTest.cpp
+        tests/support/PumpUntilTest.cpp
         tests/support/RedactorTest.cpp
         tests/support/TestRunnerIsolationTest.cpp
 )

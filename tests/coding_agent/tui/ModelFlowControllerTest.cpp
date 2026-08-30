@@ -13,6 +13,7 @@
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/ModelResolver.hpp>
@@ -41,6 +42,7 @@
 #include <vector>
 
 using namespace cch;
+using tests::drain_ready;
 
 namespace {
 
@@ -117,12 +119,6 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
     auto resolved = tui::resolve_keybindings(std::move(request));
     REQUIRE(resolved);
     return resolved->registry;
-}
-
-void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
 }
 
 /// One isolated assembly: a temp workspace for the session file and a temp

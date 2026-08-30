@@ -46,6 +46,7 @@
 #include <vector>
 
 using namespace cch;
+using tests::drain_ready;
 
 namespace {
 
@@ -81,12 +82,6 @@ struct TestRunOptions {
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     return options;
-}
-
-void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
 }
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
@@ -3125,6 +3120,10 @@ TEST_CASE(
         });
     drain_ready(io);
 
+    // Joins the spawned run on scope exit while the captured terminal and
+    // session are still alive (#527 failure-path drain).
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
     REQUIRE(terminal.inject_input("wait\r"));
     drain_ready(io);
     REQUIRE(client_pointer->started);
@@ -3141,8 +3140,9 @@ TEST_CASE(
     CHECK_FALSE(run_result.has_value());
 
     client_pointer->release();
-    drain_ready(io);
-    REQUIRE(run_result);
+    // The deferred exit crosses the session-close quiescence hop; wait on the
+    // terminal outcome instead of asserting after one drain.
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
     CHECK_FALSE(terminal.modes().started);
 }

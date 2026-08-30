@@ -521,9 +521,15 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
 }
 
 void InteractiveEngine::post_invalidate() {
+    // Drop the request when one is already queued: the queued handler
+    // invalidates the latest state, so a coalesced repeat loses nothing.
+    if (invalidate_posted_.exchange(true)) return;
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
-        if (const auto self = weak.lock(); self && self->running_) self->tui_.invalidate();
+        const auto self = weak.lock();
+        if (!self) return;
+        self->invalidate_posted_.store(false);
+        if (self->running_) self->tui_.invalidate();
     });
 }
 
@@ -535,9 +541,15 @@ void InteractiveEngine::post_exit() {
 }
 
 void InteractiveEngine::post_render() {
+    // Same coalescing as post_invalidate(): one queued render renders the
+    // latest invalidated state, so repeats while it is queued are redundant.
+    if (render_posted_.exchange(true)) return;
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
-        if (const auto self = weak.lock()) self->render();
+        const auto self = weak.lock();
+        if (!self) return;
+        self->render_posted_.store(false);
+        self->render();
     });
 }
 

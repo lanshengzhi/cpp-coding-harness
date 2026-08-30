@@ -27,6 +27,7 @@
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 
 #include "support/EnvVarGuard.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "coding_agent/AgentSession.hpp"
@@ -47,14 +48,9 @@
 #include <vector>
 
 using namespace cch;
+using tests::drain_ready;
 
 namespace {
-
-void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
-}
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
     std::string text;

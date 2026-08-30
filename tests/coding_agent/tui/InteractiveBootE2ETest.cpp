@@ -49,15 +49,10 @@
 #include <vector>
 
 using namespace cch;
+using tests::drain_ready;
 using tests::pump_until;
 
 namespace {
-
-void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
-}
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
     std::string text;

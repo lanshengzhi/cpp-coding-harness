@@ -6,6 +6,7 @@
 
 #include "coding_agent/tui/LoginDialog.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/PumpUntil.hpp"
 
 #include <cch/tui/Keybindings.hpp>
 
@@ -22,6 +23,7 @@
 #include <vector>
 
 using namespace cch;
+using tests::drain_ready;
 
 namespace {
 
@@ -37,12 +39,6 @@ namespace {
     return coding_agent::tui::LiveTheme(
         coding_agent::tui::builtin_dark_theme(),
         tui::TerminalColorCapability::TrueColor);
-}
-
-void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
 }
 
 /// Remove SGR (`ESC [ … final`) sequences so assertions target the visible

@@ -566,6 +566,14 @@ private:
     /// pi `lastEscapeTime`: the double-escape window base (500 ms, empty
     /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
     std::chrono::steady_clock::time_point last_escape_time_{};
+    /// Render-request coalescing for post_invalidate()/post_render(): at
+    /// most one queued handler each, so a live animation ticking from the
+    /// Loader's detached timer thread (~80 ms) cannot pile duplicate posts
+    /// onto a congested loop faster than it drains them (issue #553; the
+    /// coalescible render request of InteractiveView.hpp and ADR 0035's
+    /// render coalescing). Set off-executor, so atomic.
+    std::atomic<bool> invalidate_posted_{false};
+    std::atomic<bool> render_posted_{false};
     // Prompt-generation staleness for interrupt requests (pi onEscape
     // routing; the deleted InterruptAdmission's generation). The generation
     // is read from the input thread at post time, so it stays atomic; the

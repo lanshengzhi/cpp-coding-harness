@@ -9,6 +9,45 @@
 
 namespace cch::tests {
 
+/// Drain ready handlers until the loop stays quiet for `quiet` (or the
+/// `budget` backstop expires). Used instead of `io.run()` because a live
+/// RuntimeRoot holds a work guard, so `run()` would not return while the
+/// root is alive.
+///
+/// The empty check requires a sustained quiet window rather than one
+/// instantaneous `poll() == 0`: a live status animation posts render work on
+/// a fixed ~80 ms cadence, and under sanitizer load one render pass can
+/// outlast the cadence, so an unbounded `while (io.poll() != 0)` can spin
+/// forever without ever observing an empty queue (issue #553). The backstop
+/// caps the drain under such pressure instead of hanging the shard. The
+/// drain is best-effort: an assertion on a required asynchronous outcome
+/// (one crossing Runtime worker or close-quiescence hops) must wait on the
+/// outcome itself with pump_until, never on a drain.
+inline void drain_ready(boost::asio::io_context& io,
+        std::chrono::milliseconds quiet = std::chrono::milliseconds{2},
+        std::chrono::milliseconds budget = std::chrono::milliseconds{10000}) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    std::chrono::steady_clock::time_point quiet_since{};
+    bool queue_empty = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (io.stopped()) {
+            io.restart();
+        }
+        if (io.poll_one() != 0) {
+            queue_empty = false;
+            continue;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (!queue_empty) {
+            queue_empty = true;
+            quiet_since = now;
+        } else if (now - quiet_since >= quiet) {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds{100});
+    }
+}
+
 /// Pump one loop until `done` becomes true (or the budget expires). Used
 /// instead of `io.run()` because a live RuntimeRoot holds a work guard, so
 /// `run()` would not return while the root is alive. Session persistence

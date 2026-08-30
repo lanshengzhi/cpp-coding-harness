@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support/ModelsFixture.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/ReleaseGate.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
@@ -17,13 +18,6 @@
 #include <vector>
 
 namespace cch::tests {
-
-/// Drain every ready handler without blocking on gated (pending) work.
-inline void drain_ready(boost::asio::io_context& io) {
-    if (io.stopped()) io.restart();
-    while (io.poll() != 0) {
-    }
-}
 
 /// Gates every provider request until release(); each later request re-arms
 /// the gate so steering/follow-up continuations stay observable.
