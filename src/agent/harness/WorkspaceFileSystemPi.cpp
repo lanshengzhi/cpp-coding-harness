@@ -181,8 +181,13 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
                 std::string{path}});
         }
     } else {
-        auto parent_fd = open_parent_directory(*resolved, false);
+        int parent_errno = 0;
+        auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
         if (!parent_fd) {
+            if (parent_errno == ENOENT) {
+                return std::unexpected(
+                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            }
             return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
         }
         const auto filename = resolved->filename().string();
@@ -232,8 +237,13 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
         }
         directory_fd = std::move(*root_fd);
     } else {
-        auto parent_fd = open_parent_directory(*resolved, false);
+        int parent_errno = 0;
+        auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
         if (!parent_fd) {
+            if (parent_errno == ENOENT) {
+                return std::unexpected(
+                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            }
             return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
         }
         const auto filename = resolved->filename().string();

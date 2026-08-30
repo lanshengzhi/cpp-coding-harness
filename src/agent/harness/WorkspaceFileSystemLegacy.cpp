@@ -100,8 +100,16 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bo
         return std::unexpected(util_error_to_file_error(target.error(), requested));
     }
 
-    auto parent_guard = open_parent_directory(*target, false);
+    int parent_errno = 0;
+    auto parent_guard = open_parent_directory(*target, false, &parent_errno);
     if (!parent_guard) {
+        if (parent_errno == ENOENT) {
+            return std::unexpected(FileError{
+                    .code = FileErrorCode::NotFound,
+                    .message = "path not found: " + requested,
+                    .path = std::string{requested},
+            });
+        }
         return std::unexpected(util_error_to_file_error(parent_guard.error(), requested));
     }
 

@@ -134,6 +134,24 @@ TEST_CASE("WorkspaceFileSystem fileInfo returns not_found for missing path", "[h
     CHECK(info.error().code == harness::FileErrorCode::NotFound);
 }
 
+TEST_CASE("WorkspaceFileSystem returns not_found for missing parent paths", "[harness][filesystem][u2][issue558]") {
+    tests::TempWorkspace workspace;
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto read = fs->readTextFile("missing/note.txt");
+    REQUIRE_FALSE(read);
+    CHECK(read.error().code == harness::FileErrorCode::NotFound);
+
+    auto info = fs->fileInfo("missing/note.txt");
+    REQUIRE_FALSE(info);
+    CHECK(info.error().code == harness::FileErrorCode::NotFound);
+
+    auto listing = fs->listDir("missing/nested");
+    REQUIRE_FALSE(listing);
+    CHECK(listing.error().code == harness::FileErrorCode::NotFound);
+}
+
 TEST_CASE("WorkspaceFileSystem listDir returns direct children", "[harness][filesystem][u2]") {
     tests::TempWorkspace workspace;
     workspace.write("a.txt", "a");
