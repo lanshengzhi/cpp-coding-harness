@@ -12,14 +12,27 @@
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
+#include <array>
 #include <exception>
 #include <iterator>
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent::tui {
 namespace {
 
 constexpr std::size_t kMaxVisible = 8;
+
+/// Dispatch order (pi `scoped-models-selector.ts`): navigation, reorder, then
+/// toggle. The first bound action in table order wins, so the reorder flags
+/// retain their original up-before-down precedence.
+constexpr std::array<std::string_view, 5> kScopedModelsSelectorActions = {
+        "tui.select.up",
+        "tui.select.down",
+        "app.models.reorderUp",
+        "app.models.reorderDown",
+        "tui.select.confirm",
+};
 
 } // namespace
 
@@ -385,20 +398,22 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
     if (key == nullptr || key->type == cch::tui::KeyEventType::Release) return;
 
-    if (keybindings_->matches(*key, "tui.select.up")) {
+    // The table preserves pi's order: navigation, reorder, then toggle.
+    const auto action = keybindings_->first_match(*key, kScopedModelsSelectorActions);
+    if (action == "tui.select.up") {
         if (filtered_items_.empty()) return;
         selected_index_ = selected_index_ == 0 ? filtered_items_.size() - 1 : selected_index_ - 1;
         return;
     }
-    if (keybindings_->matches(*key, "tui.select.down")) {
+    if (action == "tui.select.down") {
         if (filtered_items_.empty()) return;
         selected_index_ = selected_index_ == filtered_items_.size() - 1 ? 0 : selected_index_ + 1;
         return;
     }
 
     // Reorder enabled models (pi `app.models.reorderUp`/`reorderDown`).
-    const bool reorder_up = keybindings_->matches(*key, "app.models.reorderUp");
-    const bool reorder_down = keybindings_->matches(*key, "app.models.reorderDown");
+    const bool reorder_up = action == "app.models.reorderUp";
+    const bool reorder_down = action == "app.models.reorderDown";
     if (reorder_up || reorder_down) {
         if (!enabled_ids_) return;
         if (selected_index_ >= filtered_items_.size()) return;
@@ -420,7 +435,7 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
     }
 
     // Toggle on Enter (pi `tui.select.confirm`).
-    if (keybindings_->matches(*key, "tui.select.confirm")) {
+    if (action == "tui.select.confirm") {
         if (selected_index_ >= filtered_items_.size()) return;
         toggle(filtered_items_[selected_index_].full_id);
         dirty_ = true;

@@ -273,6 +273,57 @@ TEST_CASE(
     CHECK((*recorder.last_change)[0] == "alpha/alpha-2");
 }
 
+TEST_CASE("ScopedModelsSelector preserves dispatch order for shared selection actions",
+        "[coding_agent][tui][scoped-models][issue555]") {
+    auto theme = test_theme();
+    bool changed = false;
+    auto registry = std::make_shared<const tui::KeybindingRegistry>(std::vector<tui::EffectiveKeybinding>{
+            {.id = "tui.select.up", .keys = {"f9"}},
+            {.id = "tui.select.confirm", .keys = {"f9"}},
+    });
+    coding_agent::tui::ScopedModelsSelectorComponent selector(
+            theme,
+            std::move(registry),
+            catalog(),
+            std::nullopt,
+            [&changed](std::optional<std::vector<std::string>>) { changed = true; },
+            [](std::optional<std::vector<std::string>>) {},
+            [] {});
+
+    // The earlier up action wins over confirm when both claim f9.
+    selector.handle_input(tui::KeyEvent{.key = "f9"});
+    CHECK_FALSE(changed);
+    const auto rendered = selector.render(90);
+    REQUIRE(rendered);
+    CHECK(join_lines(rendered->lines).find("→ beta-1 [beta]") != std::string::npos);
+}
+
+TEST_CASE("ScopedModelsSelector preserves reorder-up precedence for shared reorder actions",
+        "[coding_agent][tui][scoped-models][issue555]") {
+    auto theme = test_theme();
+    std::optional<std::vector<std::string>> changed;
+    auto registry = std::make_shared<const tui::KeybindingRegistry>(std::vector<tui::EffectiveKeybinding>{
+            {.id = "tui.select.down", .keys = {"j"}},
+            {.id = "app.models.reorderUp", .keys = {"f9"}},
+            {.id = "app.models.reorderDown", .keys = {"f9"}},
+    });
+    coding_agent::tui::ScopedModelsSelectorComponent selector(
+            theme,
+            std::move(registry),
+            catalog(),
+            std::vector<std::string>{"alpha/alpha-1", "alpha/alpha-2"},
+            [&changed](std::optional<std::vector<std::string>> ids) { changed = std::move(ids); },
+            [](std::optional<std::vector<std::string>>) {},
+            [] {});
+
+    selector.handle_input(tui::KeyEvent{.key = "j"});
+    selector.handle_input(tui::KeyEvent{.key = "f9"});
+    REQUIRE(changed.has_value());
+    REQUIRE(changed->size() == 2);
+    CHECK((*changed)[0] == "alpha/alpha-2");
+    CHECK((*changed)[1] == "alpha/alpha-1");
+}
+
 TEST_CASE(
     "ScopedModelsSelector cancels on Escape and Ctrl+C clears the search first",
     "[coding_agent][tui][scoped-models][issue407]") {

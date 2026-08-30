@@ -7,10 +7,26 @@
 #include <cch/tui/Text.hpp>
 
 #include <cch/support/Error.hpp>
+#include <array>
 #include <exception>
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent::tui {
+namespace {
+
+/// Dispatch order (pi `extension-selector.ts`): tools expansion, navigation,
+/// confirmation, then cancellation. The first bound action in table order
+/// wins; the raw k/j fallbacks stay OR-ed at their chain positions.
+constexpr std::array<std::string_view, 5> kStringListSelectorActions = {
+        "app.tools.expand",
+        "tui.select.up",
+        "tui.select.down",
+        "tui.select.confirm",
+        "tui.select.cancel",
+};
+
+} // namespace
 
 StringListSelector::StringListSelector(
     const LiveTheme& theme,
@@ -88,29 +104,32 @@ void StringListSelector::handle_input(const cch::tui::InputEventVariant& input) 
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
     if (key == nullptr || key->type == cch::tui::KeyEventType::Release) return;
 
-    // pi's order: tools-expand, up (or "k"), down (or "j"), confirm, cancel.
-    if (keybindings_->matches(*key, "app.tools.expand")) {
+    // The table preserves pi's order: tools-expand, up (or "k"), down (or
+    // "j"), confirm, cancel. Raw fallbacks remain at their chain positions,
+    // so an earlier fallback can beat a later bound action.
+    const auto action = keybindings_->first_match(*key, kStringListSelectorActions);
+    if (action == "app.tools.expand") {
         if (selector_options_.on_toggle_tools_expanded) {
             selector_options_.on_toggle_tools_expanded();
         }
         return;
     }
     const bool plain = !key->ctrl && !key->alt && !key->shift;
-    if (keybindings_->matches(*key, "tui.select.up") || (plain && key->key == "k")) {
+    if (action == "tui.select.up" || (plain && key->key == "k")) {
         selected_index_ = selected_index_ == 0 ? 0 : selected_index_ - 1;
         return;
     }
-    if (keybindings_->matches(*key, "tui.select.down") || (plain && key->key == "j")) {
+    if (action == "tui.select.down" || (plain && key->key == "j")) {
         selected_index_ = std::min(options_.empty() ? 0 : options_.size() - 1, selected_index_ + 1);
         return;
     }
-    if (keybindings_->matches(*key, "tui.select.confirm")) {
+    if (action == "tui.select.confirm") {
         if (selected_index_ < options_.size() && on_select_) {
             on_select_(options_[selected_index_]);
         }
         return;
     }
-    if (keybindings_->matches(*key, "tui.select.cancel")) {
+    if (action == "tui.select.cancel") {
         if (on_cancel_) on_cancel_();
         return;
     }
