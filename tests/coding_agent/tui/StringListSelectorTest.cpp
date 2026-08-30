@@ -193,3 +193,42 @@ TEST_CASE(
     selector.handle_input(tui::KeyEvent{.key = "o", .ctrl = true});
     CHECK(toggles == 1);
 }
+
+TEST_CASE("StringListSelector preserves dispatch order and plain-key fallback precedence",
+        "[coding_agent][tui][string-list][issue555]") {
+    auto theme = test_theme();
+    std::optional<std::string> selected;
+    auto shared_key_registry = std::make_shared<const tui::KeybindingRegistry>(std::vector<tui::EffectiveKeybinding>{
+            {.id = "tui.select.up", .keys = {"f9"}},
+            {.id = "tui.select.confirm", .keys = {"f9"}},
+    });
+    coding_agent::tui::StringListSelector shared_key_selector(
+            theme,
+            std::move(shared_key_registry),
+            "Pick:",
+            {"one", "two"},
+            [&selected](std::string value) { selected = std::move(value); },
+            [] {});
+
+    // Move to the second item with the raw plain-key fallback, then verify
+    // the earlier up action beats confirm when both claim f9.
+    shared_key_selector.handle_input(tui::KeyEvent{.key = "j"});
+    shared_key_selector.handle_input(tui::KeyEvent{.key = "f9"});
+    CHECK_FALSE(selected.has_value());
+    const auto shared_rendered = shared_key_selector.render(40);
+    REQUIRE(shared_rendered);
+    CHECK(join_lines(shared_rendered->lines).find("→ one") != std::string::npos);
+
+    // A later down binding claiming k must not displace the raw k fallback
+    // from the earlier up branch.
+    auto fallback_registry = std::make_shared<const tui::KeybindingRegistry>(std::vector<tui::EffectiveKeybinding>{
+            {.id = "tui.select.down", .keys = {"k"}},
+    });
+    coding_agent::tui::StringListSelector fallback_selector(
+            theme, std::move(fallback_registry), "Pick:", {"one", "two"}, [](std::string) {}, [] {});
+    fallback_selector.handle_input(tui::KeyEvent{.key = "j"});
+    fallback_selector.handle_input(tui::KeyEvent{.key = "k"});
+    const auto fallback_rendered = fallback_selector.render(40);
+    REQUIRE(fallback_rendered);
+    CHECK(join_lines(fallback_rendered->lines).find("→ one") != std::string::npos);
+}
