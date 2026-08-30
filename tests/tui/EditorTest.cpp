@@ -227,6 +227,147 @@ TEST_CASE(
     CHECK(editor.text() == "@s");
 }
 
+namespace {
+
+/// Minimal slash-command provider: two fixed items, pi's "/name " surgery.
+class SlashScriptedProvider final : public cch::tui::AutocompleteProvider {
+public:
+    int apply_calls{0};
+
+    void get_suggestions(const cch::tui::AutocompleteRequest&, cch::tui::AutocompleteResultSink sink) override {
+        (void)sink(cch::tui::AutocompleteSuggestions{
+                .items = {{.value = "help", .label = "help", .description = {}},
+                        {.value = "history", .label = "history", .description = {}}},
+                .prefix = "/",
+        });
+    }
+    cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem& item,
+            std::string_view prefix) override {
+        ++apply_calls;
+        auto result_lines = lines;
+        auto& line = result_lines[cursor_line];
+        const auto before = line.substr(0, cursor_column - prefix.size());
+        const auto after = line.substr(cursor_column);
+        line = before + "/" + item.value + " " + after;
+        return {
+                .lines = std::move(result_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = before.size() + item.value.size() + 2,
+        };
+    }
+    bool should_trigger_file_completion(const std::vector<std::string>&, std::size_t, std::size_t) const override {
+        return false;
+    }
+    std::vector<std::string> trigger_characters() const override { return {}; }
+};
+
+} // namespace
+
+TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit", "[tui][editor]") {
+    auto provider = std::make_unique<SlashScriptedProvider>();
+    auto* provider_ptr = provider.get();
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor({}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(text));
+        return {};
+    });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    // pi's default table binds enter to both tui.select.confirm and
+    // tui.input.submit; the open menu's dispatch phase wins: the slash
+    // completion applies before submission. A main-phase submit would fire
+    // with the raw "/" and leave apply_calls at zero.
+    type(editor, "/");
+    REQUIRE(editor.autocomplete_open());
+    key(editor, "enter");
+    CHECK(provider_ptr->apply_calls == 1);
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted[0] == "/help"); // submit trims (pi onSubmit)
+    CHECK_FALSE(editor.autocomplete_open());
+
+    // Menu closed: the same key is plain submission with no completion.
+    editor.set_text("plain");
+    key(editor, "enter");
+    CHECK(provider_ptr->apply_calls == 1);
+    REQUIRE(submitted.size() == 2);
+    CHECK(submitted[1] == "plain");
+
+    // Menu closed: up/down fall through to cursor movement.
+    editor.set_text("one\ntwo");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 1, .column = 3}));
+    key(editor, "up");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3}));
+}
+
+TEST_CASE("Editor resolves a key shared by two editing actions in dispatch order", "[tui][editor]") {
+    // f9 claims both deletion actions; the dispatch order — char deletion
+    // ahead of word deletion (pi editor-component.ts) — decides.
+    auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.editor.deleteCharBackward", .keys = {"f9"}},
+            {.id = "tui.editor.deleteWordBackward", .keys = {"f9"}},
+    });
+    cch::tui::Editor editor({.keybindings = std::move(registry)});
+    type(editor, "one two");
+    key(editor, "f9");
+    CHECK(editor.text() == "one tw");
+}
+
+TEST_CASE("Editor resolves a menu key shared by cancel and confirm in dispatch order", "[tui][editor]") {
+    auto provider = std::make_unique<SlashScriptedProvider>();
+    auto* provider_ptr = provider.get();
+    // f9 claims both menu actions; cancel leads the menu dispatch phase.
+    auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.select.cancel", .keys = {"f9"}},
+            {.id = "tui.select.confirm", .keys = {"f9"}},
+    });
+    cch::tui::Editor editor({.keybindings = std::move(registry)});
+    editor.set_autocomplete_provider(std::move(provider));
+    type(editor, "/");
+    REQUIRE(editor.autocomplete_open());
+    key(editor, "f9");
+    CHECK(provider_ptr->apply_calls == 0);
+    CHECK_FALSE(editor.autocomplete_open());
+    CHECK(editor.text() == "/");
+}
+
+TEST_CASE("Editor raw shift guards fire at their chain positions", "[tui][editor]") {
+    // shift+backspace / shift+delete bound to LATER actions: the raw guards at
+    // the deleteChar positions still win (pi editor-component.ts).
+    auto later = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.editor.deleteWordBackward", .keys = {"shift+backspace"}},
+            {.id = "tui.editor.deleteWordForward", .keys = {"shift+delete"}},
+            {.id = "tui.editor.cursorLineStart", .keys = {"home"}},
+    });
+    cch::tui::Editor editor({.keybindings = std::move(later)});
+    editor.set_text("one two");
+    key(editor, "backspace", false, true);
+    CHECK(editor.text() == "one tw"); // char deletion, not word deletion
+    editor.set_text("one two");
+    key(editor, "home");
+    key(editor, "delete", false, true);
+    CHECK(editor.text() == "ne two"); // forward char deletion, not word deletion
+
+    // An earlier claim beats the raw guard: with the completion menu open and
+    // shift+backspace bound to select.cancel, the menu phase consumes the
+    // event and no deletion happens.
+    auto provider = std::make_unique<SlashScriptedProvider>();
+    auto* provider_ptr = provider.get();
+    auto menu_first = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.select.cancel", .keys = {"shift+backspace"}},
+    });
+    cch::tui::Editor claiming({.keybindings = std::move(menu_first)});
+    claiming.set_autocomplete_provider(std::move(provider));
+    type(claiming, "/");
+    REQUIRE(claiming.autocomplete_open());
+    key(claiming, "backspace", false, true);
+    CHECK(provider_ptr->apply_calls == 0);
+    CHECK_FALSE(claiming.autocomplete_open());
+    CHECK(claiming.text() == "/");
+}
+
 TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport", "[tui][editor][issue48]") {
     cch::tui::Editor editor({.max_visible_lines = 3});
     editor.insert_text_at_cursor("abcdefgh\nijklmnop\nqrstuvwx\nyz");

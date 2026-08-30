@@ -9,6 +9,7 @@
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <exception>
 #include <format>
@@ -16,6 +17,7 @@
 #include <numeric>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -25,6 +27,19 @@ namespace cch::tui {
 // Search input flows through the single-line Input component (editing
 // behaviors and paste cleaning apply) and ranking through the public Fuzzy
 // module; space confirms only while the search is empty.
+namespace {
+
+/// Selection dispatch order (pi settings-list.ts). The first bound action in
+/// table order wins; the raw space fallback stays OR-ed at confirm's position.
+constexpr std::array<std::string_view, 4> kSettingsListActions = {
+        "tui.select.up",
+        "tui.select.down",
+        "tui.select.confirm",
+        "tui.select.cancel",
+};
+
+} // namespace
+
 struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Impl> {
     std::vector<SettingItem> items;
     std::vector<std::size_t> filtered_indices;
@@ -362,23 +377,23 @@ void SettingsList::handle_input(const InputEventVariant& input) {
     const auto* key = std::get_if<KeyEvent>(&input);
     if (key == nullptr || key->type == KeyEventType::Release) return;
     const auto& displayed = impl->displayed_indices();
-    if (impl->keybindings->matches(*key, "tui.select.up")) {
+    const auto action = impl->keybindings->first_match(*key, kSettingsListActions);
+    if (action == "tui.select.up") {
         if (displayed.empty()) return;
         impl->selected_index = impl->selected_index == 0 ? displayed.size() - 1 : impl->selected_index - 1;
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.down")) {
+    if (action == "tui.select.down") {
         if (displayed.empty()) return;
         impl->selected_index = impl->selected_index + 1 == displayed.size() ? 0 : impl->selected_index + 1;
         return;
     }
     const auto search_empty = !impl->search_input || impl->search_input->value().empty();
-    if (impl->keybindings->matches(*key, "tui.select.confirm") ||
-        (matches_key(*key, "space") && (!impl->search_enabled || search_empty))) {
+    if (action == "tui.select.confirm" || (matches_key(*key, "space") && (!impl->search_enabled || search_empty))) {
         impl->activate_item();
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.cancel")) {
+    if (action == "tui.select.cancel") {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)

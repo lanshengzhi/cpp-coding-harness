@@ -7,6 +7,7 @@
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <exception>
@@ -30,6 +31,18 @@ namespace {
 constexpr std::size_t kDefaultPrimaryColumnWidth = 32;
 constexpr std::size_t kPrimaryColumnGap = 2;
 constexpr std::size_t kMinDescriptionWidth = 10;
+
+/// Selection dispatch order (pi select-list.ts, plus the C++ semantic page
+/// keys). The first bound action in table order wins, so table order IS the
+/// precedence.
+constexpr std::array<std::string_view, 6> kSelectListActions = {
+        "tui.select.up",
+        "tui.select.down",
+        "tui.select.pageUp",
+        "tui.select.pageDown",
+        "tui.select.confirm",
+        "tui.select.cancel",
+};
 
 [[nodiscard]] bool starts_with_case_insensitive(std::string_view value, std::string_view prefix) {
     if (prefix.size() > value.size()) return false;
@@ -306,23 +319,23 @@ void SelectList::handle_input(const InputEventVariant& input) {
     if (key == nullptr || key->type == KeyEventType::Release) return;
     auto impl = impl_;
     const auto count = impl->filtered_indices.size();
-    if (impl->keybindings->matches(*key, "tui.select.up")) {
+    const auto action = impl->keybindings->first_match(*key, kSelectListActions);
+    if (action == "tui.select.up") {
         if (count == 0) return;
         impl->selected_index = impl->selected_index == 0 ? count - 1 : impl->selected_index - 1;
         impl->notify_selection_change();
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.down")) {
+    if (action == "tui.select.down") {
         if (count == 0) return;
         impl->selected_index = impl->selected_index + 1 == count ? 0 : impl->selected_index + 1;
         impl->notify_selection_change();
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.pageUp") ||
-        impl->keybindings->matches(*key, "tui.select.pageDown")) {
+    if (action == "tui.select.pageUp" || action == "tui.select.pageDown") {
         if (count == 0) return;
         const auto page = impl->max_visible;
-        if (impl->keybindings->matches(*key, "tui.select.pageUp")) {
+        if (action == "tui.select.pageUp") {
             impl->selected_index = impl->selected_index > page ? impl->selected_index - page : 0;
         } else {
             impl->selected_index = std::min(impl->selected_index + page, count - 1);
@@ -330,7 +343,7 @@ void SelectList::handle_input(const InputEventVariant& input) {
         impl->notify_selection_change();
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.confirm")) {
+    if (action == "tui.select.confirm") {
         const auto* item = impl->selected();
         auto sink = impl->on_select;
         if (item == nullptr || !sink || !*sink) return;
@@ -347,7 +360,7 @@ void SelectList::handle_input(const InputEventVariant& input) {
 #endif
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.cancel")) {
+    if (action == "tui.select.cancel") {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)

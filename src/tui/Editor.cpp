@@ -10,6 +10,7 @@
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <map>
@@ -33,6 +34,46 @@ namespace {
 
 /// History depth cap matching pi's addToHistory.
 constexpr std::size_t kMaxHistoryEntries = 100;
+
+/// Dispatch tables: the first bound action in table order wins, so table
+/// order IS pi's dispatch precedence (pi editor-component.ts). The open
+/// completion menu's table is consulted ahead of the main table.
+constexpr std::array<std::string_view, 5> kCompletionMenuActions = {
+        "tui.select.cancel",
+        "tui.select.up",
+        "tui.select.down",
+        "tui.input.tab",
+        "tui.select.confirm",
+};
+
+/// Main editing dispatch order (pi editor-component.ts). The raw
+/// shift+backspace / shift+delete guards stay OR-ed at their chain positions.
+constexpr std::array<std::string_view, 24> kEditorActions = {
+        "tui.input.tab",
+        "tui.editor.undo",
+        "tui.editor.jumpForward",
+        "tui.editor.jumpBackward",
+        "tui.editor.deleteCharBackward",
+        "tui.editor.deleteCharForward",
+        "tui.editor.deleteWordBackward",
+        "tui.editor.deleteWordForward",
+        "tui.editor.deleteToLineStart",
+        "tui.editor.deleteToLineEnd",
+        "tui.editor.yank",
+        "tui.editor.yankPop",
+        "tui.editor.cursorLineStart",
+        "tui.editor.cursorLineEnd",
+        "tui.editor.cursorLeft",
+        "tui.editor.cursorRight",
+        "tui.editor.cursorWordLeft",
+        "tui.editor.cursorWordRight",
+        "tui.editor.cursorUp",
+        "tui.editor.cursorDown",
+        "tui.editor.pageUp",
+        "tui.editor.pageDown",
+        "tui.input.newLine",
+        "tui.input.submit",
+};
 
 /// U+2500 BOX DRAWINGS LIGHT HORIZONTAL repeated to the width (the editor
 /// border rule, matching pi's `borderColor("─").repeat(width)`).
@@ -1056,99 +1097,105 @@ void Editor::handle_input(const InputEventVariant& input) {
         impl.jump_direction.reset();
     }
 
+    // The open completion menu's table dispatches ahead of the main table
+    // (pi's autocomplete branch); a menu miss falls through to editing.
     if (impl.autocomplete_menu.open) {
-        if (matches("tui.select.cancel")) {
-            impl.cancel_autocomplete(lock);
-            return;
-        }
-        if (matches("tui.select.up")) {
-            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveUp, lock);
-            return;
-        }
-        if (matches("tui.select.down")) {
-            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveDown, lock);
-            return;
-        }
-        if (matches("tui.input.tab")) {
-            impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Accept, lock);
-            return;
-        }
-        if (matches("tui.select.confirm")) {
+        if (const auto menu_action = impl.options.keybindings->first_match(*event, kCompletionMenuActions)) {
+            if (*menu_action == "tui.select.cancel") {
+                impl.cancel_autocomplete(lock);
+                return;
+            }
+            if (*menu_action == "tui.select.up") {
+                impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveUp, lock);
+                return;
+            }
+            if (*menu_action == "tui.select.down") {
+                impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveDown, lock);
+                return;
+            }
+            if (*menu_action == "tui.input.tab") {
+                impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Accept, lock);
+                return;
+            }
             impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Confirm, lock);
             return;
         }
     }
 
-    if (matches("tui.input.tab")) {
+    // Main dispatch in kEditorActions order. The raw shift+backspace /
+    // shift+delete guards stay OR-ed at their chain positions (pi parity):
+    // they fire exactly when no earlier-listed action claimed the event.
+    const auto action = impl.options.keybindings->first_match(*event, kEditorActions);
+    if (action == "tui.input.tab") {
         impl.handle_tab_completion(lock);
         return;
     }
-    if (matches("tui.editor.undo")) {
+    if (action == "tui.editor.undo") {
         impl.undo_once(lock);
         return;
     }
-    if (matches("tui.editor.jumpForward") || matches("tui.editor.jumpBackward")) {
+    if (action == "tui.editor.jumpForward" || action == "tui.editor.jumpBackward") {
         impl.jump_direction =
-                matches("tui.editor.jumpForward") ? Impl::JumpDirection::Forward : Impl::JumpDirection::Backward;
+                action == "tui.editor.jumpForward" ? Impl::JumpDirection::Forward : Impl::JumpDirection::Backward;
         return;
     }
-    if (matches("tui.editor.deleteCharBackward") || matches_key(*event, "shift+backspace")) {
+    if (action == "tui.editor.deleteCharBackward" || matches_key(*event, "shift+backspace")) {
         impl.erase_at_cursor(true, lock);
         return;
     }
-    if (matches("tui.editor.deleteCharForward") || matches_key(*event, "shift+delete")) {
+    if (action == "tui.editor.deleteCharForward" || matches_key(*event, "shift+delete")) {
         impl.erase_at_cursor(false, lock);
         return;
     }
-    if (matches("tui.editor.deleteWordBackward")) {
+    if (action == "tui.editor.deleteWordBackward") {
         impl.delete_word(false);
         return;
     }
-    if (matches("tui.editor.deleteWordForward")) {
+    if (action == "tui.editor.deleteWordForward") {
         impl.delete_word(true);
         return;
     }
-    if (matches("tui.editor.deleteToLineStart")) {
+    if (action == "tui.editor.deleteToLineStart") {
         impl.kill_to_line(false);
         return;
     }
-    if (matches("tui.editor.deleteToLineEnd")) {
+    if (action == "tui.editor.deleteToLineEnd") {
         impl.kill_to_line(true);
         return;
     }
-    if (matches("tui.editor.yank")) {
+    if (action == "tui.editor.yank") {
         impl.yank();
         return;
     }
-    if (matches("tui.editor.yankPop")) {
+    if (action == "tui.editor.yankPop") {
         impl.yank_pop();
         return;
     }
-    if (matches("tui.editor.cursorLineStart")) {
+    if (action == "tui.editor.cursorLineStart") {
         impl.move_to_line_start();
         return;
     }
-    if (matches("tui.editor.cursorLineEnd")) {
+    if (action == "tui.editor.cursorLineEnd") {
         impl.move_to_line_end();
         return;
     }
-    if (matches("tui.editor.cursorLeft")) {
+    if (action == "tui.editor.cursorLeft") {
         impl.move_left(lock);
         return;
     }
-    if (matches("tui.editor.cursorRight")) {
+    if (action == "tui.editor.cursorRight") {
         impl.move_right(lock);
         return;
     }
-    if (matches("tui.editor.cursorWordLeft")) {
+    if (action == "tui.editor.cursorWordLeft") {
         impl.move_word(false);
         return;
     }
-    if (matches("tui.editor.cursorWordRight")) {
+    if (action == "tui.editor.cursorWordRight") {
         impl.move_word(true);
         return;
     }
-    if (matches("tui.editor.cursorUp")) {
+    if (action == "tui.editor.cursorUp") {
         const auto cur = impl.buffer.cursor();
         if (impl.on_first_visual_line() &&
                 (impl.editor_is_empty() || impl.history_index.has_value() || cur.column == 0)) {
@@ -1160,7 +1207,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         }
         return;
     }
-    if (matches("tui.editor.cursorDown")) {
+    if (action == "tui.editor.cursorDown") {
         if (impl.history_index.has_value() && impl.on_last_visual_line()) {
             impl.navigate_history(1);
         } else if (impl.on_last_visual_line()) {
@@ -1170,24 +1217,24 @@ void Editor::handle_input(const InputEventVariant& input) {
         }
         return;
     }
-    if (matches("tui.editor.pageUp")) {
+    if (action == "tui.editor.pageUp") {
         for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
             impl.move_vertical(-1, lock);
         }
         return;
     }
-    if (matches("tui.editor.pageDown")) {
+    if (action == "tui.editor.pageDown") {
         for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
             impl.move_vertical(1, lock);
         }
         return;
     }
-    if (matches("tui.input.newLine")) {
+    if (action == "tui.input.newLine") {
         impl.cancel_autocomplete(lock);
         impl.insert_text("\n", true, lock);
         return;
     }
-    if (matches("tui.input.submit")) {
+    if (action == "tui.input.submit") {
         impl.submit(lock);
         return;
     }

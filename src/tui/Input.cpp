@@ -9,6 +9,7 @@
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -30,6 +31,29 @@ namespace {
 
 /// The rendered prompt prefix, as in pi's input.ts.
 constexpr std::string_view kPrompt = "> ";
+
+/// Dispatch order (pi input.ts): cancel, undo, submit, deletions, kill ring,
+/// cursor movement, then printable characters. The first bound action in
+/// table order wins, so table order IS the precedence.
+constexpr std::array<std::string_view, 17> kInputActions = {
+        "tui.select.cancel",
+        "tui.editor.undo",
+        "tui.input.submit",
+        "tui.editor.deleteCharBackward",
+        "tui.editor.deleteCharForward",
+        "tui.editor.deleteWordBackward",
+        "tui.editor.deleteWordForward",
+        "tui.editor.deleteToLineStart",
+        "tui.editor.deleteToLineEnd",
+        "tui.editor.yank",
+        "tui.editor.yankPop",
+        "tui.editor.cursorLeft",
+        "tui.editor.cursorRight",
+        "tui.editor.cursorLineStart",
+        "tui.editor.cursorLineEnd",
+        "tui.editor.cursorWordLeft",
+        "tui.editor.cursorWordRight",
+};
 
 } // namespace
 
@@ -246,77 +270,72 @@ void Input::handle_input(const InputEventVariant& input) {
     }
     const auto* event = std::get_if<KeyEvent>(&input);
     if (event == nullptr || event->type == KeyEventType::Release) return;
-    const auto matches = [this, event](std::string_view action_id) {
-        return impl_->options.keybindings->matches(*event, action_id);
-    };
-
-    // Action order follows pi's input.ts: cancel, undo, submit, deletions,
-    // kill ring, cursor movement, then printable characters.
-    if (matches("tui.select.cancel")) {
+    const auto action = impl_->options.keybindings->first_match(*event, kInputActions);
+    if (action == "tui.select.cancel") {
         impl_->fire_escape();
         return;
     }
-    if (matches("tui.editor.undo")) {
+    if (action == "tui.editor.undo") {
         impl_->buffer.undo();
         return;
     }
-    if (matches("tui.input.submit")) {
+    if (action == "tui.input.submit") {
         impl_->fire_submit();
         return;
     }
-    if (matches("tui.editor.deleteCharBackward")) {
+    if (action == "tui.editor.deleteCharBackward") {
         impl_->buffer.backspace();
         return;
     }
-    if (matches("tui.editor.deleteCharForward")) {
+    if (action == "tui.editor.deleteCharForward") {
         impl_->buffer.forward_delete();
         return;
     }
-    if (matches("tui.editor.deleteWordBackward")) {
+    if (action == "tui.editor.deleteWordBackward") {
         impl_->buffer.delete_word_backward();
         return;
     }
-    if (matches("tui.editor.deleteWordForward")) {
+    if (action == "tui.editor.deleteWordForward") {
         impl_->buffer.delete_word_forward();
         return;
     }
-    if (matches("tui.editor.deleteToLineStart")) {
+    if (action == "tui.editor.deleteToLineStart") {
         impl_->buffer.kill_to_line_start();
         return;
     }
-    if (matches("tui.editor.deleteToLineEnd")) {
+    if (action == "tui.editor.deleteToLineEnd") {
         impl_->buffer.kill_to_line_end();
         return;
     }
-    if (matches("tui.editor.yank")) {
+    if (action == "tui.editor.yank") {
         impl_->buffer.yank();
         return;
     }
-    if (matches("tui.editor.yankPop")) {
+    if (action == "tui.editor.yankPop") {
         impl_->buffer.yank_pop();
         return;
     }
-    if (matches("tui.editor.cursorLeft")) {
+    if (action == "tui.editor.cursorLeft") {
         impl_->buffer.move_left();
         return;
     }
-    if (matches("tui.editor.cursorRight")) {
+    if (action == "tui.editor.cursorRight") {
         impl_->buffer.move_right();
         return;
     }
-    if (matches("tui.editor.cursorLineStart")) {
+    if (action == "tui.editor.cursorLineStart") {
         impl_->buffer.move_to_line_start();
         return;
     }
-    if (matches("tui.editor.cursorLineEnd")) {
+    if (action == "tui.editor.cursorLineEnd") {
         impl_->buffer.move_to_line_end();
         return;
     }
-    if (matches("tui.editor.cursorWordLeft")) {
+    if (action == "tui.editor.cursorWordLeft") {
         impl_->buffer.move_word_backward();
         return;
     }
-    if (matches("tui.editor.cursorWordRight")) {
+    if (action == "tui.editor.cursorWordRight") {
         impl_->buffer.move_word_forward();
         return;
     }

@@ -68,6 +68,34 @@ TEST_CASE("Input routes escape and ctrl+c through the escape sink", "[tui][input
     CHECK(escapes == 2);
 }
 
+TEST_CASE("Input resolves a key shared by two actions in dispatch order", "[tui][input]") {
+    // f9 claims cancel and char-deletion; cancel leads pi's input.ts chain.
+    auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.select.cancel", .keys = {"f9"}},
+            {.id = "tui.editor.deleteCharBackward", .keys = {"f9"}},
+            {.id = "tui.input.submit", .keys = {"enter"}},
+    });
+    int escapes = 0;
+    std::vector<std::string> submitted;
+    cch::tui::Input input(
+            {.keybindings = std::move(registry)},
+            [&submitted](std::string value) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(value));
+                return {};
+            },
+            [&escapes]() -> cch::support::ExpectedVoid {
+                ++escapes;
+                return {};
+            });
+    type(input, "ab");
+    key(input, "f9");
+    CHECK(escapes == 1);
+    CHECK(input.value() == "ab");
+    key(input, "enter");
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted[0] == "ab");
+}
+
 TEST_CASE("Input edits Unicode with grapheme-aware cursor movement", "[tui][input][issue380]") {
     cch::tui::Input input;
     type(input, "A\xc3\xa9\xf0\x9f\x98\x80");

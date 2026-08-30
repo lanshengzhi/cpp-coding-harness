@@ -52,6 +52,47 @@ TEST_CASE(
     CHECK(updates[1] == "theme=light");
 }
 
+TEST_CASE("SettingsList resolves a key shared by two actions in dispatch order", "[tui][settings-list]") {
+    // f9 claims up and confirm; movement leads pi's settings-list chain.
+    // space is bound to the LATER cancel action, yet the raw space guard at
+    // confirm's chain position still activates the item (pi settings-list.ts).
+    auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.select.up", .keys = {"f9"}},
+            {.id = "tui.select.confirm", .keys = {"f9"}},
+            {.id = "tui.select.cancel", .keys = {"space"}},
+    });
+    std::vector<std::string> updates;
+    std::size_t cancels = 0;
+    cch::tui::SettingsList list(
+            {
+                    {
+                            .id = "theme",
+                            .label = "Theme",
+                            .description = "Color theme",
+                            .current_value = "unknown",
+                            .control = cch::tui::SettingValues{{"dark", "light"}},
+                    },
+            },
+            cch::tui::SettingsListOptions{
+                    .on_change = [&updates](std::string id, std::string value) -> cch::support::ExpectedVoid {
+                        updates.push_back(std::move(id) + "=" + std::move(value));
+                        return {};
+                    },
+                    .on_cancel = [&cancels]() -> cch::support::ExpectedVoid {
+                        ++cancels;
+                        return {};
+                    },
+                    .keybindings = std::move(registry),
+            });
+    list.handle_input(cch::tui::KeyEvent{.key = "f9"});
+    CHECK(updates.empty());
+    CHECK(cancels == 0);
+    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    CHECK(cancels == 0);
+    REQUIRE(updates.size() == 1);
+    CHECK(updates[0] == "theme=dark");
+}
+
 TEST_CASE("SettingsList search and no matches render through VirtualTerminal", "[tui][settings-list][issue52]") {
     cch::tui::VirtualTerminal terminal({.columns = 50, .rows = 8});
     cch::tui::Tui tui(terminal);

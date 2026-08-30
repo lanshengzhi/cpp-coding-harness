@@ -161,6 +161,29 @@ TEST_CASE("SelectList dispatches configured keys from its effective registry", "
     CHECK(selections == 1);
 }
 
+TEST_CASE("SelectList resolves a key shared by two actions in dispatch order", "[tui][select-list]") {
+    // f9 claims up and confirm; selection movement leads pi's select-list chain.
+    auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
+            {.id = "tui.select.up", .keys = {"f9"}},
+            {.id = "tui.select.confirm", .keys = {"f9", "enter"}},
+    });
+    std::size_t selections = 0;
+    cch::tui::SelectList list(make_items(3),
+            cch::tui::SelectListOptions{
+                    .on_select = [&selections](const cch::tui::SelectItem&) -> cch::support::ExpectedVoid {
+                        ++selections;
+                        return {};
+                    },
+                    .keybindings = std::move(registry),
+            });
+    list.handle_input(cch::tui::KeyEvent{.key = "f9"});
+    CHECK(selections == 0);
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "item2"); // up wraps to the tail
+    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    CHECK(selections == 1);
+}
+
 TEST_CASE("SelectList renders descriptions in an overlay with bounded rows", "[tui][select-list][overlay][issue52]") {
     cch::tui::VirtualTerminal terminal({.columns = 70, .rows = 6});
     cch::tui::Tui tui(terminal);
