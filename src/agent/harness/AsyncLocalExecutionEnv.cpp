@@ -102,7 +102,8 @@ template <typename T, typename Operation>
     std::size_t byte_charge,
     std::stop_token stop_token,
     std::optional<std::string> path,
-    Operation operation) {
+    Operation operation,
+    AdmissionLane lane = AdmissionLane::Ordinary) {
     if (stop_token.stop_requested()) {
         return support::AsyncResult<T, FileError>{
             std::unexpected(aborted_file_error(std::move(path)))};
@@ -115,7 +116,8 @@ template <typename T, typename Operation>
              byte_charge,
              stop_token,
              path = std::move(path),
-             operation = std::move(operation)](
+             operation = std::move(operation),
+             lane](
                 support::AsyncCompletion<T, FileError> completion) mutable noexcept {
                 std::shared_ptr<FileOperationState<T>> state;
                 // Kept out-of-line across the state allocation so a setup
@@ -134,8 +136,11 @@ template <typename T, typename Operation>
                         completion(std::unexpected(busy_file_error(std::move(path))));
                         return;
                     }
-                    admission =
-                        runtime_target->try_admit(byte_charge + kAdmittedOperationOverheadBytes);
+                    admission = lane == AdmissionLane::Reserved
+                        ? runtime_target->try_admit_reserved(
+                            byte_charge + kAdmittedOperationOverheadBytes)
+                        : runtime_target->try_admit(
+                            byte_charge + kAdmittedOperationOverheadBytes);
                     if (!admission) {
                         completion(std::unexpected(busy_file_error(std::move(path))));
                         return;
@@ -385,7 +390,11 @@ support::AsyncResult<std::string, FileError> AsyncLocalExecutionEnv::readTextFil
     std::string path,
     std::stop_token stop_token) {
     return submit_filesystem_operation<std::string>(
-        impl_->runtime_target, impl_->sync, path.size(), stop_token, path,
+        impl_->runtime_target,
+        impl_->sync,
+        path.size() + kFileSystemCapacity.max_file_bytes,
+        stop_token,
+        path,
         [path = std::move(path)](const SyncLocalExecutionEnv& sync) {
             return sync.readTextFile(path);
         });
@@ -396,7 +405,12 @@ support::AsyncResult<std::vector<std::string>, FileError> AsyncLocalExecutionEnv
     std::optional<int> maxLines,
     std::stop_token stop_token) {
     return submit_filesystem_operation<std::vector<std::string>>(
-        impl_->runtime_target, impl_->sync, path.size(), stop_token, path,
+        impl_->runtime_target,
+        impl_->sync,
+        path.size() + kFileSystemCapacity.max_file_bytes +
+            kFileSystemCapacity.max_text_lines * sizeof(std::string),
+        stop_token,
+        path,
         [path = std::move(path), maxLines](const SyncLocalExecutionEnv& sync) {
             return sync.readTextLines(path, maxLines);
         });
@@ -406,7 +420,11 @@ support::AsyncResult<BinaryData, FileError> AsyncLocalExecutionEnv::readBinaryFi
     std::string path,
     std::stop_token stop_token) {
     return submit_filesystem_operation<BinaryData>(
-        impl_->runtime_target, impl_->sync, path.size(), stop_token, path,
+        impl_->runtime_target,
+        impl_->sync,
+        path.size() + kFileSystemCapacity.max_file_bytes,
+        stop_token,
+        path,
         [path = std::move(path)](const SyncLocalExecutionEnv& sync) {
             return sync.readBinaryFile(path);
         });
@@ -450,7 +468,12 @@ support::AsyncResult<std::vector<FileInfo>, FileError> AsyncLocalExecutionEnv::l
     std::string path,
     std::stop_token stop_token) {
     return submit_filesystem_operation<std::vector<FileInfo>>(
-        impl_->runtime_target, impl_->sync, path.size(), stop_token, path,
+        impl_->runtime_target,
+        impl_->sync,
+        path.size() + kFileSystemCapacity.max_directory_result_bytes +
+            kFileSystemCapacity.max_directory_entries * sizeof(FileInfo),
+        stop_token,
+        path,
         [path = std::move(path)](const SyncLocalExecutionEnv& sync) {
             return sync.listDir(path);
         });
@@ -519,6 +542,22 @@ support::AsyncResult<std::string, FileError> AsyncLocalExecutionEnv::createTempF
         [prefix = std::move(prefix), suffix = std::move(suffix)](const SyncLocalExecutionEnv& sync) {
             return sync.createTempFile(prefix, suffix);
         });
+}
+
+support::AsyncResult<void, FileError> AsyncLocalExecutionEnv::cleanup() {
+    if (!impl_->runtime_target) {
+        return support::AsyncResult<void, FileError>{std::expected<void, FileError>{}};
+    }
+    return submit_filesystem_operation<void>(
+        impl_->runtime_target,
+        impl_->sync,
+        0,
+        std::stop_token{},
+        std::nullopt,
+        [](const SyncLocalExecutionEnv& sync) {
+            return sync.cleanup();
+        },
+        AdmissionLane::Reserved);
 }
 
 support::AsyncResult<ShellExecResult, ExecutionError> AsyncLocalExecutionEnv::exec(

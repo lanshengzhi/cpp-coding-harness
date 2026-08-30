@@ -46,6 +46,7 @@ public:
     [[nodiscard]] std::expected<std::string, FileError> createTempFile(
         std::optional<std::string> prefix = std::nullopt,
         std::optional<std::string> suffix = std::nullopt) const;
+    [[nodiscard]] std::expected<void, FileError> cleanup() const;
 
     [[nodiscard]] const WorkspaceFileSystem& fs() const { return fs_; }
 

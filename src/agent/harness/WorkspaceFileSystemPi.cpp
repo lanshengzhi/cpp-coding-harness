@@ -1,5 +1,6 @@
 #include "WorkspaceFileSystem.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <sstream>
 
@@ -32,38 +33,59 @@ std::expected<std::string, FileError> WorkspaceFileSystem::joinPath(
 }
 
 std::expected<std::string, FileError> WorkspaceFileSystem::readTextFile(const std::string& path) const {
-    auto content = read_existing_file(path);
-    if (!content) {
-        return std::unexpected(util_error_to_file_error(content.error(), path));
-    }
-    return *content;
+    return read_existing_file_bounded(path, kFileSystemCapacity.max_file_bytes);
 }
 
 std::expected<std::vector<std::string>, FileError> WorkspaceFileSystem::readTextLines(
     const std::string& path,
     std::optional<int> maxLines) const {
-    auto content = read_existing_file(path);
+    auto content = read_existing_file_bounded(path, kFileSystemCapacity.max_file_bytes);
     if (!content) {
-        return std::unexpected(util_error_to_file_error(content.error(), path));
+        return std::unexpected(content.error());
     }
+
+    const auto requested_lines = maxLines && *maxLines > 0
+        ? static_cast<std::size_t>(*maxLines)
+        : maxLines
+            ? std::size_t{0}
+            : kFileSystemCapacity.max_text_lines;
+    const auto line_limit = std::min(requested_lines, kFileSystemCapacity.max_text_lines);
     std::vector<std::string> lines;
+    lines.reserve(line_limit);
+    if (line_limit == 0) {
+        return lines;
+    }
     std::istringstream input(*content);
     std::string line;
-    int count = 0;
+    std::size_t result_bytes{0};
     while (std::getline(input, line)) {
-        if (maxLines && count >= *maxLines) {
-            break;
+        if (lines.size() >= line_limit) {
+            if (maxLines && *maxLines >= 0 && requested_lines <= kFileSystemCapacity.max_text_lines) {
+                break;
+            }
+            return std::unexpected(FileError{
+                .code = FileErrorCode::ResourceLimit,
+                .message = "text-line result exceeds the filesystem result limit",
+                .path = std::string{path},
+            });
         }
+        if (line.size() > kFileSystemCapacity.max_text_lines_result_bytes - result_bytes) {
+            return std::unexpected(FileError{
+                .code = FileErrorCode::ResourceLimit,
+                .message = "text-line result exceeds the filesystem result limit",
+                .path = std::string{path},
+            });
+        }
+        result_bytes += line.size();
         lines.push_back(std::move(line));
-        ++count;
     }
     return lines;
 }
 
 std::expected<BinaryData, FileError> WorkspaceFileSystem::readBinaryFile(const std::string& path) const {
-    auto content = read_existing_file(path);
+    auto content = read_existing_file_bounded(path, kFileSystemCapacity.max_file_bytes);
     if (!content) {
-        return std::unexpected(util_error_to_file_error(content.error(), path));
+        return std::unexpected(content.error());
     }
     BinaryData result;
     result.reserve(content->size());
@@ -188,6 +210,8 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
     }
 
     std::vector<FileInfo> results;
+    results.reserve(kFileSystemCapacity.max_directory_entries);
+    std::size_t result_bytes{0};
     for (const auto& entry : std::filesystem::directory_iterator(*resolved, ec)) {
         if (ec) {
             break;
@@ -204,7 +228,18 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
             kind = FileKind::Symlink;
         }
 
-        auto child_name = entry.path().filename().string();
+        const auto child_name = entry.path().filename().string();
+        const auto child_path = entry.path().string();
+        const auto child_bytes = sizeof(FileInfo) + child_name.size() + child_path.size();
+        if (results.size() >= kFileSystemCapacity.max_directory_entries ||
+            child_bytes > kFileSystemCapacity.max_directory_result_bytes - result_bytes) {
+            return std::unexpected(FileError{
+                .code = FileErrorCode::ResourceLimit,
+                .message = "directory result exceeds the filesystem result limit",
+                .path = std::string{path},
+            });
+        }
+
         std::uint64_t size = 0;
         std::int64_t mtimeMs = 0;
         struct stat st {};
@@ -213,9 +248,10 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
             mtimeMs = static_cast<std::int64_t>(st.st_mtim.tv_sec) * 1000 +
                       static_cast<std::int64_t>(st.st_mtim.tv_nsec) / 1'000'000;
         }
+        result_bytes += child_bytes;
         results.push_back(FileInfo{
             .name = child_name,
-            .path = entry.path().string(),
+            .path = child_path,
             .kind = kind,
             .size = size,
             .mtimeMs = mtimeMs,

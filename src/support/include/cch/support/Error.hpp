@@ -29,6 +29,8 @@ enum class ErrorCode {
     Validation,
     Workspace,
     Process,
+    /// A fixed capability result or storage bound was exceeded.
+    ResourceLimit,
     /// pi `MissingSessionCwdError`: the resumed session's stored header cwd
     /// no longer exists (session-cwd.ts). The CLI prints the error's message
     /// verbatim (no "could not resume session:" prefix) and exits 1.
@@ -85,6 +87,8 @@ using ExpectedVoid = std::expected<void, Error>;
         return "workspace";
     case ErrorCode::Process:
         return "process";
+    case ErrorCode::ResourceLimit:
+        return "resource_limit";
     case ErrorCode::MissingSessionCwd:
         return "missing_session_cwd";
     }

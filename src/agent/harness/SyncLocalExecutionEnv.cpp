@@ -118,6 +118,11 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
     return fs_.createTempFile(prefix, suffix);
 }
 
+std::expected<void, FileError> SyncLocalExecutionEnv::cleanup() const {
+    fs_.cleanup_temporary_resources();
+    return {};
+}
+
 // ---------------------------------------------------------------------------
 // Pi-shaped shell methods
 // ---------------------------------------------------------------------------

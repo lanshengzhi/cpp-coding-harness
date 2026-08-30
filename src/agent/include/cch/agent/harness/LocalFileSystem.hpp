@@ -1,34 +1,29 @@
 #pragma once
 
-#include <cch/agent/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 
+#include <filesystem>
 #include <memory>
-#include <vector>
 
 namespace cch::harness {
 
 class RuntimeTarget;
 
-/// Local Execution Environment bound to a Runtime root target. The target is
-/// shared deliberately with pending operations, so destroying this facade
-/// cannot strand admitted work or leave it using destroyed filesystem state.
-class AsyncLocalExecutionEnv final : public AsyncExecutionEnv {
+/// Local filesystem Adapter for the complete asynchronous filesystem
+/// capability. All containment-sensitive work delegates to the private
+/// WorkspaceFileSystem implementation through the adapter's private state.
+class AsyncLocalFileSystem final : public AsyncFileSystem {
 public:
-    AsyncLocalExecutionEnv(
+    AsyncLocalFileSystem(
         std::shared_ptr<RuntimeTarget> runtime_target,
-        std::filesystem::path workspace,
-        bool bash_enabled = false,
-        std::vector<std::string> secret_environment_names = {},
-        ShellConfig shell_config = {});
-    AsyncLocalExecutionEnv(AsyncLocalExecutionEnv&&) noexcept;
-    AsyncLocalExecutionEnv& operator=(AsyncLocalExecutionEnv&&) noexcept;
-    ~AsyncLocalExecutionEnv() override;
-    AsyncLocalExecutionEnv(const AsyncLocalExecutionEnv&) = delete;
-    AsyncLocalExecutionEnv& operator=(const AsyncLocalExecutionEnv&) = delete;
+        std::filesystem::path workspace);
+    AsyncLocalFileSystem(AsyncLocalFileSystem&&) noexcept;
+    AsyncLocalFileSystem& operator=(AsyncLocalFileSystem&&) noexcept;
+    ~AsyncLocalFileSystem() override;
+    AsyncLocalFileSystem(const AsyncLocalFileSystem&) = delete;
+    AsyncLocalFileSystem& operator=(const AsyncLocalFileSystem&) = delete;
 
     [[nodiscard]] const std::filesystem::path& workspace() const override;
-
-    // -- Pi-shaped filesystem overrides ---
 
     [[nodiscard]] support::AsyncResult<std::string, FileError> absolutePath(
         std::string path,
@@ -82,12 +77,6 @@ public:
         std::optional<std::string> suffix,
         std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<void, FileError> cleanup() override;
-
-    // -- Pi-shaped shell override ---
-
-    [[nodiscard]] support::AsyncResult<ShellExecResult, ExecutionError> exec(
-        std::string command,
-        ExecOptions options = {}) override;
 
 private:
     struct Impl;

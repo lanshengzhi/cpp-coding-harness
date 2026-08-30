@@ -12,8 +12,12 @@
 
 namespace cch::harness {
 
+WorkspaceFileSystem::WorkspaceFileSystem()
+    : temporary_state_(std::make_shared<TemporaryState>()) {}
+
 WorkspaceFileSystem::WorkspaceFileSystem(std::filesystem::path workspace)
-    : root_(canonicalized(std::move(workspace))) {}
+    : root_(canonicalized(std::move(workspace))),
+      temporary_state_(std::make_shared<TemporaryState>()) {}
 
 support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::filesystem::path& workspace) {
     std::error_code ec;
@@ -82,6 +86,84 @@ support::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std
     return content;
 }
 
+std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bounded(
+    const std::string& requested,
+    std::size_t max_bytes) const {
+    auto target = resolve_addressed_path(requested);
+    if (!target) {
+        return std::unexpected(util_error_to_file_error(target.error(), requested));
+    }
+
+    auto parent_guard = open_parent_directory(*target, false);
+    if (!parent_guard) {
+        return std::unexpected(util_error_to_file_error(parent_guard.error(), requested));
+    }
+
+    const auto filename = target->filename().string();
+    support::UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+    if (!fd) {
+        if (errno == ELOOP) {
+            return std::unexpected(FileError{
+                .code = FileErrorCode::PermissionDenied,
+                .message = "refusing to read through symlink: " + requested,
+                .path = std::string{requested},
+            });
+        }
+        if (errno == ENOENT) {
+            return std::unexpected(FileError{
+                .code = FileErrorCode::NotFound,
+                .message = "path not found: " + requested,
+                .path = std::string{requested},
+            });
+        }
+        return std::unexpected(FileError{
+            .code = FileErrorCode::PermissionDenied,
+            .message = "could not open file for reading: " + requested,
+            .path = std::string{requested},
+        });
+    }
+
+    struct stat st {};
+    if (::fstat(fd.get(), &st) != 0 || !S_ISREG(st.st_mode)) {
+        return std::unexpected(FileError{
+            .code = FileErrorCode::IsDirectory,
+            .message = "path is not a regular file: " + requested,
+            .path = std::string{requested},
+        });
+    }
+    if (st.st_size < 0 || static_cast<std::uintmax_t>(st.st_size) > max_bytes) {
+        return std::unexpected(FileError{
+            .code = FileErrorCode::ResourceLimit,
+            .message = "file exceeds the filesystem result limit",
+            .path = std::string{requested},
+        });
+    }
+
+    std::string content;
+    content.reserve(static_cast<std::size_t>(st.st_size));
+    char buffer[4096];
+    ssize_t n = 0;
+    while ((n = ::read(fd.get(), buffer, sizeof(buffer))) > 0) {
+        const auto count = static_cast<std::size_t>(n);
+        if (count > max_bytes - content.size()) {
+            return std::unexpected(FileError{
+                .code = FileErrorCode::ResourceLimit,
+                .message = "file exceeds the filesystem result limit",
+                .path = std::string{requested},
+            });
+        }
+        content.append(buffer, count);
+    }
+    if (n < 0) {
+        return std::unexpected(FileError{
+            .code = FileErrorCode::Unknown,
+            .message = "could not read file: " + requested,
+            .path = std::string{requested},
+        });
+    }
+    return content;
+}
+
 support::Expected<std::size_t> WorkspaceFileSystem::write_file(
     const std::string& requested,
     const std::string& content,
@@ -141,6 +223,9 @@ FileError WorkspaceFileSystem::util_error_to_file_error(const support::Error& er
         break;
     case support::ErrorCode::Cancelled:
         code = FileErrorCode::Aborted;
+        break;
+    case support::ErrorCode::ResourceLimit:
+        code = FileErrorCode::ResourceLimit;
         break;
     default:
         break;
