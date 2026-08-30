@@ -1,9 +1,13 @@
 #pragma once
 
+#include <cch/agent/harness/FileSystem.hpp>
+
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <stop_token>
 #include <vector>
 
 namespace cch::harness {
@@ -11,6 +15,27 @@ class WorkspaceFileSystem;
 }
 
 namespace cch::coding_agent {
+
+/// One explicitly authorized path capability supplied by coding-agent
+/// composition. Resource loading may select only a capability from this
+/// collection; it never creates a filesystem for a path it discovers.
+struct AuthorizedResourcePath {
+    std::string path;
+    std::shared_ptr<harness::AsyncFileSystem> filesystem;
+};
+
+/// Filesystem capabilities authorized by Session composition for project
+/// resource discovery. The vectors contain already-opened capabilities for
+/// the workspace/ancestor and git roots in discovery order. The loader has no
+/// arbitrary-root factory and cannot widen this set.
+struct ProjectResourceFileSystems {
+    std::shared_ptr<harness::AsyncFileSystem> workspace;
+    std::vector<std::shared_ptr<harness::AsyncFileSystem>> ancestor_roots;
+    std::vector<std::shared_ptr<harness::AsyncFileSystem>> git_roots;
+    std::shared_ptr<harness::AsyncFileSystem> agent_config_directory;
+    std::shared_ptr<harness::AsyncFileSystem> user_agents_root;
+    std::vector<AuthorizedResourcePath> explicit_paths;
+};
 
 /// pi `SourceScope` subset (`core/source-info.ts`): the scope recorded on a
 /// resource's `SourceInfo`. `user` and `project` group the loaded-resources
@@ -138,6 +163,13 @@ struct ProjectResourceDetectionResult {
 
 [[nodiscard]] std::string_view to_string(ProjectResourceKind kind);
 
+[[nodiscard]] support::AsyncResult<ProjectResourceDetectionResult, harness::FileError> detect_project_resources(
+        ProjectResourceFileSystems filesystems,
+        const std::filesystem::path& user_agents_skills_dir,
+        std::stop_token stop_token = {});
+
+/// Temporary expand-contract bridge for synchronous callers. New production
+/// resource loading uses the AsyncFileSystem overload above.
 [[nodiscard]] ProjectResourceDetectionResult detect_project_resources(
     const harness::WorkspaceFileSystem& fs,
     const std::filesystem::path& user_agents_skills_dir);

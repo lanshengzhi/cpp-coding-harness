@@ -2,8 +2,10 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Skill.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -44,13 +46,15 @@ struct SkillDirSpec {
     SkillSourceContext source_context{};
 };
 
-/// Load a single SKILL.md file from the given absolute path.
-///
-/// Reads the file via the filesystem, parses YAML frontmatter, validates
-/// skill metadata, and returns the loaded Skill with any diagnostics. The
-/// file body is not retained: `/skill:` invocation reads it at invocation
-/// time. Returns only diagnostics (no Skill) when validation fails fatally
-/// (missing/empty description) or when the file cannot be read/parsed.
+/// Load a single SKILL.md file through the canonical asynchronous filesystem
+/// capability.
+[[nodiscard]] support::AsyncResult<SkillLoadResult, harness::FileError> loadSkillFromFile(harness::AsyncFileSystem& fs,
+        std::string file_path,
+        SkillSourceContext source_context = {},
+        std::stop_token stop_token = {});
+
+/// Temporary expand-contract bridge for synchronous callers. New production
+/// resource loading uses the AsyncFileSystem overload above.
 [[nodiscard]] SkillLoadResult loadSkillFromFile(
     const harness::WorkspaceFileSystem& fs,
     const std::string& filePath,
@@ -66,6 +70,10 @@ struct SkillDirSpec {
 /// are resolved, and the same real file reached twice (via symlink) is
 /// silently deduplicated. Duplicate skill names drop subsequent occurrences
 /// with a pi-shaped collision diagnostic.
+[[nodiscard]] support::AsyncResult<SkillLoadResult, harness::FileError> loadSkills(
+        harness::AsyncFileSystem& fs, std::vector<SkillDirSpec> dirs, std::stop_token stop_token = {});
+
+/// Temporary expand-contract bridge for synchronous callers.
 [[nodiscard]] SkillLoadResult loadSkills(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<SkillDirSpec>& dirs);

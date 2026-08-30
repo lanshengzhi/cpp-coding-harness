@@ -1,7 +1,10 @@
 #include <cch/coding_agent/ProjectResources.hpp>
 
+#include "AsyncTask.hpp"
+#include "LoaderPath.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <optional>
@@ -52,7 +55,7 @@ constexpr std::array<MarkerSpec, 5> kMarkers{{
     return actual == expected;
 }
 
-[[nodiscard]] harness::FileKind canonical_kind(const std::string& path) {
+[[maybe_unused]] [[nodiscard]] harness::FileKind canonical_kind(const std::string& path) {
     std::error_code ec;
     auto status = std::filesystem::status(path, ec);
     if (ec) {
@@ -84,7 +87,7 @@ constexpr std::array<MarkerSpec, 5> kMarkers{{
 /// `workspace` or any ancestor up to the filesystem root, excluding the
 /// user's own `~/.agents/skills` (always a trusted user resource, even when
 /// the workspace is `$HOME`). Returns nullopt when no such directory exists.
-[[nodiscard]] std::optional<std::filesystem::path> find_project_agents_skills_dir(
+[[maybe_unused]] [[nodiscard]] std::optional<std::filesystem::path> find_project_agents_skills_dir(
     const std::filesystem::path& workspace,
     const std::filesystem::path& user_agents_skills_dir) {
     std::error_code ec;
@@ -110,6 +113,77 @@ constexpr std::array<MarkerSpec, 5> kMarkers{{
     }
 }
 
+[[nodiscard]] harness::FileError detection_aborted_error() {
+    return harness::FileError{
+            .code = harness::FileErrorCode::Aborted,
+            .message = "Operation aborted",
+            .path = std::nullopt,
+    };
+}
+
+[[nodiscard]] bool detection_aborted(const harness::FileError& error) {
+    return error.code == harness::FileErrorCode::Aborted;
+}
+
+[[nodiscard]] std::filesystem::path absolute_normalized(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto absolute = std::filesystem::absolute(path, ec);
+    return (ec ? path : absolute).lexically_normal();
+}
+
+[[nodiscard]] detail::AsyncTask<std::optional<std::string>, harness::FileError>
+find_project_agents_skills_dir_async_task(const ProjectResourceFileSystems& filesystems,
+        const std::filesystem::path& user_agents_skills_dir,
+        std::stop_token stop_token) {
+    const auto user_path = absolute_normalized(user_agents_skills_dir);
+    std::vector<std::shared_ptr<harness::AsyncFileSystem>> roots;
+    const auto add_unique = [&roots](const std::shared_ptr<harness::AsyncFileSystem>& filesystem) {
+        if (!filesystem) {
+            return;
+        }
+        const auto root = absolute_normalized(filesystem->workspace());
+        const auto duplicate = std::any_of(roots.begin(), roots.end(), [&root](const auto& existing) {
+            return absolute_normalized(existing->workspace()) == root;
+        });
+        if (!duplicate) {
+            roots.push_back(filesystem);
+        }
+    };
+    add_unique(filesystems.workspace);
+    for (const auto& root : filesystems.ancestor_roots) {
+        add_unique(root);
+    }
+    for (const auto& root : filesystems.git_roots) {
+        add_unique(root);
+    }
+
+    for (const auto& filesystem : roots) {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(detection_aborted_error());
+        }
+        const auto root = absolute_normalized(filesystem->workspace());
+        const auto agents_skills = root / ".agents" / "skills";
+        if (agents_skills == user_path) {
+            continue;
+        }
+        const auto relative = strip_workspace_root(root, agents_skills.string());
+        if (!relative) {
+            continue;
+        }
+        auto present = co_await std::move(filesystem->exists(*relative, stop_token));
+        if (!present) {
+            if (detection_aborted(present.error())) {
+                co_return std::unexpected(std::move(present.error()));
+            }
+            continue;
+        }
+        if (*present) {
+            co_return std::optional<std::string>{agents_skills.string()};
+        }
+    }
+    co_return std::optional<std::string>{};
+}
+
 } // namespace
 
 std::string_view to_string(ProjectResourceKind kind) {
@@ -133,67 +207,136 @@ std::string_view to_string(ProjectResourceKind kind) {
 ProjectResourceDetectionResult detect_project_resources(
     const harness::WorkspaceFileSystem& fs,
     const std::filesystem::path& user_agents_skills_dir) {
-    ProjectResourceDetectionResult result;
+    // Temporary expand-contract bridge: all detection now runs through the
+    // canonical asynchronous capability. Ancestor capabilities are bounded
+    // to the known path chain so the bridge preserves the legacy
+    // `.agents/skills` trust-marker search without widening authority.
+    ProjectResourceFileSystems filesystems;
+    filesystems.workspace = detail::make_sync_async_filesystem(fs);
+    auto current = absolute_normalized(fs.root());
+    while (true) {
+        const auto parent = current.parent_path();
+        if (parent == current || parent == parent.root_path()) {
+            break;
+        }
+        current = parent;
+        if (auto ancestor = harness::WorkspaceFileSystem::create(current)) {
+            filesystems.ancestor_roots.push_back(
+                detail::make_sync_async_filesystem(*ancestor));
+        }
+    }
 
+    auto completed = detail::run_sync_bridge(detect_project_resources(
+        std::move(filesystems), user_agents_skills_dir));
+    if (!completed) {
+        return ProjectResourceDetectionResult{};
+    }
+    if (!*completed) {
+        ProjectResourceDetectionResult result;
+        result.diagnostics.push_back(diagnostic(
+            ResourceDiagnosticType::Warning,
+            completed->error().message,
+            completed->error().path.value_or(std::string{})));
+        return result;
+    }
+    return std::move(**completed);
+}
+
+namespace {
+
+[[nodiscard]] detail::AsyncTask<ProjectResourceDetectionResult, harness::FileError> detect_project_resources_task(
+        ProjectResourceFileSystems filesystems,
+        std::filesystem::path user_agents_skills_dir,
+        std::stop_token stop_token) {
+    ProjectResourceDetectionResult result;
+    if (!filesystems.workspace) {
+        co_return std::unexpected(harness::FileError{
+                .code = harness::FileErrorCode::Invalid,
+                .message = "project resource loading requires a workspace filesystem",
+                .path = std::nullopt,
+        });
+    }
     for (const auto& marker : kMarkers) {
-        auto info = fs.fileInfo(marker.path);
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(detection_aborted_error());
+        }
+        auto info = co_await std::move(filesystems.workspace->fileInfo(marker.path, stop_token));
         if (!info) {
+            if (detection_aborted(info.error())) {
+                co_return std::unexpected(std::move(info.error()));
+            }
             if (info.error().code == harness::FileErrorCode::NotFound) {
                 continue;
             }
-            result.diagnostics.push_back(diagnostic(
-                ResourceDiagnosticType::Warning,
-                info.error().message,
-                marker.path));
+            result.diagnostics.push_back(
+                    diagnostic(ResourceDiagnosticType::Warning, info.error().message, marker.path));
             continue;
         }
 
         bool loadable = true;
-        if (info->kind == harness::FileKind::Symlink) {
-            auto canonical = fs.canonicalPath(marker.path);
+        harness::FileKind actual_kind = info->kind;
+        if (actual_kind == harness::FileKind::Symlink) {
+            auto canonical = co_await std::move(filesystems.workspace->canonicalPath(marker.path, stop_token));
             if (!canonical) {
-                result.diagnostics.push_back(diagnostic(
-                    ResourceDiagnosticType::Warning,
-                    canonical.error().message,
-                    marker.path));
+                if (detection_aborted(canonical.error())) {
+                    co_return std::unexpected(std::move(canonical.error()));
+                }
+                result.diagnostics.push_back(
+                        diagnostic(ResourceDiagnosticType::Warning, canonical.error().message, marker.path));
                 loadable = false;
-            } else if (!kind_matches(canonical_kind(*canonical), marker.expected_kind)) {
-                result.diagnostics.push_back(diagnostic(
-                    ResourceDiagnosticType::Warning,
+            } else {
+                const auto target_path =
+                        strip_workspace_root(absolute_normalized(filesystems.workspace->workspace()), *canonical);
+                auto target = co_await std::move(
+                        filesystems.workspace->fileInfo(target_path.value_or(*canonical), stop_token));
+                if (!target) {
+                    if (detection_aborted(target.error())) {
+                        co_return std::unexpected(std::move(target.error()));
+                    }
+                    result.diagnostics.push_back(
+                            diagnostic(ResourceDiagnosticType::Warning, target.error().message, marker.path));
+                    loadable = false;
+                } else {
+                    actual_kind = target->kind;
+                }
+            }
+        }
+        if (loadable && !kind_matches(actual_kind, marker.expected_kind)) {
+            result.diagnostics.push_back(diagnostic(ResourceDiagnosticType::Warning,
                     "resource marker has unexpected kind: " + std::string(marker.path),
                     marker.path));
-                loadable = false;
-            }
-        } else if (!kind_matches(info->kind, marker.expected_kind)) {
-            result.diagnostics.push_back(diagnostic(
-                ResourceDiagnosticType::Warning,
-                "resource marker has unexpected kind: " + std::string(marker.path),
-                marker.path));
             loadable = false;
         }
-
         result.resources.push_back(DetectedProjectResource{
-            .kind = marker.kind,
-            .path = marker.path,
-            .loadable = loadable,
+                .kind = marker.kind,
+                .path = marker.path,
+                .loadable = loadable,
         });
     }
 
-    // The `.agents/skills` convention in the workspace or any ancestor up to
-    // the filesystem root (excluding the user's own directory) is a
-    // trust-requiring project resource marker: mere presence triggers the
-    // boot Project Trust decision (pi `trust-manager.ts`
-    // `hasTrustRequiringProjectResources`). The recorded path is the
-    // directory that actually triggered it.
-    if (auto found = find_project_agents_skills_dir(fs.root(), user_agents_skills_dir)) {
+    auto found = co_await std::move(to_async_result(
+            find_project_agents_skills_dir_async_task(filesystems, std::move(user_agents_skills_dir), stop_token)));
+    if (!found) {
+        co_return std::unexpected(std::move(found.error()));
+    }
+    if (*found) {
         result.resources.push_back(DetectedProjectResource{
-            .kind = ProjectResourceKind::ProjectAgentsSkills,
-            .path = found->string(),
-            .loadable = true,
+                .kind = ProjectResourceKind::ProjectAgentsSkills,
+                .path = std::move(**found),
+                .loadable = true,
         });
     }
+    co_return result;
+}
 
-    return result;
+} // namespace
+
+support::AsyncResult<ProjectResourceDetectionResult, harness::FileError> detect_project_resources(
+        ProjectResourceFileSystems filesystems,
+        const std::filesystem::path& user_agents_skills_dir,
+        std::stop_token stop_token) {
+    return detail::to_async_result(
+            detect_project_resources_task(std::move(filesystems), user_agents_skills_dir, stop_token));
 }
 
 bool has_detected_kind(

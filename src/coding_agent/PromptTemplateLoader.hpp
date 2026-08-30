@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cch/coding_agent/PromptTemplate.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,13 +51,16 @@ struct PromptTemplateDirSpec {
     std::optional<SourceInfo> source_info{std::nullopt};
 };
 
-/// Load a single .md prompt template file.
-///
-/// Reads the file via the filesystem, parses YAML frontmatter using the
-/// existing SkillFrontmatterParser, and returns a PromptTemplate with
-/// name (from filename), optional description, optional argument_hint,
-/// and body content. A non-Markdown path returns an `unsupported_type`
-/// diagnostic instead of being silently ignored.
+/// Load a single .md prompt template file through the canonical asynchronous
+/// filesystem capability.
+[[nodiscard]] support::AsyncResult<PromptTemplateLoadResult, harness::FileError> loadPromptTemplateFromFile(
+        harness::AsyncFileSystem& fs,
+        std::string file_path,
+        std::optional<SourceInfo> source_info = std::nullopt,
+        std::stop_token stop_token = {});
+
+/// Temporary expand-contract bridge for synchronous callers. New production
+/// resource loading uses the AsyncFileSystem overload above.
 [[nodiscard]] PromptTemplateLoadResult loadPromptTemplateFromFile(
     const harness::WorkspaceFileSystem& fs,
     const std::string& filePath,
@@ -69,6 +74,10 @@ struct PromptTemplateDirSpec {
 /// Duplicate names are NOT deduplicated here (pi `loadPromptTemplates` returns
 /// the raw list); the resource loader resolves collisions with pi-shaped
 /// collision diagnostics and winner/loser paths.
+[[nodiscard]] support::AsyncResult<PromptTemplateLoadResult, harness::FileError> loadPromptTemplates(
+        harness::AsyncFileSystem& fs, std::vector<PromptTemplateDirSpec> dirs, std::stop_token stop_token = {});
+
+/// Temporary expand-contract bridge for synchronous callers.
 [[nodiscard]] PromptTemplateLoadResult loadPromptTemplates(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<PromptTemplateDirSpec>& dirs);

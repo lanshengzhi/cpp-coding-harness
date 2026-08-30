@@ -1,5 +1,6 @@
 #include "coding_agent/PromptTemplateLoader.hpp"
 
+#include "AsyncTask.hpp"
 #include "SkillFrontmatterParser.hpp"
 #include "LoaderPath.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
@@ -49,155 +50,225 @@ PromptTemplateLoadResult loadPromptTemplateFromFile(
     const harness::WorkspaceFileSystem& fs,
     const std::string& filePath,
     const std::optional<SourceInfo>& source_info) {
-    PromptTemplateLoadResult result;
-
-    // Only load .md files. Directory discovery filters other entries before
-    // calling this function; an explicit non-Markdown input must report why it
-    // could not be loaded so session assembly can fail consistently.
-    if (!hasMarkdownExtension(filePath)) {
-        result.diagnostics.push_back(PromptTemplateDiagnostic{
-            .type = "warning",
-            .code = PromptTemplateDiagnosticCode::unsupported_type,
-            .message = "prompt template file must use a .md extension",
-            .path = filePath,
-        });
-        return result;
+    auto async_filesystem = detail::make_sync_async_filesystem(fs);
+    auto completed = detail::run_sync_bridge(loadPromptTemplateFromFile(
+        *async_filesystem, filePath, source_info));
+    if (!completed) {
+        return PromptTemplateLoadResult{};
     }
-
-    // Read the file.
-    auto content = fs.readTextFile(filePath);
-    if (!content) {
+    if (!*completed) {
+        PromptTemplateLoadResult result;
         result.diagnostics.push_back(PromptTemplateDiagnostic{
             .type = "warning",
             .code = PromptTemplateDiagnosticCode::read_failed,
-            .message = content.error().message,
+            .message = completed->error().message,
             .path = filePath,
         });
         return result;
     }
-
-    // Parse frontmatter.
-    auto parsed = parseFrontmatter(*content);
-    if (!parsed) {
-        result.diagnostics.push_back(PromptTemplateDiagnostic{
-            .type = "warning",
-            .code = PromptTemplateDiagnosticCode::parse_failed,
-            .message = parsed.error().message,
-            .path = filePath,
-        });
-        return result;
-    }
-
-    const auto& fm = *parsed;
-
-    // Extract name from filename.
-    std::string name = templateNameFromPath(filePath);
-
-    // Extract description from frontmatter fields.
-    std::optional<std::string> description;
-    auto descIt = fm.fields.find("description");
-    if (descIt != fm.fields.end() && !descIt->second.empty()) {
-        description = descIt->second;
-    }
-
-    // Extract argument-hint from frontmatter fields.
-    std::optional<std::string> argument_hint;
-    auto hintIt = fm.fields.find("argument-hint");
-    if (hintIt != fm.fields.end() && !hintIt->second.empty()) {
-        argument_hint = hintIt->second;
-    }
-
-    const std::filesystem::path absolute_path = std::filesystem::path{filePath}.is_absolute()
-        ? std::filesystem::path{filePath}
-        : (fs.root() / filePath);
-    const auto normalized_path = absolute_path.lexically_normal().string();
-    // pi `createPromptSourceInfo`: the spec's provenance with the per-file
-    // path (pi `SourceInfo.path`); absent specs carry an empty SourceInfo.
-    SourceInfo template_source;
-    if (source_info) {
-        template_source = *source_info;
-        template_source.path = normalized_path;
-    }
-
-    result.templates.push_back(PromptTemplate{
-        .name = std::move(name),
-        .description = std::move(description),
-        .content = std::move(fm.body),
-        .argument_hint = std::move(argument_hint),
-        .filePath = normalized_path,
-        .sourceInfo = std::move(template_source),
-    });
-
-    return result;
+    return std::move(**completed);
 }
 
 PromptTemplateLoadResult loadPromptTemplates(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<PromptTemplateDirSpec>& dirs) {
-    PromptTemplateLoadResult result;
+    auto async_filesystem = detail::make_sync_async_filesystem(fs);
+    auto completed = detail::run_sync_bridge(loadPromptTemplates(
+        *async_filesystem, std::vector<PromptTemplateDirSpec>{dirs.begin(), dirs.end()}));
+    if (!completed) {
+        return PromptTemplateLoadResult{};
+    }
+    if (!*completed) {
+        PromptTemplateLoadResult result;
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+            .type = "warning",
+            .code = PromptTemplateDiagnosticCode::list_failed,
+            .message = completed->error().message,
+            .path = completed->error().path.value_or(std::string{}),
+        });
+        return result;
+    }
+    return std::move(**completed);
+}
 
+namespace {
+
+[[nodiscard]] harness::FileError async_prompt_aborted_error(std::string path = {}) {
+    return harness::FileError{
+            .code = harness::FileErrorCode::Aborted,
+            .message = "Operation aborted",
+            .path = path.empty() ? std::nullopt : std::optional<std::string>{std::move(path)},
+    };
+}
+
+[[nodiscard]] bool async_prompt_aborted(const harness::FileError& error) {
+    return error.code == harness::FileErrorCode::Aborted;
+}
+
+[[nodiscard]] std::string async_prompt_read_path(const harness::AsyncFileSystem& fs, std::string_view file_path) {
+    const auto relative_path = strip_workspace_root(fs.workspace(), file_path);
+    return relative_path.value_or(std::string{file_path});
+}
+
+[[nodiscard]] std::string async_prompt_absolute_path(const harness::AsyncFileSystem& fs, std::string_view file_path) {
+    const std::filesystem::path path{file_path};
+    if (path.is_absolute()) {
+        return path.lexically_normal().string();
+    }
+    return (fs.workspace() / path).lexically_normal().string();
+}
+
+[[nodiscard]] detail::AsyncTask<PromptTemplateLoadResult, harness::FileError> load_prompt_template_file_task(
+        harness::AsyncFileSystem& fs,
+        std::string file_path,
+        std::optional<SourceInfo> source_info,
+        std::stop_token stop_token) {
+    PromptTemplateLoadResult result;
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(async_prompt_aborted_error(file_path));
+    }
+    if (!hasMarkdownExtension(file_path)) {
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+                .type = "warning",
+                .code = PromptTemplateDiagnosticCode::unsupported_type,
+                .message = "prompt template file must use a .md extension",
+                .path = file_path,
+        });
+        co_return result;
+    }
+
+    auto content = co_await std::move(fs.readTextFile(async_prompt_read_path(fs, file_path), stop_token));
+    if (!content) {
+        if (async_prompt_aborted(content.error())) {
+            co_return std::unexpected(std::move(content.error()));
+        }
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+                .type = "warning",
+                .code = PromptTemplateDiagnosticCode::read_failed,
+                .message = content.error().message,
+                .path = file_path,
+        });
+        co_return result;
+    }
+
+    auto parsed = parseFrontmatter(*content);
+    if (!parsed) {
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+                .type = "warning",
+                .code = PromptTemplateDiagnosticCode::parse_failed,
+                .message = parsed.error().message,
+                .path = file_path,
+        });
+        co_return result;
+    }
+
+    std::optional<std::string> description;
+    if (const auto description_it = parsed->fields.find("description");
+            description_it != parsed->fields.end() && !description_it->second.empty()) {
+        description = description_it->second;
+    }
+    std::optional<std::string> argument_hint;
+    if (const auto hint_it = parsed->fields.find("argument-hint");
+            hint_it != parsed->fields.end() && !hint_it->second.empty()) {
+        argument_hint = hint_it->second;
+    }
+
+    const auto absolute_path = async_prompt_absolute_path(fs, file_path);
+    SourceInfo template_source;
+    if (source_info) {
+        template_source = std::move(*source_info);
+        template_source.path = absolute_path;
+    }
+    result.templates.push_back(PromptTemplate{
+            .name = templateNameFromPath(file_path),
+            .description = std::move(description),
+            .content = std::move(parsed->body),
+            .argument_hint = std::move(argument_hint),
+            .filePath = absolute_path,
+            .sourceInfo = std::move(template_source),
+    });
+    co_return result;
+}
+
+[[nodiscard]] detail::AsyncTask<PromptTemplateLoadResult, harness::FileError> load_prompt_templates_task(
+        harness::AsyncFileSystem& fs, std::vector<PromptTemplateDirSpec> dirs, std::stop_token stop_token) {
+    PromptTemplateLoadResult result;
     for (const auto& spec : dirs) {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(async_prompt_aborted_error());
+        }
         if (spec.is_file) {
-            // Explicit file path — load directly.
-            auto file_result = loadPromptTemplateFromFile(fs, spec.path, spec.source_info);
-            result.templates.insert(
-                result.templates.end(),
-                std::make_move_iterator(file_result.templates.begin()),
-                std::make_move_iterator(file_result.templates.end()));
+            auto file_result = co_await std::move(
+                    to_async_result(load_prompt_template_file_task(fs, spec.path, spec.source_info, stop_token)));
+            if (!file_result) {
+                co_return std::unexpected(std::move(file_result.error()));
+            }
+            result.templates.insert(result.templates.end(),
+                    std::make_move_iterator(file_result->templates.begin()),
+                    std::make_move_iterator(file_result->templates.end()));
             result.diagnostics.insert(result.diagnostics.end(),
-                std::make_move_iterator(file_result.diagnostics.begin()),
-                std::make_move_iterator(file_result.diagnostics.end()));
+                    std::make_move_iterator(file_result->diagnostics.begin()),
+                    std::make_move_iterator(file_result->diagnostics.end()));
             continue;
         }
 
-        // Directory — list direct children.
-        auto entries = fs.listDir(spec.path);
+        auto entries = co_await std::move(fs.listDir(async_prompt_read_path(fs, spec.path), stop_token));
         if (!entries) {
-            // Missing directory is silent (not an error).
+            if (async_prompt_aborted(entries.error())) {
+                co_return std::unexpected(std::move(entries.error()));
+            }
             if (entries.error().code != harness::FileErrorCode::NotFound) {
                 result.diagnostics.push_back(PromptTemplateDiagnostic{
-                    .type = "warning",
-                    .code = PromptTemplateDiagnosticCode::list_failed,
-                    .message = entries.error().message,
-                    .path = spec.path,
+                        .type = "warning",
+                        .code = PromptTemplateDiagnosticCode::list_failed,
+                        .message = entries.error().message,
+                        .path = spec.path,
                 });
             }
             continue;
         }
-
-        // Sort entries by name for deterministic order.
-        std::sort(entries->begin(), entries->end(),
-            [](const harness::FileInfo& a, const harness::FileInfo& b) { return a.name < b.name; });
-
+        std::sort(entries->begin(), entries->end(), [](const auto& left, const auto& right) {
+            return left.name < right.name;
+        });
         for (const auto& entry : *entries) {
-            // Skip dot-prefixed entries and non-files.
-            if (isDotfile(entry.name)) continue;
-            if (entry.kind != harness::FileKind::File) continue;
-            // Only load .md files.
-            if (!hasMarkdownExtension(entry.name)) continue;
-
-            // listDir returns absolute entry paths; convert paths beneath the
-            // workspace to the relative form required by the file loader.
-            const auto stripped_path = strip_workspace_root(fs.root(), entry.path);
+            if (isDotfile(entry.name) || entry.kind != harness::FileKind::File || !hasMarkdownExtension(entry.name)) {
+                continue;
+            }
+            const auto stripped_path = strip_workspace_root(fs.workspace(), entry.path);
             const auto relative_path = stripped_path.value_or(spec.path + "/" + entry.name);
-
-            auto file_result = loadPromptTemplateFromFile(fs, relative_path, spec.source_info);
-
-            result.templates.insert(
-                result.templates.end(),
-                std::make_move_iterator(file_result.templates.begin()),
-                std::make_move_iterator(file_result.templates.end()));
+            auto file_result = co_await std::move(
+                    to_async_result(load_prompt_template_file_task(fs, relative_path, spec.source_info, stop_token)));
+            if (!file_result) {
+                co_return std::unexpected(std::move(file_result.error()));
+            }
+            result.templates.insert(result.templates.end(),
+                    std::make_move_iterator(file_result->templates.begin()),
+                    std::make_move_iterator(file_result->templates.end()));
             result.diagnostics.insert(result.diagnostics.end(),
-                std::make_move_iterator(file_result.diagnostics.begin()),
-                std::make_move_iterator(file_result.diagnostics.end()));
+                    std::make_move_iterator(file_result->diagnostics.begin()),
+                    std::make_move_iterator(file_result->diagnostics.end()));
         }
     }
+    std::sort(result.templates.begin(), result.templates.end(), [](const auto& left, const auto& right) {
+        return left.name < right.name;
+    });
+    co_return result;
+}
 
-    // Sort templates by name for deterministic output.
-    std::sort(result.templates.begin(), result.templates.end(),
-        [](const PromptTemplate& a, const PromptTemplate& b) { return a.name < b.name; });
+} // namespace
 
-    return result;
+support::AsyncResult<PromptTemplateLoadResult, harness::FileError> loadPromptTemplateFromFile(
+        harness::AsyncFileSystem& fs,
+        std::string file_path,
+        std::optional<SourceInfo> source_info,
+        std::stop_token stop_token) {
+    return detail::to_async_result(
+            load_prompt_template_file_task(fs, std::move(file_path), std::move(source_info), stop_token));
+}
+
+support::AsyncResult<PromptTemplateLoadResult, harness::FileError> loadPromptTemplates(
+        harness::AsyncFileSystem& fs, std::vector<PromptTemplateDirSpec> dirs, std::stop_token stop_token) {
+    return detail::to_async_result(load_prompt_templates_task(fs, std::move(dirs), stop_token));
 }
 
 } // namespace cch::coding_agent
