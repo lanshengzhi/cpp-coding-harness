@@ -42,7 +42,13 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_
             return std::unexpected(workspace_error("path escapes workspace: " + requested));
         }
     }
+    if (normalized == ".") {
+        return root_;
+    }
     auto target = (root_ / normalized).lexically_normal();
+    if (target != root_ && target.filename().empty()) {
+        target = target.parent_path();
+    }
     if (!inside_lexically(target)) {
         return std::unexpected(workspace_error("path escapes workspace: " + requested));
     }
@@ -173,35 +179,25 @@ support::Expected<std::size_t> WorkspaceFileSystem::write_file(
         return std::unexpected(target.error());
     }
 
-    auto parent = target->parent_path();
-    if (parent.empty()) {
-        parent = root_;
-    }
-    std::error_code ec;
-    if (!std::filesystem::exists(parent, ec)) {
-        if (!create_parents) {
-            return std::unexpected(workspace_error("parent directory does not exist: " + requested));
-        }
-        auto created = create_parent_directories(*target);
-        if (!created) {
-            return std::unexpected(created.error());
-        }
-    }
     auto parent_guard = open_parent_directory(*target, create_parents);
     if (!parent_guard) {
         return std::unexpected(parent_guard.error());
     }
-    auto target_status = std::filesystem::symlink_status(*target, ec);
-    if (ec && target_status.type() != std::filesystem::file_type::not_found) {
+
+    const auto filename = target->filename().string();
+    struct stat target_status{};
+    if (::fstatat(parent_guard->get(), filename.c_str(), &target_status, AT_SYMLINK_NOFOLLOW) == 0) {
+        if (S_ISLNK(target_status.st_mode)) {
+            return std::unexpected(workspace_error("refusing to write through final symlink: " + requested));
+        }
+        if (!S_ISREG(target_status.st_mode)) {
+            return std::unexpected(workspace_error("target is not a regular file: " + requested));
+        }
+    } else if (errno != ENOENT) {
         return std::unexpected(workspace_error("could not inspect target: " + requested));
     }
-    if (std::filesystem::is_symlink(target_status)) {
-        return std::unexpected(workspace_error("refusing to write through final symlink: " + requested));
-    }
-    if (std::filesystem::exists(target_status) && !std::filesystem::is_regular_file(target_status)) {
-        return std::unexpected(workspace_error("target is not a regular file: " + requested));
-    }
-    auto written = write_atomic_file(*target, content);
+
+    auto written = write_atomic_file_at(parent_guard->get(), filename, content);
     if (!written) {
         return std::unexpected(written.error());
     }

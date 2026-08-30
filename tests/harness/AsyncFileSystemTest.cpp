@@ -3,6 +3,7 @@
 
 #include <cch/agent/harness/ExecutionEnv.hpp>
 #include <cch/agent/harness/LocalFileSystem.hpp>
+#include "agent/harness/AsyncFileSystemOperations.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "support/AsyncResultBridge.hpp"
 
@@ -188,6 +189,29 @@ TEST_CASE(
     CHECK(cancelled.error().code == harness::FileErrorCode::Aborted);
     CHECK(workspace.read("nested/note.txt") == "hello");
 
+    runtime.close();
+}
+
+TEST_CASE("started filesystem work returns its committed outcome after cancellation",
+        "[harness][filesystem][async][issue558]") {
+    tests::TempWorkspace workspace;
+    TestRuntime runtime;
+    auto sync = std::make_shared<harness::SyncLocalExecutionEnv>(workspace.path());
+    std::stop_source stop_source;
+
+    auto result = runtime.run(harness::filesystem_detail::submit_filesystem_operation<void>(runtime.make_target(),
+            sync,
+            0,
+            stop_source.get_token(),
+            std::string{"committed.txt"},
+            [&stop_source](const harness::SyncLocalExecutionEnv& local) {
+                auto written = local.writeFile("committed.txt", std::string{"committed"});
+                stop_source.request_stop();
+                return written;
+            }));
+
+    REQUIRE(result);
+    CHECK(workspace.read("committed.txt") == "committed");
     runtime.close();
 }
 

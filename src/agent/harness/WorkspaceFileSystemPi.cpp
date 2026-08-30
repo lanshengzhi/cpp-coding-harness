@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <dirent.h>
 #include <sstream>
 
 #include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -123,17 +125,37 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
         data.assign(reinterpret_cast<const char*>(bin.data()), bin.size());
     }
 
-    auto existing = read_existing_file(path);
-    auto resolved = resolve_addressed_path(path);
-    if (!resolved) {
-        return std::unexpected(util_error_to_file_error(resolved.error(), path));
+    const auto limit = kFileSystemCapacity.max_file_bytes;
+    auto present = exists(path);
+    if (!present) {
+        return std::unexpected(present.error());
     }
 
     std::string combined;
-    if (existing) {
-        combined = *existing + data;
+    if (*present) {
+        auto existing = read_existing_file_bounded(path, limit);
+        if (!existing) {
+            return std::unexpected(existing.error());
+        }
+        if (data.size() > limit - existing->size()) {
+            return std::unexpected(FileError{
+                    .code = FileErrorCode::ResourceLimit,
+                    .message = "append would exceed the filesystem result limit",
+                    .path = std::string{path},
+            });
+        }
+        combined.reserve(existing->size() + data.size());
+        combined = std::move(*existing);
+        combined.append(data);
     } else {
-        combined = data;
+        if (data.size() > limit) {
+            return std::unexpected(FileError{
+                    .code = FileErrorCode::ResourceLimit,
+                    .message = "append would exceed the filesystem result limit",
+                    .path = std::string{path},
+            });
+        }
+        combined = std::move(data);
     }
 
     auto result = write_file(path, combined, true);
@@ -150,23 +172,31 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
     }
 
     struct stat st {};
-    if (::lstat(resolved->c_str(), &st) != 0) {
-        if (errno == ENOENT) {
+    if (*resolved == root_) {
+        auto root_fd = open_workspace_root();
+        if (!root_fd || ::fstat(root_fd->get(), &st) != 0) {
             return std::unexpected(FileError{
                 FileErrorCode::NotFound,
                 "path not found: " + path,
                 std::string{path}});
         }
-        if (errno == EACCES) {
-            return std::unexpected(FileError{
-                FileErrorCode::PermissionDenied,
-                "permission denied: " + path,
-                std::string{path}});
+    } else {
+        auto parent_fd = open_parent_directory(*resolved, false);
+        if (!parent_fd) {
+            return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
         }
-        return std::unexpected(FileError{
-            FileErrorCode::Unknown,
-            "could not stat: " + path,
-            std::string{path}});
+        const auto filename = resolved->filename().string();
+        if (::fstatat(parent_fd->get(), filename.c_str(), &st, AT_SYMLINK_NOFOLLOW) != 0) {
+            if (errno == ENOENT) {
+                return std::unexpected(
+                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            }
+            if (errno == EACCES) {
+                return std::unexpected(
+                        FileError{FileErrorCode::PermissionDenied, "permission denied: " + path, std::string{path}});
+            }
+            return std::unexpected(FileError{FileErrorCode::Unknown, "could not stat: " + path, std::string{path}});
+        }
     }
 
     FileKind kind = FileKind::File;
@@ -194,45 +224,88 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
 
-    std::error_code ec;
-    auto status = std::filesystem::symlink_status(*resolved, ec);
-    if (ec) {
-        return std::unexpected(FileError{
-            FileErrorCode::NotFound,
-            "path not found: " + path,
-            std::string{path}});
+    support::UniqueFd directory_fd;
+    if (*resolved == root_) {
+        auto root_fd = open_workspace_root();
+        if (!root_fd) {
+            return std::unexpected(util_error_to_file_error(root_fd.error(), path));
+        }
+        directory_fd = std::move(*root_fd);
+    } else {
+        auto parent_fd = open_parent_directory(*resolved, false);
+        if (!parent_fd) {
+            return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
+        }
+        const auto filename = resolved->filename().string();
+        struct stat status{};
+        if (::fstatat(parent_fd->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+            if (errno == ENOENT) {
+                return std::unexpected(
+                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            }
+            return std::unexpected(FileError{
+                    FileErrorCode::PermissionDenied, "could not inspect directory: " + path, std::string{path}});
+        }
+        if (!S_ISDIR(status.st_mode)) {
+            return std::unexpected(
+                    FileError{FileErrorCode::NotDirectory, "not a directory: " + path, std::string{path}});
+        }
+        directory_fd.reset(
+                ::openat(parent_fd->get(), filename.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (!directory_fd) {
+            return std::unexpected(
+                    FileError{FileErrorCode::PermissionDenied, "could not open directory: " + path, std::string{path}});
+        }
     }
-    if (!std::filesystem::is_directory(status)) {
-        return std::unexpected(FileError{
-            FileErrorCode::NotDirectory,
-            "not a directory: " + path,
-            std::string{path}});
+
+    const int directory_number = directory_fd.release();
+    DIR* directory = ::fdopendir(directory_number);
+    if (!directory) {
+        support::UniqueFd failed_directory(directory_number);
+        return std::unexpected(
+                FileError{FileErrorCode::PermissionDenied, "could not read directory: " + path, std::string{path}});
+    }
+    const int listing_fd = ::dirfd(directory);
+    if (listing_fd < 0) {
+        (void)::closedir(directory);
+        return std::unexpected(
+                FileError{FileErrorCode::PermissionDenied, "could not read directory: " + path, std::string{path}});
     }
 
     std::vector<FileInfo> results;
     results.reserve(kFileSystemCapacity.max_directory_entries);
     std::size_t result_bytes{0};
-    for (const auto& entry : std::filesystem::directory_iterator(*resolved, ec)) {
-        if (ec) {
+    bool read_failed = false;
+    for (;;) {
+        errno = 0;
+        const auto* entry = ::readdir(directory);
+        if (!entry) {
+            read_failed = errno != 0;
             break;
         }
-        auto child_status = std::filesystem::symlink_status(entry.path(), ec);
-        if (ec) {
+        if (entry->d_name[0] == '.' &&
+                (entry->d_name[1] == '\0' || (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
+            continue;
+        }
+
+        struct stat status{};
+        if (::fstatat(listing_fd, entry->d_name, &status, AT_SYMLINK_NOFOLLOW) != 0) {
             continue;
         }
 
         FileKind kind = FileKind::File;
-        if (std::filesystem::is_directory(child_status)) {
+        if (S_ISDIR(status.st_mode)) {
             kind = FileKind::Directory;
-        } else if (std::filesystem::is_symlink(child_status)) {
+        } else if (S_ISLNK(status.st_mode)) {
             kind = FileKind::Symlink;
         }
 
-        const auto child_name = entry.path().filename().string();
-        const auto child_path = entry.path().string();
+        const std::string child_name{entry->d_name};
+        const auto child_path = (*resolved / child_name).string();
         const auto child_bytes = sizeof(FileInfo) + child_name.size() + child_path.size();
         if (results.size() >= kFileSystemCapacity.max_directory_entries ||
             child_bytes > kFileSystemCapacity.max_directory_result_bytes - result_bytes) {
+            (void)::closedir(directory);
             return std::unexpected(FileError{
                 .code = FileErrorCode::ResourceLimit,
                 .message = "directory result exceeds the filesystem result limit",
@@ -240,22 +313,20 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(con
             });
         }
 
-        std::uint64_t size = 0;
-        std::int64_t mtimeMs = 0;
-        struct stat st {};
-        if (::lstat(entry.path().c_str(), &st) == 0) {
-            size = static_cast<std::uint64_t>(st.st_size);
-            mtimeMs = static_cast<std::int64_t>(st.st_mtim.tv_sec) * 1000 +
-                      static_cast<std::int64_t>(st.st_mtim.tv_nsec) / 1'000'000;
-        }
         result_bytes += child_bytes;
         results.push_back(FileInfo{
-            .name = child_name,
-            .path = child_path,
-            .kind = kind,
-            .size = size,
-            .mtimeMs = mtimeMs,
+                .name = child_name,
+                .path = child_path,
+                .kind = kind,
+                .size = static_cast<std::uint64_t>(status.st_size),
+                .mtimeMs = static_cast<std::int64_t>(status.st_mtim.tv_sec) * 1000 +
+                           static_cast<std::int64_t>(status.st_mtim.tv_nsec) / 1'000'000,
         });
+    }
+    const bool close_failed = ::closedir(directory) != 0;
+    if (read_failed || close_failed) {
+        return std::unexpected(
+                FileError{FileErrorCode::Unknown, "could not read directory: " + path, std::string{path}});
     }
     return results;
 }
@@ -273,7 +344,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::canonicalPath(const s
             "could not canonicalize: " + path,
             std::string{path}});
     }
-    if (!inside(canonical)) {
+    if (!inside_lexically(canonical)) {
         return std::unexpected(FileError{
             FileErrorCode::Invalid,
             "canonical path escapes workspace: " + path,
@@ -287,15 +358,36 @@ std::expected<bool, FileError> WorkspaceFileSystem::exists(const std::string& pa
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
-    std::error_code ec;
-    auto status = std::filesystem::symlink_status(*resolved, ec);
-    if (ec && ec.default_error_condition() != std::errc::no_such_file_or_directory) {
+
+    if (*resolved == root_) {
+        auto root_fd = open_workspace_root();
+        if (!root_fd) {
+            return std::unexpected(util_error_to_file_error(root_fd.error(), path));
+        }
+        return true;
+    }
+
+    int parent_errno = 0;
+    auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
+    if (!parent_fd) {
+        if (parent_errno == ENOENT) {
+            return false;
+        }
+        return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
+    }
+
+    struct stat status{};
+    const auto filename = resolved->filename().string();
+    if (::fstatat(parent_fd->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT || errno == ENOTDIR) {
+            return false;
+        }
         return std::unexpected(FileError{
             FileErrorCode::Invalid,
             "could not check path: " + path,
             std::string{path}});
     }
-    return std::filesystem::exists(status);
+    return true;
 }
 
 std::expected<void, FileError> WorkspaceFileSystem::createDir(
@@ -305,13 +397,16 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
-    if (recursive) {
-        auto created = create_parent_directories(*resolved);
-        if (!created) {
-            return std::unexpected(util_error_to_file_error(created.error(), path));
-        }
+    if (*resolved == root_) {
+        return {};
     }
-    if (::mkdir(resolved->c_str(), 0755) != 0) {
+
+    auto parent_fd = open_parent_directory(*resolved, recursive);
+    if (!parent_fd) {
+        return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
+    }
+    const auto filename = resolved->filename().string();
+    if (::mkdirat(parent_fd->get(), filename.c_str(), 0755) != 0) {
         if (errno == EEXIST) {
             return {};
         }
@@ -330,68 +425,56 @@ std::expected<void, FileError> WorkspaceFileSystem::remove(
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
-
-    std::error_code ec;
-    auto canonical = std::filesystem::weakly_canonical(*resolved, ec);
-    if (ec) {
-        return std::unexpected(FileError{
-            .code = FileErrorCode::Invalid,
-            .message = "could not resolve path: " + path,
-            .path = std::string{path},
-        });
-    }
-    if (canonical == root_) {
+    if (*resolved == root_) {
         return std::unexpected(FileError{
             FileErrorCode::Invalid,
             "cannot remove workspace root",
             std::string{path}});
     }
 
-    auto status = std::filesystem::symlink_status(*resolved, ec);
-    if (ec) {
-        return std::unexpected(FileError{
-            FileErrorCode::NotFound,
-            "path not found: " + path,
-            std::string{path}});
+    auto parent_fd = open_parent_directory(*resolved, false);
+    if (!parent_fd) {
+        return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
     }
 
-    if (std::filesystem::is_symlink(status)) {
-        std::filesystem::remove(*resolved, ec);
-        if (ec) {
+    const auto filename = resolved->filename().string();
+    struct stat status{};
+    if (::fstatat(parent_fd->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT) {
+            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+        }
+        return std::unexpected(
+                FileError{FileErrorCode::PermissionDenied, "could not inspect path: " + path, std::string{path}});
+    }
+
+    if (S_ISDIR(status.st_mode) && recursive) {
+        support::UniqueFd directory_fd(
+                ::openat(parent_fd->get(), filename.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (!directory_fd) {
+            if (errno == ENOENT) {
+                return std::unexpected(
+                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            }
+            return std::unexpected(
+                    FileError{FileErrorCode::PermissionDenied, "could not open directory: " + path, std::string{path}});
+        }
+        if (!remove_directory_contents(directory_fd.get())) {
+            return std::unexpected(FileError{FileErrorCode::PermissionDenied,
+                    "could not remove directory contents: " + path,
+                    std::string{path}});
+        }
+        if (::unlinkat(parent_fd->get(), filename.c_str(), AT_REMOVEDIR) != 0) {
             return std::unexpected(FileError{
-                FileErrorCode::PermissionDenied,
-                "could not remove symlink: " + ec.message(),
-                std::string{path}});
+                    FileErrorCode::PermissionDenied, "could not remove directory: " + path, std::string{path}});
         }
         return {};
     }
 
-    if (std::filesystem::is_directory(status) && recursive) {
-        for (const auto& entry : std::filesystem::directory_iterator(*resolved, ec)) {
-            if (ec) {
-                break;
-            }
-            auto child = entry.path().string();
-            auto child_status = std::filesystem::symlink_status(entry.path(), ec);
-            if (!ec && std::filesystem::is_symlink(child_status)) {
-                std::filesystem::remove(entry.path(), ec);
-            } else if (!ec && std::filesystem::is_directory(child_status)) {
-                auto child_result = remove(entry.path().lexically_relative(root_).string(), true);
-                if (!child_result) {
-                    return child_result;
-                }
-            } else {
-                std::filesystem::remove(entry.path(), ec);
-            }
-        }
-    }
-
-    std::filesystem::remove(*resolved, ec);
-    if (ec) {
-        return std::unexpected(FileError{
-            FileErrorCode::PermissionDenied,
-            "could not remove: " + ec.message(),
-            std::string{path}});
+    const int flags = S_ISDIR(status.st_mode) ? AT_REMOVEDIR : 0;
+    if (::unlinkat(parent_fd->get(), filename.c_str(), flags) != 0) {
+        return std::unexpected(FileError{FileErrorCode::PermissionDenied,
+                "could not remove: " + std::string(std::strerror(errno)),
+                std::string{path}});
     }
     return {};
 }

@@ -164,11 +164,10 @@ template <typename T, typename Operation>
                                     state->outcome = std::unexpected(
                                         aborted_file_error(std::move(path)));
                                 } else {
+                                    // Once the operation starts, return its actual outcome. In
+                                    // particular, cancellation cannot rewrite a committed write,
+                                    // remove, or temporary-resource creation as Aborted.
                                     state->outcome = operation(*sync);
-                                    if (stop_token.stop_requested()) {
-                                        state->outcome = std::unexpected(aborted_file_error(
-                                            std::move(path), true));
-                                    }
                                 }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                             } catch (const std::exception& error) {

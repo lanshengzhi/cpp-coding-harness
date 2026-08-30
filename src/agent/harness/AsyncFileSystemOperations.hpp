@@ -16,7 +16,9 @@
 namespace cch::harness::filesystem_detail {
 
 /// Conservative per-admitted-operation byte charge covering retained result
-/// state that is not derivable from request bytes alone (ADR 0040 admission).
+/// state (read/list buffers, process results) that is not derivable from the
+/// request bytes alone, so the runtime's byte bound stays conservative
+/// (ADR 0040 admission/overload).
 inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
 
 [[nodiscard]] inline FileError aborted_file_error(
@@ -130,11 +132,10 @@ template <typename T, typename Operation>
                                     state->outcome = std::unexpected(
                                         aborted_file_error(std::move(path)));
                                 } else {
+                                    // Once the operation starts, return its actual outcome. In
+                                    // particular, cancellation cannot rewrite a committed write,
+                                    // remove, or temporary-resource creation as Aborted.
                                     state->outcome = operation(*sync);
-                                    if (stop_token.stop_requested()) {
-                                        state->outcome = std::unexpected(aborted_file_error(
-                                            std::move(path), true));
-                                    }
                                 }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                             } catch (const std::exception& error) {

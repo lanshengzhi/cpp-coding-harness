@@ -75,10 +75,17 @@ public:
 private:
     friend class SyncLocalExecutionEnv;
 
+    struct TemporaryResource final {
+        std::string name;
+        support::UniqueFd descriptor;
+        bool directory{false};
+    };
+
     struct TemporaryState final {
         std::mutex mutex;
         bool cleanup_started{false};
-        std::vector<std::filesystem::path> resources;
+        support::UniqueFd temporary_directory;
+        std::vector<TemporaryResource> resources;
     };
 
     [[nodiscard]] static support::Error workspace_error(std::string message);
@@ -86,13 +93,13 @@ private:
 
     [[nodiscard]] support::Expected<support::UniqueFd> open_workspace_root() const;
     [[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
-        const std::filesystem::path& target,
-        bool create_missing) const;
+            const std::filesystem::path& target, bool create_missing, int* failure_errno = nullptr) const;
     [[nodiscard]] support::Expected<void> create_parent_directories(const std::filesystem::path& target) const;
+    [[nodiscard]] bool remove_directory_contents(int directory_fd) const noexcept;
     [[nodiscard]] std::expected<std::string, FileError> read_existing_file_bounded(
         const std::string& requested,
         std::size_t max_bytes) const;
-    [[nodiscard]] bool track_temporary_resource(const std::filesystem::path& path) const;
+    [[nodiscard]] support::Expected<void> ensure_temporary_directory() const;
 
     /// Remove this instance's tracked temporary resources only. Errors are
     /// intentionally ignored so cleanup remains best-effort and idempotent.

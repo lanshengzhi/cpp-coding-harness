@@ -29,22 +29,38 @@ namespace {
         component != "." && component != "..";
 }
 
-[[nodiscard]] bool is_missing(const std::error_code& error) {
-    return error == std::errc::no_such_file_or_directory;
+[[nodiscard]] bool same_object(const struct stat& left, const struct stat& right) noexcept {
+    return left.st_dev == right.st_dev && left.st_ino == right.st_ino &&
+           (left.st_mode & S_IFMT) == (right.st_mode & S_IFMT);
 }
 
 } // namespace
 
-bool WorkspaceFileSystem::track_temporary_resource(const std::filesystem::path& path) const {
-    if (!temporary_state_ || !inside_lexically(path)) {
-        return false;
+support::Expected<void> WorkspaceFileSystem::ensure_temporary_directory() const {
+    if (temporary_state_->temporary_directory) {
+        return {};
     }
-    std::lock_guard lock(temporary_state_->mutex);
-    if (temporary_state_->cleanup_started) {
-        return false;
+
+    auto root_fd = open_workspace_root();
+    if (!root_fd) {
+        return std::unexpected(root_fd.error());
     }
-    temporary_state_->resources.push_back(path);
-    return true;
+
+    support::UniqueFd directory(::openat(root_fd->get(), ".cch-tmp", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    if (!directory && errno == ENOENT) {
+        if (::mkdirat(root_fd->get(), ".cch-tmp", 0700) != 0 && errno != EEXIST) {
+            return std::unexpected(
+                    workspace_error("could not create temporary directory: " + std::string(std::strerror(errno))));
+        }
+        directory.reset(::openat(root_fd->get(), ".cch-tmp", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    }
+    if (!directory) {
+        return std::unexpected(
+                workspace_error("could not open temporary directory: " + std::string(std::strerror(errno))));
+    }
+
+    temporary_state_->temporary_directory = std::move(directory);
+    return {};
 }
 
 void WorkspaceFileSystem::cleanup_temporary_resources() const noexcept {
@@ -52,7 +68,7 @@ void WorkspaceFileSystem::cleanup_temporary_resources() const noexcept {
         return;
     }
 
-    std::vector<std::filesystem::path> resources;
+    std::vector<TemporaryResource> resources;
     {
         std::lock_guard lock(temporary_state_->mutex);
         if (temporary_state_->cleanup_started) {
@@ -63,23 +79,47 @@ void WorkspaceFileSystem::cleanup_temporary_resources() const noexcept {
         temporary_state_->resources.clear();
     }
 
-    // Only exact paths recorded by this WorkspaceFileSystem are considered.
-    // In particular, the shared `.cch-tmp` directory itself is never swept.
+    const auto& directory = temporary_state_->temporary_directory;
+    if (!directory) {
+        return;
+    }
+
     for (auto iterator = resources.rbegin(); iterator != resources.rend(); ++iterator) {
-        const auto& resource = *iterator;
-        if (!inside_lexically(resource)) {
+        auto& resource = *iterator;
+        if (!resource.descriptor) {
             continue;
         }
-        std::error_code ec;
-        const auto status = std::filesystem::symlink_status(resource, ec);
-        if (ec) {
+
+        struct stat owned_status{};
+        if (::fstat(resource.descriptor.get(), &owned_status) != 0) {
             continue;
         }
-        if (std::filesystem::is_directory(status) && !std::filesystem::is_symlink(status)) {
-            std::filesystem::remove_all(resource, ec);
-        } else {
-            std::filesystem::remove(resource, ec);
+        struct stat current_status{};
+        if (::fstatat(directory.get(), resource.name.c_str(), &current_status, AT_SYMLINK_NOFOLLOW) != 0 ||
+                !same_object(owned_status, current_status)) {
+            continue;
         }
+
+        if (resource.directory) {
+            support::UniqueFd resource_directory(
+                    ::openat(directory.get(), resource.name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+            if (!resource_directory) {
+                continue;
+            }
+            struct stat opened_status{};
+            if (::fstat(resource_directory.get(), &opened_status) != 0 || !same_object(owned_status, opened_status)) {
+                continue;
+            }
+            (void)remove_directory_contents(resource_directory.get());
+        }
+
+        struct stat final_status{};
+        if (::fstatat(directory.get(), resource.name.c_str(), &final_status, AT_SYMLINK_NOFOLLOW) != 0 ||
+                !same_object(owned_status, final_status)) {
+            continue;
+        }
+        const int flags = resource.directory ? AT_REMOVEDIR : 0;
+        (void)::unlinkat(directory.get(), resource.name.c_str(), flags);
     }
 }
 
@@ -91,67 +131,44 @@ std::expected<std::string, FileError> WorkspaceFileSystem::createTempDir(
             FileErrorCode::Invalid,
             "temporary directory prefix is not a filename component"));
     }
-    {
-        std::lock_guard lock(temporary_state_->mutex);
-        if (temporary_state_->cleanup_started) {
-            return std::unexpected(temporary_error(
-                FileErrorCode::Aborted,
-                "temporary-resource cleanup has already started"));
-        }
+
+    std::unique_lock lock(temporary_state_->mutex);
+    if (temporary_state_->cleanup_started) {
+        return std::unexpected(
+                temporary_error(FileErrorCode::Aborted, "temporary-resource cleanup has already started"));
+    }
+    if (auto ensured = ensure_temporary_directory(); !ensured) {
+        return std::unexpected(temporary_error(FileErrorCode::PermissionDenied, ensured.error().message));
     }
 
-    const auto tmp_area = root_ / ".cch-tmp";
-    std::error_code ec;
-    auto area_status = std::filesystem::symlink_status(tmp_area, ec);
-    if (ec && !is_missing(ec)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::PermissionDenied,
-            "could not inspect temporary directory: " + ec.message()));
-    }
-    if (!ec && std::filesystem::is_symlink(area_status)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::PermissionDenied,
-            "refusing to use a symlink as the temporary directory"));
-    }
-    if (ec || !std::filesystem::exists(area_status)) {
-        if (::mkdir(tmp_area.c_str(), 0700) != 0 && errno != EEXIST) {
+    const int directory_fd = temporary_state_->temporary_directory.get();
+    for (int index = 0; index < 1000; ++index) {
+        const auto name = pfx + std::to_string(index);
+        if (::mkdirat(directory_fd, name.c_str(), 0700) != 0) {
+            if (errno == EEXIST) {
+                continue;
+            }
             return std::unexpected(temporary_error(
                 FileErrorCode::PermissionDenied,
                 "could not create temporary directory: " + std::string(std::strerror(errno))));
         }
-        area_status = std::filesystem::symlink_status(tmp_area, ec);
-    }
-    if (ec || !std::filesystem::is_directory(area_status) || std::filesystem::is_symlink(area_status)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::PermissionDenied,
-            "temporary path is not a directory"));
-    }
 
-    for (int index = 0; index < 1000; ++index) {
-        const auto candidate = tmp_area / (pfx + std::to_string(index));
-        const auto status = std::filesystem::symlink_status(candidate, ec);
-        if (!ec && std::filesystem::exists(status)) {
-            continue;
-        }
-        if (ec && !is_missing(ec)) {
-            return std::unexpected(temporary_error(
-                FileErrorCode::Unknown,
-                "could not inspect temporary directory entry: " + ec.message()));
-        }
-        if (::mkdir(candidate.c_str(), 0700) != 0) {
-            if (errno == EEXIST) {
+        support::UniqueFd descriptor(
+                ::openat(directory_fd, name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (!descriptor) {
+            if (errno == ENOENT || errno == ELOOP) {
                 continue;
             }
-            continue;
+            return std::unexpected(temporary_error(FileErrorCode::PermissionDenied,
+                    "could not open temporary directory: " + std::string(std::strerror(errno))));
         }
-        if (!track_temporary_resource(candidate)) {
-            std::error_code cleanup_error;
-            std::filesystem::remove(candidate, cleanup_error);
-            return std::unexpected(temporary_error(
-                FileErrorCode::Aborted,
-                "temporary-resource cleanup started before creation completed"));
-        }
-        return candidate.string();
+
+        temporary_state_->resources.push_back(TemporaryResource{
+                .name = name,
+                .descriptor = std::move(descriptor),
+                .directory = true,
+        });
+        return (root_ / ".cch-tmp" / name).string();
     }
     return std::unexpected(temporary_error(
         FileErrorCode::Unknown,
@@ -168,62 +185,35 @@ std::expected<std::string, FileError> WorkspaceFileSystem::createTempFile(
             FileErrorCode::Invalid,
             "temporary file prefix and suffix must be filename components"));
     }
-    {
-        std::lock_guard lock(temporary_state_->mutex);
-        if (temporary_state_->cleanup_started) {
-            return std::unexpected(temporary_error(
-                FileErrorCode::Aborted,
-                "temporary-resource cleanup has already started"));
-        }
+
+    std::unique_lock lock(temporary_state_->mutex);
+    if (temporary_state_->cleanup_started) {
+        return std::unexpected(
+                temporary_error(FileErrorCode::Aborted, "temporary-resource cleanup has already started"));
+    }
+    if (auto ensured = ensure_temporary_directory(); !ensured) {
+        return std::unexpected(temporary_error(FileErrorCode::PermissionDenied, ensured.error().message));
     }
 
-    const auto tmp_area = root_ / ".cch-tmp";
-    std::error_code ec;
-    auto area_status = std::filesystem::symlink_status(tmp_area, ec);
-    if (ec && !is_missing(ec)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::PermissionDenied,
-            "could not inspect temporary directory: " + ec.message()));
-    }
-    if (!ec && std::filesystem::is_symlink(area_status)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::PermissionDenied,
-            "refusing to use a symlink as the temporary directory"));
-    }
-    if (ec || !std::filesystem::exists(area_status)) {
-        if (::mkdir(tmp_area.c_str(), 0700) != 0 && errno != EEXIST) {
-            return std::unexpected(temporary_error(
-                FileErrorCode::PermissionDenied,
-                "could not create temporary directory: " + std::string(std::strerror(errno))));
-        }
-        area_status = std::filesystem::symlink_status(tmp_area, ec);
-    }
-    if (ec || !std::filesystem::is_directory(area_status) || std::filesystem::is_symlink(area_status)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::PermissionDenied,
-            "temporary path is not a directory"));
-    }
-
+    const int directory_fd = temporary_state_->temporary_directory.get();
     for (int index = 0; index < 1000; ++index) {
-        const auto candidate = tmp_area / (pfx + std::to_string(index) + sfx);
-        support::UniqueFd fd(::open(
-            candidate.c_str(),
-            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
-            0600));
-        if (!fd) {
-            if (errno == EEXIST) {
+        const auto name = pfx + std::to_string(index) + sfx;
+        support::UniqueFd descriptor(
+                ::openat(directory_fd, name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
+        if (!descriptor) {
+            if (errno == EEXIST || errno == ELOOP) {
                 continue;
             }
-            continue;
+            return std::unexpected(temporary_error(FileErrorCode::PermissionDenied,
+                    "could not create temporary file: " + std::string(std::strerror(errno))));
         }
-        if (!track_temporary_resource(candidate)) {
-            std::error_code cleanup_error;
-            std::filesystem::remove(candidate, cleanup_error);
-            return std::unexpected(temporary_error(
-                FileErrorCode::Aborted,
-                "temporary-resource cleanup started before creation completed"));
-        }
-        return candidate.string();
+
+        temporary_state_->resources.push_back(TemporaryResource{
+                .name = name,
+                .descriptor = std::move(descriptor),
+                .directory = false,
+        });
+        return (root_ / ".cch-tmp" / name).string();
     }
     return std::unexpected(temporary_error(
         FileErrorCode::Unknown,

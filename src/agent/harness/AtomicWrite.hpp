@@ -4,9 +4,7 @@
 #include "PosixWrite.hpp"
 #include "support/UniqueFd.hpp"
 
-#include <filesystem>
 #include <string>
-#include <system_error>
 
 #include <cerrno>
 #include <cstring>
@@ -16,67 +14,71 @@
 
 namespace cch::harness {
 
-inline std::filesystem::path atomic_temp_path(const std::filesystem::path& target, int suffix) {
-    return target.parent_path() / ("." + target.filename().string() + ".tmp-" + std::to_string(suffix));
-}
-
 inline support::Error write_error(std::string message) {
     return support::make_error(support::ErrorCode::Workspace, message, message);
 }
 
-inline support::ExpectedVoid write_atomic_file(const std::filesystem::path& target, const std::string& content) {
-    std::error_code ec;
-    std::filesystem::path temp;
+[[nodiscard]] inline bool atomic_write_same_object(const struct stat& left, const struct stat& right) noexcept {
+    return left.st_dev == right.st_dev && left.st_ino == right.st_ino &&
+           (left.st_mode & S_IFMT) == (right.st_mode & S_IFMT);
+}
+
+inline void unlink_atomic_temp_if_owned(
+        int directory_fd, const std::string& filename, const struct stat& expected) noexcept {
+    struct stat current{};
+    if (::fstatat(directory_fd, filename.c_str(), &current, AT_SYMLINK_NOFOLLOW) != 0 ||
+            !atomic_write_same_object(expected, current)) {
+        return;
+    }
+    (void)::unlinkat(directory_fd, filename.c_str(), 0);
+}
+
+/// Atomically replace a file below an already-opened, no-follow directory.
+/// The descriptor keeps every parent component anchored while candidate
+/// inspection, creation, and replacement take place.
+inline support::ExpectedVoid write_atomic_file_at(
+        int directory_fd, const std::string& target_filename, const std::string& content) {
     mode_t mode = S_IRUSR | S_IWUSR;
     struct stat existing_status {};
-    if (::lstat(target.c_str(), &existing_status) == 0) {
+    if (::fstatat(directory_fd, target_filename.c_str(), &existing_status, AT_SYMLINK_NOFOLLOW) == 0) {
+        if (S_ISLNK(existing_status.st_mode)) {
+            return std::unexpected(write_error("refusing to write through final symlink"));
+        }
         mode = existing_status.st_mode & 0777;
+    } else if (errno != ENOENT) {
+        return std::unexpected(write_error("could not inspect target: " + std::string(std::strerror(errno))));
     }
 
+    std::string temp_filename;
     for (int suffix = 0; suffix < 100; ++suffix) {
-        auto candidate = atomic_temp_path(target, suffix);
-        auto status = std::filesystem::symlink_status(candidate, ec);
-        if (!ec && std::filesystem::is_symlink(status)) {
+        auto candidate = "." + target_filename + ".tmp-" + std::to_string(suffix);
+        struct stat candidate_status{};
+        if (::fstatat(directory_fd, candidate.c_str(), &candidate_status, AT_SYMLINK_NOFOLLOW) == 0) {
             continue;
         }
-        if (!ec && std::filesystem::exists(status)) {
-            continue;
+        if (errno != ENOENT) {
+            return std::unexpected(
+                    write_error("could not inspect temporary file: " + std::string(std::strerror(errno))));
         }
-        if (ec && status.type() != std::filesystem::file_type::not_found) {
-            return std::unexpected(write_error("could not inspect temporary file: " + ec.message()));
-        }
-        temp = candidate;
+        temp_filename = std::move(candidate);
         break;
     }
-    if (temp.empty()) {
+    if (temp_filename.empty()) {
         return std::unexpected(write_error("could not allocate temporary file for atomic write"));
     }
 
-    auto parent = target.parent_path();
-    if (parent.empty()) {
-        parent = ".";
-    }
-    int dir_flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
-#ifdef O_NOFOLLOW
-    dir_flags |= O_NOFOLLOW;
-#endif
-    const support::UniqueFd dir_fd(::open(parent.c_str(), dir_flags));
-    if (!dir_fd) {
-        return std::unexpected(write_error("could not open target parent directory: " + std::string(std::strerror(errno))));
-    }
-
-    auto temp_filename = temp.filename().string();
-    int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
-#ifdef O_NOFOLLOW
-    flags |= O_NOFOLLOW;
-#endif
-    support::UniqueFd file_fd(::openat(dir_fd.get(), temp_filename.c_str(), flags, mode));
+    const int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW;
+    support::UniqueFd file_fd(::openat(directory_fd, temp_filename.c_str(), flags, mode));
     if (!file_fd) {
         return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }
+    struct stat temporary_status{};
+    if (::fstat(file_fd.get(), &temporary_status) != 0) {
+        return std::unexpected(write_error("could not inspect temporary file: " + std::string(std::strerror(errno))));
+    }
     if (auto persisted = write_all_fsync(file_fd.get(), content); !persisted) {
         const auto message = std::string(std::strerror(persisted.error().error_number));
-        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
+        unlink_atomic_temp_if_owned(directory_fd, temp_filename, temporary_status);
         if (persisted.error().kind == PosixWriteErrorKind::Write) {
             return std::unexpected(write_error("could not write temporary file: " + message));
         }
@@ -84,14 +86,19 @@ inline support::ExpectedVoid write_atomic_file(const std::filesystem::path& targ
     }
     if (file_fd.close() != 0) {
         const auto message = std::string(std::strerror(errno));
-        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
+        unlink_atomic_temp_if_owned(directory_fd, temp_filename, temporary_status);
         return std::unexpected(write_error("could not close temporary file: " + message));
     }
 
-    auto target_filename = target.filename().string();
-    if (::renameat(dir_fd.get(), temp_filename.c_str(), dir_fd.get(), target_filename.c_str()) != 0) {
+    struct stat target_status{};
+    if (::fstatat(directory_fd, target_filename.c_str(), &target_status, AT_SYMLINK_NOFOLLOW) == 0 &&
+            S_ISLNK(target_status.st_mode)) {
+        unlink_atomic_temp_if_owned(directory_fd, temp_filename, temporary_status);
+        return std::unexpected(write_error("refusing to write through final symlink"));
+    }
+    if (::renameat(directory_fd, temp_filename.c_str(), directory_fd, target_filename.c_str()) != 0) {
         const auto message = std::string(std::strerror(errno));
-        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
+        unlink_atomic_temp_if_owned(directory_fd, temp_filename, temporary_status);
         return std::unexpected(write_error("could not replace target atomically: " + message));
     }
     return {};
