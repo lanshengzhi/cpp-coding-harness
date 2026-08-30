@@ -740,11 +740,20 @@ namespace {
     return best;
 }
 
+/// Resolve only an explicit capability supplied by composition. Discovered
+/// roots are deliberately not consulted here: an explicit absolute path is
+/// authorized by its matching prefix, never by being a sibling beneath a
+/// workspace, ancestor, or git capability.
 [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> filesystem_for_path(
         const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
-    if (auto explicit_filesystem = explicit_filesystem_for(filesystems, path)) {
-        return explicit_filesystem;
-    }
+    return explicit_filesystem_for(filesystems, path);
+}
+
+/// Resolve a path discovered from an already-authorized resource root. This
+/// separate helper keeps discovery traversal from becoming an authorization
+/// fallback for explicit inputs.
+[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> discovered_filesystem_for_path(
+        const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
     const auto candidate = normalized_absolute(path);
     std::shared_ptr<harness::AsyncFileSystem> best;
     std::size_t best_length{0};
@@ -772,13 +781,7 @@ namespace {
 
 [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> explicit_resource_filesystem_for(
         const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
-    if (auto explicit_filesystem = explicit_filesystem_for(filesystems, path)) {
-        return explicit_filesystem;
-    }
-    if (filesystems.workspace && path_is_under(filesystems.workspace->workspace(), normalized_absolute(path))) {
-        return filesystems.workspace;
-    }
-    return {};
+    return filesystem_for_path(filesystems, path);
 }
 
 [[nodiscard]] harness::FileError unauthorized_resource_path(const std::filesystem::path& path) {
@@ -787,6 +790,137 @@ namespace {
             .message = "resource path is not authorized",
             .path = path.string(),
     };
+}
+
+[[nodiscard]] harness::FileError invalid_filesystem_collection(
+        std::string message, std::optional<std::string> path = std::nullopt) {
+    return harness::FileError{
+            .code = harness::FileErrorCode::Invalid,
+            .message = std::move(message),
+            .path = std::move(path),
+    };
+}
+
+[[nodiscard]] std::optional<harness::FileError> validate_resource_filesystems(
+        const ProjectResourceFileSystems& filesystems, const ProjectResourceLoadingRequest& request) {
+    if (!filesystems.workspace) {
+        return invalid_filesystem_collection("project resource loading requires a workspace filesystem");
+    }
+
+    const auto workspace_root = normalized_absolute(filesystems.workspace->workspace());
+    const auto requested_workspace =
+            normalized_absolute(request.workspace.empty() ? workspace_root : request.workspace);
+    if (workspace_root != requested_workspace) {
+        return invalid_filesystem_collection(
+                "workspace filesystem root does not match the resource request", workspace_root.string());
+    }
+
+    const auto check_labeled_root = [](const std::shared_ptr<harness::AsyncFileSystem>& filesystem,
+                                            const std::optional<std::filesystem::path>& requested,
+                                            std::string_view label) -> std::optional<harness::FileError> {
+        if (!filesystem) {
+            return std::nullopt;
+        }
+        if (!requested || requested->empty()) {
+            return invalid_filesystem_collection(
+                    std::string{label} + " filesystem supplied without a matching request path",
+                    normalized_absolute(filesystem->workspace()).string());
+        }
+        const auto actual = normalized_absolute(filesystem->workspace());
+        const auto expected = normalized_absolute(*requested);
+        if (actual != expected) {
+            return invalid_filesystem_collection(
+                    std::string{label} + " filesystem root does not match the resource request", actual.string());
+        }
+        return std::nullopt;
+    };
+
+    if (auto invalid = check_labeled_root(
+                filesystems.agent_config_directory, request.agent_config_directory, "agent config");
+            invalid) {
+        return invalid;
+    }
+
+    const auto home = normalized_absolute(request.home_directory.value_or(home_directory()));
+    const auto expected_user_agents_root = home / ".agents";
+    if (filesystems.user_agents_root) {
+        const auto actual = normalized_absolute(filesystems.user_agents_root->workspace());
+        if (actual != expected_user_agents_root) {
+            return invalid_filesystem_collection(
+                    "user agents filesystem root does not match the resource request", actual.string());
+        }
+    }
+
+    const auto check_ancestor_roots = [&](const auto& roots,
+                                              std::string_view label) -> std::optional<harness::FileError> {
+        for (const auto& filesystem : roots) {
+            if (!filesystem) {
+                return invalid_filesystem_collection(std::string{label} + " contains an empty filesystem capability");
+            }
+            const auto root = normalized_absolute(filesystem->workspace());
+            if (!path_is_under(root, workspace_root)) {
+                return invalid_filesystem_collection(
+                        std::string{label} + " filesystem root is unrelated to the workspace", root.string());
+            }
+        }
+        return std::nullopt;
+    };
+    if (auto invalid = check_ancestor_roots(filesystems.ancestor_roots, "ancestor roots"); invalid) {
+        return invalid;
+    }
+    // A linked worktree's common git repository is often a sibling of the
+    // worktree rather than one of its lexical ancestors. Its capability is
+    // still composition-authorized, so validate presence without imposing
+    // the ancestor relationship used by context roots.
+    for (const auto& filesystem : filesystems.git_roots) {
+        if (!filesystem) {
+            return invalid_filesystem_collection("git roots contains an empty filesystem capability");
+        }
+    }
+
+    std::vector<std::filesystem::path> requested_explicit_paths;
+    const auto add_requested_path = [&](std::string_view raw) {
+        if (raw.empty()) {
+            return;
+        }
+        const auto input = std::filesystem::path{raw};
+        requested_explicit_paths.push_back(normalized_absolute(input.is_absolute() ? input : workspace_root / input));
+    };
+    for (const auto& path : request.skill_paths) {
+        add_requested_path(path);
+    }
+    for (const auto& path : request.theme_paths) {
+        add_requested_path(path);
+    }
+    for (const auto& input : request.explicit_prompt_templates) {
+        add_requested_path(input.path);
+    }
+    if (request.system_prompt && !request.system_prompt->empty()) {
+        add_requested_path(*request.system_prompt);
+    }
+    for (const auto& input : request.append_system_prompt) {
+        add_requested_path(input);
+    }
+
+    for (const auto& authorized : filesystems.explicit_paths) {
+        if (!authorized.filesystem || authorized.path.empty()) {
+            return invalid_filesystem_collection("explicit resource authorization is incomplete");
+        }
+        const auto prefix = normalized_absolute(authorized.path);
+        const auto filesystem_root = normalized_absolute(authorized.filesystem->workspace());
+        if (!path_is_under(filesystem_root, prefix)) {
+            return invalid_filesystem_collection(
+                    "explicit resource authorization path is outside its filesystem root", prefix.string());
+        }
+        const bool matches_request = std::any_of(requested_explicit_paths.begin(),
+                requested_explicit_paths.end(),
+                [&prefix](const auto& requested) { return path_is_under(prefix, requested); });
+        if (!matches_request) {
+            return invalid_filesystem_collection(
+                    "explicit resource authorization has no matching request path", prefix.string());
+        }
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::vector<std::shared_ptr<harness::AsyncFileSystem>> ordered_context_filesystems(
@@ -818,113 +952,12 @@ namespace {
     return roots;
 }
 
-class SyncAsyncFileSystemAdapter final : public harness::AsyncFileSystem {
-public:
-    explicit SyncAsyncFileSystemAdapter(harness::WorkspaceFileSystem filesystem) : filesystem_(std::move(filesystem)) {}
-
-    [[nodiscard]] const std::filesystem::path& workspace() const override { return filesystem_.root(); }
-
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> absolutePath(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<std::string>(path, stop_token, [&] { return filesystem_.absolutePath(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> joinPath(
-            std::vector<std::string> parts, std::stop_token stop_token) override {
-        return immediate<std::string>(std::nullopt, stop_token, [&] { return filesystem_.joinPath(parts); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> readTextFile(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<std::string>(path, stop_token, [&] { return filesystem_.readTextFile(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(
-            std::string path, std::optional<int> max_lines, std::stop_token stop_token) override {
-        return immediate<std::vector<std::string>>(
-                path, stop_token, [&] { return filesystem_.readTextLines(path, max_lines); });
-    }
-
-    [[nodiscard]] support::AsyncResult<harness::BinaryData, harness::FileError> readBinaryFile(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<harness::BinaryData>(path, stop_token, [&] { return filesystem_.readBinaryFile(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<void, harness::FileError> writeFile(
-            std::string path, harness::WriteContent content, std::stop_token stop_token) override {
-        return immediate<void>(path, stop_token, [&] { return filesystem_.writeFile(path, content); });
-    }
-
-    [[nodiscard]] support::AsyncResult<void, harness::FileError> appendFile(
-            std::string path, harness::WriteContent content, std::stop_token stop_token) override {
-        return immediate<void>(path, stop_token, [&] { return filesystem_.appendFile(path, content); });
-    }
-
-    [[nodiscard]] support::AsyncResult<harness::FileInfo, harness::FileError> fileInfo(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<harness::FileInfo>(path, stop_token, [&] { return filesystem_.fileInfo(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::vector<harness::FileInfo>, harness::FileError> listDir(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<std::vector<harness::FileInfo>>(path, stop_token, [&] { return filesystem_.listDir(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> canonicalPath(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<std::string>(path, stop_token, [&] { return filesystem_.canonicalPath(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<bool, harness::FileError> exists(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<bool>(path, stop_token, [&] { return filesystem_.exists(path); });
-    }
-
-    [[nodiscard]] support::AsyncResult<void, harness::FileError> createDir(
-            std::string path, bool recursive, std::stop_token stop_token) override {
-        return immediate<void>(path, stop_token, [&] { return filesystem_.createDir(path, recursive); });
-    }
-
-    [[nodiscard]] support::AsyncResult<void, harness::FileError> remove(
-            std::string path, bool recursive, std::stop_token stop_token) override {
-        return immediate<void>(path, stop_token, [&] { return filesystem_.remove(path, recursive); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> createTempDir(
-            std::optional<std::string> prefix, std::stop_token stop_token) override {
-        return immediate<std::string>(std::nullopt, stop_token, [&] { return filesystem_.createTempDir(prefix); });
-    }
-
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> createTempFile(
-            std::optional<std::string> prefix, std::optional<std::string> suffix, std::stop_token stop_token) override {
-        return immediate<std::string>(
-                std::nullopt, stop_token, [&] { return filesystem_.createTempFile(prefix, suffix); });
-    }
-
-    [[nodiscard]] support::AsyncResult<void, harness::FileError> cleanup() override {
-        return support::AsyncResult<void, harness::FileError>{std::expected<void, harness::FileError>{}};
-    }
-
-private:
-    template <typename Value, typename Operation>
-    [[nodiscard]] static support::AsyncResult<Value, harness::FileError> immediate(
-            std::optional<std::string> path, std::stop_token stop_token, Operation operation) {
-        if (stop_token.stop_requested()) {
-            return support::AsyncResult<Value, harness::FileError>{
-                    std::unexpected(loader_aborted_error(std::move(path)))};
-        }
-        return support::AsyncResult<Value, harness::FileError>{operation()};
-    }
-
-    harness::WorkspaceFileSystem filesystem_;
-};
-
 [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> make_sync_async_filesystem(const std::filesystem::path& root) {
     auto filesystem = harness::WorkspaceFileSystem::create(root);
     if (!filesystem) {
         return {};
     }
-    return std::make_shared<SyncAsyncFileSystemAdapter>(std::move(*filesystem));
+    return detail::make_sync_async_filesystem(*filesystem);
 }
 
 [[nodiscard]] ProjectResourceFileSystems make_compatibility_filesystems(
@@ -933,10 +966,16 @@ private:
     // the old synchronous adapters so the canonical loader itself never
     // creates a capability from a discovered path.
     const auto workspace = normalized_absolute(request.workspace.empty() ? filesystem.root() : request.workspace);
+    const auto source_root = normalized_absolute(filesystem.root());
     ProjectResourceFileSystems result;
-    result.workspace = make_sync_async_filesystem(workspace);
+    if (path_is_under(source_root, workspace)) {
+        // A requested cwd may not exist yet (for example, a nested path used
+        // only to inherit an ancestor context file). The public constructor
+        // preserves the requested capability root without creating it.
+        result.workspace = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem(workspace));
+    }
     if (!result.workspace) {
-        result.workspace = std::make_shared<SyncAsyncFileSystemAdapter>(filesystem);
+        result.workspace = std::make_shared<detail::SyncAsyncFileSystemAdapter>(filesystem);
     }
 
     auto current = workspace;
@@ -987,16 +1026,32 @@ private:
     for (const auto& path : explicit_paths) {
         const auto candidate = std::filesystem::path{path};
         if (!candidate.is_absolute()) {
-            result.explicit_paths.push_back(AuthorizedResourcePath{
-                    .path = (workspace / candidate).lexically_normal().string(),
-                    .filesystem = result.workspace,
-            });
+            const auto absolute_candidate = (workspace / candidate).lexically_normal();
+            if (result.workspace && path_is_under(result.workspace->workspace(), absolute_candidate)) {
+                result.explicit_paths.push_back(AuthorizedResourcePath{
+                        .path = absolute_candidate.string(),
+                        .filesystem = result.workspace,
+                });
+            }
             continue;
         }
-        if (auto cap = filesystem_for_path(result, candidate)) {
+        // Compatibility composition explicitly grants only the known
+        // workspace/user roots. Ancestor and git capabilities remain
+        // discovery-only; an absolute sibling must be rejected unless a
+        // future caller supplies an explicit AuthorizedResourcePath.
+        std::shared_ptr<harness::AsyncFileSystem> capability;
+        if (result.workspace && path_is_under(result.workspace->workspace(), candidate)) {
+            capability = result.workspace;
+        } else if (result.agent_config_directory &&
+                   path_is_under(result.agent_config_directory->workspace(), candidate)) {
+            capability = result.agent_config_directory;
+        } else if (result.user_agents_root && path_is_under(result.user_agents_root->workspace(), candidate)) {
+            capability = result.user_agents_root;
+        }
+        if (capability) {
             result.explicit_paths.push_back(AuthorizedResourcePath{
                     .path = candidate.lexically_normal().string(),
-                    .filesystem = std::move(cap),
+                    .filesystem = std::move(capability),
             });
         }
     }
@@ -1085,7 +1140,7 @@ struct AsyncGitPaths {
         const auto git_dir = std::filesystem::path{git_file.substr(8)}.is_absolute()
                                      ? std::filesystem::path{git_file.substr(8)}
                                      : (root / std::filesystem::path{git_file.substr(8)});
-        auto git_filesystem = filesystem_for_path(filesystems, git_dir);
+        auto git_filesystem = discovered_filesystem_for_path(filesystems, git_dir);
         if (!git_filesystem) {
             continue;
         }
@@ -1111,7 +1166,7 @@ struct AsyncGitPaths {
             }
             common_git_dir = (git_dir / std::filesystem::path{trim(*text)}).lexically_normal();
         }
-        auto common_filesystem = filesystem_for_path(filesystems, common_git_dir);
+        auto common_filesystem = discovered_filesystem_for_path(filesystems, common_git_dir);
         if (!common_filesystem) {
             continue;
         }
@@ -1175,7 +1230,7 @@ struct AsyncGitPaths {
 
 [[nodiscard]] detail::AsyncTask<std::string, harness::FileError> canonicalized_path_task(
         const ProjectResourceFileSystems& filesystems, std::filesystem::path path, std::stop_token stop_token) {
-    auto filesystem = filesystem_for_path(filesystems, path);
+    auto filesystem = discovered_filesystem_for_path(filesystems, path);
     if (!filesystem) {
         co_return normalized_absolute(path).string();
     }
@@ -1368,7 +1423,7 @@ struct AsyncResolvedPrompt {
     // by composition. Discovered SYSTEM/APPEND files may instead use the
     // already-authorized workspace/agent capabilities.
     if (!filesystem && allow_discovered_path) {
-        filesystem = filesystem_for_path(filesystems, input_path);
+        filesystem = discovered_filesystem_for_path(filesystems, input_path);
     }
     if (!filesystem) {
         result.text = std::move(input);
@@ -1432,12 +1487,8 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     KindedDiagnosticSink skill_sink{diagnostics, skill_diagnostics};
     KindedDiagnosticSink theme_sink{diagnostics, theme_diagnostics};
 
-    if (!filesystems.workspace) {
-        co_return std::unexpected(harness::FileError{
-                .code = harness::FileErrorCode::Invalid,
-                .message = "project resource loading requires a workspace filesystem",
-                .path = std::nullopt,
-        });
+    if (auto invalid = validate_resource_filesystems(filesystems, request); invalid) {
+        co_return std::unexpected(std::move(*invalid));
     }
     if (stop_token.stop_requested()) {
         co_return std::unexpected(loader_aborted_error());

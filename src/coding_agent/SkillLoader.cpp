@@ -410,6 +410,23 @@ namespace {
     return (fs.workspace() / path).lexically_normal().string();
 }
 
+/// Canonical paths are authority-bearing results. A symlink target is usable
+/// only when it remains inside the capability root; an absolute target outside
+/// the root must never be passed back to a filesystem operation as a fallback.
+[[nodiscard]] std::optional<std::string> contained_async_path(
+        const harness::AsyncFileSystem& fs, std::string_view file_path) {
+    const std::filesystem::path path{file_path};
+    if (!path.is_absolute()) {
+        return std::string{file_path};
+    }
+    std::error_code ec;
+    auto root = std::filesystem::absolute(fs.workspace(), ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    return strip_workspace_root(root.lexically_normal(), path.lexically_normal().string());
+}
+
 [[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skill_from_file_task(
         harness::AsyncFileSystem& fs,
         std::string file_path,
@@ -569,7 +586,11 @@ namespace {
             }
             co_return std::optional<std::string>{};
         }
-        co_return std::optional<std::string>{std::move(*canonical)};
+        auto contained = contained_async_path(fs, *canonical);
+        if (!contained) {
+            co_return std::optional<std::string>{};
+        }
+        co_return std::optional<std::string>{async_absolute_path(fs, *contained)};
     };
 
     // One SKILL.md per directory, matching pi's traversal order.
@@ -585,7 +606,11 @@ namespace {
                 }
                 continue;
             }
-            auto target_info = co_await std::move(fs.fileInfo(async_read_path(fs, *canonical), stop_token));
+            auto target_path = contained_async_path(fs, *canonical);
+            if (!target_path) {
+                continue;
+            }
+            auto target_info = co_await std::move(fs.fileInfo(*target_path, stop_token));
             if (!target_info) {
                 if (async_aborted(target_info.error())) {
                     co_return std::unexpected(std::move(target_info.error()));
@@ -635,7 +660,11 @@ namespace {
                 }
                 continue;
             }
-            auto target_info = co_await std::move(fs.fileInfo(async_read_path(fs, *canonical), stop_token));
+            auto target_path = contained_async_path(fs, *canonical);
+            if (!target_path) {
+                continue;
+            }
+            auto target_info = co_await std::move(fs.fileInfo(*target_path, stop_token));
             if (!target_info) {
                 if (async_aborted(target_info.error())) {
                     co_return std::unexpected(std::move(target_info.error()));
@@ -643,11 +672,10 @@ namespace {
                 continue;
             }
             kind = target_info->kind;
-            entry_name = target_info->name;
         }
 
         const auto child_path = dir_path + "/" + entry_name;
-        const auto relative_path = relative_posix(root, child_path);
+        const auto relative_path = relative_posix(root, dir_path + "/" + entry.name);
         if (kind == harness::FileKind::Directory) {
             if (matcher.ignores(relative_path, true)) {
                 continue;
@@ -730,7 +758,11 @@ namespace {
                 }
                 continue;
             }
-            auto target = co_await std::move(fs.fileInfo(async_read_path(fs, *canonical), stop_token));
+            auto target_path = contained_async_path(fs, *canonical);
+            if (!target_path) {
+                continue;
+            }
+            auto target = co_await std::move(fs.fileInfo(*target_path, stop_token));
             if (!target) {
                 if (async_aborted(target.error())) {
                     co_return std::unexpected(std::move(target.error()));
@@ -738,7 +770,7 @@ namespace {
                 continue;
             }
             kind = target->kind;
-            spec_path = *canonical;
+            spec_path = std::move(*target_path);
         }
 
         if (kind == harness::FileKind::File) {
