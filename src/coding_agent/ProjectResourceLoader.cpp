@@ -925,6 +925,33 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     }
 }
 
+[[nodiscard]] PromptTemplateDirSpec make_prompt_dir_spec(
+        std::string path, bool is_file, std::string source, SourceScope scope, std::optional<std::string> base_dir) {
+    PromptTemplateDirSpec spec;
+    spec.path = std::move(path);
+    spec.is_file = is_file;
+    SourceInfo source_info;
+    source_info.source = std::move(source);
+    source_info.scope = scope;
+    source_info.base_dir = std::move(base_dir);
+    spec.source_info = std::move(source_info);
+    return spec;
+}
+
+[[nodiscard]] SkillDirSpec make_skill_dir_spec(std::string path,
+        bool include_root_files,
+        std::string source,
+        SourceScope scope,
+        std::optional<std::string> base_dir) {
+    SkillDirSpec spec;
+    spec.path = std::move(path);
+    spec.include_root_files = include_root_files;
+    spec.source_context.source = std::move(source);
+    spec.source_context.scope = scope;
+    spec.source_context.base_dir = std::move(base_dir);
+    return spec;
+}
+
 [[nodiscard]] detail::AsyncTask<ProjectResourceLoadingResult, harness::FileError> load_project_resources_task(
         ProjectResourceFileSystems filesystems,
         ProjectTrustStore trust_store,
@@ -977,18 +1004,11 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             continue;
         }
         auto loaded = co_await std::move(loadPromptTemplates(*filesystem,
-                std::vector<PromptTemplateDirSpec>{PromptTemplateDirSpec{
-                        .path = addressed_path(*filesystem, addressed_input),
-                        .is_file = input.is_file,
-                        .source_info =
-                                SourceInfo{
-                                        .path = {},
-                                        .source = "cli",
-                                        .scope = SourceScope::Temporary,
-                                        .origin = SourceOrigin::TopLevel,
-                                        .base_dir = std::nullopt,
-                                },
-                }},
+                std::vector<PromptTemplateDirSpec>{make_prompt_dir_spec(addressed_path(*filesystem, addressed_input),
+                        input.is_file,
+                        "cli",
+                        SourceScope::Temporary,
+                        std::nullopt)},
                 stop_token));
         if (!loaded) {
             if (loader_aborted(loaded.error())) {
@@ -1010,18 +1030,8 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     }
     if (!request.no_prompt_templates && project_trusted) {
         auto loaded = co_await std::move(loadPromptTemplates(*filesystems.workspace,
-                std::vector<PromptTemplateDirSpec>{PromptTemplateDirSpec{
-                        .path = ".pi/prompts",
-                        .is_file = false,
-                        .source_info =
-                                SourceInfo{
-                                        .path = {},
-                                        .source = "auto",
-                                        .scope = SourceScope::Project,
-                                        .origin = SourceOrigin::TopLevel,
-                                        .base_dir = (workspace / ".pi" / "prompts").string(),
-                                },
-                }},
+                std::vector<PromptTemplateDirSpec>{make_prompt_dir_spec(
+                        ".pi/prompts", false, "auto", SourceScope::Project, (workspace / ".pi" / "prompts").string())},
                 stop_token));
         if (!loaded) {
             if (loader_aborted(loaded.error())) {
@@ -1037,18 +1047,11 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     if (!request.no_prompt_templates && filesystems.agent_config_directory && request.agent_config_directory &&
             !request.agent_config_directory->empty()) {
         auto loaded = co_await std::move(loadPromptTemplates(*filesystems.agent_config_directory,
-                std::vector<PromptTemplateDirSpec>{PromptTemplateDirSpec{
-                        .path = "prompts",
-                        .is_file = false,
-                        .source_info =
-                                SourceInfo{
-                                        .path = {},
-                                        .source = "auto",
-                                        .scope = SourceScope::User,
-                                        .origin = SourceOrigin::TopLevel,
-                                        .base_dir = normalized_absolute(*request.agent_config_directory).string(),
-                                },
-                }},
+                std::vector<PromptTemplateDirSpec>{make_prompt_dir_spec("prompts",
+                        false,
+                        "auto",
+                        SourceScope::User,
+                        normalized_absolute(*request.agent_config_directory).string())},
                 stop_token));
         if (!loaded) {
             if (loader_aborted(loaded.error())) {
@@ -1070,16 +1073,8 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     if (!request.no_skills) {
         if (project_trusted) {
             auto loaded = co_await std::move(loadSkills(*filesystems.workspace,
-                    std::vector<SkillDirSpec>{SkillDirSpec{
-                            .path = ".pi/skills",
-                            .include_root_files = true,
-                            .source_context =
-                                    SkillSourceContext{
-                                            .source = "auto",
-                                            .scope = SourceScope::Project,
-                                            .base_dir = (workspace / ".pi").string(),
-                                    },
-                    }},
+                    std::vector<SkillDirSpec>{make_skill_dir_spec(
+                            ".pi/skills", true, "auto", SourceScope::Project, (workspace / ".pi").string())},
                     stop_token));
             if (!loaded) {
                 if (loader_aborted(loaded.error())) {
@@ -1140,16 +1135,8 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
                     continue;
                 }
                 auto loaded = co_await std::move(loadSkills(*filesystem,
-                        std::vector<SkillDirSpec>{SkillDirSpec{
-                                .path = ".agents/skills",
-                                .include_root_files = false,
-                                .source_context =
-                                        SkillSourceContext{
-                                                .source = "auto",
-                                                .scope = SourceScope::Project,
-                                                .base_dir = (root / ".agents").string(),
-                                        },
-                        }},
+                        std::vector<SkillDirSpec>{make_skill_dir_spec(
+                                ".agents/skills", false, "auto", SourceScope::Project, (root / ".agents").string())},
                         stop_token));
                 if (!loaded) {
                     if (loader_aborted(loaded.error())) {
@@ -1168,16 +1155,11 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
         if (filesystems.agent_config_directory && request.agent_config_directory &&
                 !request.agent_config_directory->empty()) {
             auto loaded = co_await std::move(loadSkills(*filesystems.agent_config_directory,
-                    std::vector<SkillDirSpec>{SkillDirSpec{
-                            .path = "skills",
-                            .include_root_files = true,
-                            .source_context =
-                                    SkillSourceContext{
-                                            .source = "auto",
-                                            .scope = SourceScope::User,
-                                            .base_dir = normalized_absolute(*request.agent_config_directory).string(),
-                                    },
-                    }},
+                    std::vector<SkillDirSpec>{make_skill_dir_spec("skills",
+                            true,
+                            "auto",
+                            SourceScope::User,
+                            normalized_absolute(*request.agent_config_directory).string())},
                     stop_token));
             if (!loaded) {
                 if (loader_aborted(loaded.error())) {
@@ -1192,17 +1174,11 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
         }
         if (filesystems.user_agents_root) {
             auto loaded = co_await std::move(loadSkills(*filesystems.user_agents_root,
-                    std::vector<SkillDirSpec>{SkillDirSpec{
-                            .path = "skills",
-                            .include_root_files = false,
-                            .source_context =
-                                    SkillSourceContext{
-                                            .source = "auto",
-                                            .scope = SourceScope::User,
-                                            .base_dir = normalized_absolute(filesystems.user_agents_root->workspace())
-                                                    .string(),
-                                    },
-                    }},
+                    std::vector<SkillDirSpec>{make_skill_dir_spec("skills",
+                            false,
+                            "auto",
+                            SourceScope::User,
+                            normalized_absolute(filesystems.user_agents_root->workspace()).string())},
                     stop_token));
             if (!loaded) {
                 if (loader_aborted(loaded.error())) {
@@ -1239,16 +1215,7 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             continue;
         }
         auto loaded = co_await std::move(loadSkills(*filesystem,
-                std::vector<SkillDirSpec>{SkillDirSpec{
-                        .path = path,
-                        .include_root_files = true,
-                        .source_context =
-                                SkillSourceContext{
-                                        .source = "cli",
-                                        .scope = SourceScope::Temporary,
-                                        .base_dir = std::nullopt,
-                                },
-                }},
+                std::vector<SkillDirSpec>{make_skill_dir_spec(path, true, "cli", SourceScope::Temporary, std::nullopt)},
                 stop_token));
         if (!loaded) {
             if (loader_aborted(loaded.error())) {
