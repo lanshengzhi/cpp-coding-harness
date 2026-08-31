@@ -545,8 +545,11 @@ public:
     /// returned result carries the per-kind diagnostics and theme documents
     /// the TUI re-registers. The caller (the TUI) refuses while
     /// `is_streaming()`/`is_compacting()`; User Bash does not block reload.
-    /// Same `impl_` copying contract as `prompt()`.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> reload();
+    /// Same `impl_` copying contract as `prompt()`. An optional stop token
+    /// lets the Native TUI cancel the in-flight resource scan during Close;
+    /// cancellation never publishes a partial refresh.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> reload(
+            std::stop_token stop_token = {});
 
     /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
     /// NOT block `/reload`).

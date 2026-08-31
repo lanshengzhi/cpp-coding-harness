@@ -621,12 +621,12 @@ support::ExpectedVoid AgentSession::set_entry_label(
     return impl_->set_entry_label(entry_id, std::move(label));
 }
 
-boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession::reload() {
+boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession::reload(std::stop_token stop_token) {
     // Same impl_ copying contract as prompt()/set_model: the impl_ copy
     // enters the session_reload frame synchronously at this call, so moving
     // or destroying the public handle before the first co_await cannot
     // invalidate the returned lazy awaitable.
-    return detail::session_reload(impl_);
+    return detail::session_reload(impl_, stop_token);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

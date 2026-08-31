@@ -709,7 +709,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_reload() {
     }
 
     presenter_->replace_prompt_slot(make_reload_box(hooks_.live_theme()));
-    auto result = co_await session->reload();
+    auto result = co_await session->reload(stop_source_.get_token());
     if (closed_ || captured_generation != action_generation()) co_return;
     if (!result) {
         presenter_->restore_prompt_slot();

@@ -279,9 +279,10 @@ struct AgentSession::Impl {
     /// swap skills/templates/prompt inputs, rebuild the System Prompt, and
     /// push it into the live Agent. Fatal loader errors abort with
     /// `std::unexpected` (the TUI shows `Reload failed: ...`). Requires an
-    /// idle session (streaming/compaction refusal is the TUI's job via
-    /// `is_streaming`/`is_compacting`).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> reload();
+    /// idle session; the Native TUI performs the user-facing refusal before
+    /// admission and this door repeats the guard for races.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> reload(
+            std::stop_token stop_token);
 
     /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
     /// NOT block `/reload`).
@@ -448,6 +449,11 @@ struct AgentSession::Impl {
     bool prompt_active_{false};
     bool user_bash_active_{false};
     bool compaction_active_{false};
+    /// Resource reload is admitted independently from prompt/compaction work;
+    /// Close requests its cancellation and waits for the reload frame to
+    /// release its retained filesystem capabilities before final teardown.
+    bool reload_active_{false};
+    std::stop_source reload_stop_source_;
     /// pi `_overflowRecoveryAttempted`: true from the first overflow
     /// compact-and-retry until a new user message starts (or a non-error
     /// assistant message completes in pi); a second overflow while true fails
@@ -522,7 +528,7 @@ namespace detail {
 
 /// Resource reload entry (defined in AgentSessionInteraction.cpp).
 [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> session_reload(
-        std::shared_ptr<AgentSession::Impl> impl);
+        std::shared_ptr<AgentSession::Impl> impl, std::stop_token stop_token);
 
 /// One admission shaping for every user input path (Prompt, steering,
 /// follow-up): optional skill/prompt-template expansion, then image content

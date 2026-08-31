@@ -68,67 +68,120 @@ namespace {
 
 } // namespace
 
-boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession::Impl::reload() {
+boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession::Impl::reload(
+        std::stop_token stop_token) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
-    // pi `AgentSession.reload()`: `settingsManager.reload()` first
-    // (preserving `projectTrusted`), then `resourceLoader.reload()` — the
-    // retained discovery request re-run with the creation-time trust state.
-    if (services_.settings_manager) {
-        (void)services_.settings_manager->reload();
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "session reload cancelled"));
     }
-    if (!config_.resource_loading_request) {
-        co_return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "session has no retained resource loading request"));
+    if (reload_active_) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Busy, "session reload is already in flight"));
     }
-    if (!config_.resource_file_systems.workspace) {
-        co_return std::unexpected(support::make_error(
-                support::ErrorCode::Workspace, "reload failed: resource filesystem capability is unavailable"));
+    if (prompt_active_ || compaction_active_) {
+        co_return std::unexpected(
+                support::make_error(support::ErrorCode::Busy, "session is busy while the Agent is active"));
     }
-    auto resource_filesystems = config_.resource_file_systems;
-    auto resource_request = *config_.resource_loading_request;
-    // pi `reload()` preserves `SettingsManager.projectTrusted`: the reload
-    // re-runs with the current trust state, never re-resolving it.
-    resource_request.project_trust_override = is_project_trusted();
-    resource_request.workspace = session_.workspace;
-    ProjectTrustStore trust_store{trust_store_file_path()};
-    auto loading = co_await support::detail::await_async_result(
-            load_project_resources(std::move(resource_filesystems), trust_store, std::move(resource_request), {}));
-    if (!loading) {
-        co_return std::unexpected(harness::to_util_error(std::move(loading.error())));
-    }
-    if (!loading->fatal_errors.empty()) {
-        co_return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "reload failed", loading->fatal_errors.front().message));
-    }
-
-    // Swap the live resource snapshots and the System Prompt inputs (pi
-    // `_rebuildSystemPrompt` reads the fresh loader results).
-    skills_ = std::move(loading->resources.skills);
-    templates_ = std::move(loading->resources.prompt_templates);
-    config_.custom_prompt = std::move(loading->resources.system_prompt);
-    config_.append_system_prompt = std::move(loading->resources.append_system_prompt);
-    config_.context_files = std::move(loading->resources.agents_files);
-    config_.system_prompt_source = std::move(loading->resources.system_prompt_source);
-    config_.append_system_prompt_sources = std::move(loading->resources.append_system_prompt_sources);
-    config_.skill_diagnostics = std::move(loading->skill_diagnostics);
-    config_.prompt_diagnostics = std::move(loading->prompt_diagnostics);
-    config_.theme_diagnostics = std::move(loading->theme_diagnostics);
-
-    // Rebuild the System Prompt and push it into the live Agent (pi
-    // `_rebuildSystemPrompt` → `agent.state.systemPrompt`).
     if (!agent_) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session Agent is unavailable"));
     }
-    agent_->set_system_prompt(rebuild_system_prompt());
+    reload_active_ = true;
+    reload_stop_source_ = std::stop_source{};
+    const auto reload_token = reload_stop_source_.get_token();
+    const auto finish_reload = [this](support::Expected<AgentSessionReloadResult> result)
+            -> boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> {
+        reload_active_ = false;
+        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_ && !compaction_active_) {
+            co_await finalize_close_after_active_work();
+        }
+        co_return result;
+    };
+    const auto cancelled_error = [] {
+        return support::make_error(support::ErrorCode::Cancelled, "session reload cancelled");
+    };
 
-    AgentSessionReloadResult result;
-    result.skill_diagnostics = config_.skill_diagnostics;
-    result.prompt_diagnostics = config_.prompt_diagnostics;
-    result.theme_diagnostics = config_.theme_diagnostics;
-    result.themes = std::move(loading->resources.themes);
-    co_return result;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        std::stop_callback stop_bridge(stop_token, [this]() noexcept { (void)reload_stop_source_.request_stop(); });
+
+        // pi `AgentSession.reload()`: `settingsManager.reload()` first
+        // (preserving `projectTrusted`), then `resourceLoader.reload()` — the
+        // retained discovery request re-run with the creation-time trust state.
+        if (services_.settings_manager) {
+            (void)services_.settings_manager->reload();
+        }
+        if (reload_token.stop_requested() || lifecycle_ != Lifecycle::Open) {
+            co_return co_await finish_reload(std::unexpected(cancelled_error()));
+        }
+        if (!config_.resource_loading_request) {
+            co_return co_await finish_reload(std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "session has no retained resource loading request")));
+        }
+        if (!config_.resource_file_systems.workspace) {
+            co_return co_await finish_reload(std::unexpected(support::make_error(
+                    support::ErrorCode::Workspace, "reload failed: resource filesystem capability is unavailable")));
+        }
+        auto resource_filesystems = config_.resource_file_systems;
+        auto resource_request = *config_.resource_loading_request;
+        // pi `reload()` preserves `SettingsManager.projectTrusted`: the reload
+        // re-runs with the current trust state, never re-resolving it.
+        resource_request.project_trust_override = is_project_trusted();
+        resource_request.workspace = session_.workspace;
+        ProjectTrustStore trust_store{trust_store_file_path()};
+        auto loading = co_await support::detail::await_async_result(load_project_resources(
+                std::move(resource_filesystems), trust_store, std::move(resource_request), reload_token));
+        if (reload_token.stop_requested() || lifecycle_ != Lifecycle::Open) {
+            co_return co_await finish_reload(std::unexpected(cancelled_error()));
+        }
+        if (!loading) {
+            co_return co_await finish_reload(std::unexpected(harness::to_util_error(std::move(loading.error()))));
+        }
+        if (!loading->fatal_errors.empty()) {
+            co_return co_await finish_reload(std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "reload failed", loading->fatal_errors.front().message)));
+        }
+
+        // Swap the live resource snapshots and the System Prompt inputs (pi
+        // `_rebuildSystemPrompt` reads the fresh loader results). Every fallible
+        // filesystem operation completed above, so cancellation and Close cannot
+        // publish a partial refresh.
+        skills_ = std::move(loading->resources.skills);
+        templates_ = std::move(loading->resources.prompt_templates);
+        config_.custom_prompt = std::move(loading->resources.system_prompt);
+        config_.append_system_prompt = std::move(loading->resources.append_system_prompt);
+        config_.context_files = std::move(loading->resources.agents_files);
+        config_.system_prompt_source = std::move(loading->resources.system_prompt_source);
+        config_.append_system_prompt_sources = std::move(loading->resources.append_system_prompt_sources);
+        config_.skill_diagnostics = std::move(loading->skill_diagnostics);
+        config_.prompt_diagnostics = std::move(loading->prompt_diagnostics);
+        config_.theme_diagnostics = std::move(loading->theme_diagnostics);
+
+        agent_->set_system_prompt(rebuild_system_prompt());
+
+        AgentSessionReloadResult result;
+        result.skill_diagnostics = config_.skill_diagnostics;
+        result.prompt_diagnostics = config_.prompt_diagnostics;
+        result.theme_diagnostics = config_.theme_diagnostics;
+        result.themes = std::move(loading->resources.themes);
+        co_return co_await finish_reload(std::move(result));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& error) {
+        reload_active_ = false;
+        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_ && !compaction_active_) {
+            finalize_close();
+        }
+        co_return std::unexpected(
+                support::make_error(support::ErrorCode::Unknown, "session reload coroutine failed", error.what()));
+    } catch (...) {
+        reload_active_ = false;
+        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_ && !compaction_active_) {
+            finalize_close();
+        }
+        co_return std::unexpected(support::make_error(support::ErrorCode::Unknown, "session reload coroutine failed"));
+    }
+#endif
 }
 
 void AgentSession::Impl::refresh_bash_session_environment() {
@@ -284,7 +337,7 @@ boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>> AgentSess
     active_user_bash_stop_source_.reset();
     user_bash_active_ = false;
     const auto finalize_if_last_active_work = [this]() -> boost::asio::awaitable<void> {
-        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !compaction_active_) {
+        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !compaction_active_ && !reload_active_) {
             co_await finalize_close_after_active_work();
         }
     };
@@ -959,14 +1012,14 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> detai
 }
 
 boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> detail::session_reload(
-        std::shared_ptr<AgentSession::Impl> impl) {
+        std::shared_ptr<AgentSession::Impl> impl, std::stop_token stop_token) {
     if (!impl) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     try {
 #endif
-        co_return co_await impl->reload();
+        co_return co_await impl->reload(stop_token);
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception& error) {
         co_return std::unexpected(

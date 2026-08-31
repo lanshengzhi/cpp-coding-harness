@@ -23,6 +23,9 @@ boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::Impl::
         co_return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "compaction is already in flight"));
     }
+    if (reload_active_) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Busy, "session reload is already in flight"));
+    }
     // Claim the in-flight guard before any await so concurrent compact()
     // calls reject here instead of interleaving at the summarization await.
     compaction_active_ = true;
@@ -66,7 +69,7 @@ boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::Impl::
     // after the compaction reached its terminal outcome — never while the
     // compaction could still touch the Agent, the store, or the persistence
     // channel (issue #467).
-    if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_) {
+    if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_ && !reload_active_) {
         co_await finalize_close_after_active_work();
     }
     co_return result;
