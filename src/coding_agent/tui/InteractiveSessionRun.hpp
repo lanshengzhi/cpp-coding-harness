@@ -8,10 +8,12 @@
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
 #include <atomic>
 #include <filesystem>
+#include <functional>
 #include <iosfwd>
 #include <memory>
 #include <optional>
@@ -23,6 +25,10 @@ namespace cch::coding_agent::tui {
 
 class InteractiveSessionRun;
 class InteractiveSessionRunBuilder;
+
+using AsyncSessionReplacementSink =
+        std::move_only_function<support::AsyncResult<coding_agent::CreateAgentSessionResult>(
+                std::size_t, runtime::AgentSessionCreationRequest)>;
 
 /// Build the one composition-owned filesystem capability collection used by
 /// Native TUI trust detection. Every capability shares one Runtime target;
@@ -85,6 +91,7 @@ public:
     void suspend_process() const;
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> replace_session(
         runtime::AgentSessionCreationRequest request) const;
+    [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() const;
     void report_boot_diagnostics(
         const std::vector<coding_agent::SessionDiagnostic>& diagnostics) const;
     void report_boot_creation_failure(const support::Error& error) const;

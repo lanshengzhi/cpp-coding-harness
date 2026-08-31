@@ -15,6 +15,7 @@
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
@@ -28,6 +29,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <stop_token>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -604,21 +606,25 @@ private:
 [[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request);
 
-/// The full Session Assembly door. `session_facts` carries the CLI-owned
-/// facts beside an engine-built request (in-session session replacement, pi
-/// `createRuntime`): the boundary re-applies them under the issue #507
-/// field-ownership rules — engine-resolved session trust wins, the pure
-/// CLI-owned resource/model facts are re-applied unconditionally, and the
-/// host-only capabilities (User Shell, Runtime target, shared Models
-/// runtime) stay host-set on the request. Host-built requests (boot, print
-/// mode, list-models) arrive complete and pass no facts. `overrides` is the
-/// Owner-internal assembly-overrides seam: injects a deterministic Models
-/// catalog and/or a Session-owned User Shell (test assembly); production
-/// passes an empty value.
+/// The full synchronous expand-contract bridge. `session_facts` carries the
+/// CLI-owned facts beside an engine-built request (in-session session
+/// replacement, pi `createRuntime`); production hosts use
+/// `create_agent_session_async` instead.
 [[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request,
     std::optional<runtime::InteractiveSessionFacts> session_facts,
     runtime::AssemblyOverrides overrides);
+
+/// The one asynchronous production Session Assembly door. It re-applies
+/// `session_facts` under the issue #507 field-ownership rules, awaits
+/// authorized resource loading and model prerequisites, and publishes only
+/// after the assembled value is complete. Cancellation is explicit and is
+/// resolved by the assembly operation's domain error.
+[[nodiscard]] support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
+        runtime::AgentSessionCreationRequest request,
+        std::optional<runtime::InteractiveSessionFacts> session_facts,
+        runtime::AssemblyOverrides overrides,
+        std::stop_token stop_token = {});
 
 /// Private test-support wrapper around SessionFactory's Models assembly seam
 /// (the deterministic provider surface the deleted fake-provider CLI flag

@@ -13,6 +13,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -376,14 +377,27 @@ void print_session_diagnostics(
 
     // The private test seam injects the deterministic fake catalog; at most
     // one of the two call sites below executes per run, so moving `models`
-    // here is safe.
-    const auto create_session = [&]() {
-        return coding_agent::create_agent_session(std::move(request),
+    // here is safe. The non-interactive CLI owns one Runtime root for session
+    // assembly and print-mode work; the interactive path creates its root in
+    // `run_native_tui_boot` after this lambda is bypassed.
+    std::shared_ptr<boost::asio::io_context> runtime_io;
+    std::shared_ptr<harness::RuntimeRoot> runtime_root;
+    const auto create_session = [&]() -> support::Expected<coding_agent::CreateAgentSessionResult> {
+        runtime_io = std::make_shared<boost::asio::io_context>();
+        runtime_root = std::make_shared<harness::RuntimeRoot>(runtime_io, kRuntimeLimits);
+        request.execution_runtime_target = runtime_root->make_target();
+        auto operation = coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime),
                         .cli_fake = model_runtime_cli_fake,
                         .models = std::move(models),
                         .user_shell = nullptr});
+        auto future = boost::asio::co_spawn(
+                *runtime_io, support::detail::await_async_result(std::move(operation)), boost::asio::use_future);
+        while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
+            (void)runtime_io->run_one();
+        }
+        return future.get();
     };
 
     // pi main.ts: `--list-models` runs post-runtime pre-stdin and exits 0
@@ -393,13 +407,17 @@ void print_session_diagnostics(
     if (config.list_models) {
         auto created = create_session();
         if (!created) {
-            return print_creation_failure(created.error());
+            const int exit_code = print_creation_failure(created.error());
+            close_runtime(runtime_root, *runtime_io);
+            return exit_code;
         }
         print_list_models(
             *created->session->model_runtime(),
             config.list_models,
             streams.output,
             streams.error);
+        created->session->close();
+        close_runtime(runtime_root, *runtime_io);
         return 0;
     }
 
@@ -474,13 +492,11 @@ void print_session_diagnostics(
                 std::move(request));
     }
 
-    auto runtime_io = std::make_shared<boost::asio::io_context>();
-    auto runtime_root = std::make_shared<harness::RuntimeRoot>(runtime_io, kRuntimeLimits);
-    request.execution_runtime_target = runtime_root->make_target();
-
     auto created = create_session();
     if (!created) {
-        return print_creation_failure(created.error());
+        const int exit_code = print_creation_failure(created.error());
+        close_runtime(runtime_root, *runtime_io);
+        return exit_code;
     }
     print_session_diagnostics(streams.error, created->diagnostics);
 

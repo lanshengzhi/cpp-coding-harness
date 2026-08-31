@@ -100,6 +100,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     clipboard_reader_ = run.take_clipboard_reader();
     model_fallback_message_ = run.model_fallback_message();
     action_sink_ = run.make_action_sink();
+    async_session_replacement_sink_ = run.make_async_session_replacement_sink();
     session_facts_ = run.session_facts();
 
     InteractiveStartupDiagnostics diagnostics;
@@ -206,7 +207,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     //    resolves deterministically (pi `projectTrustByCwd` cache).
     auto request = std::move(*boot_request_);
     request.project_trust_override = *decision;
-    auto created = request_session_replacement(action_generation_, std::move(request));
+    auto created = co_await request_session_replacement_async(action_generation_, std::move(request));
     if (!created) {
         const support::Error failure = created.error();
         // pi `print_creation_failure`: the host reports the failure

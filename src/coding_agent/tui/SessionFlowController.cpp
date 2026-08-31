@@ -13,6 +13,7 @@
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/TreeSelector.hpp"
 #include "coding_agent/tui/UserMessageSelector.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
 
@@ -199,6 +200,24 @@ SessionFlowController::request_session_replacement(
     return hooks_.request_session_replacement(action_generation(), std::move(request));
 }
 
+boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
+SessionFlowController::request_session_replacement_async(runtime::AgentSessionCreationRequest request) {
+    const auto captured_generation = action_generation();
+    if (hooks_.request_session_replacement_async != nullptr) {
+        auto created = co_await support::detail::await_async_result(
+                hooks_.request_session_replacement_async(captured_generation, std::move(request)));
+        if (closed_ || captured_generation != action_generation()) {
+            co_return std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "Session replacement was superseded"));
+        }
+        co_return created;
+    }
+    if (hooks_.request_session_replacement != nullptr) {
+        co_return hooks_.request_session_replacement(captured_generation, std::move(request));
+    }
+    co_return std::unexpected(session_replacement_unavailable_error());
+}
+
 support::ExpectedVoid SessionFlowController::replace_session(
     std::unique_ptr<AgentSession> session) {
     if (hooks_.replace_session == nullptr) {
@@ -213,7 +232,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_resume_session(
     if (session == nullptr) co_return;
     const auto captured_generation = action_generation();
     const auto fallback_cwd = session->workspace();
-    if (hooks_.request_session_replacement == nullptr) {
+    if (hooks_.request_session_replacement == nullptr && hooks_.request_session_replacement_async == nullptr) {
         presenter_->show_error("Session switching is not available in this host");
         co_return;
     }
@@ -247,7 +266,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_resume_session(
         cwd_override ? *cwd_override : session->workspace(),
         ExplicitResumeSessionTarget{target});
     request.resume_cwd_override = cwd_override;
-    auto created = request_session_replacement(std::move(request));
+    auto created = co_await request_session_replacement_async(std::move(request));
     if (!created) {
         presenter_->show_error(combined_error_text(created.error()));
         co_return;
@@ -264,7 +283,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_resume_session(
 boost::asio::awaitable<void> SessionFlowController::handle_new_session() {
     auto* session = current_session();
     if (session == nullptr) co_return;
-    if (hooks_.request_session_replacement == nullptr) {
+    if (hooks_.request_session_replacement == nullptr && hooks_.request_session_replacement_async == nullptr) {
         presenter_->show_error("Session switching is not available in this host");
         co_return;
     }
@@ -276,7 +295,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_new_session() {
     if (session->session_path()) {
         request.session_dir = session->session_path()->parent_path().string();
     }
-    auto created = request_session_replacement(std::move(request));
+    auto created = co_await request_session_replacement_async(std::move(request));
     if (!created) {
         presenter_->show_error(combined_error_text(created.error()));
         co_return;
@@ -348,7 +367,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_fork_session(
     std::string entry_id) {
     auto* session = current_session();
     if (session == nullptr) co_return;
-    if (hooks_.request_session_replacement == nullptr) {
+    if (hooks_.request_session_replacement == nullptr && hooks_.request_session_replacement_async == nullptr) {
         presenter_->show_error("Session switching is not available in this host");
         co_return;
     }
@@ -368,7 +387,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_fork_session(
     if (prepared->in_memory_seed) {
         request.in_memory_branch_seed = std::move(prepared->in_memory_seed);
     }
-    auto created = request_session_replacement(std::move(request));
+    auto created = co_await request_session_replacement_async(std::move(request));
     if (!created) {
         presenter_->show_error(combined_error_text(created.error()));
         co_return;

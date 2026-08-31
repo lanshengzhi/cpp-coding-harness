@@ -6,6 +6,7 @@
 #include "coding_agent/tui/ModalPresenter.hpp"
 
 #include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
 
@@ -69,6 +70,12 @@ struct SessionFlowHostHooks {
         std::size_t,
         runtime::AgentSessionCreationRequest)>
         request_session_replacement{nullptr};
+    /// Asynchronous Session Assembly door. Production Native TUI flows use
+    /// this hook so resource loading and model prerequisites remain on the
+    /// Runtime loop; the synchronous hook above is retained as a test bridge.
+    std::move_only_function<support::AsyncResult<CreateAgentSessionResult>(
+            std::size_t, runtime::AgentSessionCreationRequest)>
+            request_session_replacement_async{nullptr};
     /// Install a created replacement and rebind the Native TUI.
     std::move_only_function<support::ExpectedVoid(std::unique_ptr<AgentSession>)>
         replace_session{nullptr};
@@ -181,6 +188,8 @@ private:
         std::string failure_label);
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
     request_session_replacement(runtime::AgentSessionCreationRequest request);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
+    request_session_replacement_async(runtime::AgentSessionCreationRequest request);
     [[nodiscard]] support::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> session);
     [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> maybe_save_implicit_project_trust_after_reload();

@@ -4,10 +4,10 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
-#include "agent/harness/WorkspaceFileSystem.hpp"
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "ai/ModelThinkingLevel.hpp"
@@ -82,36 +82,39 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         co_return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "session has no retained resource loading request"));
     }
-    auto fs = harness::WorkspaceFileSystem::create(session_.workspace);
-    if (!fs) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Unknown,
-                "reload failed: could not open the session workspace",
-                fs.error().message));
+    if (!config_.resource_file_systems.workspace) {
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Workspace, "reload failed: resource filesystem capability is unavailable"));
     }
+    auto resource_filesystems = config_.resource_file_systems;
     auto resource_request = *config_.resource_loading_request;
     // pi `reload()` preserves `SettingsManager.projectTrusted`: the reload
     // re-runs with the current trust state, never re-resolving it.
     resource_request.project_trust_override = is_project_trusted();
     resource_request.workspace = session_.workspace;
     ProjectTrustStore trust_store{trust_store_file_path()};
-    auto loading = load_project_resources(*fs, trust_store, std::move(resource_request));
-    if (!loading.fatal_errors.empty()) {
+    auto loading = co_await support::detail::await_async_result(
+            load_project_resources(std::move(resource_filesystems), trust_store, std::move(resource_request), {}));
+    if (!loading) {
+        co_return std::unexpected(harness::to_util_error(std::move(loading.error())));
+    }
+    if (!loading->fatal_errors.empty()) {
         co_return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "reload failed", loading.fatal_errors.front().message));
+                support::ErrorCode::Validation, "reload failed", loading->fatal_errors.front().message));
     }
 
     // Swap the live resource snapshots and the System Prompt inputs (pi
     // `_rebuildSystemPrompt` reads the fresh loader results).
-    skills_ = std::move(loading.resources.skills);
-    templates_ = std::move(loading.resources.prompt_templates);
-    config_.custom_prompt = std::move(loading.resources.system_prompt);
-    config_.append_system_prompt = std::move(loading.resources.append_system_prompt);
-    config_.context_files = std::move(loading.resources.agents_files);
-    config_.system_prompt_source = std::move(loading.resources.system_prompt_source);
-    config_.append_system_prompt_sources = std::move(loading.resources.append_system_prompt_sources);
-    config_.skill_diagnostics = std::move(loading.skill_diagnostics);
-    config_.prompt_diagnostics = std::move(loading.prompt_diagnostics);
-    config_.theme_diagnostics = std::move(loading.theme_diagnostics);
+    skills_ = std::move(loading->resources.skills);
+    templates_ = std::move(loading->resources.prompt_templates);
+    config_.custom_prompt = std::move(loading->resources.system_prompt);
+    config_.append_system_prompt = std::move(loading->resources.append_system_prompt);
+    config_.context_files = std::move(loading->resources.agents_files);
+    config_.system_prompt_source = std::move(loading->resources.system_prompt_source);
+    config_.append_system_prompt_sources = std::move(loading->resources.append_system_prompt_sources);
+    config_.skill_diagnostics = std::move(loading->skill_diagnostics);
+    config_.prompt_diagnostics = std::move(loading->prompt_diagnostics);
+    config_.theme_diagnostics = std::move(loading->theme_diagnostics);
 
     // Rebuild the System Prompt and push it into the live Agent (pi
     // `_rebuildSystemPrompt` → `agent.state.systemPrompt`).
@@ -124,7 +127,7 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
     result.skill_diagnostics = config_.skill_diagnostics;
     result.prompt_diagnostics = config_.prompt_diagnostics;
     result.theme_diagnostics = config_.theme_diagnostics;
-    result.themes = std::move(loading.resources.themes);
+    result.themes = std::move(loading->resources.themes);
     co_return result;
 }
 

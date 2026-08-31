@@ -652,6 +652,14 @@ support::Expected<CreateAgentSessionResult> create_agent_session(
         std::move(request), std::move(session_facts), std::move(overrides));
 }
 
+support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(runtime::AgentSessionCreationRequest request,
+        std::optional<runtime::InteractiveSessionFacts> session_facts,
+        runtime::AssemblyOverrides overrides,
+        std::stop_token stop_token) {
+    return runtime::SessionFactory::create_async(
+            std::move(request), std::move(session_facts), std::move(overrides), stop_token);
+}
+
 support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models) {

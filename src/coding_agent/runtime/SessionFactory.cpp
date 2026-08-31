@@ -10,8 +10,11 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/agent/harness/LocalFileSystem.hpp>
+#include "agent/harness/RuntimeRoot.hpp"
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
+#include "coding_agent/AsyncTask.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
@@ -23,6 +26,7 @@
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/ExpectedMacros.hpp"
 
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -32,6 +36,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -261,24 +266,6 @@ void add_project_resource_loading_diagnostics(
     }
 }
 
-[[nodiscard]] std::vector<ExplicitPromptTemplateInput> make_explicit_template_inputs(
-    const harness::WorkspaceFileSystem& fs,
-    const std::vector<std::string>& paths) {
-    std::vector<ExplicitPromptTemplateInput> inputs;
-    inputs.reserve(paths.size());
-    for (const auto& path : paths) {
-        bool is_file = true;
-        if (auto info = fs.fileInfo(path); info && info->kind == harness::FileKind::Directory) {
-            is_file = false;
-        }
-        inputs.push_back(ExplicitPromptTemplateInput{
-            .path = path,
-            .is_file = is_file,
-        });
-    }
-    return inputs;
-}
-
 [[nodiscard]] std::optional<std::string> find_duplicate_tool_name(
     const std::vector<agent::Tool>& tools) {
     std::set<std::string, std::less<>> seen;
@@ -356,6 +343,187 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
         std::move(env->cleanup()).start(
             [](std::expected<void, harness::FileError>) noexcept {});
     }
+}
+
+[[nodiscard]] std::filesystem::path normalized_capability_root(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto absolute = std::filesystem::absolute(path, ec);
+    return (ec ? path : std::move(absolute)).lexically_normal();
+}
+
+[[nodiscard]] bool path_is_under(const std::filesystem::path& root, const std::filesystem::path& candidate) {
+    const auto relative = normalized_capability_root(candidate).lexically_relative(normalized_capability_root(root));
+    if (relative.empty()) {
+        return false;
+    }
+    const auto first = relative.begin();
+    return first == relative.end() || *first != "..";
+}
+
+[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> make_local_resource_filesystem(
+        const std::shared_ptr<harness::RuntimeTarget>& target, const std::filesystem::path& root) {
+    if (!target || root.empty()) {
+        return {};
+    }
+    return std::make_shared<harness::AsyncLocalFileSystem>(target, normalized_capability_root(root));
+}
+
+[[nodiscard]] ProjectResourceFileSystems make_authorized_resource_filesystems(
+        const std::shared_ptr<harness::RuntimeTarget>& target,
+        std::filesystem::path workspace,
+        const std::filesystem::path& agent_config_directory,
+        const std::filesystem::path& home_directory,
+        const std::vector<std::string>& explicit_paths = {}) {
+    ProjectResourceFileSystems result;
+    if (!target || workspace.empty()) {
+        return result;
+    }
+
+    workspace = normalized_capability_root(workspace);
+    result.workspace = make_local_resource_filesystem(target, workspace);
+
+    std::vector<std::pair<std::filesystem::path, std::shared_ptr<harness::AsyncFileSystem>>> known_roots;
+    const auto add_known_root = [&](const std::filesystem::path& root,
+                                        std::shared_ptr<harness::AsyncFileSystem> filesystem) {
+        if (!filesystem || root.empty()) {
+            return;
+        }
+        known_roots.emplace_back(normalized_capability_root(root), std::move(filesystem));
+    };
+    add_known_root(workspace, result.workspace);
+
+    auto current = workspace;
+    while (true) {
+        const auto parent = current.parent_path();
+        if (parent == current || parent == parent.root_path()) {
+            break;
+        }
+        current = parent;
+        auto filesystem = make_local_resource_filesystem(target, current);
+        if (filesystem) {
+            result.ancestor_roots.push_back(filesystem);
+            add_known_root(current, std::move(filesystem));
+        }
+    }
+
+    if (!agent_config_directory.empty()) {
+        result.agent_config_directory = make_local_resource_filesystem(target, agent_config_directory);
+        add_known_root(agent_config_directory, result.agent_config_directory);
+    }
+    if (!home_directory.empty()) {
+        const auto user_agents_root = normalized_capability_root(home_directory) / ".agents";
+        result.user_agents_root = make_local_resource_filesystem(target, user_agents_root);
+        add_known_root(user_agents_root, result.user_agents_root);
+    }
+
+    for (const auto& raw_path : explicit_paths) {
+        if (raw_path.empty()) {
+            continue;
+        }
+        const auto raw = std::filesystem::path{raw_path};
+        const auto candidate = normalized_capability_root(raw.is_absolute() ? raw : workspace / raw);
+        std::shared_ptr<harness::AsyncFileSystem> selected;
+        std::size_t selected_length{0};
+        for (const auto& [root, filesystem] : known_roots) {
+            if (!path_is_under(root, candidate)) {
+                continue;
+            }
+            const auto length = root.string().size();
+            if (!selected || length > selected_length) {
+                selected = filesystem;
+                selected_length = length;
+            }
+        }
+        if (selected) {
+            result.explicit_paths.push_back(AuthorizedResourcePath{
+                    .path = candidate.string(),
+                    .filesystem = std::move(selected),
+            });
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> explicit_resource_filesystem_for(
+        const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
+    const auto candidate = normalized_capability_root(path);
+    std::shared_ptr<harness::AsyncFileSystem> selected;
+    std::size_t selected_length{0};
+    for (const auto& authorized : filesystems.explicit_paths) {
+        if (!authorized.filesystem || !path_is_under(std::filesystem::path{authorized.path}, candidate)) {
+            continue;
+        }
+        const auto length = authorized.path.size();
+        if (!selected || length > selected_length) {
+            selected = authorized.filesystem;
+            selected_length = length;
+        }
+    }
+    return selected;
+}
+
+[[nodiscard]] ProjectResourceFileSystems make_sync_resource_filesystems(
+        const std::filesystem::path& workspace, const std::vector<std::string>& explicit_paths) {
+    ProjectResourceFileSystems result;
+    result.workspace = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{workspace});
+    std::vector<std::pair<std::filesystem::path, std::shared_ptr<harness::AsyncFileSystem>>> known_roots;
+    const auto add_known_root = [&](const std::filesystem::path& root,
+                                        std::shared_ptr<harness::AsyncFileSystem> filesystem) {
+        if (!filesystem || root.empty()) {
+            return;
+        }
+        known_roots.emplace_back(normalized_capability_root(root), std::move(filesystem));
+    };
+    add_known_root(workspace, result.workspace);
+
+    auto current = normalized_capability_root(workspace);
+    while (true) {
+        const auto parent = current.parent_path();
+        if (parent == current || parent == parent.root_path()) {
+            break;
+        }
+        current = parent;
+        auto filesystem = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{current});
+        result.ancestor_roots.push_back(filesystem);
+        add_known_root(current, std::move(filesystem));
+    }
+
+    const auto agent_config_directory = coding_agent::agent_config_dir();
+    auto agent_filesystem = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{agent_config_directory});
+    result.agent_config_directory = agent_filesystem;
+    add_known_root(agent_config_directory, std::move(agent_filesystem));
+
+    const auto user_agents_root = normalized_capability_root(coding_agent::home_directory()) / ".agents";
+    auto user_agents_filesystem = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{user_agents_root});
+    result.user_agents_root = user_agents_filesystem;
+    add_known_root(user_agents_root, std::move(user_agents_filesystem));
+
+    for (const auto& raw_path : explicit_paths) {
+        if (raw_path.empty()) {
+            continue;
+        }
+        const auto raw = std::filesystem::path{raw_path};
+        const auto candidate = normalized_capability_root(raw.is_absolute() ? raw : workspace / raw);
+        std::shared_ptr<harness::AsyncFileSystem> selected;
+        std::size_t selected_length{0};
+        for (const auto& [root, filesystem] : known_roots) {
+            if (!path_is_under(root, candidate)) {
+                continue;
+            }
+            const auto length = root.string().size();
+            if (!selected || length > selected_length) {
+                selected = filesystem;
+                selected_length = length;
+            }
+        }
+        if (selected) {
+            result.explicit_paths.push_back(AuthorizedResourcePath{
+                    .path = candidate.string(),
+                    .filesystem = std::move(selected),
+            });
+        }
+    }
+    return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -907,10 +1075,43 @@ struct SessionTargetNormalizationOptions {
         }));
 }
 
-[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> run_assembly(
-    AssemblyPlan plan,
-    SettingsSnapshot& snapshot,
-    std::unique_ptr<AsyncUserShell> user_shell) {
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<ExplicitPromptTemplateInput>>>
+make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystems,
+        const std::filesystem::path& workspace,
+        const std::vector<std::string>& paths,
+        std::stop_token stop_token) {
+    std::vector<ExplicitPromptTemplateInput> inputs;
+    inputs.reserve(paths.size());
+    for (const auto& path : paths) {
+        bool is_file = true;
+        const auto raw = std::filesystem::path{path};
+        const auto candidate = normalized_capability_root(raw.is_absolute() ? raw : workspace / raw);
+        if (auto filesystem = explicit_resource_filesystem_for(filesystems, candidate)) {
+            const auto relative = candidate.lexically_relative(normalized_capability_root(filesystem->workspace()));
+            const auto addressed = relative.empty() ? std::string{"."} : relative.string();
+            auto info = co_await support::detail::await_async_result(filesystem->fileInfo(addressed, stop_token));
+            if (!info) {
+                if (info.error().code == harness::FileErrorCode::Aborted) {
+                    co_return std::unexpected(harness::to_util_error(std::move(info.error())));
+                }
+            } else if (info->kind == harness::FileKind::Directory) {
+                is_file = false;
+            }
+        }
+        inputs.push_back(ExplicitPromptTemplateInput{
+                .path = path,
+                .is_file = is_file,
+        });
+    }
+    co_return inputs;
+}
+
+[[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> run_assembly_async(
+        AssemblyPlan plan,
+        SettingsSnapshot& snapshot,
+        std::unique_ptr<AsyncUserShell> user_shell,
+        std::stop_token stop_token,
+        bool use_compatibility_filesystem = false) {
     std::vector<SessionDiagnostic> diagnostics;
 
     // 1. Resolve workspace and validate target shape. Resume-shaped targets
@@ -929,7 +1130,7 @@ struct SessionTargetNormalizationOptions {
             target->resume_path, target->workspace, target->workspace_explicit,
             plan.resume_cwd_override);
         if (!prepared) {
-            return std::unexpected(prepared.error());
+            co_return std::unexpected(prepared.error());
         }
         workspace = prepared->workspace;
         prepared_resume = std::move(*prepared);
@@ -946,17 +1147,16 @@ struct SessionTargetNormalizationOptions {
         const bool regular =
             exists && std::filesystem::is_regular_file(target->session_path, ec);
         if (exists && !regular) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                "session target is not a regular file",
-                target->session_path.string()));
+            co_return std::unexpected(support::make_error(support::ErrorCode::Session,
+                    "session target is not a regular file",
+                    target->session_path.string()));
         }
         if (regular && std::filesystem::file_size(target->session_path, ec) > 0) {
             auto prepared = prepare_resume_target(
                 target->session_path, workspace, false,
                 plan.resume_cwd_override);
             if (!prepared) {
-                return std::unexpected(prepared.error());
+                co_return std::unexpected(prepared.error());
             }
             workspace = prepared->workspace;
             prepared_resume = std::move(*prepared);
@@ -966,12 +1166,9 @@ struct SessionTargetNormalizationOptions {
                 std::error_code remove_ec;
                 if (!std::filesystem::remove(target->session_path, remove_ec) ||
                     remove_ec) {
-                    return std::unexpected(support::make_error(
-                        support::ErrorCode::Session,
-                        "could not initialize session file",
-                        target->session_path.string() +
-                            (remove_ec ? ": " + remove_ec.message()
-                                       : std::string{})));
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Session,
+                            "could not initialize session file",
+                            target->session_path.string() + (remove_ec ? ": " + remove_ec.message() : std::string{})));
                 }
             }
             new_publication = ExplicitNewPublication{
@@ -985,7 +1182,7 @@ struct SessionTargetNormalizationOptions {
             target->directory_override,
             target->session_id);
         if (!prepared) {
-            return std::unexpected(prepared.error());
+            co_return std::unexpected(prepared.error());
         }
         prepared_resume = std::move(*prepared);
         is_resume = true;
@@ -1011,7 +1208,7 @@ struct SessionTargetNormalizationOptions {
             auto prepared = prepare_resume_target(
                 most_recent->path, workspace, false);
             if (!prepared) {
-                return std::unexpected(prepared.error());
+                co_return std::unexpected(prepared.error());
             }
             workspace = prepared->workspace;
             prepared_resume = std::move(*prepared);
@@ -1030,9 +1227,7 @@ struct SessionTargetNormalizationOptions {
         workspace = target->workspace;
         new_publication = InMemoryPublication{workspace, target->session_id};
     } else {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "unsupported session target"));
+        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "unsupported session target"));
     }
 
     // pi main.ts missing-cwd recovery (session-cwd.ts): a resumed session
@@ -1045,8 +1240,7 @@ struct SessionTargetNormalizationOptions {
     if (is_resume && workspace != launch_cwd) {
         std::error_code exists_ec;
         if (!std::filesystem::exists(workspace, exists_ec)) {
-            return std::unexpected(missing_session_cwd_error(
-                prepared_resume.resume_path, workspace, launch_cwd));
+            co_return std::unexpected(missing_session_cwd_error(prepared_resume.resume_path, workspace, launch_cwd));
         }
     }
 
@@ -1111,6 +1305,7 @@ struct SessionTargetNormalizationOptions {
     /// The resolved loading request, retained for the runtime's `/reload`
     /// re-run (pi's retained `DefaultResourceLoader` options, #418).
     std::optional<ProjectResourceLoadingRequest> retained_resource_request;
+    ProjectResourceFileSystems retained_resource_filesystems;
     std::filesystem::path trust_store_path =
         coding_agent::trust_store_file_path();
     if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
@@ -1118,63 +1313,85 @@ struct SessionTargetNormalizationOptions {
     }
 
     bool project_trusted = false;
-    {
-        auto fs = harness::WorkspaceFileSystem::create(workspace);
-        if (fs) {
-            ProjectResourceLoadingRequest resource_request;
-            resource_request.workspace = workspace;
-            resource_request.agent_config_directory = coding_agent::agent_config_dir();
-            resource_request.default_project_trust = plan.default_project_trust.value_or(DefaultProjectTrust::Ask);
-            resource_request.project_trust_override = plan.project_trust_override;
-            resource_request.no_skills = plan.no_skills;
-            resource_request.no_prompt_templates = plan.no_prompt_templates;
-            resource_request.skill_paths = plan.skill_paths;
-            resource_request.no_themes = plan.no_themes;
-            resource_request.theme_paths = plan.theme_paths;
-            resource_request.no_context_files = plan.no_context_files;
-            resource_request.system_prompt = plan.system_prompt;
-            resource_request.append_system_prompt = plan.append_system_prompt;
-            resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
-
-            ProjectTrustStore trust_store{trust_store_path};
-            // Retained for `/reload` (pi's `DefaultResourceLoader` instance
-            // re-runs the same discovery options); the loader takes a copy so
-            // the retained request survives.
-            const auto retained_request_copy = resource_request;
-            auto resource_loading = load_project_resources(*fs, trust_store, std::move(resource_request));
-            if (!resource_loading.fatal_errors.empty()) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation,
-                    "explicit resource failed to load",
-                    resource_loading.fatal_errors.front().message));
-            }
-            add_project_resource_loading_diagnostics(diagnostics, resource_loading);
-            project_trusted = resource_loading.trust.decision == ProjectTrustDecision::Trusted;
-            skills = std::move(resource_loading.resources.skills);
-            templates = std::move(resource_loading.resources.prompt_templates);
-            theme_documents = std::move(resource_loading.resources.themes);
-            agents_files = std::move(resource_loading.resources.agents_files);
-            system_prompt_text = std::move(resource_loading.resources.system_prompt);
-            append_system_prompt_texts =
-                std::move(resource_loading.resources.append_system_prompt);
-            system_prompt_source =
-                std::move(resource_loading.resources.system_prompt_source);
-            append_system_prompt_sources =
-                std::move(resource_loading.resources.append_system_prompt_sources);
-            skill_diagnostics = std::move(resource_loading.skill_diagnostics);
-            prompt_diagnostics = std::move(resource_loading.prompt_diagnostics);
-            theme_diagnostics = std::move(resource_loading.theme_diagnostics);
-            retained_resource_request.emplace(retained_request_copy);
-        } else {
-            diagnostics.push_back(make_diag(
-                SessionDiagnostic::Severity::Warning,
-                "resource:workspace_fs_unavailable",
-                fs.error().message,
-                workspace.string()));
+    std::vector<std::string> explicit_resource_paths = plan.skill_paths;
+    explicit_resource_paths.insert(explicit_resource_paths.end(), plan.theme_paths.begin(), plan.theme_paths.end());
+    explicit_resource_paths.insert(
+            explicit_resource_paths.end(), plan.prompt_template_paths.begin(), plan.prompt_template_paths.end());
+    if (plan.system_prompt && !plan.system_prompt->empty()) {
+        explicit_resource_paths.push_back(*plan.system_prompt);
+    }
+    for (const auto& append : plan.append_system_prompt) {
+        if (!append.empty()) {
+            explicit_resource_paths.push_back(append);
         }
     }
+    auto resource_filesystems = use_compatibility_filesystem
+                                        ? make_sync_resource_filesystems(workspace, explicit_resource_paths)
+                                        : make_authorized_resource_filesystems(plan.execution_runtime_target,
+                                                  workspace,
+                                                  coding_agent::agent_config_dir(),
+                                                  coding_agent::home_directory(),
+                                                  explicit_resource_paths);
+    retained_resource_filesystems = resource_filesystems;
+    if (resource_filesystems.workspace) {
+        ProjectResourceLoadingRequest resource_request;
+        resource_request.workspace = workspace;
+        resource_request.agent_config_directory = coding_agent::agent_config_dir();
+        resource_request.home_directory = coding_agent::home_directory();
+        resource_request.default_project_trust = plan.default_project_trust.value_or(DefaultProjectTrust::Ask);
+        resource_request.project_trust_override = plan.project_trust_override;
+        resource_request.no_skills = plan.no_skills;
+        resource_request.no_prompt_templates = plan.no_prompt_templates;
+        resource_request.skill_paths = plan.skill_paths;
+        resource_request.no_themes = plan.no_themes;
+        resource_request.theme_paths = plan.theme_paths;
+        resource_request.no_context_files = plan.no_context_files;
+        resource_request.system_prompt = plan.system_prompt;
+        resource_request.append_system_prompt = plan.append_system_prompt;
+        auto explicit_templates = co_await make_explicit_template_inputs_async(
+                resource_filesystems, workspace, plan.prompt_template_paths, stop_token);
+        if (!explicit_templates) {
+            co_return std::unexpected(std::move(explicit_templates.error()));
+        }
+        resource_request.explicit_prompt_templates = std::move(*explicit_templates);
+
+        ProjectTrustStore trust_store{trust_store_path};
+        // Retained for `/reload` (pi's `DefaultResourceLoader` instance
+        // re-runs the same discovery options); the loader takes a copy so
+        // the retained request survives.
+        const auto retained_request_copy = resource_request;
+        auto resource_loading = co_await support::detail::await_async_result(load_project_resources(
+                std::move(resource_filesystems), trust_store, std::move(resource_request), stop_token));
+        if (!resource_loading) {
+            co_return std::unexpected(harness::to_util_error(std::move(resource_loading.error())));
+        }
+        if (!resource_loading->fatal_errors.empty()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "explicit resource failed to load",
+                    resource_loading->fatal_errors.front().message));
+        }
+        add_project_resource_loading_diagnostics(diagnostics, *resource_loading);
+        project_trusted = resource_loading->trust.decision == ProjectTrustDecision::Trusted;
+        skills = std::move(resource_loading->resources.skills);
+        templates = std::move(resource_loading->resources.prompt_templates);
+        theme_documents = std::move(resource_loading->resources.themes);
+        agents_files = std::move(resource_loading->resources.agents_files);
+        system_prompt_text = std::move(resource_loading->resources.system_prompt);
+        append_system_prompt_texts = std::move(resource_loading->resources.append_system_prompt);
+        system_prompt_source = std::move(resource_loading->resources.system_prompt_source);
+        append_system_prompt_sources = std::move(resource_loading->resources.append_system_prompt_sources);
+        skill_diagnostics = std::move(resource_loading->skill_diagnostics);
+        prompt_diagnostics = std::move(resource_loading->prompt_diagnostics);
+        theme_diagnostics = std::move(resource_loading->theme_diagnostics);
+        retained_resource_request.emplace(retained_request_copy);
+    } else {
+        diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Warning,
+                "resource:workspace_fs_unavailable",
+                "project resource filesystem capability is unavailable",
+                workspace.string()));
+    }
     if (auto trusted = snapshot.manager.set_project_trusted(project_trusted); !trusted) {
-        return std::unexpected(trusted.error());
+        co_return std::unexpected(trusted.error());
     }
     // A project-scope load error recorded during the trust flip must surface on
     // the success path too, not only through the failure-path context.
@@ -1189,7 +1406,7 @@ struct SessionTargetNormalizationOptions {
     } else {
         auto built = build_runtime(nullptr);
         if (!built) {
-            return std::unexpected(built.error());
+            co_return std::unexpected(built.error());
         }
         runtime = std::move(*built);
     }
@@ -1250,7 +1467,7 @@ struct SessionTargetNormalizationOptions {
             plan, *runtime, is_resume, stored_provider, stored_model,
             resume_restore_failed, settings, &scoped_models, &scoped_thinking_level);
         if (!resolved) {
-            return std::unexpected(resolved.error());
+            co_return std::unexpected(resolved.error());
         }
         request_model = std::move(*resolved);
     }
@@ -1260,7 +1477,7 @@ struct SessionTargetNormalizationOptions {
         if (auto override_set = runtime->set_runtime_api_key(
                 request_model.provider, *plan.cli_selection.api_key);
             !override_set) {
-            return std::unexpected(override_set.error());
+            co_return std::unexpected(override_set.error());
         }
     }
     resolved_provider = request_model.provider;
@@ -1351,17 +1568,17 @@ struct SessionTargetNormalizationOptions {
     builtin_names.insert("read");
     if (auto added = tools.add(tools::make_async_read_file_tool(exec_env)); !added) {
         cleanup_on_failure();
-        return std::unexpected(added.error());
+        co_return std::unexpected(added.error());
     }
     builtin_names.insert("write");
     if (auto added = tools.add(tools::make_async_write_file_tool(exec_env)); !added) {
         cleanup_on_failure();
-        return std::unexpected(added.error());
+        co_return std::unexpected(added.error());
     }
     builtin_names.insert("edit");
     if (auto added = tools.add(tools::make_async_edit_tool(exec_env)); !added) {
         cleanup_on_failure();
-        return std::unexpected(added.error());
+        co_return std::unexpected(added.error());
     }
     builtin_names.insert("bash");
     // Live PI_* session facts for the model Bash Tool (pi
@@ -1375,29 +1592,27 @@ struct SessionTargetNormalizationOptions {
             exec_env, bash_session_environment));
         !added) {
         cleanup_on_failure();
-        return std::unexpected(added.error());
+        co_return std::unexpected(added.error());
     }
 
     if (auto dup = find_duplicate_tool_name(plan.custom_tools)) {
         cleanup_on_failure();
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            std::format("duplicate custom tool name: '{}'", *dup),
-            "each custom tool must have a unique name"));
+        co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                std::format("duplicate custom tool name: '{}'", *dup),
+                "each custom tool must have a unique name"));
     }
     if (auto collision = find_builtin_custom_collision(builtin_names, plan.custom_tools)) {
         cleanup_on_failure();
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            std::format("custom tool name '{}' collides with built-in tool", *collision),
-            "rename the custom tool or disable the conflicting built-in tool"));
+        co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                std::format("custom tool name '{}' collides with built-in tool", *collision),
+                "rename the custom tool or disable the conflicting built-in tool"));
     }
 
     for (auto& tool : plan.custom_tools) {
         if (tool.execute) {
             if (auto added = tools.add(std::move(tool)); !added) {
                 cleanup_on_failure();
-                return std::unexpected(added.error());
+                co_return std::unexpected(added.error());
             }
         }
     }
@@ -1425,7 +1640,7 @@ struct SessionTargetNormalizationOptions {
         auto published = publish_resume_session(prepared_resume);
         if (!published) {
             cleanup_on_failure();
-            return std::unexpected(published.error());
+            co_return std::unexpected(published.error());
         }
         open = std::move(*published);
         // pi sdk.ts: a resumed session without a `thinking_level_change`
@@ -1436,7 +1651,7 @@ struct SessionTargetNormalizationOptions {
                     std::nullopt, effective_thinking_level);
                 !appended) {
                 cleanup_on_failure();
-                return std::unexpected(appended.error());
+                co_return std::unexpected(appended.error());
             }
         }
     } else {
@@ -1446,7 +1661,7 @@ struct SessionTargetNormalizationOptions {
             resolved_model);
         if (!published) {
             cleanup_on_failure();
-            return std::unexpected(published.error());
+            co_return std::unexpected(published.error());
         }
         open = std::move(*published);
         // Private in-session seam: pi in-memory `createBranchedSession` — the
@@ -1470,7 +1685,7 @@ struct SessionTargetNormalizationOptions {
             for (const auto& message : open.history) {
                 if (auto appended = open.store->append(message); !appended) {
                     cleanup_on_failure();
-                    return std::unexpected(appended.error());
+                    co_return std::unexpected(appended.error());
                 }
             }
         }
@@ -1489,7 +1704,7 @@ struct SessionTargetNormalizationOptions {
                     std::nullopt, resolved_provider, resolved_model);
                 !appended) {
                 cleanup_on_failure();
-                return std::unexpected(appended.error());
+                co_return std::unexpected(appended.error());
             }
         }
         // pi sdk.ts: new sessions persist the initial thinking level as
@@ -1500,7 +1715,7 @@ struct SessionTargetNormalizationOptions {
                 std::nullopt, effective_thinking_level);
             !appended) {
             cleanup_on_failure();
-            return std::unexpected(appended.error());
+            co_return std::unexpected(appended.error());
         }
     }
 
@@ -1513,7 +1728,7 @@ struct SessionTargetNormalizationOptions {
                 std::nullopt, std::move(sanitized));
             !appended) {
             cleanup_on_failure();
-            return std::unexpected(appended.error());
+            co_return std::unexpected(appended.error());
         }
     }
 
@@ -1548,6 +1763,7 @@ struct SessionTargetNormalizationOptions {
     session_config.prompt_diagnostics = std::move(prompt_diagnostics);
     session_config.theme_diagnostics = std::move(theme_diagnostics);
     session_config.resource_loading_request = std::move(retained_resource_request);
+    session_config.resource_file_systems = std::move(retained_resource_filesystems);
     const auto shell_path = settings.shell_path;
     const auto shell_command_prefix = settings.shell_command_prefix;
 
@@ -1590,16 +1806,29 @@ struct SessionTargetNormalizationOptions {
         .workspace = workspace,
         .metadata = metadata,
     };
-    return SessionFactory::publish(std::move(assembly),
+    co_return SessionFactory::publish(std::move(assembly),
             std::move(diagnostics),
             std::move(model_fallback_message),
             std::move(theme_documents),
             std::move(identity));
 }
 
-/// Shared creation tail: normalize produced a plan (or the attempt's first
-/// error), assembly runs against the same snapshot, and any failure carries
-/// the settings load warnings through the error context field.
+/// The synchronous expand-contract bridge owns a private loop only for
+/// legacy tests. Production calls `finish_creation_async` on the CLI Runtime
+/// loop and never enters this bridge.
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> run_assembly_sync(
+        AssemblyPlan plan, SettingsSnapshot& snapshot, std::unique_ptr<AsyncUserShell> user_shell) {
+    auto loop = std::make_shared<boost::asio::io_context>();
+    auto future = boost::asio::co_spawn(*loop,
+            run_assembly_async(std::move(plan), snapshot, std::move(user_shell), {}, true),
+            boost::asio::use_future);
+    loop->run();
+    return future.get();
+}
+
+/// Shared synchronous creation tail: normalize produced a plan (or the
+/// attempt's first error), assembly runs against the same snapshot, and any
+/// failure carries the settings load warnings through the error context field.
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> finish_creation(
     support::Expected<AssemblyPlan> plan,
     SettingsSnapshot& snapshot,
@@ -1607,15 +1836,42 @@ struct SessionTargetNormalizationOptions {
     if (!plan) {
         return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
     }
-    auto result = run_assembly(
-        std::move(*plan), snapshot, std::move(user_shell));
+    auto result = run_assembly_sync(std::move(*plan), snapshot, std::move(user_shell));
     if (!result) {
         return std::unexpected(with_settings_fallback_context(result.error(), snapshot));
     }
     return result;
 }
 
+[[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> finish_creation_async(
+        support::Expected<AssemblyPlan> plan,
+        SettingsSnapshot& snapshot,
+        std::unique_ptr<AsyncUserShell> user_shell,
+        std::stop_token stop_token) {
+    if (!plan) {
+        co_return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
+    }
+    auto result = co_await run_assembly_async(std::move(*plan), snapshot, std::move(user_shell), stop_token);
+    if (!result) {
+        co_return std::unexpected(with_settings_fallback_context(result.error(), snapshot));
+    }
+    co_return std::move(*result);
+}
+
 } // namespace
+
+ProjectResourceFileSystems SessionFactory::make_authorized_project_resource_filesystems(
+        std::shared_ptr<harness::RuntimeRoot> runtime_root,
+        std::filesystem::path workspace,
+        std::filesystem::path agent_config_directory,
+        std::filesystem::path home_directory,
+        std::vector<std::string> explicit_paths) {
+    return make_authorized_resource_filesystems(runtime_root ? runtime_root->make_target() : nullptr,
+            std::move(workspace),
+            agent_config_directory,
+            home_directory,
+            explicit_paths);
+}
 
 coding_agent::CreateAgentSessionResult SessionFactory::publish(AgentSessionAssembly assembly,
         std::vector<coding_agent::SessionDiagnostic> diagnostics,
@@ -1647,6 +1903,55 @@ void SessionFactory::apply_cli_facts(
     // each replacement): host-authoritative, load-bearing for the fields
     // `InteractiveEngine::make_session_request` deliberately omits.
     request.session_facts = facts;
+}
+
+support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::create_async(
+        AgentSessionCreationRequest request,
+        std::optional<InteractiveSessionFacts> session_facts,
+        AssemblyOverrides overrides,
+        std::stop_token stop_token) {
+    return support::detail::make_async_result(
+            [request = std::move(request),
+                    session_facts = std::move(session_facts),
+                    overrides = std::move(overrides),
+                    stop_token]() mutable
+                    -> boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> {
+                if (session_facts.has_value()) {
+                    apply_cli_facts(request, *session_facts);
+                }
+                auto snapshot = load_settings_snapshot(request.workspace);
+                if (overrides.model_runtime) {
+                    auto plan = normalize_cli(std::move(request), snapshot.manager);
+                    if (!plan) {
+                        co_return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
+                    }
+                    if (!plan->model_runtime) {
+                        plan->model_runtime = std::move(overrides.model_runtime);
+                        plan->model_runtime_owned = false;
+                        plan->cli_fake = overrides.cli_fake;
+                    }
+                    co_return co_await finish_creation_async(
+                            std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);
+                }
+                if (overrides.models) {
+                    auto wrapped = std::make_shared<ModelRuntime>(std::move(overrides.models));
+                    auto plan = normalize_cli(std::move(request), snapshot.manager);
+                    if (!plan) {
+                        co_return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
+                    }
+                    if (!plan->model_runtime) {
+                        plan->model_runtime = std::move(wrapped);
+                        plan->model_runtime_owned = true;
+                        plan->cli_fake = true;
+                    }
+                    co_return co_await finish_creation_async(
+                            std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);
+                }
+                co_return co_await finish_creation_async(normalize_cli(std::move(request), snapshot.manager),
+                        snapshot,
+                        std::move(overrides.user_shell),
+                        stop_token);
+            });
 }
 
 support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create(

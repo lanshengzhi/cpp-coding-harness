@@ -413,6 +413,8 @@ private:
     request_session_replacement(
         std::size_t captured_generation,
         runtime::AgentSessionCreationRequest request);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
+    request_session_replacement_async(std::size_t captured_generation, runtime::AgentSessionCreationRequest request);
 
     /// pi `AgentSessionRuntime.apply` + `rebindCurrentSession` subset: swap
     /// the live session, resubscribe, and rebuild the presentation from the
@@ -517,6 +519,7 @@ private:
     /// composition host (ADR 0040); null applies TUI-local platform defaults
     /// for the environment operations.
     TuiActionSink action_sink_{nullptr};
+    AsyncSessionReplacementSink async_session_replacement_sink_{nullptr};
     std::optional<std::string> model_fallback_message_;
     /// CLI-owned facts reused for in-session session replacement requests.
     runtime::InteractiveSessionFacts session_facts_;

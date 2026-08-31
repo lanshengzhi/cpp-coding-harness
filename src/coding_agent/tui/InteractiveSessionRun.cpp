@@ -1,10 +1,10 @@
 #include "InteractiveSessionRun.hpp"
 
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 
-#include <cch/agent/harness/LocalFileSystem.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 
 #include <csignal>
@@ -17,18 +17,6 @@
 
 namespace cch::coding_agent::tui {
 namespace {
-
-[[nodiscard]] std::filesystem::path normalized_capability_root(const std::filesystem::path& path) {
-    return path.lexically_normal();
-}
-
-[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> make_local_capability(
-        const std::shared_ptr<harness::RuntimeTarget>& target, const std::filesystem::path& root) {
-    if (!target || root.empty()) {
-        return {};
-    }
-    return std::make_shared<harness::AsyncLocalFileSystem>(target, normalized_capability_root(root));
-}
 
 [[nodiscard]] std::filesystem::path intent_workspace(const SessionIntentVariant& intent) {
     return std::visit(
@@ -50,28 +38,10 @@ ProjectResourceFileSystems make_authorized_project_resource_filesystems(
         std::filesystem::path workspace,
         std::filesystem::path agent_config_directory,
         std::filesystem::path home_directory) {
-    ProjectResourceFileSystems result;
-    if (!runtime_root || workspace.empty()) {
-        return result;
-    }
-
-    workspace = normalized_capability_root(workspace);
-    const auto target = runtime_root->make_target();
-    result.workspace = make_local_capability(target, workspace);
-    auto current = workspace;
-    while (true) {
-        const auto parent = current.parent_path();
-        if (parent == current || parent == parent.root_path()) {
-            break;
-        }
-        current = parent;
-        result.ancestor_roots.push_back(make_local_capability(target, current));
-    }
-    result.agent_config_directory = make_local_capability(target, agent_config_directory);
-    if (!home_directory.empty()) {
-        result.user_agents_root = make_local_capability(target, normalized_capability_root(home_directory) / ".agents");
-    }
-    return result;
+    return runtime::SessionFactory::make_authorized_project_resource_filesystems(std::move(runtime_root),
+            std::move(workspace),
+            std::move(agent_config_directory),
+            std::move(home_directory));
 }
 
 InteractiveSessionRun::InteractiveSessionRun(std::shared_ptr<State> state)
@@ -171,6 +141,33 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
                     .models = state_->models,
                     .user_shell = nullptr,
             });
+}
+
+AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacement_sink() const {
+    if (!state_) return nullptr;
+    // An injected action sink is the authoritative host seam for tests and
+    // alternate compositions. Keep boot and in-session replacement on that
+    // synchronous action path rather than bypassing it with the production
+    // asynchronous factory.
+    if (state_->custom_action_sink.has_value()) {
+        return nullptr;
+    }
+    const auto state = state_;
+    return [state](std::size_t /* action_generation */, runtime::AgentSessionCreationRequest request)
+                   -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.provide_user_shell = true;
+        if (state->runtime_root) {
+            request.execution_runtime_target = state->runtime_root->make_target();
+        }
+        return coding_agent::create_agent_session_async(std::move(request),
+                state->session_facts,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = state->shared_runtime,
+                        .cli_fake = state->model_runtime_cli_fake,
+                        .models = state->models,
+                        .user_shell = nullptr,
+                });
+    };
 }
 
 void InteractiveSessionRun::report_boot_diagnostics(
