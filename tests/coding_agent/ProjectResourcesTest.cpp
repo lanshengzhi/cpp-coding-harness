@@ -1,4 +1,5 @@
 #include <cch/coding_agent/ProjectResources.hpp>
+#include "support/LegacyAsyncLoader.hpp"
 #include <cch/agent/harness/LocalFileSystem.hpp>
 #include "agent/harness/RuntimeRoot.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"

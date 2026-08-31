@@ -1,4 +1,5 @@
 #include "coding_agent/SkillLoader.hpp"
+#include "support/LegacyAsyncLoader.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/AsyncResultBridge.hpp"

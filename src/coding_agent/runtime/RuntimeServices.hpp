@@ -22,6 +22,11 @@ namespace cch::coding_agent::runtime {
 /// Kept as an implementation detail; SessionFactory is the only seam that
 /// constructs or populates this bundle.
 struct RuntimeServices {
+    /// Optional owner for a compatibility RuntimeRoot created by the
+    /// synchronous test/legacy creation bridge. It keeps that root's loop
+    /// alive for later async Session operations without exposing a private
+    /// filesystem implementation or changing the production Runtime graph.
+    std::shared_ptr<void> runtime_keepalive;
     /// The session's canonical model/auth runtime, held as `std::shared_ptr`
     /// and injected into the stateful Agent (the sole injectable seam per
     /// #326). Always constructed by SessionFactory: a host-injected runtime

@@ -1,4 +1,5 @@
 #include "coding_agent/PromptTemplateLoader.hpp"
+#include "support/LegacyAsyncLoader.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 

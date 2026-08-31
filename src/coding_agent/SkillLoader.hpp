@@ -9,10 +9,6 @@
 #include <string>
 #include <vector>
 
-namespace cch::harness {
-class WorkspaceFileSystem;
-}
-
 namespace cch::coding_agent {
 
 /// pi `PathMetadata` subset carried by one skill scan: the scope and
@@ -53,13 +49,6 @@ struct SkillDirSpec {
         SkillSourceContext source_context = {},
         std::stop_token stop_token = {});
 
-/// Temporary expand-contract bridge for synchronous callers. New production
-/// resource loading uses the AsyncFileSystem overload above.
-[[nodiscard]] SkillLoadResult loadSkillFromFile(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath,
-    SkillSourceContext source_context = {});
-
 /// Discover and load skills from one or more directories.
 ///
 /// Each SkillDirSpec specifies a directory to scan and whether root .md
@@ -72,10 +61,5 @@ struct SkillDirSpec {
 /// with a pi-shaped collision diagnostic.
 [[nodiscard]] support::AsyncResult<SkillLoadResult, harness::FileError> loadSkills(
         harness::AsyncFileSystem& fs, std::vector<SkillDirSpec> dirs, std::stop_token stop_token = {});
-
-/// Temporary expand-contract bridge for synchronous callers.
-[[nodiscard]] SkillLoadResult loadSkills(
-    const harness::WorkspaceFileSystem& fs,
-    const std::vector<SkillDirSpec>& dirs);
 
 } // namespace cch::coding_agent

@@ -9,10 +9,6 @@
 #include <string_view>
 #include <vector>
 
-namespace cch::harness {
-class WorkspaceFileSystem;
-}
-
 namespace cch::coding_agent {
 
 /// Diagnostic severity for prompt template loading.
@@ -59,13 +55,6 @@ struct PromptTemplateDirSpec {
         std::optional<SourceInfo> source_info = std::nullopt,
         std::stop_token stop_token = {});
 
-/// Temporary expand-contract bridge for synchronous callers. New production
-/// resource loading uses the AsyncFileSystem overload above.
-[[nodiscard]] PromptTemplateLoadResult loadPromptTemplateFromFile(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath,
-    const std::optional<SourceInfo>& source_info = std::nullopt);
-
 /// Discover and load prompt templates from one or more directory specs.
 ///
 /// Each PromptTemplateDirSpec specifies a directory to scan (non-recursively)
@@ -76,10 +65,5 @@ struct PromptTemplateDirSpec {
 /// collision diagnostics and winner/loser paths.
 [[nodiscard]] support::AsyncResult<PromptTemplateLoadResult, harness::FileError> loadPromptTemplates(
         harness::AsyncFileSystem& fs, std::vector<PromptTemplateDirSpec> dirs, std::stop_token stop_token = {});
-
-/// Temporary expand-contract bridge for synchronous callers.
-[[nodiscard]] PromptTemplateLoadResult loadPromptTemplates(
-    const harness::WorkspaceFileSystem& fs,
-    const std::vector<PromptTemplateDirSpec>& dirs);
 
 } // namespace cch::coding_agent

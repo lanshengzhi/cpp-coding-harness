@@ -3,8 +3,6 @@
 #include "AsyncTask.hpp"
 #include "SkillFrontmatterParser.hpp"
 #include "LoaderPath.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
-
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
@@ -45,51 +43,6 @@ namespace {
 }
 
 } // namespace
-
-PromptTemplateLoadResult loadPromptTemplateFromFile(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath,
-    const std::optional<SourceInfo>& source_info) {
-    auto async_filesystem = detail::make_sync_async_filesystem(fs);
-    auto completed = detail::run_sync_bridge(loadPromptTemplateFromFile(
-        *async_filesystem, filePath, source_info));
-    if (!completed) {
-        return PromptTemplateLoadResult{};
-    }
-    if (!*completed) {
-        PromptTemplateLoadResult result;
-        result.diagnostics.push_back(PromptTemplateDiagnostic{
-            .type = "warning",
-            .code = PromptTemplateDiagnosticCode::read_failed,
-            .message = completed->error().message,
-            .path = filePath,
-        });
-        return result;
-    }
-    return std::move(**completed);
-}
-
-PromptTemplateLoadResult loadPromptTemplates(
-    const harness::WorkspaceFileSystem& fs,
-    const std::vector<PromptTemplateDirSpec>& dirs) {
-    auto async_filesystem = detail::make_sync_async_filesystem(fs);
-    auto completed = detail::run_sync_bridge(loadPromptTemplates(
-        *async_filesystem, std::vector<PromptTemplateDirSpec>{dirs.begin(), dirs.end()}));
-    if (!completed) {
-        return PromptTemplateLoadResult{};
-    }
-    if (!*completed) {
-        PromptTemplateLoadResult result;
-        result.diagnostics.push_back(PromptTemplateDiagnostic{
-            .type = "warning",
-            .code = PromptTemplateDiagnosticCode::list_failed,
-            .message = completed->error().message,
-            .path = completed->error().path.value_or(std::string{}),
-        });
-        return result;
-    }
-    return std::move(**completed);
-}
 
 namespace {
 

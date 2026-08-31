@@ -13,10 +13,6 @@
 #include <string>
 #include <vector>
 
-namespace cch::harness {
-class WorkspaceFileSystem;
-}
-
 namespace cch::coding_agent {
 
 struct ExplicitPromptTemplateInput {
@@ -136,13 +132,5 @@ struct ProjectResourceLoadingResult {
         const ProjectTrustStore& trust_store,
         ProjectResourceLoadingRequest request,
         std::stop_token stop_token = {});
-
-/// Temporary expand-contract bridge for existing synchronous callers. It
-/// delegates to the canonical asynchronous loader through composition-owned
-/// compatibility capabilities; it is not a second resource-loading authority.
-[[nodiscard]] ProjectResourceLoadingResult load_project_resources(
-    const harness::WorkspaceFileSystem& fs,
-    const ProjectTrustStore& trust_store,
-    ProjectResourceLoadingRequest request);
 
 } // namespace cch::coding_agent

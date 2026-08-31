@@ -2,8 +2,6 @@
 
 #include "AsyncTask.hpp"
 #include "LoaderPath.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
-
 #include <algorithm>
 #include <array>
 #include <filesystem>
@@ -234,44 +232,6 @@ std::string_view to_string(ProjectResourceKind kind) {
         return "project_agents_skills";
     }
     return "project_resource";
-}
-
-ProjectResourceDetectionResult detect_project_resources(
-    const harness::WorkspaceFileSystem& fs,
-    const std::filesystem::path& user_agents_skills_dir) {
-    // Temporary expand-contract bridge: all detection now runs through the
-    // canonical asynchronous capability. Ancestor capabilities are bounded
-    // to the known path chain so the bridge preserves the legacy
-    // `.agents/skills` trust-marker search without widening authority.
-    ProjectResourceFileSystems filesystems;
-    filesystems.workspace = detail::make_sync_async_filesystem(fs);
-    auto current = absolute_normalized(fs.root());
-    while (true) {
-        const auto parent = current.parent_path();
-        if (parent == current || parent == parent.root_path()) {
-            break;
-        }
-        current = parent;
-        if (auto ancestor = harness::WorkspaceFileSystem::create(current)) {
-            filesystems.ancestor_roots.push_back(
-                detail::make_sync_async_filesystem(*ancestor));
-        }
-    }
-
-    auto completed = detail::run_sync_bridge(detect_project_resources(
-        std::move(filesystems), user_agents_skills_dir));
-    if (!completed) {
-        return ProjectResourceDetectionResult{};
-    }
-    if (!*completed) {
-        ProjectResourceDetectionResult result;
-        result.diagnostics.push_back(diagnostic(
-            ResourceDiagnosticType::Warning,
-            completed->error().message,
-            completed->error().path.value_or(std::string{})));
-        return result;
-    }
-    return std::move(**completed);
 }
 
 namespace {

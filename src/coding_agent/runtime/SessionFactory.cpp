@@ -23,7 +23,6 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -33,14 +32,17 @@
 #include <boost/asio/use_future.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <future>
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -103,6 +105,38 @@ using NormalizedSessionTarget = std::variant<
     ForkTarget,
     ContinueRecentTarget>;
 
+/// Loop and RuntimeRoot owner used only by the synchronous compatibility
+/// bridge. The public Session retains this owner so its canonical async
+/// filesystem capabilities remain usable after creation returns.
+struct CompatibilityRuntime final {
+    CompatibilityRuntime()
+        : loop(std::make_shared<boost::asio::io_context>()),
+          root(std::make_shared<harness::RuntimeRoot>(loop, harness::RuntimeLimits{})),
+          loop_thread([loop = loop] { loop->run(); }) {}
+
+    ~CompatibilityRuntime() {
+        // RuntimeRoot::close() drains admitted workers and releases the loop
+        // guard. Let the loop thread finish queued terminal/cleanup handlers
+        // before joining; stopping it here would discard those handlers.
+        root->close();
+        if (!loop_thread.joinable()) {
+            return;
+        }
+        if (loop_thread.get_id() == std::this_thread::get_id()) {
+            loop_thread.detach();
+        } else {
+            loop_thread.join();
+        }
+    }
+
+    CompatibilityRuntime(const CompatibilityRuntime&) = delete;
+    CompatibilityRuntime& operator=(const CompatibilityRuntime&) = delete;
+
+    std::shared_ptr<boost::asio::io_context> loop;
+    std::shared_ptr<harness::RuntimeRoot> root;
+    std::jthread loop_thread;
+};
+
 struct AssemblyPlan {
     NormalizedSessionTarget target;
     /// The model/auth runtime used by the session. Nullable: a runtime is
@@ -161,6 +195,9 @@ struct AssemblyPlan {
     /// One target of the CLI-owned Runtime root. It is shared by the Session's
     /// filesystem and Shell capabilities and survives Session replacement.
     std::shared_ptr<harness::RuntimeTarget> execution_runtime_target;
+    /// Keeps the synchronous compatibility RuntimeRoot's loop driver alive
+    /// when this plan created the target for a legacy/test caller.
+    std::shared_ptr<void> runtime_keepalive;
     /// pi `switchSession` cwdOverride (in-session resume only): bind the
     /// resumed session's runtime to this cwd even when the header stores a
     /// different (missing) cwd.
@@ -462,71 +499,6 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
     return selected;
 }
 
-[[nodiscard]] ProjectResourceFileSystems make_sync_resource_filesystems(
-        const std::filesystem::path& workspace, const std::vector<std::string>& explicit_paths) {
-    ProjectResourceFileSystems result;
-    result.workspace = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{workspace});
-    std::vector<std::pair<std::filesystem::path, std::shared_ptr<harness::AsyncFileSystem>>> known_roots;
-    const auto add_known_root = [&](const std::filesystem::path& root,
-                                        std::shared_ptr<harness::AsyncFileSystem> filesystem) {
-        if (!filesystem || root.empty()) {
-            return;
-        }
-        known_roots.emplace_back(normalized_capability_root(root), std::move(filesystem));
-    };
-    add_known_root(workspace, result.workspace);
-
-    auto current = normalized_capability_root(workspace);
-    while (true) {
-        const auto parent = current.parent_path();
-        if (parent == current || parent == parent.root_path()) {
-            break;
-        }
-        current = parent;
-        auto filesystem = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{current});
-        result.ancestor_roots.push_back(filesystem);
-        add_known_root(current, std::move(filesystem));
-    }
-
-    const auto agent_config_directory = coding_agent::agent_config_dir();
-    auto agent_filesystem = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{agent_config_directory});
-    result.agent_config_directory = agent_filesystem;
-    add_known_root(agent_config_directory, std::move(agent_filesystem));
-
-    const auto user_agents_root = normalized_capability_root(coding_agent::home_directory()) / ".agents";
-    auto user_agents_filesystem = detail::make_sync_async_filesystem(harness::WorkspaceFileSystem{user_agents_root});
-    result.user_agents_root = user_agents_filesystem;
-    add_known_root(user_agents_root, std::move(user_agents_filesystem));
-
-    for (const auto& raw_path : explicit_paths) {
-        if (raw_path.empty()) {
-            continue;
-        }
-        const auto raw = std::filesystem::path{raw_path};
-        const auto candidate = normalized_capability_root(raw.is_absolute() ? raw : workspace / raw);
-        std::shared_ptr<harness::AsyncFileSystem> selected;
-        std::size_t selected_length{0};
-        for (const auto& [root, filesystem] : known_roots) {
-            if (!path_is_under(root, candidate)) {
-                continue;
-            }
-            const auto length = root.string().size();
-            if (!selected || length > selected_length) {
-                selected = filesystem;
-                selected_length = length;
-            }
-        }
-        if (selected) {
-            result.explicit_paths.push_back(AuthorizedResourcePath{
-                    .path = candidate.string(),
-                    .filesystem = std::move(selected),
-            });
-        }
-    }
-    return result;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Model / runtime resolution
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1110,8 +1082,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
         AssemblyPlan plan,
         SettingsSnapshot& snapshot,
         std::unique_ptr<AsyncUserShell> user_shell,
-        std::stop_token stop_token,
-        bool use_compatibility_filesystem = false) {
+        std::stop_token stop_token) {
     std::vector<SessionDiagnostic> diagnostics;
 
     // 1. Resolve workspace and validate target shape. Resume-shaped targets
@@ -1325,13 +1296,11 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
             explicit_resource_paths.push_back(append);
         }
     }
-    auto resource_filesystems = use_compatibility_filesystem
-                                        ? make_sync_resource_filesystems(workspace, explicit_resource_paths)
-                                        : make_authorized_resource_filesystems(plan.execution_runtime_target,
-                                                  workspace,
-                                                  coding_agent::agent_config_dir(),
-                                                  coding_agent::home_directory(),
-                                                  explicit_resource_paths);
+    auto resource_filesystems = make_authorized_resource_filesystems(plan.execution_runtime_target,
+            workspace,
+            coding_agent::agent_config_dir(),
+            coding_agent::home_directory(),
+            explicit_resource_paths);
     retained_resource_filesystems = resource_filesystems;
     if (resource_filesystems.workspace) {
         ProjectResourceLoadingRequest resource_request;
@@ -1768,6 +1737,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     const auto shell_command_prefix = settings.shell_command_prefix;
 
     RuntimeServices services;
+    services.runtime_keepalive = std::move(plan.runtime_keepalive);
     services.model_runtime = std::move(runtime);
     services.model_runtime_owned = plan.model_runtime_owned;
     services.settings_manager = std::move(snapshot.manager);
@@ -1813,15 +1783,32 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
             std::move(identity));
 }
 
-/// The synchronous expand-contract bridge owns a private loop only for
-/// legacy tests. Production calls `finish_creation_async` on the CLI Runtime
-/// loop and never enters this bridge.
+/// The synchronous expand-contract bridge owns a private RuntimeRoot only for
+/// legacy tests; its loop owner transfers into the published Session so later
+/// async operations still use the canonical capability. Production calls
+/// `finish_creation_async` on the CLI Runtime loop and never enters this bridge.
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> run_assembly_sync(
         AssemblyPlan plan, SettingsSnapshot& snapshot, std::unique_ptr<AsyncUserShell> user_shell) {
-    auto loop = std::make_shared<boost::asio::io_context>();
-    auto future = boost::asio::co_spawn(*loop,
-            run_assembly_async(std::move(plan), snapshot, std::move(user_shell), {}, true),
-            boost::asio::use_future);
+    std::shared_ptr<CompatibilityRuntime> compatibility_runtime;
+    std::shared_ptr<boost::asio::io_context> loop;
+    if (!plan.execution_runtime_target) {
+        compatibility_runtime = std::make_shared<CompatibilityRuntime>();
+        loop = compatibility_runtime->loop;
+        plan.execution_runtime_target = compatibility_runtime->root->make_target();
+        plan.runtime_keepalive = compatibility_runtime;
+    } else {
+        loop = std::make_shared<boost::asio::io_context>();
+    }
+
+    auto future = boost::asio::co_spawn(
+            *loop, run_assembly_async(std::move(plan), snapshot, std::move(user_shell), {}), boost::asio::use_future);
+    if (compatibility_runtime) {
+        // The compatibility RuntimeRoot owns a dedicated loop driver. Keep it
+        // alive in the published Session so subsequent async operations use
+        // the same canonical filesystem capability rather than a closed or
+        // undriven target.
+        return future.get();
+    }
     loop->run();
     return future.get();
 }

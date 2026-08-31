@@ -10,10 +10,6 @@
 #include <stop_token>
 #include <vector>
 
-namespace cch::harness {
-class WorkspaceFileSystem;
-}
-
 namespace cch::coding_agent {
 
 /// One explicitly authorized path capability supplied by coding-agent
@@ -167,12 +163,6 @@ struct ProjectResourceDetectionResult {
         ProjectResourceFileSystems filesystems,
         const std::filesystem::path& user_agents_skills_dir,
         std::stop_token stop_token = {});
-
-/// Temporary expand-contract bridge for synchronous callers. New production
-/// resource loading uses the AsyncFileSystem overload above.
-[[nodiscard]] ProjectResourceDetectionResult detect_project_resources(
-    const harness::WorkspaceFileSystem& fs,
-    const std::filesystem::path& user_agents_skills_dir);
 
 [[nodiscard]] bool has_detected_kind(
     const ProjectResourceDetectionResult& detection,
