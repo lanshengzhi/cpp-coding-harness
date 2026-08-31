@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <future>
@@ -136,6 +137,120 @@ struct CompatibilityRuntime final {
     std::shared_ptr<harness::RuntimeRoot> root;
     std::jthread loop_thread;
 };
+
+[[nodiscard]] support::Error runtime_work_cancelled_error() {
+    return support::make_error(support::ErrorCode::Cancelled, "Session assembly was cancelled");
+}
+
+[[nodiscard]] support::Error runtime_work_busy_error() {
+    return support::make_error(support::ErrorCode::Busy, "Runtime is busy; session assembly work was not admitted");
+}
+
+template <typename T> struct RuntimeWorkState final {
+    std::optional<harness::RuntimeTarget::Admission> admission;
+    support::AsyncCompletion<T, support::Error> completion;
+    std::optional<support::Expected<T>> outcome;
+};
+
+template <typename T, typename Operation>
+[[nodiscard]] support::AsyncResult<T> submit_runtime_work(std::shared_ptr<harness::RuntimeTarget> runtime_target,
+        std::size_t byte_charge,
+        std::stop_token stop_token,
+        Operation operation) {
+    if (stop_token.stop_requested()) {
+        return support::AsyncResult<T>{std::unexpected(runtime_work_cancelled_error())};
+    }
+    if (!runtime_target) {
+        return support::AsyncResult<T>{std::unexpected(runtime_work_busy_error())};
+    }
+
+    return support::AsyncResult<T>{support::AsyncProducer<T, support::Error>{
+            [runtime_target = std::move(runtime_target), byte_charge, stop_token, operation = std::move(operation)](
+                    support::AsyncCompletion<T, support::Error> completion) mutable noexcept {
+                std::shared_ptr<RuntimeWorkState<T>> state;
+                std::optional<harness::RuntimeTarget::Admission> admission;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                bool terminal_posted = false;
+                try {
+#endif
+                    if (stop_token.stop_requested()) {
+                        completion(std::unexpected(runtime_work_cancelled_error()));
+                        return;
+                    }
+                    admission = runtime_target->try_admit_reserved(byte_charge);
+                    if (!admission) {
+                        completion(std::unexpected(runtime_work_busy_error()));
+                        return;
+                    }
+                    state = std::make_shared<RuntimeWorkState<T>>();
+                    state->admission = std::move(admission);
+                    state->completion = std::move(completion);
+                    const bool queued = state->admission->post_worker(
+                            [state, stop_token, operation = std::move(operation)]() mutable noexcept {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                try {
+#endif
+                                    if (stop_token.stop_requested()) {
+                                        state->outcome = std::unexpected(runtime_work_cancelled_error());
+                                    } else {
+                                        state->outcome = operation();
+                                    }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                                } catch (const std::exception& error) {
+                                    state->outcome = std::unexpected(support::make_error(
+                                            support::ErrorCode::Unknown, "Session assembly work failed", error.what()));
+                                } catch (...) {
+                                    state->outcome = std::unexpected(support::make_error(
+                                            support::ErrorCode::Unknown, "Session assembly work failed"));
+                                }
+#endif
+                                std::move(*state->admission).complete([state]() mutable noexcept {
+                                    state->completion(std::move(*state->outcome));
+                                });
+                            });
+                    if (!queued) {
+                        std::move(*state->admission).complete([state]() mutable noexcept {
+                            state->completion(std::unexpected(runtime_work_busy_error()));
+                        });
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                        terminal_posted = true;
+#endif
+                    }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+                } catch (const std::exception& error) {
+                    const auto failure = support::make_error(
+                            support::ErrorCode::Unknown, "Session assembly work could not be scheduled", error.what());
+                    if (state && !terminal_posted) {
+                        std::move(*state->admission).complete([state, failure = failure]() mutable noexcept {
+                            state->completion(std::unexpected(std::move(failure)));
+                        });
+                    } else if (admission) {
+                        std::move(*admission)
+                                .complete([completion = std::move(completion), failure = failure]() mutable noexcept {
+                                    completion(std::unexpected(std::move(failure)));
+                                });
+                    } else {
+                        completion(std::unexpected(failure));
+                    }
+                } catch (...) {
+                    const auto failure = support::make_error(
+                            support::ErrorCode::Unknown, "Session assembly work could not be scheduled");
+                    if (state && !terminal_posted) {
+                        std::move(*state->admission).complete([state, failure = failure]() mutable noexcept {
+                            state->completion(std::unexpected(std::move(failure)));
+                        });
+                    } else if (admission) {
+                        std::move(*admission)
+                                .complete([completion = std::move(completion), failure = failure]() mutable noexcept {
+                                    completion(std::unexpected(failure));
+                                });
+                    } else {
+                        completion(std::unexpected(failure));
+                    }
+                }
+#endif
+            }}};
+}
 
 struct AssemblyPlan {
     NormalizedSessionTarget target;
@@ -640,34 +755,6 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
     return cch::coding_agent::resolve_model_scope(patterns, runtime.get_available_snapshot());
 }
 
-/// Run the side-effect-free availability coroutine to completion on a
-/// temporary executor so the synchronous session-assembly path can consult
-/// live configured auth (pi `refreshAvailability`, which session creation and
-/// `findInitialModel` both run). The per-provider checks never hit the
-/// network and OAuth credentials are never refreshed; a refresh failure keeps
-/// the last-known snapshot (pi keeps the previous list on failure).
-void refresh_availability_sync(
-    const std::shared_ptr<ModelRuntime>& runtime) {
-    boost::asio::io_context io;
-    auto future = boost::asio::co_spawn(
-            io,
-            [runtime]() -> boost::asio::awaitable<void> {
-                (void)co_await support::detail::await_async_result(runtime->get_available());
-                co_return;
-            },
-            boost::asio::use_future);
-    io.run();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        future.get();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Availability failures keep the last-known snapshot.
-    }
-#endif
-}
-
 /// Frozen runtime default selection (pi `findInitialModel` step 4): the
 /// default-model table over the available (configured-auth) models, then the
 /// first available model, then the concrete unknown `kDefaultModel` (pi
@@ -1078,6 +1165,120 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     co_return inputs;
 }
 
+struct PreparedAssemblyTarget final {
+    std::filesystem::path workspace;
+    PreparedResumeTarget prepared_resume;
+    std::optional<NewSessionPublication> new_publication;
+    bool is_resume{false};
+    /// A fork writes its new JSONL file while the source is prepared. The
+    /// caller removes this path when assembly is cancelled or fails before
+    /// publication, so a superseded replacement cannot leave an orphan.
+    std::optional<std::filesystem::path> transient_session_path;
+};
+
+[[nodiscard]] support::Expected<PreparedAssemblyTarget> prepare_assembly_target(
+        NormalizedSessionTarget target, std::optional<std::filesystem::path> cwd_override) {
+    const auto launch_cwd = std::visit([](const auto& value) { return value.workspace; }, target);
+    PreparedAssemblyTarget result;
+
+    if (const auto* resume = std::get_if<ResumeSessionTarget>(&target)) {
+        auto prepared =
+                prepare_resume_target(resume->resume_path, resume->workspace, resume->workspace_explicit, cwd_override);
+        if (!prepared) {
+            return std::unexpected(prepared.error());
+        }
+        result.workspace = prepared->workspace;
+        result.prepared_resume = std::move(*prepared);
+        result.is_resume = true;
+    } else if (const auto* open_or_create = std::get_if<OpenOrCreateSessionTarget>(&target)) {
+        result.workspace = open_or_create->workspace;
+        // pi `SessionManager.open`: an existing non-empty file resumes (cwd
+        // from the header); a missing or empty regular file creates a new
+        // session at the exact path. A non-regular existing entry is refused.
+        std::error_code ec;
+        const bool exists = std::filesystem::exists(open_or_create->session_path, ec);
+        const bool regular = exists && std::filesystem::is_regular_file(open_or_create->session_path, ec);
+        if (exists && !regular) {
+            return std::unexpected(support::make_error(support::ErrorCode::Session,
+                    "session target is not a regular file",
+                    open_or_create->session_path.string()));
+        }
+        if (regular && std::filesystem::file_size(open_or_create->session_path, ec) > 0) {
+            auto prepared = prepare_resume_target(open_or_create->session_path, result.workspace, false, cwd_override);
+            if (!prepared) {
+                return std::unexpected(prepared.error());
+            }
+            result.workspace = prepared->workspace;
+            result.prepared_resume = std::move(*prepared);
+            result.is_resume = true;
+        } else {
+            if (exists) {
+                std::error_code remove_ec;
+                if (!std::filesystem::remove(open_or_create->session_path, remove_ec) || remove_ec) {
+                    return std::unexpected(support::make_error(support::ErrorCode::Session,
+                            "could not initialize session file",
+                            open_or_create->session_path.string() +
+                                    (remove_ec ? ": " + remove_ec.message() : std::string{})));
+                }
+            }
+            result.new_publication = ExplicitNewPublication{open_or_create->session_path, result.workspace};
+        }
+    } else if (const auto* fork = std::get_if<ForkTarget>(&target)) {
+        result.workspace = fork->workspace;
+        auto prepared =
+                prepare_fork_target(fork->source_path, result.workspace, fork->directory_override, fork->session_id);
+        if (!prepared) {
+            return std::unexpected(prepared.error());
+        }
+        result.prepared_resume = std::move(*prepared);
+        result.workspace = result.prepared_resume.workspace;
+        result.is_resume = true;
+        result.transient_session_path = result.prepared_resume.resume_path;
+    } else if (const auto* continue_recent = std::get_if<ContinueRecentTarget>(&target)) {
+        result.workspace = continue_recent->workspace;
+        // pi `continueRecent`: the most recent session in the effective
+        // session directory, or a new persisted session when none exists.
+        const auto sessions_root = coding_agent::sessions_root_path();
+        const auto default_directory = sessions_root / session_paths::encode_workspace_key(result.workspace);
+        const auto directory = continue_recent->directory_override.value_or(default_directory);
+        const std::optional<std::filesystem::path> cwd_filter =
+                (continue_recent->directory_override && *continue_recent->directory_override != default_directory)
+                        ? std::optional<std::filesystem::path>{result.workspace}
+                        : std::nullopt;
+        if (auto most_recent = session_discovery::find_most_recent_session(
+                directory, cwd_filter)) {
+            auto prepared = prepare_resume_target(most_recent->path, result.workspace, false, cwd_override);
+            if (!prepared) {
+                return std::unexpected(prepared.error());
+            }
+            result.workspace = prepared->workspace;
+            result.prepared_resume = std::move(*prepared);
+            result.is_resume = true;
+        } else {
+            result.new_publication =
+                    AutomaticPublication{result.workspace, continue_recent->directory_override, std::nullopt};
+        }
+    } else if (const auto* automatic = std::get_if<AutomaticNewSessionTarget>(&target)) {
+        result.workspace = automatic->workspace;
+        result.new_publication =
+                AutomaticPublication{result.workspace, automatic->directory_override, automatic->session_id};
+    } else if (const auto* in_memory = std::get_if<InMemoryNewSessionTarget>(&target)) {
+        result.workspace = in_memory->workspace;
+        result.new_publication = InMemoryPublication{result.workspace, in_memory->session_id};
+    } else {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "unsupported session target"));
+    }
+
+    if (result.is_resume && result.workspace != launch_cwd) {
+        std::error_code exists_ec;
+        if (!std::filesystem::exists(result.workspace, exists_ec)) {
+            return std::unexpected(
+                    missing_session_cwd_error(result.prepared_resume.resume_path, result.workspace, launch_cwd));
+        }
+    }
+    return result;
+}
+
 [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> run_assembly_async(
         AssemblyPlan plan,
         SettingsSnapshot& snapshot,
@@ -1085,135 +1286,43 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
         std::stop_token stop_token) {
     std::vector<SessionDiagnostic> diagnostics;
 
-    // 1. Resolve workspace and validate target shape. Resume-shaped targets
-    // (explicit resume, open-or-create on an existing file, fork, continue
-    // with a most-recent session) prepare their resume view first so the
-    // model chain below re-resolves the stored identity.
-    std::filesystem::path workspace;
-    const auto launch_cwd = std::visit(
-        [](const auto& target) { return target.workspace; }, plan.target);
-    PreparedResumeTarget prepared_resume;
-    std::optional<NewSessionPublication> new_publication;
-    bool is_resume = false;
-
-    if (const auto* target = std::get_if<ResumeSessionTarget>(&plan.target)) {
-        auto prepared = prepare_resume_target(
-            target->resume_path, target->workspace, target->workspace_explicit,
-            plan.resume_cwd_override);
-        if (!prepared) {
-            co_return std::unexpected(prepared.error());
-        }
-        workspace = prepared->workspace;
-        prepared_resume = std::move(*prepared);
-        is_resume = true;
-    } else if (const auto* target =
-                   std::get_if<OpenOrCreateSessionTarget>(&plan.target)) {
-        workspace = target->workspace;
-        // pi `SessionManager.open`: an existing non-empty file resumes (cwd
-        // from the header); a missing or empty regular file creates a new
-        // session at the exact path (pi rewrites an empty file with a fresh
-        // header). A non-regular existing entry is refused.
-        std::error_code ec;
-        const bool exists = std::filesystem::exists(target->session_path, ec);
-        const bool regular =
-            exists && std::filesystem::is_regular_file(target->session_path, ec);
-        if (exists && !regular) {
-            co_return std::unexpected(support::make_error(support::ErrorCode::Session,
-                    "session target is not a regular file",
-                    target->session_path.string()));
-        }
-        if (regular && std::filesystem::file_size(target->session_path, ec) > 0) {
-            auto prepared = prepare_resume_target(
-                target->session_path, workspace, false,
-                plan.resume_cwd_override);
-            if (!prepared) {
-                co_return std::unexpected(prepared.error());
-            }
-            workspace = prepared->workspace;
-            prepared_resume = std::move(*prepared);
-            is_resume = true;
-        } else {
-            if (exists) {
-                std::error_code remove_ec;
-                if (!std::filesystem::remove(target->session_path, remove_ec) ||
-                    remove_ec) {
-                    co_return std::unexpected(support::make_error(support::ErrorCode::Session,
-                            "could not initialize session file",
-                            target->session_path.string() + (remove_ec ? ": " + remove_ec.message() : std::string{})));
-                }
-            }
-            new_publication = ExplicitNewPublication{
-                target->session_path, workspace};
-        }
-    } else if (const auto* target = std::get_if<ForkTarget>(&plan.target)) {
-        workspace = target->workspace;
-        auto prepared = prepare_fork_target(
-            target->source_path,
-            workspace,
-            target->directory_override,
-            target->session_id);
-        if (!prepared) {
-            co_return std::unexpected(prepared.error());
-        }
-        prepared_resume = std::move(*prepared);
-        is_resume = true;
-    } else if (const auto* target =
-                   std::get_if<ContinueRecentTarget>(&plan.target)) {
-        workspace = target->workspace;
-        // pi `continueRecent`: the most recent session in the effective
-        // session directory, cwd-filtered only when a custom override differs
-        // from the workspace-keyed default; a new persisted session when
-        // none exists.
-        const auto sessions_root = coding_agent::sessions_root_path();
-        const auto default_directory =
-            sessions_root / session_paths::encode_workspace_key(workspace);
-        const auto directory =
-            target->directory_override.value_or(default_directory);
-        const std::optional<std::filesystem::path> cwd_filter =
-            (target->directory_override &&
-             *target->directory_override != default_directory)
-                ? std::optional<std::filesystem::path>{workspace}
-                : std::nullopt;
-        if (auto most_recent = session_discovery::find_most_recent_session(
-                directory, cwd_filter)) {
-            auto prepared = prepare_resume_target(
-                most_recent->path, workspace, false);
-            if (!prepared) {
-                co_return std::unexpected(prepared.error());
-            }
-            workspace = prepared->workspace;
-            prepared_resume = std::move(*prepared);
-            is_resume = true;
-        } else {
-            new_publication = AutomaticPublication{
-                workspace, target->directory_override, std::nullopt};
-        }
-    } else if (const auto* target =
-                   std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
-        workspace = target->workspace;
-        new_publication = AutomaticPublication{
-            workspace, target->directory_override, target->session_id};
-    } else if (const auto* target =
-                   std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
-        workspace = target->workspace;
-        new_publication = InMemoryPublication{workspace, target->session_id};
-    } else {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "unsupported session target"));
+    // 1. Resolve the target and read any resumed session on a Runtime worker.
+    // SessionStore parsing, directory discovery, and target inspection are
+    // blocking persistence work; none of it runs on the Runtime loop.
+    const auto target_workspace = std::visit([](const auto& target) { return target.workspace; }, plan.target);
+    auto prepared_target = co_await support::detail::await_async_result(
+            submit_runtime_work<PreparedAssemblyTarget>(plan.execution_runtime_target,
+                    target_workspace.string().size() + 1,
+                    stop_token,
+                    [target = std::move(plan.target), cwd_override = plan.resume_cwd_override]() mutable {
+                        return prepare_assembly_target(std::move(target), std::move(cwd_override));
+                    }));
+    if (!prepared_target) {
+        co_return std::unexpected(std::move(prepared_target.error()));
+    }
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(runtime_work_cancelled_error());
     }
 
-    // pi main.ts missing-cwd recovery (session-cwd.ts): a resumed session
-    // whose stored header cwd no longer exists fails the boot with pi's
-    // MissingSessionCwdError text. The check engages only when the header
-    // cwd replaced the launch cwd (an empty header keeps the launch cwd, and
-    // forks always target the launch cwd). The interactive Continue/Cancel
-    // prompt lands with the startup-TUI host; until then both frontends
-    // surface the stderr error and exit 1.
-    if (is_resume && workspace != launch_cwd) {
-        std::error_code exists_ec;
-        if (!std::filesystem::exists(workspace, exists_ec)) {
-            co_return std::unexpected(missing_session_cwd_error(prepared_resume.resume_path, workspace, launch_cwd));
+    std::filesystem::path workspace = prepared_target->workspace;
+    PreparedResumeTarget prepared_resume = std::move(prepared_target->prepared_resume);
+    std::optional<NewSessionPublication> new_publication = std::move(prepared_target->new_publication);
+    const bool is_resume = prepared_target->is_resume;
+    std::optional<std::filesystem::path> transient_session_path = std::move(prepared_target->transient_session_path);
+    auto discard_unpublished_session = [&]() -> boost::asio::awaitable<void> {
+        if (!transient_session_path) {
+            co_return;
         }
-    }
+        auto path = std::exchange(transient_session_path, std::nullopt);
+        auto discarded = co_await support::detail::await_async_result(submit_runtime_work<void>(
+                plan.execution_runtime_target, path->string().size() + 1, {}, [path = std::move(*path)]() {
+                    std::error_code error;
+                    (void)std::filesystem::remove(path, error);
+                    return support::ExpectedVoid{};
+                }));
+        static_cast<void>(discarded);
+        co_return;
+    };
 
     // pi main.ts: cwd-bound services (settings, resources, provider
     // registrations, models) resolve against the target session cwd, not the
@@ -1221,10 +1330,19 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     // settings scope to the session header cwd. The project scope stays
     // untrusted until the trust decision below reloads it.
     if (is_resume && snapshot.manager.cwd() != workspace) {
-        snapshot.manager = coding_agent::SettingsManager::create(
-            workspace,
-            coding_agent::agent_config_dir(),
-            /* project_trusted */ false);
+        auto moved_settings =
+                co_await support::detail::await_async_result(submit_runtime_work<coding_agent::SettingsManager>(
+                        plan.execution_runtime_target, workspace.string().size() + 1, stop_token, [workspace] {
+                            return support::Expected<coding_agent::SettingsManager>{
+                                    coding_agent::SettingsManager::create(workspace,
+                                            coding_agent::agent_config_dir(),
+                                            /* project_trusted */ false)};
+                        }));
+        if (!moved_settings) {
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(moved_settings.error()));
+        }
+        snapshot.manager = std::move(*moved_settings);
     }
 
     // 2. Settings load errors stay observable as warning diagnostics. Global
@@ -1279,9 +1397,21 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     ProjectResourceFileSystems retained_resource_filesystems;
     std::filesystem::path trust_store_path =
         coding_agent::trust_store_file_path();
-    if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
-        trust_store_path.clear();
+    auto validated_trust_path = co_await support::detail::await_async_result(
+            submit_runtime_work<std::filesystem::path>(plan.execution_runtime_target,
+                    trust_store_path.string().size() + workspace.string().size() + 1,
+                    stop_token,
+                    [trust_store_path, workspace]() {
+                        if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
+                            return support::Expected<std::filesystem::path>{std::filesystem::path{}};
+                        }
+                        return support::Expected<std::filesystem::path>{trust_store_path};
+                    }));
+    if (!validated_trust_path) {
+        co_await discard_unpublished_session();
+        co_return std::unexpected(std::move(validated_trust_path.error()));
     }
+    trust_store_path = std::move(*validated_trust_path);
 
     bool project_trusted = false;
     std::vector<std::string> explicit_resource_paths = plan.skill_paths;
@@ -1320,6 +1450,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
         auto explicit_templates = co_await make_explicit_template_inputs_async(
                 resource_filesystems, workspace, plan.prompt_template_paths, stop_token);
         if (!explicit_templates) {
+            co_await discard_unpublished_session();
             co_return std::unexpected(std::move(explicit_templates.error()));
         }
         resource_request.explicit_prompt_templates = std::move(*explicit_templates);
@@ -1332,9 +1463,11 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
         auto resource_loading = co_await support::detail::await_async_result(load_project_resources(
                 std::move(resource_filesystems), trust_store, std::move(resource_request), stop_token));
         if (!resource_loading) {
+            co_await discard_unpublished_session();
             co_return std::unexpected(harness::to_util_error(std::move(resource_loading.error())));
         }
         if (!resource_loading->fatal_errors.empty()) {
+            co_await discard_unpublished_session();
             co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                     "explicit resource failed to load",
                     resource_loading->fatal_errors.front().message));
@@ -1359,9 +1492,21 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
                 "project resource filesystem capability is unavailable",
                 workspace.string()));
     }
-    if (auto trusted = snapshot.manager.set_project_trusted(project_trusted); !trusted) {
-        co_return std::unexpected(trusted.error());
+    auto trusted_manager = co_await support::detail::await_async_result(
+            submit_runtime_work<coding_agent::SettingsManager>(plan.execution_runtime_target,
+                    workspace.string().size() + 1,
+                    stop_token,
+                    [manager = std::move(snapshot.manager), project_trusted]() mutable {
+                        if (auto trusted = manager.set_project_trusted(project_trusted); !trusted) {
+                            return support::Expected<coding_agent::SettingsManager>{std::unexpected(trusted.error())};
+                        }
+                        return support::Expected<coding_agent::SettingsManager>{std::move(manager)};
+                    }));
+    if (!trusted_manager) {
+        co_await discard_unpublished_session();
+        co_return std::unexpected(std::move(trusted_manager.error()));
     }
+    snapshot.manager = std::move(*trusted_manager);
     // A project-scope load error recorded during the trust flip must surface on
     // the success path too, not only through the failure-path context.
     add_settings_diagnostics();
@@ -1373,9 +1518,13 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     if (plan.model_runtime) {
         runtime = std::move(plan.model_runtime);
     } else {
-        auto built = build_runtime(nullptr);
+        auto built = co_await support::detail::await_async_result(submit_runtime_work<std::shared_ptr<ModelRuntime>>(
+                plan.execution_runtime_target, coding_agent::agent_config_dir().string().size() + 1, stop_token, [] {
+                    return build_runtime(nullptr);
+                }));
         if (!built) {
-            co_return std::unexpected(built.error());
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(built.error()));
         }
         runtime = std::move(*built);
     }
@@ -1387,7 +1536,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     // `refreshAvailability` at runtime creation and inside `findInitialModel`):
     // `has_configured_auth` and the available snapshot then reflect actual
     // credential resolution, not the structural provider composition.
-    refresh_availability_sync(runtime);
+    static_cast<void>(co_await support::detail::await_async_result(runtime->get_available()));
 
     std::optional<std::string> stored_provider;
     std::optional<std::string> stored_model;
@@ -1436,6 +1585,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
             plan, *runtime, is_resume, stored_provider, stored_model,
             resume_restore_failed, settings, &scoped_models, &scoped_thinking_level);
         if (!resolved) {
+            co_await discard_unpublished_session();
             co_return std::unexpected(resolved.error());
         }
         request_model = std::move(*resolved);
@@ -1446,6 +1596,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
         if (auto override_set = runtime->set_runtime_api_key(
                 request_model.provider, *plan.cli_selection.api_key);
             !override_set) {
+            co_await discard_unpublished_session();
             co_return std::unexpected(override_set.error());
         }
     }
@@ -1537,16 +1688,19 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     builtin_names.insert("read");
     if (auto added = tools.add(tools::make_async_read_file_tool(exec_env)); !added) {
         cleanup_on_failure();
+        co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
     }
     builtin_names.insert("write");
     if (auto added = tools.add(tools::make_async_write_file_tool(exec_env)); !added) {
         cleanup_on_failure();
+        co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
     }
     builtin_names.insert("edit");
     if (auto added = tools.add(tools::make_async_edit_tool(exec_env)); !added) {
         cleanup_on_failure();
+        co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
     }
     builtin_names.insert("bash");
@@ -1561,17 +1715,20 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
             exec_env, bash_session_environment));
         !added) {
         cleanup_on_failure();
+        co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
     }
 
     if (auto dup = find_duplicate_tool_name(plan.custom_tools)) {
         cleanup_on_failure();
+        co_await discard_unpublished_session();
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 std::format("duplicate custom tool name: '{}'", *dup),
                 "each custom tool must have a unique name"));
     }
     if (auto collision = find_builtin_custom_collision(builtin_names, plan.custom_tools)) {
         cleanup_on_failure();
+        co_await discard_unpublished_session();
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 std::format("custom tool name '{}' collides with built-in tool", *collision),
                 "rename the custom tool or disable the conflicting built-in tool"));
@@ -1581,6 +1738,7 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
         if (tool.execute) {
             if (auto added = tools.add(std::move(tool)); !added) {
                 cleanup_on_failure();
+                co_await discard_unpublished_session();
                 co_return std::unexpected(added.error());
             }
         }
@@ -1603,102 +1761,127 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
                 ? plan.in_memory_branch_seed->context.thinking_level
                 : settings.default_thinking_level.value_or("medium"));
 
-    // 9. Publish the session only after all fallible prerequisites succeeded.
-    OpenSession open;
-    if (is_resume) {
-        auto published = publish_resume_session(prepared_resume);
-        if (!published) {
-            cleanup_on_failure();
-            co_return std::unexpected(published.error());
-        }
-        open = std::move(*published);
-        // pi sdk.ts: a resumed session without a `thinking_level_change`
-        // entry gets the restored level appended so a later resume restores
-        // it; a session that already carries the entry stays untouched.
-        if (!prepared_resume.resume.has_thinking_level_entry) {
-            if (auto appended = open.store->append_thinking_level_change(
-                    std::nullopt, effective_thinking_level);
-                !appended) {
-                cleanup_on_failure();
-                co_return std::unexpected(appended.error());
-            }
-        }
-    } else {
-        auto published = publish_session(
-            std::move(*new_publication),
-            resolved_provider,
-            resolved_model);
-        if (!published) {
-            cleanup_on_failure();
-            co_return std::unexpected(published.error());
-        }
-        open = std::move(*published);
-        // Private in-session seam: pi in-memory `createBranchedSession` — the
-        // branch's message projection and derived state seed the new
-        // in-memory session. The seed messages are also committed to the
-        // store so its live tree mirrors the live context exactly (pi's
-        // non-persisting SessionManager keeps the branch's entries). The
-        // header parent pointer comes from the seed; the model/thinking
-        // restore rides the branch context like a resumed session.
-        if (plan.in_memory_branch_seed) {
-            const auto& seed = *plan.in_memory_branch_seed;
-            open.metadata.parent_session = seed.parent_session;
-            open.history = seed.context.messages;
-            open.context_model = seed.context.model;
-            open.context_thinking_level =
-                seed.context.thinking_level == "off" &&
-                    !seed.context.has_thinking_level_entry
-                ? std::nullopt
-                : std::optional<std::string>{seed.context.thinking_level};
-            open.topology = harness::session::SessionTopology::Branched;
-            for (const auto& message : open.history) {
-                if (auto appended = open.store->append(message); !appended) {
-                    cleanup_on_failure();
-                    co_return std::unexpected(appended.error());
-                }
-            }
-        }
-        // Persist the session's `model_change {provider, modelId}` as the first
-        // content entry (pi `setModel` → `appendModelChange`) — skipped for the
-        // unknown placeholder, exactly like pi's `if (model)` guard, so a
-        // zero-model session never records a spurious unknown/unknown identity
-        // that a later resume would warn about. Resume re-resolves this
-        // identity against the live runtime catalog; no baseUrl, key-source,
-        // or authentication material ever enters the session file (ADR 0031).
-        const bool placeholder_model =
-            resolved_provider == agent::detail::kDefaultModel.provider &&
-            resolved_model == agent::detail::kDefaultModel.id;
-        if (!placeholder_model) {
-            if (auto appended = open.store->append_model_change(
-                    std::nullopt, resolved_provider, resolved_model);
-                !appended) {
-                cleanup_on_failure();
-                co_return std::unexpected(appended.error());
-            }
-        }
-        // pi sdk.ts: new sessions persist the initial thinking level as
-        // the second entry so a later resume restores it. In-memory sessions
-        // keep both entries in the store's live tree only (nothing durable
-        // to resume from).
-        if (auto appended = open.store->append_thinking_level_change(
-                std::nullopt, effective_thinking_level);
-            !appended) {
-            cleanup_on_failure();
-            co_return std::unexpected(appended.error());
-        }
-    }
+    // 9. Publish the session and its initial entries through one reserved
+    // Runtime worker admission. SessionStore construction, JSONL parsing,
+    // directory preparation, and every initial append are blocking
+    // persistence operations and must not run on the Runtime loop.
+    const auto target_cleanup_path = transient_session_path;
+    auto session_publication = co_await support::detail::await_async_result(submit_runtime_work<OpenSession>(
+            plan.execution_runtime_target,
+            workspace.string().size() + resolved_provider.size() + resolved_model.size() + 1,
+            stop_token,
+            [is_resume,
+                    prepared_resume = std::move(prepared_resume),
+                    new_publication = std::move(new_publication),
+                    target_cleanup_path,
+                    provider = resolved_provider,
+                    model = resolved_model,
+                    effective_thinking_level,
+                    branch_seed = std::move(plan.in_memory_branch_seed),
+                    session_name = plan.session_name]() mutable {
+                std::optional<std::filesystem::path> cleanup_path = target_cleanup_path;
+                auto remove_created_file = [&]() {
+                    if (!cleanup_path) {
+                        return;
+                    }
+                    std::error_code error;
+                    (void)std::filesystem::remove(*cleanup_path, error);
+                    cleanup_path.reset();
+                };
+                auto fail = [&](support::Error error) -> support::Expected<OpenSession> {
+                    remove_created_file();
+                    return std::unexpected(std::move(error));
+                };
 
-    // pi main.ts `--name`: appendSessionInfo after session selection. The
-    // stored name is sanitized exactly like pi (CR/LF runs become one space,
-    // then trimmed); in-memory sessions have no session_info surface.
-    if (plan.session_name) {
-        auto sanitized = sanitize_session_name(*plan.session_name);
-        if (auto appended = open.store->append_session_info(
-                std::nullopt, std::move(sanitized));
-            !appended) {
-            cleanup_on_failure();
-            co_return std::unexpected(appended.error());
-        }
+                OpenSession open;
+                if (is_resume) {
+                    auto published = publish_resume_session(prepared_resume);
+                    if (!published) {
+                        return fail(published.error());
+                    }
+                    open = std::move(*published);
+                    // pi sdk.ts: a resumed session without a
+                    // `thinking_level_change` entry gets the restored level
+                    // appended so a later resume restores it.
+                    if (!prepared_resume.resume.has_thinking_level_entry) {
+                        if (auto appended = open.store->append_thinking_level_change(
+                                    std::nullopt, effective_thinking_level);
+                                !appended) {
+                            return fail(appended.error());
+                        }
+                    }
+                } else {
+                    if (!new_publication) {
+                        return fail(support::make_error(
+                                support::ErrorCode::Validation, "new session publication is missing"));
+                    }
+                    auto published = publish_session(std::move(*new_publication), provider, model);
+                    if (!published) {
+                        return fail(published.error());
+                    }
+                    open = std::move(*published);
+                    if (!cleanup_path && open.store) {
+                        cleanup_path = open.store->path();
+                    }
+                    // Private in-session seam: pi in-memory
+                    // `createBranchedSession` — the branch's message
+                    // projection and derived state seed the new in-memory
+                    // session. The seed messages are also committed to the
+                    // store so its live tree mirrors the live context.
+                    if (branch_seed) {
+                        const auto& seed = *branch_seed;
+                        open.metadata.parent_session = seed.parent_session;
+                        open.history = seed.context.messages;
+                        open.context_model = seed.context.model;
+                        open.context_thinking_level =
+                                seed.context.thinking_level == "off" && !seed.context.has_thinking_level_entry
+                                        ? std::nullopt
+                                        : std::optional<std::string>{seed.context.thinking_level};
+                        open.topology = harness::session::SessionTopology::Branched;
+                        for (const auto& message : open.history) {
+                            if (auto appended = open.store->append(message); !appended) {
+                                return fail(appended.error());
+                            }
+                        }
+                    }
+                    const bool placeholder_model = provider == agent::detail::kDefaultModel.provider &&
+                                                   model == agent::detail::kDefaultModel.id;
+                    if (!placeholder_model) {
+                        if (auto appended = open.store->append_model_change(std::nullopt, provider, model); !appended) {
+                            return fail(appended.error());
+                        }
+                    }
+                    if (auto appended =
+                                    open.store->append_thinking_level_change(std::nullopt, effective_thinking_level);
+                            !appended) {
+                        return fail(appended.error());
+                    }
+                }
+
+                // pi main.ts `--name`: appendSessionInfo after session
+                // selection; in-memory sessions have no durable surface.
+                if (session_name) {
+                    auto sanitized = sanitize_session_name(*session_name);
+                    if (auto appended = open.store->append_session_info(std::nullopt, std::move(sanitized));
+                            !appended) {
+                        return fail(appended.error());
+                    }
+                }
+                return support::Expected<OpenSession>{std::move(open)};
+            }));
+    if (!session_publication) {
+        cleanup_on_failure();
+        co_await discard_unpublished_session();
+        co_return std::unexpected(std::move(session_publication.error()));
+    }
+    OpenSession open = std::move(*session_publication);
+    if ((!is_resume || target_cleanup_path) && !transient_session_path && open.store && open.store->path()) {
+        transient_session_path = open.store->path();
+    }
+    if (stop_token.stop_requested()) {
+        cleanup_on_failure();
+        co_await discard_unpublished_session();
+        co_return std::unexpected(runtime_work_cancelled_error());
     }
 
     // 10. Assemble the runtime. The Native TUI's Session-owned User Shell is
@@ -1906,7 +2089,17 @@ support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::cre
                 if (session_facts.has_value()) {
                     apply_cli_facts(request, *session_facts);
                 }
-                auto snapshot = load_settings_snapshot(request.workspace);
+                auto snapshot_result = co_await support::detail::await_async_result(
+                        submit_runtime_work<SettingsSnapshot>(request.execution_runtime_target,
+                                request.workspace.string().size() + 1,
+                                stop_token,
+                                [workspace = request.workspace]() {
+                                    return support::Expected<SettingsSnapshot>{load_settings_snapshot(workspace)};
+                                }));
+                if (!snapshot_result) {
+                    co_return std::unexpected(std::move(snapshot_result.error()));
+                }
+                auto snapshot = std::move(*snapshot_result);
                 if (overrides.model_runtime) {
                     auto plan = normalize_cli(std::move(request), snapshot.manager);
                     if (!plan) {

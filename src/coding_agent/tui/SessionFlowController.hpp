@@ -12,6 +12,7 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include <atomic>
 #include <cstddef>
@@ -189,9 +190,11 @@ private:
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
     request_session_replacement(runtime::AgentSessionCreationRequest request);
     [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
-    request_session_replacement_async(runtime::AgentSessionCreationRequest request);
+    request_session_replacement_async(runtime::AgentSessionCreationRequest request,
+            std::optional<std::size_t> expected_generation = std::nullopt);
     [[nodiscard]] support::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> session);
+    void release_session_replacement() noexcept;
     [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> maybe_save_implicit_project_trust_after_reload();
 
     boost::asio::any_io_executor executor_;
@@ -211,6 +214,11 @@ private:
     /// executor); once set it never clears.
     std::atomic<bool> closed_{false};
     std::stop_source stop_source_;
+    /// At most one production replacement may assemble at a time. A later
+    /// request waits for the active attempt, then is rejected if the action
+    /// generation changed, preventing a stale published session.
+    boost::asio::steady_timer replacement_settled_;
+    bool replacement_active_{false};
 
     void track_prompt_slot(std::shared_ptr<PromptSlot> slot);
     void untrack_prompt_slot(const std::shared_ptr<PromptSlot>& slot);
