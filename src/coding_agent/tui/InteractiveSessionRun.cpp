@@ -153,8 +153,9 @@ AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacemen
         return nullptr;
     }
     const auto state = state_;
-    return [state](std::size_t /* action_generation */, runtime::AgentSessionCreationRequest request)
-                   -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+    return [state](std::size_t /* action_generation */,
+                   runtime::AgentSessionCreationRequest request,
+                   std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         request.provide_user_shell = true;
         if (state->runtime_root) {
             request.execution_runtime_target = state->runtime_root->make_target();
@@ -166,7 +167,8 @@ AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacemen
                         .cli_fake = state->model_runtime_cli_fake,
                         .models = state->models,
                         .user_shell = nullptr,
-                });
+                },
+                stop_token);
     };
 }
 

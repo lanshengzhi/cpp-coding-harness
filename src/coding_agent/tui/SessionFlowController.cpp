@@ -204,8 +204,8 @@ boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>
 SessionFlowController::request_session_replacement_async(runtime::AgentSessionCreationRequest request) {
     const auto captured_generation = action_generation();
     if (hooks_.request_session_replacement_async != nullptr) {
-        auto created = co_await support::detail::await_async_result(
-                hooks_.request_session_replacement_async(captured_generation, std::move(request)));
+        auto created = co_await support::detail::await_async_result(hooks_.request_session_replacement_async(
+                captured_generation, std::move(request), stop_source_.get_token()));
         if (closed_ || captured_generation != action_generation()) {
             co_return std::unexpected(
                     support::make_error(support::ErrorCode::Cancelled, "Session replacement was superseded"));
@@ -213,7 +213,16 @@ SessionFlowController::request_session_replacement_async(runtime::AgentSessionCr
         co_return created;
     }
     if (hooks_.request_session_replacement != nullptr) {
-        co_return hooks_.request_session_replacement(captured_generation, std::move(request));
+        if (closed_ || stop_source_.stop_requested() || captured_generation != action_generation()) {
+            co_return std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "Session replacement was superseded"));
+        }
+        auto created = hooks_.request_session_replacement(captured_generation, std::move(request));
+        if (closed_ || stop_source_.stop_requested() || captured_generation != action_generation()) {
+            co_return std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "Session replacement was superseded"));
+        }
+        co_return created;
     }
     co_return std::unexpected(session_replacement_unavailable_error());
 }

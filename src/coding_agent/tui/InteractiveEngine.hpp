@@ -414,7 +414,9 @@ private:
         std::size_t captured_generation,
         runtime::AgentSessionCreationRequest request);
     [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
-    request_session_replacement_async(std::size_t captured_generation, runtime::AgentSessionCreationRequest request);
+    request_session_replacement_async(std::size_t captured_generation,
+            runtime::AgentSessionCreationRequest request,
+            std::stop_token stop_token = {});
 
     /// pi `AgentSessionRuntime.apply` + `rebindCurrentSession` subset: swap
     /// the live session, resubscribe, and rebuild the presentation from the

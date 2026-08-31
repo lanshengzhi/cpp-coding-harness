@@ -74,7 +74,7 @@ struct SessionFlowHostHooks {
     /// this hook so resource loading and model prerequisites remain on the
     /// Runtime loop; the synchronous hook above is retained as a test bridge.
     std::move_only_function<support::AsyncResult<CreateAgentSessionResult>(
-            std::size_t, runtime::AgentSessionCreationRequest)>
+            std::size_t, runtime::AgentSessionCreationRequest, std::stop_token)>
             request_session_replacement_async{nullptr};
     /// Install a created replacement and rebind the Native TUI.
     std::move_only_function<support::ExpectedVoid(std::unique_ptr<AgentSession>)>

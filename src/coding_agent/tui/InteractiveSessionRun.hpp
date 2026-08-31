@@ -17,6 +17,7 @@
 #include <iosfwd>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,7 +29,7 @@ class InteractiveSessionRunBuilder;
 
 using AsyncSessionReplacementSink =
         std::move_only_function<support::AsyncResult<coding_agent::CreateAgentSessionResult>(
-                std::size_t, runtime::AgentSessionCreationRequest)>;
+                std::size_t, runtime::AgentSessionCreationRequest, std::stop_token)>;
 
 /// Build the one composition-owned filesystem capability collection used by
 /// Native TUI trust detection. Every capability shares one Runtime target;
