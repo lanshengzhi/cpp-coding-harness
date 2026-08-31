@@ -4,16 +4,14 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <filesystem>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
-
-namespace cch::harness {
-class WorkspaceFileSystem;
-}
 
 namespace cch::coding_agent {
 
@@ -127,9 +125,12 @@ struct ProjectResourceLoadingResult {
     std::vector<ResourceDiagnostic> theme_diagnostics;
 };
 
-[[nodiscard]] ProjectResourceLoadingResult load_project_resources(
-    const harness::WorkspaceFileSystem& fs,
-    const ProjectTrustStore& trust_store,
-    ProjectResourceLoadingRequest request);
+/// Canonical asynchronous project-resource loader. The supplied collection is
+/// the complete authorization boundary for every resource source.
+[[nodiscard]] support::AsyncResult<ProjectResourceLoadingResult, harness::FileError> load_project_resources(
+        ProjectResourceFileSystems filesystems,
+        const ProjectTrustStore& trust_store,
+        ProjectResourceLoadingRequest request,
+        std::stop_token stop_token = {});
 
 } // namespace cch::coding_agent

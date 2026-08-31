@@ -16,6 +16,7 @@
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/SlashCommandEffects.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <csignal>
 #include <format>
@@ -219,6 +220,25 @@ InteractiveEngine::request_session_replacement(
         return std::unexpected(session_replacement_unavailable_error());
     }
     return std::move(*created);
+}
+
+boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
+InteractiveEngine::request_session_replacement_async(
+        std::size_t captured_generation, runtime::AgentSessionCreationRequest request, std::stop_token stop_token) {
+    if (captured_generation != action_generation_) {
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled, "Native TUI action rejected", "retired session generation"));
+    }
+    if (async_session_replacement_sink_) {
+        auto created = co_await support::detail::await_async_result(
+                async_session_replacement_sink_(captured_generation, std::move(request), stop_token));
+        if (captured_generation != action_generation_) {
+            co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Cancelled, "Native TUI action rejected", "retired session generation"));
+        }
+        co_return created;
+    }
+    co_return request_session_replacement(captured_generation, std::move(request));
 }
 
 support::ExpectedVoid InteractiveEngine::replace_session(

@@ -2,6 +2,7 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
@@ -12,9 +13,14 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
-#include <string>
 #include <optional>
+#include <stop_token>
+#include <string>
 #include <vector>
+
+namespace cch::harness {
+class RuntimeRoot;
+}
 
 namespace cch::coding_agent::runtime {
 
@@ -42,10 +48,34 @@ public:
     /// has them re-applied under the issue #507 field-ownership rules before
     /// any assembly step reads the request; a host-built request (boot, print
     /// mode, list-models) arrives complete and passes no facts.
+    /// The asynchronous production Session Assembly door. The operation is
+    /// lazy and consumes the request once; filesystem work uses the
+    /// composition-authorized capability collection and cancellation is
+    /// propagated through `stop_token`.
+    [[nodiscard]] static support::AsyncResult<coding_agent::CreateAgentSessionResult> create_async(
+            AgentSessionCreationRequest request,
+            std::optional<InteractiveSessionFacts> session_facts,
+            AssemblyOverrides overrides = {},
+            std::stop_token stop_token = {});
+
+    /// Temporary synchronous expand-contract bridge for tests and legacy
+    /// callers. Production CLI paths use `create_async` and await it on their
+    /// Runtime loop.
     [[nodiscard]] static support::Expected<coding_agent::CreateAgentSessionResult>
     create(AgentSessionCreationRequest request,
            std::optional<InteractiveSessionFacts> session_facts,
            AssemblyOverrides overrides = {});
+
+    /// Compose all filesystem capabilities that Session Assembly may use.
+    /// Every returned capability shares the request's one Runtime root target;
+    /// explicit resource paths are authorized only when they fall under one
+    /// of the known workspace, ancestor, Agent Config, or user roots.
+    [[nodiscard]] static ProjectResourceFileSystems make_authorized_project_resource_filesystems(
+            std::shared_ptr<harness::RuntimeRoot> runtime_root,
+            std::filesystem::path workspace,
+            std::filesystem::path agent_config_directory,
+            std::filesystem::path home_directory,
+            std::vector<std::string> explicit_paths = {});
 
     /// The CLI-facts merge the door performs (issue #507, absorbed from the
     /// interactive composition host): engine-resolved session trust wins —

@@ -81,6 +81,7 @@ public:
         std::optional<std::string> prefix,
         std::optional<std::string> suffix,
         std::stop_token stop_token) override;
+    [[nodiscard]] support::AsyncResult<void, FileError> cleanup() override;
 
     // -- Pi-shaped shell override ---
 

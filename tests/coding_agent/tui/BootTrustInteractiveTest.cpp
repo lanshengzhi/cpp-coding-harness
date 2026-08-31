@@ -14,11 +14,14 @@
 #include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/agent/harness/FileSystem.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
+#include "support/FakeAsyncFileSystem.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -83,10 +86,10 @@ struct BootTrustRun {
     std::vector<std::optional<bool>> request_overrides;
     coding_agent::tui::testing::ActionSinkRecorder recorder;
 
-    void start(
-        const TrustIsolatedWorkspace& fixture,
-        coding_agent::runtime::AgentSessionCreationRequest request,
-        std::shared_ptr<ai::Models> models) {
+    void start(const TrustIsolatedWorkspace& fixture,
+            coding_agent::runtime::AgentSessionCreationRequest request,
+            std::shared_ptr<ai::Models> models,
+            std::shared_ptr<harness::AsyncFileSystem> resource_filesystem = nullptr) {
         recorder.replace_session =
             [this, models](coding_agent::runtime::AgentSessionCreationRequest req)
             -> support::Expected<coding_agent::CreateAgentSessionResult> {
@@ -95,11 +98,19 @@ struct BootTrustRun {
                 return coding_agent::create_agent_session_for_testing(
                     std::move(req), models);
             };
-        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_agent_config_directory(fixture.agent_dir)
-            .with_action_sink(recorder.make_sink())
-            .with_defer_boot(std::move(request))
-            .build();
+        auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
+        auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
+        auto builder = coding_agent::tui::InteractiveSessionRunBuilder{};
+        builder.with_agent_config_directory(fixture.agent_dir)
+                .with_action_sink(recorder.make_sink())
+                .with_defer_boot(std::move(request))
+                .with_runtime_root(std::move(runtime_root));
+        if (resource_filesystem) {
+            coding_agent::ProjectResourceFileSystems filesystems;
+            filesystems.workspace = std::move(resource_filesystem);
+            builder.with_project_resource_filesystems(std::move(filesystems));
+        }
+        auto run = std::move(builder).build();
         boost::asio::co_spawn(
             io,
             coding_agent::tui::run_interactive_mode(
@@ -117,9 +128,14 @@ struct BootTrustRun {
         drain_ready(io);
     }
 
+    void wait_for_screen(std::string_view text) {
+        REQUIRE(tests::pump_until(
+                io, [this, text] { return visible_screen(terminal).find(text) != std::string::npos; }));
+    }
+
     void exit() {
         type("\x04");
-        REQUIRE(run_result);
+        REQUIRE(tests::pump_until(io, [this] { return run_result.has_value(); }));
         CHECK(*run_result);
     }
 };
@@ -256,6 +272,56 @@ TEST_CASE(
     CHECK(screen.find("This project is not trusted.") != std::string::npos);
 
     run.exit();
+}
+
+TEST_CASE("async trust detection failure aborts boot before session creation",
+        "[coding_agent][tui][boot-trust][issue560]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::Busy,
+            .message = "project resource filesystem is busy",
+            .path = std::string{".pi/skills"},
+    };
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models(), std::move(filesystem));
+
+    REQUIRE(run.run_result);
+    CHECK_FALSE(*run.run_result);
+    CHECK(run.run_result->error().code == support::ErrorCode::Busy);
+    CHECK(run.run_result->error().detail.find("project resource filesystem is busy") != std::string::npos);
+    CHECK(run.request_overrides.empty());
+    CHECK_FALSE(run.terminal.modes().started);
+}
+
+TEST_CASE("explicit trust override bypasses a failing async detection", "[coding_agent][tui][boot-trust][issue560]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+    fixture.write(".pi/skills/README.md", "project skill marker");
+
+    auto request = boot_request(fixture);
+    request.project_trust_override = true;
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::PermissionDenied,
+            .message = "project resource filesystem is unavailable",
+            .path = std::string{".pi/skills"},
+    };
+
+    BootTrustRun run;
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models(), std::move(filesystem));
+
+    REQUIRE(run.request_overrides.size() == 1);
+    CHECK(run.request_overrides.front() == true);
+    CHECK(visible_screen(run.terminal).find("Trust project folder?") == std::string::npos);
+
+    run.exit();
+    CHECK(*run.run_result);
 }
 
 TEST_CASE(
@@ -578,6 +644,7 @@ TEST_CASE(
     // persists the decision, appending the "; saved project trust" suffix.
     fixture.write(".pi/skills/README.md", "project skill marker");
     run.type("/reload\r");
+    run.wait_for_screen("Reloaded keybindings, skills, prompts, themes, and context files; saved project trust");
     screen = visible_screen(run.terminal);
     CHECK(
         screen.find(
@@ -597,6 +664,39 @@ TEST_CASE(
     run.exit();
 }
 
+TEST_CASE("/reload does not persist implicit trust when detection fails",
+        "[coding_agent][tui][boot-trust][reload][issue560]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
+    filesystem->add_directory(".");
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models(), filesystem);
+
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("Trust project folder?") == std::string::npos);
+    CHECK(screen.find("This project is not trusted.") == std::string::npos);
+
+    fixture.write(".pi/skills/README.md", "project skill marker");
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::Busy,
+            .message = "project resource filesystem is busy",
+            .path = std::string{".pi/skills"},
+    };
+    run.type("/reload\r");
+    run.wait_for_screen("Could not determine project trust after reload: project resource filesystem is busy");
+    screen = visible_screen(run.terminal);
+    CHECK(screen.find("Could not determine project trust after reload: project resource filesystem is busy") !=
+            std::string::npos);
+    CHECK(screen.find("; saved project trust") == std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(coding_agent::trust_store_file_path()));
+
+    run.exit();
+}
+
 TEST_CASE(
     "/reload without the implicit-trust condition keeps the plain pi status",
     "[coding_agent][tui][boot-trust][reload][issue418]") {
@@ -610,6 +710,7 @@ TEST_CASE(
     // The workspace never gains trust-requiring resources; /reload runs the
     // plain status (no "; saved project trust" suffix).
     run.type("/reload\r");
+    run.wait_for_screen("Reloaded keybindings, skills, prompts, themes, and context files");
     const auto screen = visible_screen(run.terminal);
     CHECK(
         screen.find(

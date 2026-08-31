@@ -37,18 +37,14 @@ struct SyncProcessOperation final {
 
 } // namespace
 
-SyncLocalExecutionEnv::SyncLocalExecutionEnv(
-    std::filesystem::path workspace,
-    bool bash_enabled,
-    std::vector<std::string> secret_environment_names,
-    ShellConfig shell_config,
-    std::shared_ptr<harness::AsyncProcessRunner> runner)
-    : workspace_(std::move(workspace)),
-      bash_enabled_(bash_enabled),
-      secret_environment_names_(std::move(secret_environment_names)),
-      shell_config_(std::move(shell_config)),
-      runner_(std::move(runner)),
-      fs_(workspace_) {}
+SyncLocalExecutionEnv::SyncLocalExecutionEnv(std::filesystem::path workspace,
+        bool bash_enabled,
+        std::vector<std::string> secret_environment_names,
+        ShellConfig shell_config,
+        std::shared_ptr<harness::AsyncProcessRunner> runner)
+    : workspace_(WorkspaceFileSystem::canonicalized(std::move(workspace))), bash_enabled_(bash_enabled),
+      secret_environment_names_(std::move(secret_environment_names)), shell_config_(std::move(shell_config)),
+      runner_(std::move(runner)), fs_(workspace_) {}
 
 // ---------------------------------------------------------------------------
 // Pi-shaped filesystem methods
@@ -62,50 +58,53 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::joinPath(const std:
     return fs_.joinPath(parts);
 }
 
-std::expected<std::string, FileError> SyncLocalExecutionEnv::readTextFile(const std::string& path) const {
-    return fs_.readTextFile(path);
+std::expected<std::string, FileError> SyncLocalExecutionEnv::readTextFile(
+        const std::string& path, std::stop_token stop_token) const {
+    return fs_.readTextFile(path, stop_token);
 }
 
 std::expected<std::vector<std::string>, FileError> SyncLocalExecutionEnv::readTextLines(
-    const std::string& path,
-    std::optional<int> maxLines) const {
-    return fs_.readTextLines(path, maxLines);
+        const std::string& path, std::optional<int> maxLines, std::stop_token stop_token) const {
+    return fs_.readTextLines(path, maxLines, stop_token);
 }
 
-std::expected<BinaryData, FileError> SyncLocalExecutionEnv::readBinaryFile(const std::string& path) const {
-    return fs_.readBinaryFile(path);
+std::expected<BinaryData, FileError> SyncLocalExecutionEnv::readBinaryFile(
+        const std::string& path, std::stop_token stop_token) const {
+    return fs_.readBinaryFile(path, stop_token);
 }
 
-std::expected<void, FileError> SyncLocalExecutionEnv::writeFile(const std::string& path, const WriteContent& content) const {
-    return fs_.writeFile(path, content);
+std::expected<void, FileError> SyncLocalExecutionEnv::writeFile(
+        const std::string& path, const WriteContent& content, std::stop_token stop_token) const {
+    return fs_.writeFile(path, content, stop_token);
 }
 
-std::expected<void, FileError> SyncLocalExecutionEnv::appendFile(const std::string& path, const WriteContent& content) const {
-    return fs_.appendFile(path, content);
+std::expected<void, FileError> SyncLocalExecutionEnv::appendFile(
+        const std::string& path, const WriteContent& content, std::stop_token stop_token) const {
+    return fs_.appendFile(path, content, stop_token);
 }
 
 std::expected<FileInfo, FileError> SyncLocalExecutionEnv::fileInfo(const std::string& path) const {
     return fs_.fileInfo(path);
 }
 
-std::expected<std::vector<FileInfo>, FileError> SyncLocalExecutionEnv::listDir(const std::string& path) const {
-    return fs_.listDir(path);
+std::expected<std::vector<FileInfo>, FileError> SyncLocalExecutionEnv::listDir(
+        const std::string& path, std::stop_token stop_token) const {
+    return fs_.listDir(path, stop_token);
 }
 
 std::expected<std::string, FileError> SyncLocalExecutionEnv::canonicalPath(const std::string& path) const {
     return fs_.canonicalPath(path);
 }
 
-std::expected<bool, FileError> SyncLocalExecutionEnv::exists(const std::string& path) const {
-    return fs_.exists(path);
-}
+std::expected<bool, FileError> SyncLocalExecutionEnv::exists(const std::string& path) const { return fs_.exists(path); }
 
 std::expected<void, FileError> SyncLocalExecutionEnv::createDir(const std::string& path, bool recursive) const {
     return fs_.createDir(path, recursive);
 }
 
-std::expected<void, FileError> SyncLocalExecutionEnv::remove(const std::string& path, bool recursive) const {
-    return fs_.remove(path, recursive);
+std::expected<void, FileError> SyncLocalExecutionEnv::remove(
+        const std::string& path, bool recursive, std::stop_token stop_token) const {
+    return fs_.remove(path, recursive, stop_token);
 }
 
 std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempDir(std::optional<std::string> prefix) const {
@@ -113,9 +112,13 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempDir(std::
 }
 
 std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
-    std::optional<std::string> prefix,
-    std::optional<std::string> suffix) const {
+        std::optional<std::string> prefix, std::optional<std::string> suffix) const {
     return fs_.createTempFile(prefix, suffix);
+}
+
+std::expected<void, FileError> SyncLocalExecutionEnv::cleanup() const {
+    fs_.cleanup_temporary_resources();
+    return {};
 }
 
 // ---------------------------------------------------------------------------
@@ -123,18 +126,17 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
 // ---------------------------------------------------------------------------
 
 std::expected<harness::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::make_exec_request(
-    std::string command,
-    ExecOptions options) const {
+        std::string command, ExecOptions options) const {
     if (options.stop_token.stop_requested()) {
         return std::unexpected(ExecutionError{
-            .code = ExecutionErrorCode::Aborted,
-            .message = "Operation aborted",
+                .code = ExecutionErrorCode::Aborted,
+                .message = "Operation aborted",
         });
     }
     if (!bash_enabled_) {
         return std::unexpected(ExecutionError{
-            .code = ExecutionErrorCode::ShellUnavailable,
-            .message = "bash is disabled by default; rerun with explicit bash enablement",
+                .code = ExecutionErrorCode::ShellUnavailable,
+                .message = "bash is disabled by default; rerun with explicit bash enablement",
         });
     }
 
@@ -144,16 +146,14 @@ std::expected<harness::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::ma
         auto resolved = fs_.resolve_addressed_path(*options.cwd);
         if (!resolved) {
             return std::unexpected(ExecutionError{
-                .code = ExecutionErrorCode::SpawnError,
-                .message = resolved.error().detail,
+                    .code = ExecutionErrorCode::SpawnError,
+                    .message = resolved.error().detail,
             });
         }
-        std::error_code error;
-        const auto status = std::filesystem::symlink_status(*resolved, error);
-        if (error || !std::filesystem::is_directory(status)) {
+        if (auto validated = fs_.validate_directory(*resolved); !validated) {
             return std::unexpected(ExecutionError{
-                .code = ExecutionErrorCode::SpawnError,
-                .message = "cwd does not exist or is not a directory: " + *options.cwd,
+                    .code = ExecutionErrorCode::SpawnError,
+                    .message = validated.error().detail,
             });
         }
         working_dir = *resolved;
@@ -173,11 +173,7 @@ std::expected<harness::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::ma
     }
 
     std::filesystem::path executable;
-    if (auto shell = resolve_shell_executable(
-            shell_config_.shell_path,
-            workspace_,
-            base_env);
-        !shell) {
+    if (auto shell = resolve_shell_executable(shell_config_.shell_path, workspace_, base_env); !shell) {
         return std::unexpected(shell.error());
     } else {
         executable = std::move(*shell);
@@ -217,8 +213,7 @@ ShellExecResult SyncLocalExecutionEnv::exec_result_from_process(const harness::P
 }
 
 std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
-    std::string command,
-    ExecOptions options) const {
+        std::string command, ExecOptions options) const {
     auto request = make_exec_request(std::move(command), std::move(options));
     if (!request) {
         return std::unexpected(request.error());
@@ -230,32 +225,29 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     try {
 #endif
         operation = std::make_shared<SyncProcessOperation>(SyncProcessOperation{
-            .runner = runner_,
-            .request = std::move(*request),
+                .runner = runner_,
+                .request = std::move(*request),
         });
-        boost::asio::co_spawn(
-            io,
-            run_sync_process(operation),
-            boost::asio::detached);
+        boost::asio::co_spawn(io, run_sync_process(operation), boost::asio::detached);
         io.run();
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception& error) {
         return std::unexpected(ExecutionError{
-            .code = ExecutionErrorCode::SpawnError,
-            .message = "process execution could not start: " + std::string{error.what()},
+                .code = ExecutionErrorCode::SpawnError,
+                .message = "process execution could not start: " + std::string{error.what()},
         });
     } catch (...) {
         return std::unexpected(ExecutionError{
-            .code = ExecutionErrorCode::SpawnError,
-            .message = "process execution could not start",
+                .code = ExecutionErrorCode::SpawnError,
+                .message = "process execution could not start",
         });
     }
 #endif
 
     if (!operation || !operation->outcome) {
         return std::unexpected(ExecutionError{
-            .code = ExecutionErrorCode::SpawnError,
-            .message = "process execution did not complete",
+                .code = ExecutionErrorCode::SpawnError,
+                .message = "process execution did not complete",
         });
     }
     if (!*operation->outcome) {
@@ -263,8 +255,8 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     }
     if ((*operation->outcome)->timed_out) {
         return std::unexpected(ExecutionError{
-            .code = ExecutionErrorCode::Timeout,
-            .message = "shell command timed out",
+                .code = ExecutionErrorCode::Timeout,
+                .message = "shell command timed out",
         });
     }
     return exec_result_from_process(**operation->outcome);

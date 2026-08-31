@@ -3505,7 +3505,10 @@ TEST_CASE(
         "Reloaded skill body.\n");
 
     REQUIRE(terminal.inject_input("/reload\r"));
-    drain_ready(io);
+    REQUIRE(tests::pump_until(io, [&] {
+        return visible_screen(terminal).find("Reloaded keybindings, skills, prompts, themes, and context files") !=
+               std::string::npos;
+    }));
     screen = visible_screen(terminal);
     // The pi-trimmed status line ("extensions" dropped, AC2) reports the
     // successful reload.
@@ -3519,8 +3522,7 @@ TEST_CASE(
           "reloaded skill description.");
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 

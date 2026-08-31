@@ -5,15 +5,19 @@
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
-#include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/ai/Models.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
+#include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
 #include <atomic>
 #include <filesystem>
+#include <functional>
 #include <iosfwd>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +26,21 @@ namespace cch::coding_agent::tui {
 
 class InteractiveSessionRun;
 class InteractiveSessionRunBuilder;
+
+using AsyncSessionReplacementSink =
+        std::move_only_function<support::AsyncResult<coding_agent::CreateAgentSessionResult>(
+                std::size_t, runtime::AgentSessionCreationRequest, std::stop_token)>;
+
+/// Build the one composition-owned filesystem capability collection used by
+/// Native TUI trust detection. Every capability shares one Runtime target;
+/// the collection includes the workspace, its known ancestor roots, and the
+/// Agent Config Directory and user `.agents` roots when supplied. It never
+/// derives capabilities from a path discovered by resource loading.
+[[nodiscard]] ProjectResourceFileSystems make_authorized_project_resource_filesystems(
+        std::shared_ptr<harness::RuntimeRoot> runtime_root,
+        std::filesystem::path workspace,
+        std::filesystem::path agent_config_directory,
+        std::filesystem::path home_directory);
 
 /// Intent for the Interactive Session Run: either bind a pre-created Agent
 /// Session, or defer session creation until after the boot trust prompt
@@ -55,6 +74,8 @@ public:
 
     [[nodiscard]] const runtime::InteractiveSessionFacts& session_facts() const noexcept;
     [[nodiscard]] const std::filesystem::path& agent_config_directory() const noexcept;
+    [[nodiscard]] std::shared_ptr<harness::RuntimeRoot> runtime_root() const noexcept;
+    [[nodiscard]] ProjectResourceFileSystems take_project_resource_filesystems() noexcept;
     [[nodiscard]] const std::optional<std::string>& initial_prompt() const noexcept;
     [[nodiscard]] const PromptOptions& initial_prompt_options() const noexcept;
     [[nodiscard]] const std::optional<std::string>& model_fallback_message() const noexcept;
@@ -71,6 +92,7 @@ public:
     void suspend_process() const;
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> replace_session(
         runtime::AgentSessionCreationRequest request) const;
+    [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() const;
     void report_boot_diagnostics(
         const std::vector<coding_agent::SessionDiagnostic>& diagnostics) const;
     void report_boot_creation_failure(const support::Error& error) const;
@@ -96,6 +118,7 @@ private:
         SessionIntentVariant session_intent{BindExistingSession{nullptr}};
 
         std::shared_ptr<harness::RuntimeRoot> runtime_root{nullptr};
+        ProjectResourceFileSystems project_resource_filesystems{};
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime{nullptr};
         bool model_runtime_cli_fake{false};
         std::shared_ptr<ai::Models> models{nullptr};
@@ -142,6 +165,7 @@ public:
         std::unique_ptr<AsyncClipboardReader> reader) noexcept;
     InteractiveSessionRunBuilder& with_runtime_root(
         std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept;
+    InteractiveSessionRunBuilder& with_project_resource_filesystems(ProjectResourceFileSystems filesystems) noexcept;
     InteractiveSessionRunBuilder& with_shared_runtime(
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
     InteractiveSessionRunBuilder& with_model_runtime_cli_fake(bool model_runtime_cli_fake) noexcept;

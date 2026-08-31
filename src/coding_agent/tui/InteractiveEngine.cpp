@@ -4,7 +4,6 @@
 
 #include "InteractiveEngine.hpp"
 
-#include "agent/harness/WorkspaceFileSystem.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/EditorAutocomplete.hpp"
@@ -17,6 +16,7 @@
 #include "coding_agent/tui/SessionUiBinding.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -43,6 +43,11 @@ namespace {
 [[nodiscard]] std::string project_trust_warning_text() {
     return "This project is not trusted. Project .pi resources are ignored. "
            "Use /trust to save a trust decision, then restart pike.";
+}
+
+[[nodiscard]] support::Error project_resource_detection_unavailable_error() {
+    return support::make_error(
+            support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
 }
 
 } // namespace
@@ -80,9 +85,22 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         intent);
     const bool booting = boot_request_.has_value();
 
+    runtime_root_ = run.runtime_root();
+    project_resource_filesystems_ = run.take_project_resource_filesystems();
+    if (!project_resource_filesystems_.workspace && runtime_root_) {
+        const auto workspace = session_ != nullptr
+                                       ? session_->workspace()
+                                       : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
+        if (!workspace.empty()) {
+            project_resource_filesystems_ = make_authorized_project_resource_filesystems(
+                    runtime_root_, workspace, run.agent_config_directory(), coding_agent::home_directory());
+        }
+    }
+
     clipboard_reader_ = run.take_clipboard_reader();
     model_fallback_message_ = run.model_fallback_message();
     action_sink_ = run.make_action_sink();
+    async_session_replacement_sink_ = run.make_async_session_replacement_sink();
     session_facts_ = run.session_facts();
 
     InteractiveStartupDiagnostics diagnostics;
@@ -165,22 +183,31 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     //    always/never → ask prompt (the generic string-list selector
     //    overlay; G2 record). The controller also arms pi's implicit
     //    trust-on-reload behavior for a resource-free boot.
-    session_flows_->arm_auto_trust_on_reload(
-        boot_request_->workspace,
-        boot_request_->project_trust_override);
+    if (auto armed = co_await session_flows_->arm_auto_trust_on_reload(
+                boot_request_->workspace, boot_request_->project_trust_override);
+            !armed) {
+        (void)deliver_action(action_generation_, TuiActionVariant{ReportBootCreationFailureAction{armed.error()}});
+        auto failed = fail_start(armed.error());
+        co_return std::unexpected(failed.error());
+    }
     auto decision = co_await session_flows_->resolve_boot_trust(
         boot_request_->workspace,
         boot_request_->project_trust_override);
+    if (!decision) {
+        (void)deliver_action(action_generation_, TuiActionVariant{ReportBootCreationFailureAction{decision.error()}});
+        auto failed = fail_start(decision.error());
+        co_return std::unexpected(failed.error());
+    }
     // pi `projectTrustByCwd`: remember the boot decision for the boot
     // workspace so in-session session creations in the same workspace
     // reuse it instead of re-resolving (ask-without-UI would silently
     // drop a session-only trust).
-    resolved_boot_trust_.emplace(boot_request_->workspace, decision);
+    resolved_boot_trust_.emplace(boot_request_->workspace, *decision);
     // 2. Create the boot session with the decided trust so SessionFactory
     //    resolves deterministically (pi `projectTrustByCwd` cache).
     auto request = std::move(*boot_request_);
-    request.project_trust_override = decision;
-    auto created = request_session_replacement(action_generation_, std::move(request));
+    request.project_trust_override = *decision;
+    auto created = co_await request_session_replacement_async(action_generation_, std::move(request));
     if (!created) {
         const support::Error failure = created.error();
         // pi `print_creation_failure`: the host reports the failure
@@ -231,6 +258,10 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         co_return std::unexpected(subscribed.error());
     }
     initialize_view(startup_diagnostics_);
+    if (auto warning = co_await append_project_trust_warning_if_needed(); !warning) {
+        auto failed = fail_start(warning.error());
+        co_return std::unexpected(failed.error());
+    }
     if (auto rendered = tui_.render(); !rendered) {
         co_return std::unexpected(rendered.error());
     }
@@ -251,6 +282,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 }
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
+    stop_source_.request_stop();
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
@@ -481,26 +513,48 @@ void InteractiveEngine::initialize_view(const InteractiveStartupDiagnostics& dia
     for (const auto& diagnostic : diagnostics.themes) {
         view_->append_diagnostic(diagnostic.message);
     }
-    // pi `renderProjectTrustWarningIfNeeded`: the untrusted-project
-    // warning renders in the chat after the initial messages when the
-    // project is untrusted and a trust-requiring resource exists.
-    if (project_trust_warning_needed()) {
-        view_->append_trust_warning(project_trust_warning_text());
-    }
 }
 
-bool InteractiveEngine::project_trust_warning_needed() {
-    if (session_ == nullptr ||
-        detail::AgentSessionInteractiveAccess::is_project_trusted(*session_)) {
-        return false;
+ProjectResourceFileSystems InteractiveEngine::project_resource_filesystems_for(const std::filesystem::path& workspace) {
+    const auto requested = workspace.lexically_normal();
+    if (project_resource_filesystems_.workspace &&
+            project_resource_filesystems_.workspace->workspace().lexically_normal() == requested) {
+        return project_resource_filesystems_;
     }
-    auto fs = harness::WorkspaceFileSystem::create(session_->workspace());
-    if (!fs) {
-        return false;
+    if (!runtime_root_) {
+        return {};
     }
-    auto detection = detect_project_resources(
-        *fs, coding_agent::home_directory() / ".agents" / "skills");
-    return needs_project_trust_resolution(detection);
+    return make_authorized_project_resource_filesystems(
+            runtime_root_, workspace, agent_config_directory_, coding_agent::home_directory());
+}
+
+boost::asio::awaitable<support::Expected<bool>> InteractiveEngine::append_project_trust_warning_if_needed() {
+    auto* session = session_;
+    if (session == nullptr || detail::AgentSessionInteractiveAccess::is_project_trusted(*session)) {
+        co_return false;
+    }
+    const auto captured_generation = action_generation_;
+    const auto workspace = session->workspace();
+    auto filesystems = project_resource_filesystems_for(workspace);
+    if (!filesystems.workspace) {
+        co_return std::unexpected(project_resource_detection_unavailable_error());
+    }
+    auto detection = co_await support::detail::await_async_result(coding_agent::detect_project_resources(
+            std::move(filesystems), coding_agent::home_directory() / ".agents" / "skills", stop_source_.get_token()));
+    if (!running_ || stop_source_.stop_requested() || captured_generation != action_generation_ ||
+            session_ != session || session->workspace() != workspace ||
+            detail::AgentSessionInteractiveAccess::is_project_trusted(*session)) {
+        co_return false;
+    }
+    if (!detection) {
+        co_return std::unexpected(harness::to_util_error(std::move(detection.error())));
+    }
+    if (!needs_project_trust_resolution(*detection)) {
+        co_return false;
+    }
+    view_->append_trust_warning(project_trust_warning_text());
+    request_render();
+    co_return true;
 }
 
 support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error) {

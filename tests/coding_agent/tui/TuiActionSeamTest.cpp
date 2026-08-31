@@ -32,6 +32,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -98,11 +99,14 @@ void boot(
             request.session_target)) {
         request.session_target = coding_agent::InMemorySessionTarget{};
     }
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(&running.io, [](boost::asio::io_context*) {});
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_defer_boot(std::move(request))
-        .with_agent_config_directory(fixture.agent_dir.path())
-        .with_action_sink(actions->make_sink())
-        .build();
+                       .with_defer_boot(std::move(request))
+                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_action_sink(actions->make_sink())
+                       .with_runtime_root(std::move(runtime_root))
+                       .build();
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(

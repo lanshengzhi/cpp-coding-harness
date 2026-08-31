@@ -530,6 +530,19 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
             // message).
             co_return std::unexpected(booted.error());
         }
+    } else {
+        if (auto warning = co_await engine->append_project_trust_warning_if_needed(); !warning) {
+            if (warning.error().code == support::ErrorCode::Cancelled) {
+                co_return co_await engine->finish();
+            }
+            auto finished = co_await engine->finish();
+            if (!finished) {
+                co_return std::unexpected(aggregate_presentation_errors(warning.error(),
+                        finished.error(),
+                        "Native TUI trust detection and terminal restoration failed"));
+            }
+            co_return std::unexpected(warning.error());
+        }
     }
 
     boost::system::error_code wait_error;

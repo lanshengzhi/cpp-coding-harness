@@ -5,11 +5,14 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 
+#include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include <atomic>
 #include <cstddef>
@@ -17,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -50,6 +54,9 @@ struct SessionFlowHostHooks {
     std::move_only_function<const LiveTheme&()> live_theme{nullptr};
     /// Number of terminal rows used by the tree selector layout.
     std::move_only_function<std::size_t()> terminal_rows{nullptr};
+    /// Return the composition-owned capability collection for one current
+    /// Session workspace. Trust detection never creates or widens a root.
+    std::move_only_function<ProjectResourceFileSystems(std::filesystem::path)> project_resource_filesystems{nullptr};
     /// Generation that admitted the current application action.
     std::move_only_function<std::size_t()> action_generation{nullptr};
 
@@ -64,6 +71,12 @@ struct SessionFlowHostHooks {
         std::size_t,
         runtime::AgentSessionCreationRequest)>
         request_session_replacement{nullptr};
+    /// Asynchronous Session Assembly door. Production Native TUI flows use
+    /// this hook so resource loading and model prerequisites remain on the
+    /// Runtime loop; the synchronous hook above is retained as a test bridge.
+    std::move_only_function<support::AsyncResult<CreateAgentSessionResult>(
+            std::size_t, runtime::AgentSessionCreationRequest, std::stop_token)>
+            request_session_replacement_async{nullptr};
     /// Install a created replacement and rebind the Native TUI.
     std::move_only_function<support::ExpectedVoid(std::unique_ptr<AgentSession>)>
         replace_session{nullptr};
@@ -133,12 +146,10 @@ public:
     /// Boot trust preparation and resolution. The preparation arms pi's
     /// implicit-trust-on-reload behavior when the boot workspace had no
     /// trust-requiring resources.
-    void arm_auto_trust_on_reload(
-        std::filesystem::path workspace,
-        std::optional<bool> trust_override);
-    [[nodiscard]] boost::asio::awaitable<bool> resolve_boot_trust(
-        std::filesystem::path workspace,
-        std::optional<bool> trust_override);
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> arm_auto_trust_on_reload(
+            std::filesystem::path workspace, std::optional<bool> trust_override);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> resolve_boot_trust(
+            std::filesystem::path workspace, std::optional<bool> trust_override);
 
 private:
     [[nodiscard]] boost::asio::awaitable<void> handle_resume_session(
@@ -163,6 +174,8 @@ private:
     [[nodiscard]] boost::asio::awaitable<std::optional<ProjectTrustOption>>
     show_boot_trust_prompt(const std::filesystem::path& workspace);
     [[nodiscard]] boost::asio::awaitable<void> run_trust_selector();
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ProjectResourceDetectionResult>>
+    detect_project_resources_for(const std::filesystem::path& workspace);
 
     [[nodiscard]] bool is_live();
     [[nodiscard]] AgentSession* current_session();
@@ -176,9 +189,13 @@ private:
         std::string failure_label);
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
     request_session_replacement(runtime::AgentSessionCreationRequest request);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
+    request_session_replacement_async(runtime::AgentSessionCreationRequest request,
+            std::optional<std::size_t> expected_generation = std::nullopt);
     [[nodiscard]] support::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> session);
-    [[nodiscard]] bool maybe_save_implicit_project_trust_after_reload();
+    void release_session_replacement() noexcept;
+    [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> maybe_save_implicit_project_trust_after_reload();
 
     boost::asio::any_io_executor executor_;
     ModalPresenter* presenter_; // kept alive by host_lifetime_ across flows.
@@ -191,9 +208,17 @@ private:
     /// slot and finish() can await quiescence. Executor-confined.
     std::vector<std::shared_ptr<PromptSlot>> active_prompt_slots_;
     std::optional<std::filesystem::path> auto_trust_on_reload_cwd_;
+    std::optional<std::filesystem::path> boot_detection_workspace_;
+    std::optional<ProjectResourceDetectionResult> boot_detection_;
     /// Close admission from any thread (open_* read it outside the
     /// executor); once set it never clears.
     std::atomic<bool> closed_{false};
+    std::stop_source stop_source_;
+    /// At most one production replacement may assemble at a time. A later
+    /// request waits for the active attempt, then is rejected if the action
+    /// generation changed, preventing a stale published session.
+    boost::asio::steady_timer replacement_settled_;
+    bool replacement_active_{false};
 
     void track_prompt_slot(std::shared_ptr<PromptSlot> slot);
     void untrack_prompt_slot(const std::shared_ptr<PromptSlot>& slot);

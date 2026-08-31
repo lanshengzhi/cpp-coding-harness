@@ -338,11 +338,14 @@ void RuntimeTarget::Admission::complete(Task task) && noexcept {
     const auto byte_charge = byte_charge_;
     const auto lane = lane_;
     state->post_result(
-        sequence,
-        [state = std::move(state), task = std::move(task), byte_charge, lane]() mutable noexcept {
-            task();
-            state->release_admission(byte_charge, lane);
-        });
+            sequence, [state = std::move(state), task = std::move(task), byte_charge, lane]() mutable noexcept {
+                // The terminal callback may synchronously admit the next
+                // operation (for example, an awaited filesystem read). Release
+                // the completed operation before re-entering that callback so a
+                // result-capacity charge cannot reject its successor.
+                state->release_admission(byte_charge, lane);
+                task();
+            });
 }
 
 RuntimeTarget::RuntimeTarget(std::shared_ptr<State> state) noexcept : state_(std::move(state)) {}

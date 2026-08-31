@@ -185,6 +185,12 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         const auto self = weak.lock();
         return self != nullptr ? self->terminal_.dimensions().rows : 0;
     };
+    hooks.project_resource_filesystems = [weak](std::filesystem::path workspace) {
+        if (const auto self = weak.lock()) {
+            return self->project_resource_filesystems_for(std::move(workspace));
+        }
+        return ProjectResourceFileSystems{};
+    };
     hooks.action_generation = [weak] {
         const auto self = weak.lock();
         return self != nullptr ? self->action_generation_ : 0;
@@ -212,6 +218,21 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         return std::unexpected(support::make_error(
             support::ErrorCode::Cancelled,
             "Session flow host is no longer active"));
+    };
+    hooks.request_session_replacement_async =
+            [weak, executor = executor_](std::size_t generation,
+                    runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        return support::detail::make_async_result_on(executor,
+                [weak, generation, stop_token, request = std::move(request)]() mutable
+                        -> boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> {
+                    if (const auto self = weak.lock()) {
+                        co_return co_await self->request_session_replacement_async(
+                                generation, std::move(request), stop_token);
+                    }
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Cancelled, "Session flow host is no longer active"));
+                });
     };
     hooks.replace_session = [weak](std::unique_ptr<AgentSession> next)
         -> support::ExpectedVoid {

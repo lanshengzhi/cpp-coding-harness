@@ -10,8 +10,8 @@ namespace cch::coding_agent {
 /// Converts an absolute path beneath workspace_root to the corresponding
 /// workspace-relative path. Relative paths pass through unchanged and
 /// absolute or traversal-bearing paths outside the workspace return no value.
-/// This is a representation adapter only; WorkspaceFileSystem remains the
-/// authoritative containment seam for every filesystem operation.
+/// This is a representation adapter only; the filesystem capability remains
+/// the authoritative containment seam for every filesystem operation.
 [[nodiscard]] inline std::optional<std::string> strip_workspace_root(
     const std::filesystem::path& workspace_root,
     std::string_view candidate_text) {

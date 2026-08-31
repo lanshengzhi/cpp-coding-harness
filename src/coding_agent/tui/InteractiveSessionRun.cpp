@@ -1,17 +1,48 @@
 #include "InteractiveSessionRun.hpp"
 
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
+
+#include <cch/coding_agent/AgentConfigDir.hpp>
 
 #include <csignal>
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <variant>
 
 namespace cch::coding_agent::tui {
+namespace {
+
+[[nodiscard]] std::filesystem::path intent_workspace(const SessionIntentVariant& intent) {
+    return std::visit(
+            [](const auto& value) -> std::filesystem::path {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, BindExistingSession>) {
+                    return value.session != nullptr ? value.session->workspace() : std::filesystem::path{};
+                } else {
+                    return value.request.workspace;
+                }
+            },
+            intent);
+}
+
+} // namespace
+
+ProjectResourceFileSystems make_authorized_project_resource_filesystems(
+        std::shared_ptr<harness::RuntimeRoot> runtime_root,
+        std::filesystem::path workspace,
+        std::filesystem::path agent_config_directory,
+        std::filesystem::path home_directory) {
+    return runtime::SessionFactory::make_authorized_project_resource_filesystems(std::move(runtime_root),
+            std::move(workspace),
+            std::move(agent_config_directory),
+            std::move(home_directory));
+}
 
 InteractiveSessionRun::InteractiveSessionRun(std::shared_ptr<State> state)
     : state_(std::move(state)) {}
@@ -28,6 +59,17 @@ const runtime::InteractiveSessionFacts& InteractiveSessionRun::session_facts() c
 const std::filesystem::path& InteractiveSessionRun::agent_config_directory() const noexcept {
     static const std::filesystem::path kEmptyPath{};
     return state_ ? state_->agent_config_directory : kEmptyPath;
+}
+
+std::shared_ptr<harness::RuntimeRoot> InteractiveSessionRun::runtime_root() const noexcept {
+    return state_ ? state_->runtime_root : nullptr;
+}
+
+ProjectResourceFileSystems InteractiveSessionRun::take_project_resource_filesystems() noexcept {
+    if (!state_) {
+        return {};
+    }
+    return std::exchange(state_->project_resource_filesystems, {});
 }
 
 const std::optional<std::string>& InteractiveSessionRun::initial_prompt() const noexcept {
@@ -88,9 +130,11 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
             "InteractiveSessionRun is not initialized"));
     }
     request.provide_user_shell = true;
-    if (state_->runtime_root) {
-        request.execution_runtime_target = state_->runtime_root->make_target();
-    }
+    // The synchronous compatibility bridge owns the loop that drives its
+    // assembly. Do not hand it the interactive RuntimeRoot target: that
+    // target's executor is owned by the caller's loop and cannot be driven by
+    // this synchronous API. The asynchronous production sink below installs
+    // the host target on the Runtime loop instead.
     return coding_agent::create_agent_session(std::move(request),
             state_->session_facts,
             coding_agent::runtime::AssemblyOverrides{
@@ -99,6 +143,35 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
                     .models = state_->models,
                     .user_shell = nullptr,
             });
+}
+
+AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacement_sink() const {
+    if (!state_) return nullptr;
+    // An injected action sink is the authoritative host seam for tests and
+    // alternate compositions. Keep boot and in-session replacement on that
+    // synchronous action path rather than bypassing it with the production
+    // asynchronous factory.
+    if (state_->custom_action_sink.has_value()) {
+        return nullptr;
+    }
+    const auto state = state_;
+    return [state](std::size_t /* action_generation */,
+                   runtime::AgentSessionCreationRequest request,
+                   std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.provide_user_shell = true;
+        if (state->runtime_root) {
+            request.execution_runtime_target = state->runtime_root->make_target();
+        }
+        return coding_agent::create_agent_session_async(std::move(request),
+                state->session_facts,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = state->shared_runtime,
+                        .cli_fake = state->model_runtime_cli_fake,
+                        .models = state->models,
+                        .user_shell = nullptr,
+                },
+                stop_token);
+    };
 }
 
 void InteractiveSessionRun::report_boot_diagnostics(
@@ -273,6 +346,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_runtime_root(
     return *this;
 }
 
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_project_resource_filesystems(
+        ProjectResourceFileSystems filesystems) noexcept {
+    state_->project_resource_filesystems = std::move(filesystems);
+    return *this;
+}
+
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_runtime(
     std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept {
     state_->shared_runtime = std::move(shared_runtime);
@@ -310,6 +389,13 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_action_sink(
 }
 
 InteractiveSessionRun InteractiveSessionRunBuilder::build() {
+    if (!state_->project_resource_filesystems.workspace && state_->runtime_root) {
+        const auto workspace = intent_workspace(state_->session_intent);
+        if (!workspace.empty()) {
+            state_->project_resource_filesystems = make_authorized_project_resource_filesystems(
+                    state_->runtime_root, workspace, state_->agent_config_directory, coding_agent::home_directory());
+        }
+    }
     return InteractiveSessionRun(std::move(state_));
 }
 

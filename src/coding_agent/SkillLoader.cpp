@@ -1,10 +1,9 @@
 #include "coding_agent/SkillLoader.hpp"
 
+#include "AsyncTask.hpp"
 #include "coding_agent/GitIgnoreMatcher.hpp"
 #include "LoaderPath.hpp"
 #include "coding_agent/SkillFrontmatterParser.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -134,6 +133,11 @@ void append_unique_skill(
     SkillLoadResult& result,
     Skill skill,
     std::optional<std::string> real_path) {
+    // Match pi `addSkills`: an already-seen real file is silently skipped
+    // before checking names, so a symlink alias does not become a collision.
+    if (real_path && seenRealPaths.contains(*real_path)) {
+        return;
+    }
     if (auto it = seenNames.find(skill.name); it != seenNames.end()) {
         result.diagnostics.push_back(skill_collision_diagnostic(
             skill.name,
@@ -141,11 +145,10 @@ void append_unique_skill(
             skill.filePath));
         return;
     }
-    // The real path joins the set only when the skill is kept (pi `addSkills`
-    // records it in the else branch), so a collision loser never shadows a
-    // later distinct-named skill that shares its real file.
-    if (real_path && !seenRealPaths.insert(*real_path).second) {
-        return;
+    // The real path joins the set only when the skill is kept, so a collision
+    // loser never shadows a later distinct-named skill that shares its real file.
+    if (real_path) {
+        seenRealPaths.insert(*real_path);
     }
     seenNames.emplace(skill.name, skill.filePath);
     result.skills.push_back(std::move(skill));
@@ -167,113 +170,118 @@ void append_unique_skill(
     return std::string{path};
 }
 
-/// pi `addIgnoreRules(ig, dir, root)`: read every ignore file in `dir` and
-/// add its rules prefixed with the directory's path relative to the scan
-/// root. Read failures are silent (pi `try/catch {}`).
-void add_ignore_rules(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& dirPath,
-    std::string_view root,
-    IgnoreMatcher& matcher) {
-    const auto prefix = [&]() -> std::string {
-        const auto rel = relative_posix(root, dirPath);
-        if (rel.empty()) {
-            return {};
-        }
-        return rel + "/";
-    }();
-
-    // The addressed read path needs the directory prefix without a leading
-    // `./` (the scan root is `"."`).
-    const std::string dir = dirPath == "." ? std::string{} : dirPath + "/";
-    for (const auto filename : kIgnoreFileNames) {
-        const auto content = fs.readTextFile(dir + std::string{filename});
-        if (content) {
-            matcher.add_rules(*content, prefix);
-        }
-    }
-}
-
 } // namespace
 
-// Forward declaration for the recursive directory walk.
-static void loadSkillsFromDir(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& dirPath,
-    const SkillDirSpec& spec,
-    std::string_view root,
-    IgnoreMatcher& matcher,
-    std::unordered_map<std::string, std::string>& seenNames,
-    std::unordered_set<std::string>& seenRealPaths,
-    SkillLoadResult& result);
+namespace {
 
-SkillLoadResult loadSkillFromFile(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath,
-    SkillSourceContext source_context) {
-    SkillLoadResult result;
+[[nodiscard]] harness::FileError async_aborted_error(std::string path = {}) {
+    return harness::FileError{
+            .code = harness::FileErrorCode::Aborted,
+            .message = "Operation aborted",
+            .path = path.empty() ? std::nullopt : std::optional<std::string>{std::move(path)},
+    };
+}
 
-    // Resolve absolute path for storage and convert paths beneath the
-    // workspace to the relative form required by readTextFile.
-    const auto& root = fs.root();
-    const auto relative_path = strip_workspace_root(root, filePath);
-    const std::string readPath = relative_path.value_or(filePath);
-    const std::string absolutePath = std::filesystem::path{filePath}.is_absolute()
-        ? filePath
-        : (root / filePath).lexically_normal().string();
+[[nodiscard]] bool async_aborted(const harness::FileError& error) {
+    return error.code == harness::FileErrorCode::Aborted;
+}
 
-    auto readResult = fs.readTextFile(readPath);
-    if (!readResult.has_value()) {
-        result.diagnostics.push_back(SkillDiagnostic{
-            .type = "warning",
-            .code = SkillDiagnosticCode::read_failed,
-            .message = readResult.error().message,
-            .path = filePath,
-            .collision = std::nullopt,
-        });
-        return result;
+[[nodiscard]] std::string async_read_path(const harness::AsyncFileSystem& fs, std::string_view file_path) {
+    const auto relative_path = strip_workspace_root(fs.workspace(), file_path);
+    return relative_path.value_or(std::string{file_path});
+}
+
+[[nodiscard]] std::string async_absolute_path(const harness::AsyncFileSystem& fs, std::string_view file_path) {
+    const std::filesystem::path path{file_path};
+    if (path.is_absolute()) {
+        return path.lexically_normal().string();
+    }
+    return (fs.workspace() / path).lexically_normal().string();
+}
+
+/// Canonical paths are authority-bearing results. A symlink target is usable
+/// only when it remains inside the capability root; an absolute target outside
+/// the root must never be passed back to a filesystem operation as a fallback.
+[[nodiscard]] std::optional<std::string> contained_async_path(
+        const harness::AsyncFileSystem& fs, std::string_view file_path) {
+    std::error_code ec;
+    const auto root = std::filesystem::absolute(fs.workspace(), ec).lexically_normal();
+    if (ec) {
+        return std::nullopt;
     }
 
-    auto parsed = parseFrontmatter(readResult.value());
-    if (!parsed.has_value()) {
+    const std::filesystem::path path{file_path};
+    const auto absolute_path = path.is_absolute() ? path.lexically_normal() : (root / path).lexically_normal();
+    auto relative_path = strip_workspace_root(root, absolute_path.string());
+    if (!relative_path) {
+        return std::nullopt;
+    }
+    if (relative_path->empty()) {
+        return std::string{"."};
+    }
+    return relative_path;
+}
+
+[[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skill_from_file_task(
+        harness::AsyncFileSystem& fs,
+        std::string read_file_path,
+        std::string display_file_path,
+        SkillSourceContext source_context,
+        std::stop_token stop_token) {
+    SkillLoadResult result;
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(async_aborted_error(display_file_path));
+    }
+
+    const auto read_path = async_read_path(fs, read_file_path);
+    const auto absolute_path = async_absolute_path(fs, display_file_path);
+    auto content = co_await std::move(fs.readTextFile(read_path, stop_token));
+    if (!content) {
+        if (async_aborted(content.error())) {
+            co_return std::unexpected(std::move(content.error()));
+        }
         result.diagnostics.push_back(SkillDiagnostic{
-            .type = "warning",
-            .code = SkillDiagnosticCode::parse_failed,
-            .message = parsed.error().message,
-            .path = filePath,
-            .collision = std::nullopt,
+                .type = "warning",
+                .code = SkillDiagnosticCode::read_failed,
+                .message = content.error().message,
+                .path = display_file_path,
+                .collision = std::nullopt,
         });
-        return result;
+        co_return result;
+    }
+
+    auto parsed = parseFrontmatter(*content);
+    if (!parsed) {
+        result.diagnostics.push_back(SkillDiagnostic{
+                .type = "warning",
+                .code = SkillDiagnosticCode::parse_failed,
+                .message = parsed.error().message,
+                .path = display_file_path,
+                .collision = std::nullopt,
+        });
+        co_return result;
     }
 
     const auto& fields = parsed->fields;
-
-    // Resolve name: use frontmatter name, or derive from parent dir.
     std::string name;
-    auto nameIt = fields.find("name");
-    if (nameIt != fields.end()) {
-        name = nameIt->second;
+    if (const auto name_it = fields.find("name"); name_it != fields.end()) {
+        name = name_it->second;
     } else {
-        name = parentDirName(filePath);
+        name = parentDirName(display_file_path);
     }
-
-    // Validate name.
-    for (const auto& err : validateName(name)) {
+    for (const auto& error : validateName(name)) {
         result.diagnostics.push_back(SkillDiagnostic{
-            .type = "warning",
-            .code = SkillDiagnosticCode::invalid_metadata,
-            .message = err,
-            .path = filePath,
-            .collision = std::nullopt,
+                .type = "warning",
+                .code = SkillDiagnosticCode::invalid_metadata,
+                .message = error,
+                .path = display_file_path,
+                .collision = std::nullopt,
         });
     }
 
-    // Resolve description and trim whitespace.
     std::string description;
-    auto descIt = fields.find("description");
-    if (descIt != fields.end()) {
-        description = descIt->second;
-        // Trim leading/trailing whitespace.
+    if (const auto description_it = fields.find("description"); description_it != fields.end()) {
+        description = description_it->second;
         while (!description.empty() && (description.front() == ' ' || description.front() == '\t')) {
             description.erase(0, 1);
         }
@@ -282,263 +290,364 @@ SkillLoadResult loadSkillFromFile(
         }
     }
 
-    // Validate description. Empty/missing → reject skill.
-    auto descErrors = validateDescription(description);
-    bool descriptionEmpty = false;
-    for (const auto& err : descErrors) {
-        if (err == "description is required") {
-            descriptionEmpty = true;
-        }
+    bool description_empty = false;
+    for (const auto& error : validateDescription(description)) {
+        description_empty = description_empty || error == "description is required";
         result.diagnostics.push_back(SkillDiagnostic{
-            .type = "warning",
-            .code = SkillDiagnosticCode::invalid_metadata,
-            .message = err,
-            .path = filePath,
-            .collision = std::nullopt,
+                .type = "warning",
+                .code = SkillDiagnosticCode::invalid_metadata,
+                .message = error,
+                .path = display_file_path,
+                .collision = std::nullopt,
         });
     }
-
-    if (descriptionEmpty) {
-        // Skill rejected — return diagnostics only.
-        return result;
+    if (description_empty) {
+        co_return result;
     }
 
-    // Resolve disableModelInvocation.
-    bool disableModelInvocation = false;
-    auto dmiIt = fields.find("disable-model-invocation");
-    if (dmiIt != fields.end()) {
-        disableModelInvocation = (dmiIt->second == "true");
+    bool disable_model_invocation = false;
+    if (const auto disable_it = fields.find("disable-model-invocation"); disable_it != fields.end()) {
+        disable_model_invocation = disable_it->second == "true";
     }
-
-    // The skill directory: the base against which the file's relative
-    // references resolve (pi `Skill.baseDir`). Root-level .md files get the
-    // scan directory itself.
-    const std::string baseDir = std::filesystem::path{absolutePath}.parent_path().string();
 
     result.skills.push_back(Skill{
-        .name = std::move(name),
-        .description = std::move(description),
-        .filePath = absolutePath,
-        .baseDir = baseDir,
-        .sourceInfo = make_source_info(absolutePath, source_context),
-        .disableModelInvocation = disableModelInvocation,
+            .name = std::move(name),
+            .description = std::move(description),
+            .filePath = absolute_path,
+            .baseDir = std::filesystem::path{absolute_path}.parent_path().string(),
+            .sourceInfo = make_source_info(absolute_path, source_context),
+            .disableModelInvocation = disable_model_invocation,
     });
-
-    return result;
+    co_return result;
 }
 
-/// Internal recursive walk: scan a single directory for skills.
-///
-/// `dirPath` is addressed relative to the filesystem root; `root` is the
-/// scan-root spec path the ignore matcher computes rel paths against; the
-/// matcher accumulates ignore rules as the walk descends (pi `addIgnoreRules`
-/// per directory).
-void loadSkillsFromDir(
-    const harness::WorkspaceFileSystem& fs,
-    const std::string& dirPath,
-    const SkillDirSpec& spec,
-    std::string_view root,
-    IgnoreMatcher& matcher,
-    std::unordered_map<std::string, std::string>& seenNames,
-    std::unordered_set<std::string>& seenRealPaths,
-    SkillLoadResult& result) {
-
-    add_ignore_rules(fs, dirPath, root, matcher);
-
-    auto entriesResult = fs.listDir(dirPath);
-    if (!entriesResult.has_value()) {
-        result.diagnostics.push_back(SkillDiagnostic{
-            .type = "warning",
-            .code = SkillDiagnosticCode::list_failed,
-            .message = entriesResult.error().message,
-            .path = dirPath,
-            .collision = std::nullopt,
-        });
-        return;
+[[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skills_from_dir_task(
+        harness::AsyncFileSystem& fs,
+        std::string dir_path,
+        std::string display_dir_path,
+        const SkillDirSpec& spec,
+        std::string root,
+        IgnoreMatcher matcher,
+        std::stop_token stop_token) {
+    SkillLoadResult result;
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(async_aborted_error(dir_path));
     }
 
-    // Sort entries by name for deterministic traversal.
-    auto entries = std::move(entriesResult.value());
-    std::sort(entries.begin(), entries.end(),
-              [](const harness::FileInfo& a, const harness::FileInfo& b) {
-                  return a.name < b.name;
-              });
+    const auto prefix = [&]() -> std::string {
+        const auto relative = relative_posix(root, display_dir_path);
+        return relative.empty() ? std::string{} : relative + "/";
+    }();
+    const auto addressed_dir = dir_path == "." ? std::string{} : dir_path + "/";
+    for (const auto filename : kIgnoreFileNames) {
+        auto ignored = co_await std::move(fs.readTextFile(addressed_dir + std::string{filename}, stop_token));
+        if (!ignored) {
+            if (async_aborted(ignored.error())) {
+                co_return std::unexpected(std::move(ignored.error()));
+            }
+            continue;
+        }
+        matcher.add_rules(*ignored, prefix);
+    }
 
-    const auto real_path_of = [&](const harness::FileInfo& entry)
-        -> std::optional<std::string> {
-        // pi `canonicalizePath(skill.filePath)` — used to detect the same
-        // real file reached twice via symlinks.
-        auto canonical = fs.canonicalPath(entry.path);
-        return canonical ? std::optional<std::string>{*canonical} : std::nullopt;
+    auto entries_result = co_await std::move(fs.listDir(dir_path, stop_token));
+    if (!entries_result) {
+        if (async_aborted(entries_result.error())) {
+            co_return std::unexpected(std::move(entries_result.error()));
+        }
+        result.diagnostics.push_back(SkillDiagnostic{
+                .type = "warning",
+                .code = SkillDiagnosticCode::list_failed,
+                .message = entries_result.error().message,
+                .path = dir_path,
+                .collision = std::nullopt,
+        });
+        co_return result;
+    }
+
+    auto entries = std::move(*entries_result);
+    std::sort(
+            entries.begin(), entries.end(), [](const auto& left, const auto& right) { return left.name < right.name; });
+    std::unordered_map<std::string, std::string> seen_names;
+    std::unordered_set<std::string> seen_real_paths;
+
+    const auto real_path_of =
+            [&](std::string path) -> detail::AsyncTask<std::optional<std::string>, harness::FileError> {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(async_aborted_error(path));
+        }
+        auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, path), stop_token));
+        if (!canonical) {
+            if (async_aborted(canonical.error())) {
+                co_return std::unexpected(std::move(canonical.error()));
+            }
+            co_return std::optional<std::string>{};
+        }
+        auto contained = contained_async_path(fs, *canonical);
+        if (!contained) {
+            co_return std::optional<std::string>{};
+        }
+        co_return std::optional<std::string>{async_absolute_path(fs, *contained)};
     };
 
-    // First pass: look for SKILL.md in this directory.
-    // Only one SKILL.md per directory (stop recursing after finding one).
+    // One SKILL.md per directory, matching pi's traversal order.
     for (const auto& entry : entries) {
-        if (entry.name != "SKILL.md") continue;
-
-        // Resolve kind for symlinks.
+        if (entry.name != "SKILL.md") {
+            continue;
+        }
+        std::string actual_file_path = async_read_path(fs, entry.path);
         if (entry.kind == harness::FileKind::Symlink) {
-            auto targetInfo = fs.fileInfo(entry.path); // follow via canonical
-            if (!targetInfo.has_value()) continue;
-            // Check if the resolved target is a file (canonicalPath handles symlinks).
-            auto canonical = fs.canonicalPath(entry.path);
-            if (!canonical.has_value()) continue;
-            auto resolvedInfo = fs.fileInfo(*canonical);
-            if (!resolvedInfo.has_value() || resolvedInfo->kind != harness::FileKind::File) continue;
+            auto canonical = co_await std::move(fs.canonicalPath(actual_file_path, stop_token));
+            if (!canonical) {
+                if (async_aborted(canonical.error())) {
+                    co_return std::unexpected(std::move(canonical.error()));
+                }
+                continue;
+            }
+            auto target_path = contained_async_path(fs, *canonical);
+            if (!target_path) {
+                continue;
+            }
+            auto target_info = co_await std::move(fs.fileInfo(*target_path, stop_token));
+            if (!target_info) {
+                if (async_aborted(target_info.error())) {
+                    co_return std::unexpected(std::move(target_info.error()));
+                }
+                continue;
+            }
+            if (target_info->kind != harness::FileKind::File) {
+                continue;
+            }
+            actual_file_path = std::move(*target_path);
         } else if (entry.kind != harness::FileKind::File) {
             continue;
         }
 
-        // The ignore matcher prunes ignored SKILL.md files (pi
-        // `ig.ignores(relPath)`), which falls through to the recursion pass.
-        const auto rel_path = relative_posix(root, dirPath + "/" + entry.name);
-        if (matcher.ignores(rel_path, /* is_dir */ false)) continue;
-
-        auto fileResult = loadSkillFromFile(fs, entry.path, spec.source_context);
-        // Deduplicate by real path, then by name (first wins; collisions
-        // carry winner/loser paths).
-        for (auto& skill : fileResult.skills) {
-            append_unique_skill(seenNames, seenRealPaths, result, std::move(skill), real_path_of(entry));
+        const auto display_file_path = async_absolute_path(fs, display_dir_path + "/" + entry.name);
+        const auto relative_path = relative_posix(root, display_dir_path + "/" + entry.name);
+        if (matcher.ignores(relative_path, false)) {
+            continue;
+        }
+        auto file_result = co_await std::move(to_async_result(load_skill_from_file_task(
+                fs, std::move(actual_file_path), display_file_path, spec.source_context, stop_token)));
+        if (!file_result) {
+            co_return std::unexpected(std::move(file_result.error()));
+        }
+        auto real_path = co_await std::move(to_async_result(real_path_of(entry.path)));
+        if (!real_path) {
+            co_return std::unexpected(std::move(real_path.error()));
+        }
+        for (auto& skill : file_result->skills) {
+            append_unique_skill(seen_names, seen_real_paths, result, std::move(skill), std::move(*real_path));
         }
         result.diagnostics.insert(result.diagnostics.end(),
-                                  std::make_move_iterator(fileResult.diagnostics.begin()),
-                                  std::make_move_iterator(fileResult.diagnostics.end()));
-        return; // One SKILL.md per directory — stop recursing.
+                std::make_move_iterator(file_result->diagnostics.begin()),
+                std::make_move_iterator(file_result->diagnostics.end()));
+        co_return result;
     }
 
-    // Second pass: recurse into subdirectories and load root .md files.
     for (const auto& entry : entries) {
-        // Skip hidden entries and special directories.
-        if (entry.name.empty() || entry.name[0] == '.') continue;
-        if (entry.name == "node_modules") continue;
-
-        // Resolve kind for symlinks.
+        if (entry.name.empty() || entry.name.front() == '.' || entry.name == "node_modules") {
+            continue;
+        }
         harness::FileKind kind = entry.kind;
-        std::string entryName = entry.name;
+        std::string actual_entry_path = async_read_path(fs, entry.path);
         if (kind == harness::FileKind::Symlink) {
-            auto canonical = fs.canonicalPath(entry.path);
-            if (!canonical.has_value()) continue;
-            auto targetInfo = fs.fileInfo(*canonical);
-            if (!targetInfo.has_value()) continue;
-            kind = targetInfo->kind;
-            entryName = targetInfo->name;
+            auto canonical = co_await std::move(fs.canonicalPath(actual_entry_path, stop_token));
+            if (!canonical) {
+                if (async_aborted(canonical.error())) {
+                    co_return std::unexpected(std::move(canonical.error()));
+                }
+                continue;
+            }
+            auto target_path = contained_async_path(fs, *canonical);
+            if (!target_path) {
+                continue;
+            }
+            auto target_info = co_await std::move(fs.fileInfo(*target_path, stop_token));
+            if (!target_info) {
+                if (async_aborted(target_info.error())) {
+                    co_return std::unexpected(std::move(target_info.error()));
+                }
+                continue;
+            }
+            kind = target_info->kind;
+            actual_entry_path = std::move(*target_path);
         }
 
-        // Construct relative child path from the parent dir and entry name.
-        std::string childPath = dirPath + "/" + entryName;
-
-        const auto rel_path = relative_posix(root, childPath);
-
+        const auto display_entry_path = display_dir_path + "/" + entry.name;
+        const auto relative_path = relative_posix(root, display_entry_path);
         if (kind == harness::FileKind::Directory) {
-            // The matcher prunes ignored directories (pi checks dirs with a
-            // trailing slash), skipping their entire subtree.
-            if (matcher.ignores(rel_path, /* is_dir */ true)) continue;
-            // Recurse into subdirectory.
-            loadSkillsFromDir(fs, childPath, spec, root, matcher, seenNames, seenRealPaths, result);
-        } else if (kind == harness::FileKind::File &&
-                   dirPath == root &&
-                   spec.include_root_files &&
-                   entryName.size() > 3 &&
-                   entryName.ends_with(".md")) {
-            // Root-level .md file treated as a skill (pi "pi" discovery mode,
-            // scan root only).
-            if (matcher.ignores(rel_path, /* is_dir */ false)) continue;
-            auto fileResult = loadSkillFromFile(fs, childPath, spec.source_context);
-            for (auto& skill : fileResult.skills) {
-                append_unique_skill(seenNames, seenRealPaths, result, std::move(skill), real_path_of(entry));
+            if (matcher.ignores(relative_path, true)) {
+                continue;
+            }
+            auto child_result = co_await std::move(to_async_result(load_skills_from_dir_task(
+                    fs, std::move(actual_entry_path), display_entry_path, spec, root, matcher, stop_token)));
+            if (!child_result) {
+                co_return std::unexpected(std::move(child_result.error()));
+            }
+            for (auto& skill : child_result->skills) {
+                auto real_path = co_await std::move(to_async_result(real_path_of(skill.filePath)));
+                if (!real_path) {
+                    co_return std::unexpected(std::move(real_path.error()));
+                }
+                append_unique_skill(seen_names, seen_real_paths, result, std::move(skill), std::move(*real_path));
             }
             result.diagnostics.insert(result.diagnostics.end(),
-                                      std::make_move_iterator(fileResult.diagnostics.begin()),
-                                      std::make_move_iterator(fileResult.diagnostics.end()));
+                    std::make_move_iterator(child_result->diagnostics.begin()),
+                    std::make_move_iterator(child_result->diagnostics.end()));
+        } else if (kind == harness::FileKind::File && display_dir_path == root && spec.include_root_files &&
+                   entry.name.size() > 3 && entry.name.ends_with(".md") && !matcher.ignores(relative_path, false)) {
+            const auto display_file_path = async_absolute_path(fs, display_entry_path);
+            auto file_result = co_await std::move(to_async_result(load_skill_from_file_task(
+                    fs, std::move(actual_entry_path), display_file_path, spec.source_context, stop_token)));
+            if (!file_result) {
+                co_return std::unexpected(std::move(file_result.error()));
+            }
+            auto real_path = co_await std::move(to_async_result(real_path_of(entry.path)));
+            if (!real_path) {
+                co_return std::unexpected(std::move(real_path.error()));
+            }
+            for (auto& skill : file_result->skills) {
+                append_unique_skill(seen_names, seen_real_paths, result, std::move(skill), std::move(*real_path));
+            }
+            result.diagnostics.insert(result.diagnostics.end(),
+                    std::make_move_iterator(file_result->diagnostics.begin()),
+                    std::make_move_iterator(file_result->diagnostics.end()));
         }
     }
+    co_return result;
 }
 
-SkillLoadResult loadSkills(
-    const harness::WorkspaceFileSystem& fs,
-    const std::vector<SkillDirSpec>& dirs) {
+[[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skills_task(
+        harness::AsyncFileSystem& fs, std::vector<SkillDirSpec> dirs, std::stop_token stop_token) {
     SkillLoadResult result;
-    std::unordered_map<std::string, std::string> seenNames;
-    std::unordered_set<std::string> seenRealPaths;
+    std::unordered_map<std::string, std::string> seen_names;
+    std::unordered_set<std::string> seen_real_paths;
 
-    for (const auto& dirSpec : dirs) {
-        // Convert absolute paths beneath the workspace to relative paths for
-        // fileInfo. Absolute paths outside the workspace are inaccessible.
-        auto dir_path = strip_workspace_root(fs.root(), dirSpec.path);
+    for (const auto& dir_spec : dirs) {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(async_aborted_error());
+        }
+        auto dir_path = strip_workspace_root(fs.workspace(), dir_spec.path);
         if (!dir_path) {
             continue;
         }
-
-        // Check if the directory exists (skip missing dirs silently).
-        auto infoResult = fs.fileInfo(*dir_path);
-        if (!infoResult.has_value()) {
-            if (infoResult.error().code != harness::FileErrorCode::NotFound) {
+        auto info = co_await std::move(fs.fileInfo(*dir_path, stop_token));
+        if (!info) {
+            if (async_aborted(info.error())) {
+                co_return std::unexpected(std::move(info.error()));
+            }
+            if (info.error().code != harness::FileErrorCode::NotFound) {
                 result.diagnostics.push_back(SkillDiagnostic{
-                    .type = "warning",
-                    .code = SkillDiagnosticCode::file_info_failed,
-                    .message = infoResult.error().message,
-                    .path = *dir_path,
-                    .collision = std::nullopt,
+                        .type = "warning",
+                        .code = SkillDiagnosticCode::file_info_failed,
+                        .message = info.error().message,
+                        .path = *dir_path,
+                        .collision = std::nullopt,
                 });
             }
             continue;
         }
 
-        // pi `loadSkills` explicit-path handling: a file spec loads only
-        // when it is a `.md` file (anything else is a warning); symlinks are
-        // resolved through their canonical target.
-        harness::FileKind kind = infoResult->kind;
-        std::string specPath = *dir_path;
+        harness::FileKind kind = info->kind;
+        std::string spec_path = *dir_path;
         if (kind == harness::FileKind::Symlink) {
-            if (auto canonical = fs.canonicalPath(specPath); canonical) {
-                if (auto target = fs.fileInfo(*canonical); target) {
-                    kind = target->kind;
-                    specPath = *canonical;
+            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, spec_path), stop_token));
+            if (!canonical) {
+                if (async_aborted(canonical.error())) {
+                    co_return std::unexpected(std::move(canonical.error()));
                 }
-            } else {
                 continue;
             }
+            auto target_path = contained_async_path(fs, *canonical);
+            if (!target_path) {
+                continue;
+            }
+            auto target = co_await std::move(fs.fileInfo(*target_path, stop_token));
+            if (!target) {
+                if (async_aborted(target.error())) {
+                    co_return std::unexpected(std::move(target.error()));
+                }
+                continue;
+            }
+            kind = target->kind;
+            spec_path = std::move(*target_path);
         }
 
         if (kind == harness::FileKind::File) {
-            if (!specPath.ends_with(".md")) {
+            if (!spec_path.ends_with(".md")) {
                 result.diagnostics.push_back(SkillDiagnostic{
-                    .type = "warning",
-                    .code = SkillDiagnosticCode::invalid_metadata,
-                    .message = "skill path is not a markdown file",
-                    .path = *dir_path,
-                    .collision = std::nullopt,
+                        .type = "warning",
+                        .code = SkillDiagnosticCode::invalid_metadata,
+                        .message = "skill path is not a markdown file",
+                        .path = *dir_path,
+                        .collision = std::nullopt,
                 });
                 continue;
             }
-            auto fileResult = loadSkillFromFile(fs, specPath, dirSpec.source_context);
-            auto canonical = fs.canonicalPath(specPath);
-            for (auto& skill : fileResult.skills) {
-                append_unique_skill(
-                    seenNames, seenRealPaths, result, std::move(skill),
-                    canonical ? std::optional<std::string>{*canonical} : std::nullopt);
+            const auto display_file_path = async_absolute_path(fs, *dir_path);
+            auto file_result = co_await std::move(to_async_result(
+                    load_skill_from_file_task(fs, spec_path, display_file_path, dir_spec.source_context, stop_token)));
+            if (!file_result) {
+                co_return std::unexpected(std::move(file_result.error()));
             }
-            result.diagnostics.insert(
-                result.diagnostics.end(),
-                std::make_move_iterator(fileResult.diagnostics.begin()),
-                std::make_move_iterator(fileResult.diagnostics.end()));
+            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, spec_path), stop_token));
+            if (!canonical && async_aborted(canonical.error())) {
+                co_return std::unexpected(std::move(canonical.error()));
+            }
+            for (auto& skill : file_result->skills) {
+                append_unique_skill(seen_names,
+                        seen_real_paths,
+                        result,
+                        std::move(skill),
+                        canonical ? std::optional<std::string>{*canonical} : std::nullopt);
+            }
+            result.diagnostics.insert(result.diagnostics.end(),
+                    std::make_move_iterator(file_result->diagnostics.begin()),
+                    std::make_move_iterator(file_result->diagnostics.end()));
             continue;
         }
-
-        // Skip non-directories (symlinks are handled per-entry in the walk).
         if (kind != harness::FileKind::Directory) {
             continue;
         }
 
-        // Each scan root gets a fresh ignore matcher (pi builds one per
-        // `loadSkillsFromDirInternal` call); the walk then accumulates the
-        // root's and each descendant's ignore rules.
-        IgnoreMatcher matcher;
-        loadSkillsFromDir(fs, *dir_path, dirSpec, *dir_path, matcher, seenNames, seenRealPaths, result);
+        auto dir_result = co_await std::move(to_async_result(
+                load_skills_from_dir_task(fs, spec_path, *dir_path, dir_spec, *dir_path, IgnoreMatcher{}, stop_token)));
+        if (!dir_result) {
+            co_return std::unexpected(std::move(dir_result.error()));
+        }
+        for (auto& skill : dir_result->skills) {
+            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, skill.filePath), stop_token));
+            if (!canonical && async_aborted(canonical.error())) {
+                co_return std::unexpected(std::move(canonical.error()));
+            }
+            append_unique_skill(seen_names,
+                    seen_real_paths,
+                    result,
+                    std::move(skill),
+                    canonical ? std::optional<std::string>{*canonical} : std::nullopt);
+        }
+        result.diagnostics.insert(result.diagnostics.end(),
+                std::make_move_iterator(dir_result->diagnostics.begin()),
+                std::make_move_iterator(dir_result->diagnostics.end()));
     }
+    co_return result;
+}
 
-    return result;
+} // namespace
+
+support::AsyncResult<SkillLoadResult, harness::FileError> loadSkillFromFile(harness::AsyncFileSystem& fs,
+        std::string file_path,
+        SkillSourceContext source_context,
+        std::stop_token stop_token) {
+    return detail::to_async_result(
+            load_skill_from_file_task(fs, file_path, file_path, std::move(source_context), stop_token));
+}
+
+support::AsyncResult<SkillLoadResult, harness::FileError> loadSkills(
+        harness::AsyncFileSystem& fs, std::vector<SkillDirSpec> dirs, std::stop_token stop_token) {
+    return detail::to_async_result(load_skills_task(fs, std::move(dirs), stop_token));
 }
 
 } // namespace cch::coding_agent

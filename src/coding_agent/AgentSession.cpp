@@ -621,12 +621,12 @@ support::ExpectedVoid AgentSession::set_entry_label(
     return impl_->set_entry_label(entry_id, std::move(label));
 }
 
-boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession::reload() {
+boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession::reload(std::stop_token stop_token) {
     // Same impl_ copying contract as prompt()/set_model: the impl_ copy
     // enters the session_reload frame synchronously at this call, so moving
     // or destroying the public handle before the first co_await cannot
     // invalidate the returned lazy awaitable.
-    return detail::session_reload(impl_);
+    return detail::session_reload(impl_, stop_token);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -650,6 +650,14 @@ support::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AssemblyOverrides overrides) {
     return runtime::SessionFactory::create(
         std::move(request), std::move(session_facts), std::move(overrides));
+}
+
+support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(runtime::AgentSessionCreationRequest request,
+        std::optional<runtime::InteractiveSessionFacts> session_facts,
+        runtime::AssemblyOverrides overrides,
+        std::stop_token stop_token) {
+    return runtime::SessionFactory::create_async(
+            std::move(request), std::move(session_facts), std::move(overrides), stop_token);
 }
 
 support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(

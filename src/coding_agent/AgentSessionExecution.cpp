@@ -251,6 +251,9 @@ support::ExpectedVoid AgentSession::Impl::reject_if_busy() const {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "session is busy (prompt already in flight)"));
     }
+    if (reload_active_) {
+        return std::unexpected(support::make_error(support::ErrorCode::Busy, "session reload is already in flight"));
+    }
     if (compaction_active_) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "session is busy (compaction already in flight)"));
@@ -396,7 +399,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         // close: owned environment cleanup finishes before it settles. An
         // overlapping User Bash or manual compaction finalizes close when it
         // is the last active work instead (issue #467).
-        if (!user_bash_active_ && !compaction_active_) {
+        if (!user_bash_active_ && !compaction_active_ && !reload_active_) {
             co_await finalize_close_after_active_work();
         }
     }
@@ -668,7 +671,10 @@ void AgentSession::Impl::close() noexcept {
     if (user_bash_active_ && active_user_bash_stop_source_) {
         (void)active_user_bash_stop_source_->request_stop();
     }
-    if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
+    if (reload_active_) {
+        (void)reload_stop_source_.request_stop();
+    }
+    if (!prompt_active_ && !user_bash_active_ && !compaction_active_ && !reload_active_) {
         finalize_close();
     }
 }

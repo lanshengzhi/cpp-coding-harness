@@ -69,6 +69,10 @@ struct AgentSessionConfig {
     /// re-runs the same discovery with the creation-time trust state
     /// preserved.
     std::optional<ProjectResourceLoadingRequest> resource_loading_request{std::nullopt};
+    /// The composition-authorized filesystem capabilities used for the
+    /// creation-time load. Retained so `/reload` reuses the same roots rather
+    /// than manufacturing a new or broader filesystem authority.
+    ProjectResourceFileSystems resource_file_systems{};
 };
 
 /// The one private move-only passive assembly value handed from Session

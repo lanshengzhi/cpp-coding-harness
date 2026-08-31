@@ -17,7 +17,10 @@
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/LocalFileSystem.hpp>
+#include <cch/agent/harness/Shell.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
@@ -122,15 +125,20 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
+    static_assert(std::is_abstract_v<harness::AsyncFileSystem>);
+    static_assert(std::is_abstract_v<harness::AsyncShell>);
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
-    using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError>
-        (harness::AsyncExecutionEnv::*)(std::string, std::stop_token);
-    using CleanupMethod = support::AsyncResult<void, harness::FileError>
-        (harness::AsyncExecutionEnv::*)();
-    static_assert(std::is_same_v<
-                  decltype(&harness::AsyncExecutionEnv::readTextFile),
-                  ReadTextFileMethod>);
-    static_assert(std::is_same_v<decltype(&harness::AsyncExecutionEnv::cleanup), CleanupMethod>);
+    static_assert(std::is_base_of_v<harness::AsyncFileSystem, harness::AsyncExecutionEnv>);
+    static_assert(std::is_base_of_v<harness::AsyncShell, harness::AsyncExecutionEnv>);
+    static_assert(!std::is_base_of_v<harness::AsyncShell, harness::AsyncFileSystem>);
+    using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError> (harness::AsyncFileSystem::*)(
+            std::string, std::stop_token);
+    using CleanupMethod = support::AsyncResult<void, harness::FileError> (harness::AsyncFileSystem::*)();
+    static_assert(std::is_same_v<decltype(&harness::AsyncFileSystem::readTextFile), ReadTextFileMethod>);
+    static_assert(std::is_same_v<decltype(&harness::AsyncFileSystem::cleanup), CleanupMethod>);
+    static_assert(std::is_final_v<harness::AsyncLocalFileSystem>);
+    static_assert(std::is_move_constructible_v<harness::AsyncLocalFileSystem>);
+    static_assert(!std::is_copy_constructible_v<harness::AsyncLocalFileSystem>);
     // ADR 0040 §Agent Tool: a passive aggregate value with one move-only
     // execute operation returning a typed AsyncResult (no inheritance).
     static_assert(std::is_aggregate_v<agent::Tool>);

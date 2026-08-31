@@ -1,9 +1,14 @@
+#include "agent/harness/SyncLocalExecutionEnv.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
+#include <fstream>
+
+#include <sys/stat.h>
 
 using namespace cch;
 
@@ -132,6 +137,24 @@ TEST_CASE("WorkspaceFileSystem fileInfo returns not_found for missing path", "[h
     CHECK(info.error().code == harness::FileErrorCode::NotFound);
 }
 
+TEST_CASE("WorkspaceFileSystem returns not_found for missing parent paths", "[harness][filesystem][u2][issue558]") {
+    tests::TempWorkspace workspace;
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto read = fs->readTextFile("missing/note.txt");
+    REQUIRE_FALSE(read);
+    CHECK(read.error().code == harness::FileErrorCode::NotFound);
+
+    auto info = fs->fileInfo("missing/note.txt");
+    REQUIRE_FALSE(info);
+    CHECK(info.error().code == harness::FileErrorCode::NotFound);
+
+    auto listing = fs->listDir("missing/nested");
+    REQUIRE_FALSE(listing);
+    CHECK(listing.error().code == harness::FileErrorCode::NotFound);
+}
+
 TEST_CASE("WorkspaceFileSystem listDir returns direct children", "[harness][filesystem][u2]") {
     tests::TempWorkspace workspace;
     workspace.write("a.txt", "a");
@@ -159,6 +182,10 @@ TEST_CASE("WorkspaceFileSystem listDir returns direct children", "[harness][file
     auto empty = fs->listDir("empty");
     REQUIRE(empty);
     CHECK(empty->empty());
+
+    auto trailing = fs->listDir("empty/");
+    REQUIRE(trailing);
+    CHECK(trailing->empty());
 }
 
 TEST_CASE("WorkspaceFileSystem listDir returns error for regular file", "[harness][filesystem][u2]") {
@@ -263,6 +290,42 @@ TEST_CASE("WorkspaceFileSystem remove does not follow symlinks to outside", "[ha
     CHECK(std::filesystem::exists(workspace.path() / "keep.txt"));
 }
 
+TEST_CASE("WorkspaceFileSystem rejects symlink parents for metadata and mutations",
+        "[harness][filesystem][u2][issue558]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("secret.txt", "outside");
+    std::filesystem::create_symlink(outside.path(), workspace.path() / "escape");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto existing = fs->exists("escape/secret.txt");
+    REQUIRE_FALSE(existing);
+    CHECK(existing.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto info = fs->fileInfo("escape/secret.txt");
+    REQUIRE_FALSE(info);
+    CHECK(info.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto listing = fs->listDir("escape");
+    REQUIRE_FALSE(listing);
+    CHECK(listing.error().code == harness::FileErrorCode::NotDirectory);
+
+    auto written = fs->write_file("escape/new.txt", "x", true);
+    REQUIRE_FALSE(written);
+    CHECK(written.error().code == support::ErrorCode::Workspace);
+
+    auto created = fs->createDir("escape/new", true);
+    REQUIRE_FALSE(created);
+    CHECK(created.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK_FALSE(std::filesystem::exists(outside.path() / "new"));
+
+    auto removed = fs->remove("escape/secret.txt");
+    REQUIRE_FALSE(removed);
+    CHECK(removed.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK(outside.read("secret.txt") == "outside");
+}
+
 TEST_CASE("WorkspaceFileSystem exists returns false for missing path", "[harness][filesystem][u2]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
@@ -307,6 +370,54 @@ TEST_CASE("WorkspaceFileSystem createTempDir and createTempFile", "[harness][fil
     CHECK(file_result->find("-sfx") != std::string::npos);
 }
 
+TEST_CASE("WorkspaceFileSystem cleanup preserves replacement temporary resources",
+        "[harness][filesystem][cleanup][issue558]") {
+    tests::TempWorkspace workspace;
+    harness::SyncLocalExecutionEnv env(workspace.path());
+
+    auto file = env.createTempFile("owned-");
+    auto directory = env.createTempDir("owned-dir-");
+    REQUIRE(file);
+    REQUIRE(directory);
+
+    std::filesystem::remove(*file);
+    std::ofstream replacement(*file, std::ios::binary | std::ios::trunc);
+    replacement << "replacement";
+    replacement.close();
+
+    std::filesystem::remove_all(*directory);
+    std::filesystem::create_directories(*directory);
+    std::ofstream marker(std::filesystem::path{*directory} / "marker", std::ios::binary);
+    marker << "replacement-dir";
+    marker.close();
+
+    auto cleanup = env.cleanup();
+    REQUIRE(cleanup);
+    CHECK(std::filesystem::exists(*file));
+    CHECK(workspace.read(".cch-tmp/" + std::filesystem::path{*file}.filename().string()) == "replacement");
+    CHECK(std::filesystem::exists(std::filesystem::path{*directory} / "marker"));
+}
+
+TEST_CASE("WorkspaceFileSystem rejects append beyond the fixed file limit without replacement",
+        "[harness][filesystem][capacity][issue558]") {
+    tests::TempWorkspace workspace;
+    const std::string original(harness::kFileSystemCapacity.max_file_bytes, 'x');
+    workspace.write("bounded.txt", original);
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto result = fs->appendFile("bounded.txt", std::string{"y"});
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::FileErrorCode::ResourceLimit);
+    CHECK(workspace.read("bounded.txt") == original);
+
+    auto oversized =
+            fs->appendFile("new-bounded.txt", std::string(harness::kFileSystemCapacity.max_file_bytes + 1, 'z'));
+    REQUIRE_FALSE(oversized);
+    CHECK(oversized.error().code == harness::FileErrorCode::ResourceLimit);
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "new-bounded.txt"));
+}
+
 TEST_CASE("WorkspaceFileSystem absolutePath and joinPath", "[harness][filesystem][u2]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
@@ -341,4 +452,65 @@ TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2]
     auto abs = fs->absolutePath("../outside.txt");
     REQUIRE_FALSE(abs);
     CHECK(abs.error().code == harness::FileErrorCode::PermissionDenied);
+}
+
+TEST_CASE("WorkspaceFileSystem enforces reviewed path and file contracts", "[harness][filesystem][issue557]") {
+    tests::TempWorkspace workspace;
+    workspace.write("existing.txt", "content");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto nul_path = fs->readTextFile(std::string{"existing.txt\0suffix", 19});
+    REQUIRE_FALSE(nul_path);
+    CHECK(nul_path.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto zero_lines = fs->readTextLines("missing.txt", 0);
+    REQUIRE(zero_lines);
+    CHECK(zero_lines->empty());
+
+    workspace.write("crlf.txt", "first\r\nsecond\r\n");
+    auto crlf_lines = fs->readTextLines("crlf.txt");
+    REQUIRE(crlf_lines);
+    REQUIRE(crlf_lines->size() == 2);
+    CHECK((*crlf_lines)[0] == "first");
+    CHECK((*crlf_lines)[1] == "second");
+
+    auto existing_file_dir = fs->createDir("existing.txt");
+    REQUIRE_FALSE(existing_file_dir);
+    CHECK(existing_file_dir.error().code == harness::FileErrorCode::Invalid);
+
+    std::filesystem::create_symlink(workspace.path() / "existing.txt", workspace.path() / "existing-link");
+    auto existing_link_dir = fs->createDir("existing-link");
+    REQUIRE_FALSE(existing_link_dir);
+
+    auto empty_write = fs->writeFile("empty.bin", harness::BinaryData{});
+    REQUIRE(empty_write);
+    auto empty_append = fs->appendFile("empty.bin", harness::BinaryData{});
+    REQUIRE(empty_append);
+    auto empty_read = fs->readBinaryFile("empty.bin");
+    REQUIRE(empty_read);
+    CHECK(empty_read->empty());
+
+    std::filesystem::permissions(workspace.path() / "existing.txt",
+            std::filesystem::perms::owner_read,
+            std::filesystem::perm_options::replace);
+    auto read_only_write = fs->writeFile("existing.txt", std::string{"replacement"});
+    REQUIRE_FALSE(read_only_write);
+    std::filesystem::permissions(workspace.path() / "existing.txt",
+            std::filesystem::perms::owner_all,
+            std::filesystem::perm_options::replace);
+    CHECK(workspace.read("existing.txt") == "content");
+
+    const auto fifo = workspace.path() / "fifo";
+    REQUIRE(::mkfifo(fifo.c_str(), 0600) == 0);
+    auto fifo_read = fs->readTextFile("fifo");
+    REQUIRE_FALSE(fifo_read);
+    CHECK(fifo_read.error().code == harness::FileErrorCode::IsDirectory);
+    auto fifo_info = fs->fileInfo("fifo");
+    REQUIRE_FALSE(fifo_info);
+    CHECK(fifo_info.error().code == harness::FileErrorCode::Invalid);
+    auto root_entries = fs->listDir(".");
+    REQUIRE(root_entries);
+    CHECK(std::none_of(
+            root_entries->begin(), root_entries->end(), [](const auto& entry) { return entry.name == "fifo"; }));
 }

@@ -6,11 +6,15 @@
 // session runs against the scripted fake provider seam.
 
 #include "ai/ModelStreamBridge.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include <cch/agent/harness/LocalExecutionEnv.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "agent/harness/RuntimeRoot.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
@@ -26,9 +30,11 @@
 
 #include <chrono>
 #include <deque>
+#include <expected>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <utility>
 
@@ -64,16 +70,16 @@ public:
 /// Drives one `AgentSession::reload()` on a temporary executor and returns
 /// the outcome.
 [[nodiscard]] support::Expected<coding_agent::AgentSessionReloadResult> run_reload(
-        coding_agent::AgentSession& session) {
+        coding_agent::AgentSession& session, std::stop_token stop_token = {}) {
     boost::asio::io_context io;
     std::optional<support::Expected<coding_agent::AgentSessionReloadResult>> result;
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await session.reload();
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await session.reload(stop_token);
+                co_return;
+            },
+            boost::asio::detached);
     io.run();
     REQUIRE(result.has_value());
     return std::move(*result);
@@ -120,11 +126,74 @@ struct ReloadFixture {
     }
 };
 
+/// Async Session Assembly fixture used by cancellation/Close coverage. The
+/// retained resource capabilities share this root, so a reload can be
+/// cancelled while its first filesystem operation is queued behind another
+/// admitted Runtime operation.
+struct AsyncReloadFixture {
+    tests::TempWorkspace workspace;
+    std::shared_ptr<boost::asio::io_context> io;
+    std::shared_ptr<harness::RuntimeRoot> runtime_root;
+    std::unique_ptr<coding_agent::AgentSession> session;
+
+    void create() {
+        io = std::make_shared<boost::asio::io_context>();
+        harness::RuntimeLimits limits;
+        limits.worker_count = 1;
+        runtime_root = std::make_shared<harness::RuntimeRoot>(io, limits);
+
+        coding_agent::runtime::AgentSessionCreationRequest request;
+        request.execution_runtime_target = runtime_root->make_target();
+        request.project_trust_override = false;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.session_facts.no_themes = true;
+        request.session_facts.no_context_files = true;
+        request.request_model = tests::scripted_request_model("sdk-host", "sdk-model");
+        request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
+        request.workspace = workspace.path();
+
+        coding_agent::runtime::AssemblyOverrides overrides;
+        overrides.models = tests::make_scripted_fake_models();
+        std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> created;
+        bool finished{false};
+        boost::asio::co_spawn(
+                *io,
+                [&,
+                        request = std::move(request),
+                        overrides = std::move(overrides)]() mutable -> boost::asio::awaitable<void> {
+                    created = co_await support::detail::await_async_result(coding_agent::create_agent_session_async(
+                            std::move(request), std::nullopt, std::move(overrides)));
+                    finished = true;
+                    co_return;
+                },
+                boost::asio::detached);
+        REQUIRE(tests::pump_until(*io, [&] { return finished; }));
+        REQUIRE(created.has_value());
+        REQUIRE(created->has_value());
+        session = std::move((*created)->session);
+    }
+
+    ~AsyncReloadFixture() {
+        if (session) {
+            session->close();
+        }
+        if (io) {
+            tests::drain_ready(*io);
+        }
+        if (runtime_root) {
+            runtime_root->close();
+        }
+        if (io) {
+            tests::drain_ready(*io);
+        }
+    }
+};
+
 } // namespace
 
-TEST_CASE(
-    "reload re-reads skills, templates, context files, and SYSTEM/APPEND and rebuilds the system prompt",
-    "[coding_agent][reload][issue418]") {
+TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND and rebuilds the system prompt",
+        "[coding_agent][reload][issue418]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
     auto* session = fixture.session.get();
@@ -282,6 +351,109 @@ TEST_CASE(
         REQUIRE_FALSE(failed.has_value());
         CHECK(failed.error().message.find("reload") != std::string::npos);
     }
+}
+
+TEST_CASE("reload treats removed resource roots as an empty completed refresh", "[coding_agent][reload][issue563]") {
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    const auto initial_prompt = fixture.session->snapshot().agent_state.system_prompt;
+
+    std::error_code remove_error;
+    (void)std::filesystem::remove_all(fixture.workspace.path() / ".pi", remove_error);
+    REQUIRE_FALSE(remove_error);
+
+    auto result = run_reload(*fixture.session);
+    REQUIRE(result.has_value());
+    CHECK(fixture.session->skills().empty());
+    CHECK(fixture.session->templates().empty());
+    CHECK(fixture.session->system_prompt_source() == std::nullopt);
+    CHECK(fixture.session->snapshot().agent_state.system_prompt != initial_prompt);
+    CHECK(result->skill_diagnostics.empty());
+    CHECK(result->prompt_diagnostics.empty());
+    CHECK(result->theme_diagnostics.empty());
+    CHECK(result->themes.empty());
+}
+
+TEST_CASE("reload reports an oversized resource without publishing a partial refresh",
+        "[coding_agent][reload][capacity][issue563]") {
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    const auto initial_prompt = fixture.session->snapshot().agent_state.system_prompt;
+
+    fixture.workspace.write(
+            ".pi/themes/oversized.json", std::string(harness::kFileSystemCapacity.max_file_bytes + 1, 'x'));
+
+    auto result = run_reload(*fixture.session);
+    REQUIRE(result.has_value());
+    CHECK(result->themes.empty());
+    bool reported_resource_limit = false;
+    for (const auto& diagnostic : result->theme_diagnostics) {
+        if (diagnostic.type == coding_agent::ResourceDiagnosticType::Warning && diagnostic.path &&
+                diagnostic.path->find("oversized.json") != std::string::npos) {
+            reported_resource_limit = true;
+        }
+    }
+    CHECK(reported_resource_limit);
+    CHECK(fixture.session->snapshot().agent_state.system_prompt == initial_prompt);
+}
+
+TEST_CASE("reload cancellation preserves the last completed resource snapshot",
+        "[coding_agent][reload][cancellation][issue563]") {
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    const auto initial_prompt = fixture.session->snapshot().agent_state.system_prompt;
+    std::stop_source stop_source;
+    stop_source.request_stop();
+
+    auto result = run_reload(*fixture.session, stop_source.get_token());
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
+    CHECK(fixture.session->snapshot().agent_state.system_prompt == initial_prompt);
+    REQUIRE(fixture.session->skills().size() == 1);
+    CHECK(fixture.session->skills().front().description == "initial skill description.");
+}
+
+TEST_CASE("reload cancellation during Close leaves the Session closed without a partial refresh",
+        "[coding_agent][reload][close][issue563]") {
+    AsyncReloadFixture fixture;
+    fixture.create();
+    auto* session = fixture.session.get();
+    auto blocker = std::make_unique<harness::AsyncLocalExecutionEnv>(
+            fixture.runtime_root->make_target(), fixture.workspace.path(), true);
+    std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> blocker_result;
+    bool blocker_done{false};
+    std::move(blocker->exec("sleep 1"))
+            .start([&](std::expected<harness::ShellExecResult, harness::ExecutionError> result) noexcept {
+                blocker_result.emplace(std::move(result));
+                blocker_done = true;
+            });
+
+    auto reload_operation = session->reload();
+    std::optional<support::Expected<coding_agent::AgentSessionReloadResult>> reload_result;
+    bool reload_started{false};
+    bool reload_done{false};
+    boost::asio::co_spawn(
+            *fixture.io,
+            [&, operation = std::move(reload_operation)]() mutable -> boost::asio::awaitable<void> {
+                reload_started = true;
+                reload_result = co_await std::move(operation);
+                reload_done = true;
+                co_return;
+            },
+            boost::asio::detached);
+    REQUIRE(tests::pump_until(*fixture.io, [&] { return reload_started; }));
+
+    session->close();
+    REQUIRE(tests::pump_until(*fixture.io, [&] { return reload_done; }));
+    REQUIRE(reload_result.has_value());
+    REQUIRE_FALSE(reload_result->has_value());
+    CHECK(reload_result->error().code == support::ErrorCode::Cancelled);
+    CHECK_FALSE(session->is_open());
+    // Close owns the terminal teardown and therefore clears the Agent state;
+    // the cancellation/error result above proves no reload snapshot was
+    // published before that teardown.
+    REQUIRE(tests::pump_until(*fixture.io, [&] { return blocker_done; }));
+    CHECK(blocker_result.has_value());
 }
 
 TEST_CASE(
