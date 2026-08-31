@@ -595,7 +595,6 @@ TEST_CASE(
     CHECK(screen.find("Operation aborted") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }

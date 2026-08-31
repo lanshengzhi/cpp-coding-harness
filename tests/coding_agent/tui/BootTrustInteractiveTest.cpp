@@ -128,9 +128,14 @@ struct BootTrustRun {
         drain_ready(io);
     }
 
+    void wait_for_screen(std::string_view text) {
+        REQUIRE(tests::pump_until(
+                io, [this, text] { return visible_screen(terminal).find(text) != std::string::npos; }));
+    }
+
     void exit() {
         type("\x04");
-        REQUIRE(run_result);
+        REQUIRE(tests::pump_until(io, [this] { return run_result.has_value(); }));
         CHECK(*run_result);
     }
 };
@@ -639,6 +644,7 @@ TEST_CASE(
     // persists the decision, appending the "; saved project trust" suffix.
     fixture.write(".pi/skills/README.md", "project skill marker");
     run.type("/reload\r");
+    run.wait_for_screen("Reloaded keybindings, skills, prompts, themes, and context files; saved project trust");
     screen = visible_screen(run.terminal);
     CHECK(
         screen.find(
@@ -681,6 +687,7 @@ TEST_CASE("/reload does not persist implicit trust when detection fails",
             .path = std::string{".pi/skills"},
     };
     run.type("/reload\r");
+    run.wait_for_screen("Could not determine project trust after reload: project resource filesystem is busy");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Could not determine project trust after reload: project resource filesystem is busy") !=
             std::string::npos);
@@ -703,6 +710,7 @@ TEST_CASE(
     // The workspace never gains trust-requiring resources; /reload runs the
     // plain status (no "; saved project trust" suffix).
     run.type("/reload\r");
+    run.wait_for_screen("Reloaded keybindings, skills, prompts, themes, and context files");
     const auto screen = visible_screen(run.terminal);
     CHECK(
         screen.find(
