@@ -219,10 +219,10 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
             support::ErrorCode::Cancelled,
             "Session flow host is no longer active"));
     };
-    hooks.request_session_replacement_async = [weak](std::size_t generation,
+    hooks.request_session_replacement_async = [weak, executor = executor_](std::size_t generation,
                                                       runtime::AgentSessionCreationRequest request)
             -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
-        return support::detail::make_async_result(
+        return support::detail::make_async_result_on(executor,
                 [weak, generation, request = std::move(request)]() mutable
                         -> boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> {
                     if (const auto self = weak.lock()) {
