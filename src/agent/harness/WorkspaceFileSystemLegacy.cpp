@@ -12,12 +12,10 @@
 
 namespace cch::harness {
 
-WorkspaceFileSystem::WorkspaceFileSystem()
-    : temporary_state_(std::make_shared<TemporaryState>()) {}
+WorkspaceFileSystem::WorkspaceFileSystem() : temporary_state_(std::make_shared<TemporaryState>()) {}
 
 WorkspaceFileSystem::WorkspaceFileSystem(std::filesystem::path workspace)
-    : root_(canonicalized(std::move(workspace))),
-      temporary_state_(std::make_shared<TemporaryState>()) {}
+    : root_(canonicalized(std::move(workspace))), temporary_state_(std::make_shared<TemporaryState>()) {}
 
 support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::filesystem::path& workspace) {
     std::error_code ec;
@@ -28,9 +26,12 @@ support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::fi
 }
 
 support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_path(
-    const std::string& requested) const {
+        const std::string& requested) const {
     if (requested.empty()) {
         return std::unexpected(workspace_error("path is required"));
+    }
+    if (requested.find('\0') != std::string::npos) {
+        return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
     }
     std::filesystem::path relative(requested);
     if (relative.is_absolute()) {
@@ -55,46 +56,16 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_
     return target;
 }
 
-support::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std::string& requested) const {
-    auto target = resolve_addressed_path(requested);
-    if (!target) {
-        return std::unexpected(target.error());
+std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_for_read(
+        const std::string& requested, std::uintmax_t* size, std::stop_token stop_token) const {
+    if (stop_token.stop_requested()) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::Aborted,
+                .message = "Operation aborted",
+                .path = std::string{requested},
+        });
     }
 
-    auto parent_guard = open_parent_directory(*target, false);
-    if (!parent_guard) {
-        return std::unexpected(parent_guard.error());
-    }
-
-    auto filename = target->filename().string();
-    support::UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
-    if (!fd) {
-        if (errno == ELOOP) {
-            return std::unexpected(workspace_error("refusing to read through symlink: " + requested));
-        }
-        return std::unexpected(workspace_error("could not open file for reading: " + requested));
-    }
-
-    struct stat st {};
-    if (::fstat(fd.get(), &st) != 0 || !S_ISREG(st.st_mode)) {
-        return std::unexpected(workspace_error("path is not a regular file: " + requested));
-    }
-
-    std::string content;
-    char buffer[4096];
-    ssize_t n = 0;
-    while ((n = ::read(fd.get(), buffer, sizeof(buffer))) > 0) {
-        content.append(buffer, static_cast<std::size_t>(n));
-    }
-    if (n < 0) {
-        return std::unexpected(workspace_error("could not read file: " + requested));
-    }
-    return content;
-}
-
-std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bounded(
-    const std::string& requested,
-    std::size_t max_bytes) const {
     auto target = resolve_addressed_path(requested);
     if (!target) {
         return std::unexpected(util_error_to_file_error(target.error(), requested));
@@ -114,74 +85,147 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bo
     }
 
     const auto filename = target->filename().string();
-    support::UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
-    if (!fd) {
-        if (errno == ELOOP) {
+    struct stat status{};
+    if (::fstatat(parent_guard->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT) {
             return std::unexpected(FileError{
+                    .code = FileErrorCode::NotFound,
+                    .message = "path not found: " + requested,
+                    .path = std::string{requested},
+            });
+        }
+        return std::unexpected(FileError{
+                .code = FileErrorCode::PermissionDenied,
+                .message = "could not inspect file for reading: " + requested,
+                .path = std::string{requested},
+        });
+    }
+    if (S_ISLNK(status.st_mode)) {
+        return std::unexpected(FileError{
                 .code = FileErrorCode::PermissionDenied,
                 .message = "refusing to read through symlink: " + requested,
                 .path = std::string{requested},
+        });
+    }
+    if (!S_ISREG(status.st_mode)) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::IsDirectory,
+                .message = "path is not a regular file: " + requested,
+                .path = std::string{requested},
+        });
+    }
+
+    // O_NONBLOCK is harmless for regular files and closes the FIFO race
+    // between the no-follow type check and openat.
+    support::UniqueFd fd(
+            ::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
+    if (!fd) {
+        if (errno == ELOOP) {
+            return std::unexpected(FileError{
+                    .code = FileErrorCode::PermissionDenied,
+                    .message = "refusing to read through symlink: " + requested,
+                    .path = std::string{requested},
             });
         }
         if (errno == ENOENT) {
             return std::unexpected(FileError{
-                .code = FileErrorCode::NotFound,
-                .message = "path not found: " + requested,
-                .path = std::string{requested},
+                    .code = FileErrorCode::NotFound,
+                    .message = "path not found: " + requested,
+                    .path = std::string{requested},
             });
         }
         return std::unexpected(FileError{
-            .code = FileErrorCode::PermissionDenied,
-            .message = "could not open file for reading: " + requested,
-            .path = std::string{requested},
+                .code = FileErrorCode::PermissionDenied,
+                .message = "could not open file for reading: " + requested,
+                .path = std::string{requested},
         });
     }
 
-    struct stat st {};
-    if (::fstat(fd.get(), &st) != 0 || !S_ISREG(st.st_mode)) {
+    if (::fstat(fd.get(), &status) != 0 || !S_ISREG(status.st_mode)) {
         return std::unexpected(FileError{
-            .code = FileErrorCode::IsDirectory,
-            .message = "path is not a regular file: " + requested,
-            .path = std::string{requested},
+                .code = FileErrorCode::IsDirectory,
+                .message = "path is not a regular file: " + requested,
+                .path = std::string{requested},
         });
     }
-    if (st.st_size < 0 || static_cast<std::uintmax_t>(st.st_size) > max_bytes) {
+    if (size) {
+        *size = status.st_size < 0 ? 0 : static_cast<std::uintmax_t>(status.st_size);
+    }
+    return fd;
+}
+
+support::Expected<std::string> WorkspaceFileSystem::read_existing_file(
+        const std::string& requested, std::stop_token stop_token) const {
+    std::uintmax_t ignored_size = 0;
+    auto fd = open_regular_file_for_read(requested, &ignored_size, stop_token);
+    if (!fd) {
+        return std::unexpected(workspace_error(fd.error().message));
+    }
+
+    std::string content;
+    char buffer[4096];
+    ssize_t n = 0;
+    while ((n = ::read(fd->get(), buffer, sizeof(buffer))) > 0) {
+        if (stop_token.stop_requested()) {
+            return std::unexpected(workspace_error("Operation aborted"));
+        }
+        content.append(buffer, static_cast<std::size_t>(n));
+    }
+    if (n < 0) {
+        return std::unexpected(workspace_error("could not read file: " + requested));
+    }
+    return content;
+}
+
+std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bounded(
+        const std::string& requested, std::size_t max_bytes, std::stop_token stop_token) const {
+    std::uintmax_t file_size = 0;
+    auto fd = open_regular_file_for_read(requested, &file_size, stop_token);
+    if (!fd) {
+        return std::unexpected(fd.error());
+    }
+    if (file_size > max_bytes) {
         return std::unexpected(FileError{
-            .code = FileErrorCode::ResourceLimit,
-            .message = "file exceeds the filesystem result limit",
-            .path = std::string{requested},
+                .code = FileErrorCode::ResourceLimit,
+                .message = "file exceeds the filesystem result limit",
+                .path = std::string{requested},
         });
     }
 
     std::string content;
-    content.reserve(static_cast<std::size_t>(st.st_size));
+    content.reserve(static_cast<std::size_t>(file_size));
     char buffer[4096];
     ssize_t n = 0;
-    while ((n = ::read(fd.get(), buffer, sizeof(buffer))) > 0) {
+    while ((n = ::read(fd->get(), buffer, sizeof(buffer))) > 0) {
+        if (stop_token.stop_requested()) {
+            return std::unexpected(FileError{
+                    .code = FileErrorCode::Aborted,
+                    .message = "Operation aborted",
+                    .path = std::string{requested},
+            });
+        }
         const auto count = static_cast<std::size_t>(n);
         if (count > max_bytes - content.size()) {
             return std::unexpected(FileError{
-                .code = FileErrorCode::ResourceLimit,
-                .message = "file exceeds the filesystem result limit",
-                .path = std::string{requested},
+                    .code = FileErrorCode::ResourceLimit,
+                    .message = "file exceeds the filesystem result limit",
+                    .path = std::string{requested},
             });
         }
         content.append(buffer, count);
     }
     if (n < 0) {
         return std::unexpected(FileError{
-            .code = FileErrorCode::Unknown,
-            .message = "could not read file: " + requested,
-            .path = std::string{requested},
+                .code = FileErrorCode::Unknown,
+                .message = "could not read file: " + requested,
+                .path = std::string{requested},
         });
     }
     return content;
 }
 
 support::Expected<std::size_t> WorkspaceFileSystem::write_file(
-    const std::string& requested,
-    const std::string& content,
-    bool create_parents) const {
+        const std::string& requested, std::string_view content, bool create_parents, std::stop_token stop_token) const {
     auto target = resolve_addressed_path(requested);
     if (!target) {
         return std::unexpected(target.error());
@@ -205,7 +249,7 @@ support::Expected<std::size_t> WorkspaceFileSystem::write_file(
         return std::unexpected(workspace_error("could not inspect target: " + requested));
     }
 
-    auto written = write_atomic_file_at(parent_guard->get(), filename, content);
+    auto written = write_atomic_file_at(parent_guard->get(), filename, content, stop_token);
     if (!written) {
         return std::unexpected(written.error());
     }

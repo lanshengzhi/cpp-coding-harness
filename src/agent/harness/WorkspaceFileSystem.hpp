@@ -8,7 +8,9 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cch::harness {
@@ -34,43 +36,40 @@ public:
     [[nodiscard]] support::Expected<std::filesystem::path> resolve_addressed_path(const std::string& requested) const;
 
     // Legacy tool-shaped operations used by private project-resource adapters.
-    [[nodiscard]] support::Expected<std::string> read_existing_file(const std::string& requested) const;
-    [[nodiscard]] support::Expected<std::size_t> write_file(
-        const std::string& requested,
-        const std::string& content,
-        bool create_parents) const;
+    [[nodiscard]] support::Expected<std::string> read_existing_file(
+            const std::string& requested, std::stop_token stop_token = {}) const;
+    [[nodiscard]] support::Expected<std::size_t> write_file(const std::string& requested,
+            std::string_view content,
+            bool create_parents,
+            std::stop_token stop_token = {}) const;
 
     // Pi-shaped filesystem operations.
     [[nodiscard]] std::expected<std::string, FileError> absolutePath(const std::string& path) const;
     [[nodiscard]] std::expected<std::string, FileError> joinPath(const std::vector<std::string>& parts) const;
-    [[nodiscard]] std::expected<std::string, FileError> readTextFile(const std::string& path) const;
+    [[nodiscard]] std::expected<std::string, FileError> readTextFile(
+            const std::string& path, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<std::vector<std::string>, FileError> readTextLines(
-        const std::string& path,
-        std::optional<int> maxLines = std::nullopt) const;
-    [[nodiscard]] std::expected<BinaryData, FileError> readBinaryFile(const std::string& path) const;
+            const std::string& path, std::optional<int> maxLines = std::nullopt, std::stop_token stop_token = {}) const;
+    [[nodiscard]] std::expected<BinaryData, FileError> readBinaryFile(
+            const std::string& path, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<void, FileError> writeFile(
-        const std::string& path,
-        const WriteContent& content) const;
+            const std::string& path, const WriteContent& content, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<void, FileError> appendFile(
-        const std::string& path,
-        const WriteContent& content) const;
+            const std::string& path, const WriteContent& content, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<FileInfo, FileError> fileInfo(const std::string& path) const;
-    [[nodiscard]] std::expected<std::vector<FileInfo>, FileError> listDir(const std::string& path) const;
+    [[nodiscard]] std::expected<std::vector<FileInfo>, FileError> listDir(
+            const std::string& path, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<std::string, FileError> canonicalPath(const std::string& path) const;
     [[nodiscard]] std::expected<bool, FileError> exists(const std::string& path) const;
-    [[nodiscard]] std::expected<void, FileError> createDir(
-        const std::string& path,
-        bool recursive = true) const;
+    [[nodiscard]] std::expected<void, FileError> createDir(const std::string& path, bool recursive = true) const;
     [[nodiscard]] std::expected<void, FileError> remove(
-        const std::string& path,
-        bool recursive = false) const;
+            const std::string& path, bool recursive = false, std::stop_token stop_token = {}) const;
 
     // Workspace-contained temporary resources.
     [[nodiscard]] std::expected<std::string, FileError> createTempDir(
-        std::optional<std::string> prefix = std::nullopt) const;
+            std::optional<std::string> prefix = std::nullopt) const;
     [[nodiscard]] std::expected<std::string, FileError> createTempFile(
-        std::optional<std::string> prefix = std::nullopt,
-        std::optional<std::string> suffix = std::nullopt) const;
+            std::optional<std::string> prefix = std::nullopt, std::optional<std::string> suffix = std::nullopt) const;
 
 private:
     friend class SyncLocalExecutionEnv;
@@ -94,11 +93,16 @@ private:
     [[nodiscard]] support::Expected<support::UniqueFd> open_workspace_root() const;
     [[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
             const std::filesystem::path& target, bool create_missing, int* failure_errno = nullptr) const;
+    [[nodiscard]] support::Expected<void> validate_directory(const std::filesystem::path& target) const;
+    [[nodiscard]] std::expected<support::UniqueFd, FileError> open_regular_file_for_read(
+            const std::string& requested, std::uintmax_t* size, std::stop_token stop_token = {}) const;
     [[nodiscard]] support::Expected<void> create_parent_directories(const std::filesystem::path& target) const;
-    [[nodiscard]] bool remove_directory_contents(int directory_fd) const noexcept;
+    [[nodiscard]] bool remove_directory_contents(
+            int directory_fd, std::stop_token stop_token = {}, bool* cancelled = nullptr) const noexcept;
     [[nodiscard]] std::expected<std::string, FileError> read_existing_file_bounded(
-        const std::string& requested,
-        std::size_t max_bytes) const;
+            const std::string& requested, std::size_t max_bytes, std::stop_token stop_token = {}) const;
+    [[nodiscard]] std::expected<BinaryData, FileError> read_binary_file_bounded(
+            const std::string& requested, std::size_t max_bytes, std::stop_token stop_token = {}) const;
     [[nodiscard]] support::Expected<void> ensure_temporary_directory() const;
 
     /// Remove this instance's tracked temporary resources only. Errors are

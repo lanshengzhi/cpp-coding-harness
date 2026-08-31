@@ -130,9 +130,11 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
             "InteractiveSessionRun is not initialized"));
     }
     request.provide_user_shell = true;
-    if (state_->runtime_root) {
-        request.execution_runtime_target = state_->runtime_root->make_target();
-    }
+    // The synchronous compatibility bridge owns the loop that drives its
+    // assembly. Do not hand it the interactive RuntimeRoot target: that
+    // target's executor is owned by the caller's loop and cannot be driven by
+    // this synchronous API. The asynchronous production sink below installs
+    // the host target on the Runtime loop instead.
     return coding_agent::create_agent_session(std::move(request),
             state_->session_facts,
             coding_agent::runtime::AssemblyOverrides{

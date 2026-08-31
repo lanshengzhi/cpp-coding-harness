@@ -13,20 +13,17 @@ namespace cch::harness {
 namespace {
 
 [[nodiscard]] FileError temporary_error(
-    FileErrorCode code,
-    std::string message,
-    std::optional<std::string> path = std::nullopt) {
+        FileErrorCode code, std::string message, std::optional<std::string> path = std::nullopt) {
     return FileError{
-        .code = code,
-        .message = std::move(message),
-        .path = std::move(path),
+            .code = code,
+            .message = std::move(message),
+            .path = std::move(path),
     };
 }
 
 [[nodiscard]] bool valid_component(std::string_view component) {
-    return component.find('/') == std::string_view::npos &&
-        component.find('\0') == std::string_view::npos &&
-        component != "." && component != "..";
+    return component.find('/') == std::string_view::npos && component.find('\0') == std::string_view::npos &&
+           component != "." && component != "..";
 }
 
 [[nodiscard]] bool same_object(const struct stat& left, const struct stat& right) noexcept {
@@ -123,13 +120,11 @@ void WorkspaceFileSystem::cleanup_temporary_resources() const noexcept {
     }
 }
 
-std::expected<std::string, FileError> WorkspaceFileSystem::createTempDir(
-    std::optional<std::string> prefix) const {
+std::expected<std::string, FileError> WorkspaceFileSystem::createTempDir(std::optional<std::string> prefix) const {
     const std::string pfx = prefix.value_or("tmp-");
     if (!valid_component(pfx)) {
-        return std::unexpected(temporary_error(
-            FileErrorCode::Invalid,
-            "temporary directory prefix is not a filename component"));
+        return std::unexpected(
+                temporary_error(FileErrorCode::Invalid, "temporary directory prefix is not a filename component"));
     }
 
     std::unique_lock lock(temporary_state_->mutex);
@@ -148,9 +143,8 @@ std::expected<std::string, FileError> WorkspaceFileSystem::createTempDir(
             if (errno == EEXIST) {
                 continue;
             }
-            return std::unexpected(temporary_error(
-                FileErrorCode::PermissionDenied,
-                "could not create temporary directory: " + std::string(std::strerror(errno))));
+            return std::unexpected(temporary_error(FileErrorCode::PermissionDenied,
+                    "could not create temporary directory: " + std::string(std::strerror(errno))));
         }
 
         support::UniqueFd descriptor(
@@ -170,20 +164,16 @@ std::expected<std::string, FileError> WorkspaceFileSystem::createTempDir(
         });
         return (root_ / ".cch-tmp" / name).string();
     }
-    return std::unexpected(temporary_error(
-        FileErrorCode::Unknown,
-        "could not create temp directory"));
+    return std::unexpected(temporary_error(FileErrorCode::Unknown, "could not create temp directory"));
 }
 
 std::expected<std::string, FileError> WorkspaceFileSystem::createTempFile(
-    std::optional<std::string> prefix,
-    std::optional<std::string> suffix) const {
+        std::optional<std::string> prefix, std::optional<std::string> suffix) const {
     const std::string pfx = prefix.value_or("");
     const std::string sfx = suffix.value_or("");
     if (!valid_component(pfx) || !valid_component(sfx)) {
         return std::unexpected(temporary_error(
-            FileErrorCode::Invalid,
-            "temporary file prefix and suffix must be filename components"));
+                FileErrorCode::Invalid, "temporary file prefix and suffix must be filename components"));
     }
 
     std::unique_lock lock(temporary_state_->mutex);
@@ -215,9 +205,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::createTempFile(
         });
         return (root_ / ".cch-tmp" / name).string();
     }
-    return std::unexpected(temporary_error(
-        FileErrorCode::Unknown,
-        "could not create temp file"));
+    return std::unexpected(temporary_error(FileErrorCode::Unknown, "could not create temp file"));
 }
 
 } // namespace cch::harness

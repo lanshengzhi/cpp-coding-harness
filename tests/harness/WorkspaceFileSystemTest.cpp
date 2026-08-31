@@ -4,8 +4,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+
+#include <sys/stat.h>
 
 using namespace cch;
 
@@ -449,4 +452,65 @@ TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2]
     auto abs = fs->absolutePath("../outside.txt");
     REQUIRE_FALSE(abs);
     CHECK(abs.error().code == harness::FileErrorCode::PermissionDenied);
+}
+
+TEST_CASE("WorkspaceFileSystem enforces reviewed path and file contracts", "[harness][filesystem][issue557]") {
+    tests::TempWorkspace workspace;
+    workspace.write("existing.txt", "content");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto nul_path = fs->readTextFile(std::string{"existing.txt\0suffix", 19});
+    REQUIRE_FALSE(nul_path);
+    CHECK(nul_path.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto zero_lines = fs->readTextLines("missing.txt", 0);
+    REQUIRE(zero_lines);
+    CHECK(zero_lines->empty());
+
+    workspace.write("crlf.txt", "first\r\nsecond\r\n");
+    auto crlf_lines = fs->readTextLines("crlf.txt");
+    REQUIRE(crlf_lines);
+    REQUIRE(crlf_lines->size() == 2);
+    CHECK((*crlf_lines)[0] == "first");
+    CHECK((*crlf_lines)[1] == "second");
+
+    auto existing_file_dir = fs->createDir("existing.txt");
+    REQUIRE_FALSE(existing_file_dir);
+    CHECK(existing_file_dir.error().code == harness::FileErrorCode::Invalid);
+
+    std::filesystem::create_symlink(workspace.path() / "existing.txt", workspace.path() / "existing-link");
+    auto existing_link_dir = fs->createDir("existing-link");
+    REQUIRE_FALSE(existing_link_dir);
+
+    auto empty_write = fs->writeFile("empty.bin", harness::BinaryData{});
+    REQUIRE(empty_write);
+    auto empty_append = fs->appendFile("empty.bin", harness::BinaryData{});
+    REQUIRE(empty_append);
+    auto empty_read = fs->readBinaryFile("empty.bin");
+    REQUIRE(empty_read);
+    CHECK(empty_read->empty());
+
+    std::filesystem::permissions(workspace.path() / "existing.txt",
+            std::filesystem::perms::owner_read,
+            std::filesystem::perm_options::replace);
+    auto read_only_write = fs->writeFile("existing.txt", std::string{"replacement"});
+    REQUIRE_FALSE(read_only_write);
+    std::filesystem::permissions(workspace.path() / "existing.txt",
+            std::filesystem::perms::owner_all,
+            std::filesystem::perm_options::replace);
+    CHECK(workspace.read("existing.txt") == "content");
+
+    const auto fifo = workspace.path() / "fifo";
+    REQUIRE(::mkfifo(fifo.c_str(), 0600) == 0);
+    auto fifo_read = fs->readTextFile("fifo");
+    REQUIRE_FALSE(fifo_read);
+    CHECK(fifo_read.error().code == harness::FileErrorCode::IsDirectory);
+    auto fifo_info = fs->fileInfo("fifo");
+    REQUIRE_FALSE(fifo_info);
+    CHECK(fifo_info.error().code == harness::FileErrorCode::Invalid);
+    auto root_entries = fs->listDir(".");
+    REQUIRE(root_entries);
+    CHECK(std::none_of(
+            root_entries->begin(), root_entries->end(), [](const auto& entry) { return entry.name == "fifo"; }));
 }
