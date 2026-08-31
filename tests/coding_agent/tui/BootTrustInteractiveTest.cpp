@@ -14,12 +14,14 @@
 #include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/agent/harness/FileSystem.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
+#include "support/FakeAsyncFileSystem.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -84,10 +86,10 @@ struct BootTrustRun {
     std::vector<std::optional<bool>> request_overrides;
     coding_agent::tui::testing::ActionSinkRecorder recorder;
 
-    void start(
-        const TrustIsolatedWorkspace& fixture,
-        coding_agent::runtime::AgentSessionCreationRequest request,
-        std::shared_ptr<ai::Models> models) {
+    void start(const TrustIsolatedWorkspace& fixture,
+            coding_agent::runtime::AgentSessionCreationRequest request,
+            std::shared_ptr<ai::Models> models,
+            std::shared_ptr<harness::AsyncFileSystem> resource_filesystem = nullptr) {
         recorder.replace_session =
             [this, models](coding_agent::runtime::AgentSessionCreationRequest req)
             -> support::Expected<coding_agent::CreateAgentSessionResult> {
@@ -98,12 +100,17 @@ struct BootTrustRun {
             };
         auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
         auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
-        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-                           .with_agent_config_directory(fixture.agent_dir)
-                           .with_action_sink(recorder.make_sink())
-                           .with_defer_boot(std::move(request))
-                           .with_runtime_root(std::move(runtime_root))
-                           .build();
+        auto builder = coding_agent::tui::InteractiveSessionRunBuilder{};
+        builder.with_agent_config_directory(fixture.agent_dir)
+                .with_action_sink(recorder.make_sink())
+                .with_defer_boot(std::move(request))
+                .with_runtime_root(std::move(runtime_root));
+        if (resource_filesystem) {
+            coding_agent::ProjectResourceFileSystems filesystems;
+            filesystems.workspace = std::move(resource_filesystem);
+            builder.with_project_resource_filesystems(std::move(filesystems));
+        }
+        auto run = std::move(builder).build();
         boost::asio::co_spawn(
             io,
             coding_agent::tui::run_interactive_mode(
@@ -260,6 +267,56 @@ TEST_CASE(
     CHECK(screen.find("This project is not trusted.") != std::string::npos);
 
     run.exit();
+}
+
+TEST_CASE("async trust detection failure aborts boot before session creation",
+        "[coding_agent][tui][boot-trust][issue560]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::Busy,
+            .message = "project resource filesystem is busy",
+            .path = std::string{".pi/skills"},
+    };
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models(), std::move(filesystem));
+
+    REQUIRE(run.run_result);
+    CHECK_FALSE(*run.run_result);
+    CHECK(run.run_result->error().code == support::ErrorCode::Busy);
+    CHECK(run.run_result->error().detail.find("project resource filesystem is busy") != std::string::npos);
+    CHECK(run.request_overrides.empty());
+    CHECK_FALSE(run.terminal.modes().started);
+}
+
+TEST_CASE("explicit trust override bypasses a failing async detection", "[coding_agent][tui][boot-trust][issue560]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+    fixture.write(".pi/skills/README.md", "project skill marker");
+
+    auto request = boot_request(fixture);
+    request.project_trust_override = true;
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::PermissionDenied,
+            .message = "project resource filesystem is unavailable",
+            .path = std::string{".pi/skills"},
+    };
+
+    BootTrustRun run;
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models(), std::move(filesystem));
+
+    REQUIRE(run.request_overrides.size() == 1);
+    CHECK(run.request_overrides.front() == true);
+    CHECK(visible_screen(run.terminal).find("Trust project folder?") == std::string::npos);
+
+    run.exit();
+    CHECK(*run.run_result);
 }
 
 TEST_CASE(
@@ -597,6 +654,38 @@ TEST_CASE(
         std::istreambuf_iterator<char>()};
     CHECK((trust_json.find("\"trusted\"") != std::string::npos ||
         trust_json.find("true") != std::string::npos));
+
+    run.exit();
+}
+
+TEST_CASE("/reload does not persist implicit trust when detection fails",
+        "[coding_agent][tui][boot-trust][reload][issue560]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
+    filesystem->add_directory(".");
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models(), filesystem);
+
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("Trust project folder?") == std::string::npos);
+    CHECK(screen.find("This project is not trusted.") == std::string::npos);
+
+    fixture.write(".pi/skills/README.md", "project skill marker");
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::Busy,
+            .message = "project resource filesystem is busy",
+            .path = std::string{".pi/skills"},
+    };
+    run.type("/reload\r");
+    screen = visible_screen(run.terminal);
+    CHECK(screen.find("Could not determine project trust after reload: project resource filesystem is busy") !=
+            std::string::npos);
+    CHECK(screen.find("; saved project trust") == std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(coding_agent::trust_store_file_path()));
 
     run.exit();
 }

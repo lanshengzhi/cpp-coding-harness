@@ -138,11 +138,10 @@ public:
     /// Boot trust preparation and resolution. The preparation arms pi's
     /// implicit-trust-on-reload behavior when the boot workspace had no
     /// trust-requiring resources.
-    [[nodiscard]] boost::asio::awaitable<void> arm_auto_trust_on_reload(
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> arm_auto_trust_on_reload(
             std::filesystem::path workspace, std::optional<bool> trust_override);
-    [[nodiscard]] boost::asio::awaitable<bool> resolve_boot_trust(
-        std::filesystem::path workspace,
-        std::optional<bool> trust_override);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> resolve_boot_trust(
+            std::filesystem::path workspace, std::optional<bool> trust_override);
 
 private:
     [[nodiscard]] boost::asio::awaitable<void> handle_resume_session(
@@ -167,8 +166,8 @@ private:
     [[nodiscard]] boost::asio::awaitable<std::optional<ProjectTrustOption>>
     show_boot_trust_prompt(const std::filesystem::path& workspace);
     [[nodiscard]] boost::asio::awaitable<void> run_trust_selector();
-    [[nodiscard]] boost::asio::awaitable<std::optional<ProjectResourceDetectionResult>> detect_project_resources_for(
-            const std::filesystem::path& workspace);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ProjectResourceDetectionResult>>
+    detect_project_resources_for(const std::filesystem::path& workspace);
 
     [[nodiscard]] bool is_live();
     [[nodiscard]] AgentSession* current_session();
@@ -184,7 +183,7 @@ private:
     request_session_replacement(runtime::AgentSessionCreationRequest request);
     [[nodiscard]] support::ExpectedVoid replace_session(
         std::unique_ptr<AgentSession> session);
-    [[nodiscard]] boost::asio::awaitable<bool> maybe_save_implicit_project_trust_after_reload();
+    [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> maybe_save_implicit_project_trust_after_reload();
 
     boost::asio::any_io_executor executor_;
     ModalPresenter* presenter_; // kept alive by host_lifetime_ across flows.

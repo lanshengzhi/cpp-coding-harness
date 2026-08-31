@@ -699,11 +699,18 @@ boost::asio::awaitable<void> SessionFlowController::handle_reload() {
         co_return;
     }
 
-    const bool saved_implicit_trust = co_await maybe_save_implicit_project_trust_after_reload();
+    auto saved_implicit_trust = co_await maybe_save_implicit_project_trust_after_reload();
+    if (!saved_implicit_trust && saved_implicit_trust.error().code != support::ErrorCode::Cancelled && !closed_) {
+        if (hooks_.show_warning != nullptr) {
+            hooks_.show_warning("Could not determine project trust after reload: " +
+                                combined_error_text(saved_implicit_trust.error()));
+        }
+        presenter_->invalidate();
+    }
     presenter_->show_status(
-        saved_implicit_trust
-            ? "Reloaded keybindings, skills, prompts, themes, and context files; saved project trust"
-            : "Reloaded keybindings, skills, prompts, themes, and context files");
+            saved_implicit_trust && *saved_implicit_trust
+                    ? "Reloaded keybindings, skills, prompts, themes, and context files; saved project trust"
+                    : "Reloaded keybindings, skills, prompts, themes, and context files");
     presenter_->restore_prompt_slot();
 }
 

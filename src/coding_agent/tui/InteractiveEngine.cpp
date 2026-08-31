@@ -45,6 +45,11 @@ namespace {
            "Use /trust to save a trust decision, then restart pike.";
 }
 
+[[nodiscard]] support::Error project_resource_detection_unavailable_error() {
+    return support::make_error(
+            support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
+}
+
 } // namespace
 
 using interactive_view_detail::queued_editor_texts;
@@ -177,19 +182,30 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     //    always/never → ask prompt (the generic string-list selector
     //    overlay; G2 record). The controller also arms pi's implicit
     //    trust-on-reload behavior for a resource-free boot.
-    co_await session_flows_->arm_auto_trust_on_reload(boot_request_->workspace, boot_request_->project_trust_override);
+    if (auto armed = co_await session_flows_->arm_auto_trust_on_reload(
+                boot_request_->workspace, boot_request_->project_trust_override);
+            !armed) {
+        (void)deliver_action(action_generation_, TuiActionVariant{ReportBootCreationFailureAction{armed.error()}});
+        auto failed = fail_start(armed.error());
+        co_return std::unexpected(failed.error());
+    }
     auto decision = co_await session_flows_->resolve_boot_trust(
         boot_request_->workspace,
         boot_request_->project_trust_override);
+    if (!decision) {
+        (void)deliver_action(action_generation_, TuiActionVariant{ReportBootCreationFailureAction{decision.error()}});
+        auto failed = fail_start(decision.error());
+        co_return std::unexpected(failed.error());
+    }
     // pi `projectTrustByCwd`: remember the boot decision for the boot
     // workspace so in-session session creations in the same workspace
     // reuse it instead of re-resolving (ask-without-UI would silently
     // drop a session-only trust).
-    resolved_boot_trust_.emplace(boot_request_->workspace, decision);
+    resolved_boot_trust_.emplace(boot_request_->workspace, *decision);
     // 2. Create the boot session with the decided trust so SessionFactory
     //    resolves deterministically (pi `projectTrustByCwd` cache).
     auto request = std::move(*boot_request_);
-    request.project_trust_override = decision;
+    request.project_trust_override = *decision;
     auto created = request_session_replacement(action_generation_, std::move(request));
     if (!created) {
         const support::Error failure = created.error();
@@ -241,7 +257,10 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         co_return std::unexpected(subscribed.error());
     }
     initialize_view(startup_diagnostics_);
-    (void)co_await append_project_trust_warning_if_needed();
+    if (auto warning = co_await append_project_trust_warning_if_needed(); !warning) {
+        auto failed = fail_start(warning.error());
+        co_return std::unexpected(failed.error());
+    }
     if (auto rendered = tui_.render(); !rendered) {
         co_return std::unexpected(rendered.error());
     }
@@ -508,7 +527,7 @@ ProjectResourceFileSystems InteractiveEngine::project_resource_filesystems_for(c
             runtime_root_, workspace, agent_config_directory_, coding_agent::home_directory());
 }
 
-boost::asio::awaitable<bool> InteractiveEngine::append_project_trust_warning_if_needed() {
+boost::asio::awaitable<support::Expected<bool>> InteractiveEngine::append_project_trust_warning_if_needed() {
     auto* session = session_;
     if (session == nullptr || detail::AgentSessionInteractiveAccess::is_project_trusted(*session)) {
         co_return false;
@@ -517,14 +536,17 @@ boost::asio::awaitable<bool> InteractiveEngine::append_project_trust_warning_if_
     const auto workspace = session->workspace();
     auto filesystems = project_resource_filesystems_for(workspace);
     if (!filesystems.workspace) {
-        co_return false;
+        co_return std::unexpected(project_resource_detection_unavailable_error());
     }
     auto detection = co_await support::detail::await_async_result(coding_agent::detect_project_resources(
             std::move(filesystems), coding_agent::home_directory() / ".agents" / "skills", stop_source_.get_token()));
-    if (!detection || !running_ || stop_source_.stop_requested() || captured_generation != action_generation_ ||
+    if (!running_ || stop_source_.stop_requested() || captured_generation != action_generation_ ||
             session_ != session || session->workspace() != workspace ||
             detail::AgentSessionInteractiveAccess::is_project_trusted(*session)) {
         co_return false;
+    }
+    if (!detection) {
+        co_return std::unexpected(harness::to_util_error(std::move(detection.error())));
     }
     if (!needs_project_trust_resolution(*detection)) {
         co_return false;

@@ -31,6 +31,11 @@ namespace {
     return support::make_error(support::ErrorCode::Cancelled, "Login cancelled");
 }
 
+[[nodiscard]] support::Error project_resource_detection_unavailable_error() {
+    return support::make_error(
+            support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
+}
+
 [[nodiscard]] std::string format_project_trust_prompt(
     const std::filesystem::path& cwd) {
     return std::format(
@@ -59,21 +64,21 @@ namespace {
 
 } // namespace
 
-boost::asio::awaitable<std::optional<ProjectResourceDetectionResult>>
+boost::asio::awaitable<support::Expected<ProjectResourceDetectionResult>>
 SessionFlowController::detect_project_resources_for(const std::filesystem::path& workspace) {
     if (hooks_.project_resource_filesystems == nullptr) {
-        co_return std::nullopt;
+        co_return std::unexpected(project_resource_detection_unavailable_error());
     }
     auto filesystems = hooks_.project_resource_filesystems(workspace);
     auto detection = co_await support::detail::await_async_result(coding_agent::detect_project_resources(
             std::move(filesystems), coding_agent::home_directory() / ".agents" / "skills", stop_source_.get_token()));
     if (!detection) {
-        co_return std::nullopt;
+        co_return std::unexpected(harness::to_util_error(std::move(detection.error())));
     }
     co_return std::move(*detection);
 }
 
-boost::asio::awaitable<void> SessionFlowController::arm_auto_trust_on_reload(
+boost::asio::awaitable<support::ExpectedVoid> SessionFlowController::arm_auto_trust_on_reload(
         std::filesystem::path workspace, std::optional<bool> trust_override) {
     auto_trust_on_reload_cwd_.reset();
     boot_detection_workspace_.reset();
@@ -81,33 +86,37 @@ boost::asio::awaitable<void> SessionFlowController::arm_auto_trust_on_reload(
     // pi `resolveProjectTrusted`: an override decides first, before any
     // resource detection or store walk.
     if (trust_override.has_value() || closed_) {
-        co_return;
+        co_return support::ExpectedVoid{};
     }
     auto detection = co_await detect_project_resources_for(workspace);
-    if (!detection || closed_ || stop_source_.stop_requested()) {
-        co_return;
+    if (closed_ || stop_source_.stop_requested()) {
+        co_return support::ExpectedVoid{};
+    }
+    if (!detection) {
+        co_return std::unexpected(std::move(detection.error()));
     }
     boot_detection_workspace_ = workspace;
     boot_detection_ = std::move(*detection);
     if (!needs_project_trust_resolution(*boot_detection_)) {
         auto_trust_on_reload_cwd_ = std::move(workspace);
     }
+    co_return support::ExpectedVoid{};
 }
 
-boost::asio::awaitable<bool> SessionFlowController::resolve_boot_trust(
-    std::filesystem::path workspace,
-    std::optional<bool> trust_override) {
+boost::asio::awaitable<support::Expected<bool>> SessionFlowController::resolve_boot_trust(
+        std::filesystem::path workspace, std::optional<bool> trust_override) {
     // pi `resolveProjectTrusted`: an override decides first, before any
     // resource detection or store walk.
     if (trust_override.has_value()) {
         boot_detection_workspace_.reset();
         boot_detection_.reset();
-        co_return *trust_override;
+        co_return support::Expected<bool>{*trust_override};
     }
 
-    std::optional<ProjectResourceDetectionResult> detection;
+    support::Expected<ProjectResourceDetectionResult> detection{ProjectResourceDetectionResult{}};
     if (boot_detection_workspace_ && *boot_detection_workspace_ == workspace) {
-        detection = std::exchange(boot_detection_, std::nullopt);
+        detection = support::Expected<ProjectResourceDetectionResult>{
+                std::move(*std::exchange(boot_detection_, std::nullopt))};
         boot_detection_workspace_.reset();
     } else {
         detection = co_await detect_project_resources_for(workspace);
@@ -115,7 +124,10 @@ boost::asio::awaitable<bool> SessionFlowController::resolve_boot_trust(
     if (closed_ || stop_source_.stop_requested()) {
         co_return false;
     }
-    const bool trust_needed = detection && needs_project_trust_resolution(*detection);
+    if (!detection) {
+        co_return std::unexpected(std::move(detection.error()));
+    }
+    const bool trust_needed = needs_project_trust_resolution(*detection);
     ProjectTrustStore store{coding_agent::trust_store_file_path()};
     const auto default_trust = settings_manager_
         ? settings_manager_->default_project_trust().value_or(DefaultProjectTrust::Ask)
@@ -145,7 +157,8 @@ boost::asio::awaitable<bool> SessionFlowController::resolve_boot_trust(
     co_return option->trusted;
 }
 
-boost::asio::awaitable<bool> SessionFlowController::maybe_save_implicit_project_trust_after_reload() {
+boost::asio::awaitable<support::Expected<bool>>
+SessionFlowController::maybe_save_implicit_project_trust_after_reload() {
     // The armed workspace is consumed by exactly one decision attempt. The
     // Session pointer and action generation are retained across the async
     // detection so replacement cannot save a decision for a stale Session.
@@ -160,9 +173,12 @@ boost::asio::awaitable<bool> SessionFlowController::maybe_save_implicit_project_
         co_return false;
     }
     auto detection = co_await detect_project_resources_for(cwd);
-    if (!detection || closed_ || stop_source_.stop_requested() || captured_generation != action_generation() ||
+    if (closed_ || stop_source_.stop_requested() || captured_generation != action_generation() ||
             current_session() != captured_session) {
         co_return false;
+    }
+    if (!detection) {
+        co_return std::unexpected(std::move(detection.error()));
     }
     if (!needs_project_trust_resolution(*detection) ||
             !detail::AgentSessionInteractiveAccess::is_project_trusted(*session)) {

@@ -76,10 +76,6 @@ constexpr std::array<MarkerSpec, 5> kMarkers{{
     };
 }
 
-[[nodiscard]] bool detection_aborted(const harness::FileError& error) {
-    return error.code == harness::FileErrorCode::Aborted;
-}
-
 [[nodiscard]] harness::FileError invalid_detection_filesystems(
         std::string message, std::optional<std::string> path = std::nullopt) {
     return harness::FileError{
@@ -174,12 +170,8 @@ find_project_agents_skills_dir_async_task(const ProjectResourceFileSystems& file
         }
         auto info = co_await std::move(filesystem->fileInfo(*relative, stop_token));
         if (!info) {
-            if (detection_aborted(info.error())) {
-                co_return std::unexpected(std::move(info.error()));
-            }
             if (info.error().code != harness::FileErrorCode::NotFound) {
-                diagnostics.push_back(
-                        diagnostic(ResourceDiagnosticType::Warning, info.error().message, agents_skills.string()));
+                co_return std::unexpected(std::move(info.error()));
             }
             continue;
         }
@@ -195,7 +187,8 @@ find_project_agents_skills_dir_async_task(const ProjectResourceFileSystems& file
         // checked through the same capability and must be a directory.
         auto canonical = co_await std::move(filesystem->canonicalPath(*relative, stop_token));
         if (!canonical) {
-            if (detection_aborted(canonical.error())) {
+            if (canonical.error().code != harness::FileErrorCode::NotFound &&
+                    canonical.error().code != harness::FileErrorCode::Invalid) {
                 co_return std::unexpected(std::move(canonical.error()));
             }
             diagnostics.push_back(
@@ -211,12 +204,8 @@ find_project_agents_skills_dir_async_task(const ProjectResourceFileSystems& file
         }
         auto target_info = co_await std::move(filesystem->fileInfo(*target_relative, stop_token));
         if (!target_info) {
-            if (detection_aborted(target_info.error())) {
-                co_return std::unexpected(std::move(target_info.error()));
-            }
             if (target_info.error().code != harness::FileErrorCode::NotFound) {
-                diagnostics.push_back(diagnostic(
-                        ResourceDiagnosticType::Warning, target_info.error().message, agents_skills.string()));
+                co_return std::unexpected(std::move(target_info.error()));
             }
             continue;
         }
@@ -301,15 +290,10 @@ namespace {
         }
         auto info = co_await std::move(filesystems.workspace->fileInfo(marker.path, stop_token));
         if (!info) {
-            if (detection_aborted(info.error())) {
-                co_return std::unexpected(std::move(info.error()));
-            }
             if (info.error().code == harness::FileErrorCode::NotFound) {
                 continue;
             }
-            result.diagnostics.push_back(
-                    diagnostic(ResourceDiagnosticType::Warning, info.error().message, marker.path));
-            continue;
+            co_return std::unexpected(std::move(info.error()));
         }
 
         bool loadable = true;
@@ -317,7 +301,8 @@ namespace {
         if (actual_kind == harness::FileKind::Symlink) {
             auto canonical = co_await std::move(filesystems.workspace->canonicalPath(marker.path, stop_token));
             if (!canonical) {
-                if (detection_aborted(canonical.error())) {
+                if (canonical.error().code != harness::FileErrorCode::NotFound &&
+                        canonical.error().code != harness::FileErrorCode::Invalid) {
                     co_return std::unexpected(std::move(canonical.error()));
                 }
                 result.diagnostics.push_back(
@@ -334,7 +319,7 @@ namespace {
                 } else {
                     auto target = co_await std::move(filesystems.workspace->fileInfo(*target_path, stop_token));
                     if (!target) {
-                        if (detection_aborted(target.error())) {
+                        if (target.error().code != harness::FileErrorCode::NotFound) {
                             co_return std::unexpected(std::move(target.error()));
                         }
                         result.diagnostics.push_back(

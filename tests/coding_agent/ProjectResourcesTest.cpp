@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <thread>
 
 using namespace cch;
@@ -278,6 +279,54 @@ TEST_CASE("async project resource detection uses a fake filesystem",
     REQUIRE(result);
     CHECK(detected(*result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
     CHECK(detected(*result, coding_agent::ProjectResourceKind::ProjectSkills));
+}
+
+TEST_CASE("async project resource detection propagates filesystem failures",
+        "[coding_agent][project_resources][async][issue560]") {
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>("/workspace");
+    filesystem->next_error = harness::FileError{
+            .code = harness::FileErrorCode::Busy,
+            .message = "filesystem is busy",
+            .path = std::string{".pi/skills"},
+    };
+
+    coding_agent::ProjectResourceFileSystems filesystems;
+    filesystems.workspace = filesystem;
+    AsyncDetectionRuntime runtime;
+    auto result =
+            runtime.run(coding_agent::detect_project_resources(std::move(filesystems), "/user/.agents/skills", {}));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::FileErrorCode::Busy);
+    CHECK(result.error().message == "filesystem is busy");
+    CHECK(result.error().path == ".pi/skills");
+}
+
+TEST_CASE("async project resource detection preserves cancellation as an error",
+        "[coding_agent][project_resources][async][issue560]") {
+    auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>("/workspace");
+    coding_agent::ProjectResourceFileSystems filesystems;
+    filesystems.workspace = filesystem;
+    std::stop_source stop_source;
+    stop_source.request_stop();
+
+    AsyncDetectionRuntime runtime;
+    auto result = runtime.run(coding_agent::detect_project_resources(
+            std::move(filesystems), "/user/.agents/skills", stop_source.get_token()));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::FileErrorCode::Aborted);
+}
+
+TEST_CASE("async project resource detection rejects a missing workspace capability",
+        "[coding_agent][project_resources][async][issue560]") {
+    AsyncDetectionRuntime runtime;
+    auto result = runtime.run(coding_agent::detect_project_resources(
+            coding_agent::ProjectResourceFileSystems{}, "/user/.agents/skills", {}));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::FileErrorCode::Invalid);
+    CHECK(result.error().message.find("workspace filesystem") != std::string::npos);
 }
 
 TEST_CASE("async project resource detection works through the local adapter",

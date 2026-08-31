@@ -109,7 +109,7 @@ public:
     /// the Native TUI warning when the Session is untrusted. The detection is
     /// awaited on the serialized runtime path so a replaced Session cannot
     /// receive a stale warning.
-    [[nodiscard]] boost::asio::awaitable<bool> append_project_trust_warning_if_needed();
+    [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> append_project_trust_warning_if_needed();
 
     /// The exit wait: released by `signal_exit` once the run may tear down.
     [[nodiscard]] boost::asio::steady_timer& exit_wait() {
