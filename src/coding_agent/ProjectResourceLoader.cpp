@@ -31,10 +31,6 @@ namespace cch::coding_agent {
 using detail::to_async_result;
 namespace {
 
-constexpr std::string_view kProjectSkillsMarker = ".pi/skills";
-constexpr std::string_view kProjectPromptsMarker = ".pi/prompts";
-constexpr std::string_view kProjectThemesMarker = ".pi/themes";
-
 /// pi `loadContextFileFromDir` candidate names (`resource-loader.ts`), in
 /// order; the first existing regular file wins.
 constexpr std::array<std::string_view, 4> kContextFileCandidates{
