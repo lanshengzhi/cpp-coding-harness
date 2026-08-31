@@ -100,8 +100,7 @@ public:
 
     /// Execute a shell command with split streams.
     [[nodiscard]] virtual support::AsyncResult<ShellExecResult, ExecutionError> exec(
-        std::string command,
-        ExecOptions options = {}) = 0;
+            std::string command, ExecOptions options = {}) = 0;
 };
 
 } // namespace cch::harness

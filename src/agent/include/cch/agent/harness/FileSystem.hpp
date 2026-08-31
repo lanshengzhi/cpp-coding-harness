@@ -125,86 +125,65 @@ public:
     /// Return an absolute addressed path without requiring it to exist and
     /// without following symlinks.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> absolutePath(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// Join path segments without requiring the result to exist.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> joinPath(
-        std::vector<std::string> parts,
-        std::stop_token stop_token) = 0;
+            std::vector<std::string> parts, std::stop_token stop_token) = 0;
 
     /// Read an entire UTF-8 text file, subject to the fixed file-byte limit.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> readTextFile(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// Read UTF-8 text lines, subject to fixed byte and line limits. maxLines
     /// can reduce the returned result but can never raise either fixed limit.
     [[nodiscard]] virtual support::AsyncResult<std::vector<std::string>, FileError> readTextLines(
-        std::string path,
-        std::optional<int> maxLines,
-        std::stop_token stop_token) = 0;
+            std::string path, std::optional<int> maxLines, std::stop_token stop_token) = 0;
 
     /// Read an entire binary file, subject to the fixed file-byte limit.
     [[nodiscard]] virtual support::AsyncResult<BinaryData, FileError> readBinaryFile(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// Create or overwrite a file, creating parent directories.
     [[nodiscard]] virtual support::AsyncResult<void, FileError> writeFile(
-        std::string path,
-        WriteContent content,
-        std::stop_token stop_token) = 0;
+            std::string path, WriteContent content, std::stop_token stop_token) = 0;
 
     /// Create or append to a file, creating parent directories.
     [[nodiscard]] virtual support::AsyncResult<void, FileError> appendFile(
-        std::string path,
-        WriteContent content,
-        std::stop_token stop_token) = 0;
+            std::string path, WriteContent content, std::stop_token stop_token) = 0;
 
     /// Return metadata for the addressed path without following symlinks.
     [[nodiscard]] virtual support::AsyncResult<FileInfo, FileError> fileInfo(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// List direct children of a directory without following symlinks. The
     /// complete result is rejected when either fixed directory limit is hit.
     [[nodiscard]] virtual support::AsyncResult<std::vector<FileInfo>, FileError> listDir(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// Return the canonical path for an existing path, resolving symlinks.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> canonicalPath(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// Return false for missing paths. Other errors return FileError.
     [[nodiscard]] virtual support::AsyncResult<bool, FileError> exists(
-        std::string path,
-        std::stop_token stop_token) = 0;
+            std::string path, std::stop_token stop_token) = 0;
 
     /// Create a directory, recursively when requested.
     [[nodiscard]] virtual support::AsyncResult<void, FileError> createDir(
-        std::string path,
-        bool recursive,
-        std::stop_token stop_token) = 0;
+            std::string path, bool recursive, std::stop_token stop_token) = 0;
 
     /// Remove a file or directory, recursively when requested.
     [[nodiscard]] virtual support::AsyncResult<void, FileError> remove(
-        std::string path,
-        bool recursive,
-        std::stop_token stop_token) = 0;
+            std::string path, bool recursive, std::stop_token stop_token) = 0;
 
     /// Create and track a workspace-contained temporary directory.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> createTempDir(
-        std::optional<std::string> prefix,
-        std::stop_token stop_token) = 0;
+            std::optional<std::string> prefix, std::stop_token stop_token) = 0;
 
     /// Create and track a workspace-contained temporary file.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> createTempFile(
-        std::optional<std::string> prefix,
-        std::optional<std::string> suffix,
-        std::stop_token stop_token) = 0;
+            std::optional<std::string> prefix, std::optional<std::string> suffix, std::stop_token stop_token) = 0;
 
     /// Asynchronously remove only this capability's tracked temporary
     /// resources. Cleanup is idempotent and best-effort; it never sweeps a

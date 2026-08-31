@@ -20,8 +20,7 @@ namespace cch::tests {
 /// a contained in-memory tree suitable for Project Resource tests.
 class FakeAsyncFileSystem final : public harness::AsyncFileSystem {
 public:
-    explicit FakeAsyncFileSystem(std::filesystem::path workspace)
-        : workspace_(std::move(workspace)) {}
+    explicit FakeAsyncFileSystem(std::filesystem::path workspace) : workspace_(std::move(workspace)) {}
 
     const std::filesystem::path& workspace() const override { return workspace_; }
 
@@ -66,15 +65,13 @@ public:
     }
 
     support::AsyncResult<std::string, harness::FileError> absolutePath(
-        std::string path,
-        std::stop_token stop_token) override {
+            std::string path, std::stop_token stop_token) override {
         if (auto error = failure(stop_token)) return failed<std::string>(std::move(*error));
         return ready(std::move(path));
     }
 
     support::AsyncResult<std::string, harness::FileError> joinPath(
-        std::vector<std::string> parts,
-        std::stop_token stop_token) override {
+            std::vector<std::string> parts, std::stop_token stop_token) override {
         if (auto error = failure(stop_token)) return failed<std::string>(std::move(*error));
         std::filesystem::path result = workspace_;
         for (auto& part : parts)
@@ -83,8 +80,7 @@ public:
     }
 
     support::AsyncResult<std::string, harness::FileError> readTextFile(
-        std::string path,
-        std::stop_token stop_token) override {
+            std::string path, std::stop_token stop_token) override {
         if (auto error = failure(stop_token, path)) return failed<std::string>(std::move(*error));
         if (!configured_) return ready(std::move(path));
         if (auto error = path_error(path)) return failed<std::string>(std::move(*error));
@@ -201,8 +197,7 @@ public:
     }
 
     support::AsyncResult<harness::FileInfo, harness::FileError> fileInfo(
-        std::string path,
-        std::stop_token stop_token) override {
+            std::string path, std::stop_token stop_token) override {
         if (auto error = failure(stop_token, path)) return failed<harness::FileInfo>(std::move(*error));
         if (!configured_) {
             return ready(harness::FileInfo{
@@ -253,8 +248,7 @@ public:
     }
 
     support::AsyncResult<std::string, harness::FileError> canonicalPath(
-        std::string path,
-        std::stop_token stop_token) override {
+            std::string path, std::stop_token stop_token) override {
         if (auto error = failure(stop_token, path)) return failed<std::string>(std::move(*error));
         if (!configured_) return ready(std::move(path));
         auto key = key_for(path);
@@ -333,16 +327,13 @@ public:
     }
 
     support::AsyncResult<std::string, harness::FileError> createTempDir(
-        std::optional<std::string>,
-        std::stop_token stop_token) override {
+            std::optional<std::string>, std::stop_token stop_token) override {
         if (auto error = failure(stop_token)) return failed<std::string>(std::move(*error));
         return ready(workspace_.string() + "/fake-temp-dir");
     }
 
     support::AsyncResult<std::string, harness::FileError> createTempFile(
-        std::optional<std::string>,
-        std::optional<std::string>,
-        std::stop_token stop_token) override {
+            std::optional<std::string>, std::optional<std::string>, std::stop_token stop_token) override {
         if (auto error = failure(stop_token)) return failed<std::string>(std::move(*error));
         return ready(workspace_.string() + "/fake-temp-file");
     }

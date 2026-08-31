@@ -131,13 +131,10 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_base_of_v<harness::AsyncFileSystem, harness::AsyncExecutionEnv>);
     static_assert(std::is_base_of_v<harness::AsyncShell, harness::AsyncExecutionEnv>);
     static_assert(!std::is_base_of_v<harness::AsyncShell, harness::AsyncFileSystem>);
-    using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError>
-        (harness::AsyncFileSystem::*)(std::string, std::stop_token);
-    using CleanupMethod = support::AsyncResult<void, harness::FileError>
-        (harness::AsyncFileSystem::*)();
-    static_assert(std::is_same_v<
-                  decltype(&harness::AsyncFileSystem::readTextFile),
-                  ReadTextFileMethod>);
+    using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError> (harness::AsyncFileSystem::*)(
+            std::string, std::stop_token);
+    using CleanupMethod = support::AsyncResult<void, harness::FileError> (harness::AsyncFileSystem::*)();
+    static_assert(std::is_same_v<decltype(&harness::AsyncFileSystem::readTextFile), ReadTextFileMethod>);
     static_assert(std::is_same_v<decltype(&harness::AsyncFileSystem::cleanup), CleanupMethod>);
     static_assert(std::is_final_v<harness::AsyncLocalFileSystem>);
     static_assert(std::is_move_constructible_v<harness::AsyncLocalFileSystem>);

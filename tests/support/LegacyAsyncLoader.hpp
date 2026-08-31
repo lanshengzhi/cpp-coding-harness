@@ -25,12 +25,9 @@ namespace cch::tests::legacy {
 
 class AsyncFileSystemAdapter final : public harness::AsyncFileSystem {
 public:
-    explicit AsyncFileSystemAdapter(harness::WorkspaceFileSystem filesystem)
-        : filesystem_(std::move(filesystem)) {}
+    explicit AsyncFileSystemAdapter(harness::WorkspaceFileSystem filesystem) : filesystem_(std::move(filesystem)) {}
 
-    [[nodiscard]] const std::filesystem::path& workspace() const override {
-        return filesystem_.root();
-    }
+    [[nodiscard]] const std::filesystem::path& workspace() const override { return filesystem_.root(); }
 
     [[nodiscard]] support::AsyncResult<std::string, harness::FileError> absolutePath(
             std::string path, std::stop_token stop_token) override {
@@ -49,8 +46,8 @@ public:
 
     [[nodiscard]] support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(
             std::string path, std::optional<int> max_lines, std::stop_token stop_token) override {
-        return immediate<std::vector<std::string>>(path, stop_token,
-                [&] { return filesystem_.readTextLines(path, max_lines); });
+        return immediate<std::vector<std::string>>(
+                path, stop_token, [&] { return filesystem_.readTextLines(path, max_lines); });
     }
 
     [[nodiscard]] support::AsyncResult<harness::BinaryData, harness::FileError> readBinaryFile(
@@ -75,8 +72,7 @@ public:
 
     [[nodiscard]] support::AsyncResult<std::vector<harness::FileInfo>, harness::FileError> listDir(
             std::string path, std::stop_token stop_token) override {
-        return immediate<std::vector<harness::FileInfo>>(path, stop_token,
-                [&] { return filesystem_.listDir(path); });
+        return immediate<std::vector<harness::FileInfo>>(path, stop_token, [&] { return filesystem_.listDir(path); });
     }
 
     [[nodiscard]] support::AsyncResult<std::string, harness::FileError> canonicalPath(
@@ -105,11 +101,9 @@ public:
     }
 
     [[nodiscard]] support::AsyncResult<std::string, harness::FileError> createTempFile(
-            std::optional<std::string> prefix,
-            std::optional<std::string> suffix,
-            std::stop_token stop_token) override {
-        return immediate<std::string>(std::nullopt, stop_token,
-                [&] { return filesystem_.createTempFile(prefix, suffix); });
+            std::optional<std::string> prefix, std::optional<std::string> suffix, std::stop_token stop_token) override {
+        return immediate<std::string>(
+                std::nullopt, stop_token, [&] { return filesystem_.createTempFile(prefix, suffix); });
     }
 
     [[nodiscard]] support::AsyncResult<void, harness::FileError> cleanup() override {
@@ -146,9 +140,7 @@ private:
 template <typename T, typename E>
 [[nodiscard]] inline std::expected<T, E> run_sync(support::AsyncResult<T, E> operation) {
     std::optional<std::expected<T, E>> outcome;
-    std::move(operation).start([&outcome](std::expected<T, E> value) noexcept {
-        outcome.emplace(std::move(value));
-    });
+    std::move(operation).start([&outcome](std::expected<T, E> value) noexcept { outcome.emplace(std::move(value)); });
     if (!outcome) {
         std::terminate();
     }
@@ -161,8 +153,7 @@ template <typename T, typename E>
     return (error ? path : absolute).lexically_normal();
 }
 
-[[nodiscard]] inline bool path_is_under(
-        const std::filesystem::path& root, const std::filesystem::path& candidate) {
+[[nodiscard]] inline bool path_is_under(const std::filesystem::path& root, const std::filesystem::path& candidate) {
     const auto relative = normalized_absolute(candidate).lexically_relative(normalized_absolute(root));
     if (relative.empty()) {
         return true;
@@ -172,15 +163,13 @@ template <typename T, typename E>
 }
 
 [[nodiscard]] inline coding_agent::ProjectResourceFileSystems make_project_resource_filesystems(
-        const harness::WorkspaceFileSystem& filesystem,
-        const coding_agent::ProjectResourceLoadingRequest& request) {
+        const harness::WorkspaceFileSystem& filesystem, const coding_agent::ProjectResourceLoadingRequest& request) {
     const auto workspace = normalized_absolute(request.workspace.empty() ? filesystem.root() : request.workspace);
     const auto source_root = normalized_absolute(filesystem.root());
 
     coding_agent::ProjectResourceFileSystems result;
-    result.workspace = path_is_under(source_root, workspace)
-                               ? make_async_filesystem(workspace)
-                               : make_async_filesystem(filesystem);
+    result.workspace = path_is_under(source_root, workspace) ? make_async_filesystem(workspace)
+                                                             : make_async_filesystem(filesystem);
 
     auto current = workspace;
     std::optional<std::filesystem::path> git_root;
@@ -203,8 +192,7 @@ template <typename T, typename E>
     }
 
     if (request.agent_config_directory && !request.agent_config_directory->empty()) {
-        result.agent_config_directory = make_async_filesystem(
-                normalized_absolute(*request.agent_config_directory));
+        result.agent_config_directory = make_async_filesystem(normalized_absolute(*request.agent_config_directory));
     }
     const auto home = request.home_directory.value_or(coding_agent::home_directory());
     result.user_agents_root = make_async_filesystem(normalized_absolute(home / ".agents"));
@@ -231,8 +219,7 @@ template <typename T, typename E>
         } else if (result.agent_config_directory &&
                    path_is_under(result.agent_config_directory->workspace(), candidate)) {
             capability = result.agent_config_directory;
-        } else if (result.user_agents_root &&
-                   path_is_under(result.user_agents_root->workspace(), candidate)) {
+        } else if (result.user_agents_root && path_is_under(result.user_agents_root->workspace(), candidate)) {
             capability = result.user_agents_root;
         }
         if (capability) {
@@ -253,42 +240,36 @@ template <typename T, typename E>
 // production compatibility API.
 namespace cch::coding_agent {
 
-[[nodiscard]] inline SkillLoadResult loadSkillFromFile(
-        const harness::WorkspaceFileSystem& filesystem,
+[[nodiscard]] inline SkillLoadResult loadSkillFromFile(const harness::WorkspaceFileSystem& filesystem,
         const std::string& file_path,
         SkillSourceContext source_context = {}) {
-    auto result = tests::legacy::run_sync(loadSkillFromFile(
-            *tests::legacy::make_async_filesystem(filesystem), file_path, std::move(source_context)));
+    auto result = tests::legacy::run_sync(
+            loadSkillFromFile(*tests::legacy::make_async_filesystem(filesystem), file_path, std::move(source_context)));
     return result ? std::move(*result) : SkillLoadResult{};
 }
 
 [[nodiscard]] inline SkillLoadResult loadSkills(
-        const harness::WorkspaceFileSystem& filesystem,
-        const std::vector<SkillDirSpec>& directories) {
-    auto result = tests::legacy::run_sync(loadSkills(
-            *tests::legacy::make_async_filesystem(filesystem), directories));
+        const harness::WorkspaceFileSystem& filesystem, const std::vector<SkillDirSpec>& directories) {
+    auto result = tests::legacy::run_sync(loadSkills(*tests::legacy::make_async_filesystem(filesystem), directories));
     return result ? std::move(*result) : SkillLoadResult{};
 }
 
-[[nodiscard]] inline PromptTemplateLoadResult loadPromptTemplateFromFile(
-        const harness::WorkspaceFileSystem& filesystem,
+[[nodiscard]] inline PromptTemplateLoadResult loadPromptTemplateFromFile(const harness::WorkspaceFileSystem& filesystem,
         const std::string& file_path,
         const std::optional<SourceInfo>& source_info = std::nullopt) {
-    auto result = tests::legacy::run_sync(loadPromptTemplateFromFile(
-            *tests::legacy::make_async_filesystem(filesystem), file_path, source_info));
+    auto result = tests::legacy::run_sync(
+            loadPromptTemplateFromFile(*tests::legacy::make_async_filesystem(filesystem), file_path, source_info));
     return result ? std::move(*result) : PromptTemplateLoadResult{};
 }
 
 [[nodiscard]] inline PromptTemplateLoadResult loadPromptTemplates(
-        const harness::WorkspaceFileSystem& filesystem,
-        const std::vector<PromptTemplateDirSpec>& directories) {
-    auto result = tests::legacy::run_sync(loadPromptTemplates(
-            *tests::legacy::make_async_filesystem(filesystem), directories));
+        const harness::WorkspaceFileSystem& filesystem, const std::vector<PromptTemplateDirSpec>& directories) {
+    auto result = tests::legacy::run_sync(
+            loadPromptTemplates(*tests::legacy::make_async_filesystem(filesystem), directories));
     return result ? std::move(*result) : PromptTemplateLoadResult{};
 }
 
-[[nodiscard]] inline ProjectResourceLoadingResult load_project_resources(
-        const harness::WorkspaceFileSystem& filesystem,
+[[nodiscard]] inline ProjectResourceLoadingResult load_project_resources(const harness::WorkspaceFileSystem& filesystem,
         const ProjectTrustStore& trust_store,
         ProjectResourceLoadingRequest request) {
     auto result = tests::legacy::run_sync(load_project_resources(
@@ -307,8 +288,7 @@ namespace cch::coding_agent {
 }
 
 [[nodiscard]] inline ProjectResourceDetectionResult detect_project_resources(
-        const harness::WorkspaceFileSystem& filesystem,
-        const std::filesystem::path& user_agents_skills_dir) {
+        const harness::WorkspaceFileSystem& filesystem, const std::filesystem::path& user_agents_skills_dir) {
     ProjectResourceFileSystems capabilities;
     capabilities.workspace = tests::legacy::make_async_filesystem(filesystem);
     auto current = tests::legacy::normalized_absolute(filesystem.root());
@@ -320,8 +300,7 @@ namespace cch::coding_agent {
         current = parent;
         capabilities.ancestor_roots.push_back(tests::legacy::make_async_filesystem(current));
     }
-    auto result = tests::legacy::run_sync(detect_project_resources(
-            std::move(capabilities), user_agents_skills_dir));
+    auto result = tests::legacy::run_sync(detect_project_resources(std::move(capabilities), user_agents_skills_dir));
     if (result) {
         return std::move(*result);
     }

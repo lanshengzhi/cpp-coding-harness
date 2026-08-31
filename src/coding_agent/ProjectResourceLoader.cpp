@@ -229,8 +229,7 @@ void bound_diagnostics(ProjectResourceLoadingResult& result) {
     }
 
     result.diagnostics.resize(detail::kMaxResourceDiagnostics - 1);
-    result.diagnostics.push_back(warning_diagnostic(
-        "Additional project resource diagnostics were omitted"));
+    result.diagnostics.push_back(warning_diagnostic("Additional project resource diagnostics were omitted"));
 }
 
 } // namespace
@@ -1438,8 +1437,7 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             system_source_discovered = true;
         }
     }
-    auto resolved_system = co_await std::move(to_async_result(resolve_prompt_input_task(
-            filesystems,
+    auto resolved_system = co_await std::move(to_async_result(resolve_prompt_input_task(filesystems,
             std::move(system_source),
             "system prompt",
             diagnostics,
@@ -1477,8 +1475,7 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
         }
     }
     for (auto& source : append_sources) {
-        auto resolved = co_await std::move(to_async_result(resolve_prompt_input_task(
-                filesystems,
+        auto resolved = co_await std::move(to_async_result(resolve_prompt_input_task(filesystems,
                 std::optional<std::string>{source},
                 "append system prompt",
                 diagnostics,

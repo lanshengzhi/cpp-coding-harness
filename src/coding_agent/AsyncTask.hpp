@@ -14,8 +14,7 @@ namespace cch::coding_agent::detail {
 /// Small coroutine implementation detail for composing Owner Interface
 /// AsyncResults. The public loader contracts expose only support::AsyncResult;
 /// no coroutine, executor, or scheduler type crosses the Owner boundary.
-template <typename T, typename E>
-class AsyncTask {
+template <typename T, typename E> class AsyncTask {
 public:
     using completion_type = support::AsyncCompletion<T, E>;
 
@@ -42,9 +41,7 @@ public:
             return AsyncTask{std::move(state)};
         }
 
-        [[nodiscard]] static std::suspend_always initial_suspend() noexcept {
-            return {};
-        }
+        [[nodiscard]] static std::suspend_always initial_suspend() noexcept { return {}; }
 
         struct FinalAwaiter {
             [[nodiscard]] static bool await_ready() noexcept { return false; }
@@ -66,17 +63,11 @@ public:
 
         static void unhandled_exception() noexcept { std::terminate(); }
 
-        void return_value(std::expected<T, E> value) noexcept {
-            outcome.emplace(std::move(value));
-        }
+        void return_value(std::expected<T, E> value) noexcept { outcome.emplace(std::move(value)); }
 
-        void return_value(std::unexpected<E> value) noexcept {
-            outcome.emplace(std::move(value));
-        }
+        void return_value(std::unexpected<E> value) noexcept { outcome.emplace(std::move(value)); }
 
-        void return_value(T value) noexcept {
-            outcome.emplace(std::move(value));
-        }
+        void return_value(T value) noexcept { outcome.emplace(std::move(value)); }
     };
 
     AsyncTask(AsyncTask&&) noexcept = default;
@@ -91,19 +82,14 @@ public:
     }
 
 private:
-    explicit AsyncTask(std::shared_ptr<State> state) noexcept
-        : state_(std::move(state)) {}
+    explicit AsyncTask(std::shared_ptr<State> state) noexcept : state_(std::move(state)) {}
 
     std::shared_ptr<State> state_;
 };
 
-template <typename T, typename E>
-[[nodiscard]] support::AsyncResult<T, E> to_async_result(
-    AsyncTask<T, E> task) {
-    return support::AsyncResult<T, E>{
-        support::AsyncProducer<T, E>{
-            [task = std::move(task)](
-                typename AsyncTask<T, E>::completion_type completion) mutable noexcept {
+template <typename T, typename E> [[nodiscard]] support::AsyncResult<T, E> to_async_result(AsyncTask<T, E> task) {
+    return support::AsyncResult<T, E>{support::AsyncProducer<T, E>{
+            [task = std::move(task)](typename AsyncTask<T, E>::completion_type completion) mutable noexcept {
                 task.start(std::move(completion));
             }}};
 }
