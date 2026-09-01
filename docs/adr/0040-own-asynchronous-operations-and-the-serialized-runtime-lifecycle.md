@@ -8,6 +8,8 @@ Fallible asynchronous Owner operations use one lazy, move-only, single-consumpti
 
 This decision records the destination frozen by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) for documentation ticket [#440](https://github.com/lanshengzhi/cpp-coding-harness/issues/440) without reopening it. Observable behavior remains governed by [#396](https://github.com/lanshengzhi/cpp-coding-harness/issues/396), the planning authority remains parity map [#2](https://github.com/lanshengzhi/cpp-coding-harness/issues/2), and Semantic Parity remains pinned to pi commit `83114817c68f5413e4d7ba6d7003ddc511cd31d2`. The event loop and worker implementation are private representation choices; replacing them is not parity drift when ordering, cancellation, errors, overload, persistence, and Close behavior remain unchanged.
 
+> The seam list below names `AsyncExecutionEnv` from the pre-ADR 0048 shape: [ADR 0048](0048-compose-the-execution-environment-without-a-union-interface.md) removed that union interface and supplies its two constituent seams, `AsyncFileSystem` and `AsyncShell`, directly. Both remain narrow private virtual physical capabilities; every other selection in this ADR remains authoritative.
+
 ## `AsyncResult`
 
 `AsyncResult<T, E>` represents ready and pending completion with one operation shape:
