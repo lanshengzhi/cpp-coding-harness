@@ -3,7 +3,7 @@
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 
@@ -41,16 +41,18 @@ struct RuntimeServices {
     /// (and later model) defaults to settings.json with the same project-trust
     /// state as creation. Empty when assembly had no settings surface.
     std::optional<coding_agent::SettingsManager> settings_manager;
-    std::shared_ptr<harness::AsyncExecutionEnv> env;
+    /// The session's owned filesystem capability. Tool closures keep their
+    /// required capabilities alive (ADR 0048); the Runtime retains this owner
+    /// only so Session Close can run the filesystem's temporary-resource
+    /// cleanup after Tool work quiesces. The Shell capability has no
+    /// Close-time obligation and needs no Runtime owner.
+    std::shared_ptr<harness::AsyncFileSystem> filesystem;
     /// The session's serialized Runtime mailbox target (ADR 0040): the
     /// Session Event Commitment channel admits persistence work through it
     /// so journal I/O runs off the interaction loop and outcomes return in
     /// FIFO admission order. Null only for sessions assembled without a
     /// Runtime root.
     std::shared_ptr<harness::RuntimeTarget> runtime_target;
-    /// True when the factory created the execution environment and must clean
-    /// it up on session close. Host-provided environments are never owned.
-    bool env_owned{true};
     /// Independently owned direct-user capability; absence keeps User Bash
     /// unavailable without changing model tool authorization.
     std::unique_ptr<AsyncUserShell> user_shell;

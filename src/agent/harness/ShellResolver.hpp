@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/agent/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/Shell.hpp>
 
 #include <expected>
 #include <filesystem>

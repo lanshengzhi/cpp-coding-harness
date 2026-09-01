@@ -44,9 +44,9 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 3.1. Types are `PascalCase`; functions and variables are `snake_case`; private member variables carry a trailing underscore (`impl_`, `options_`); public struct members are plain `snake_case`.
 
-3.2. pi-shaped seams keep pi wire vocabulary in `camelCase`: `AsyncExecutionEnv::readTextFile`, `SessionTree::getEntry`, fields like `mtimeMs`, `exitCode`, `filePath`. This is the one sanctioned camelCase region (§15); it does not extend to cch-native code.
+3.2. pi-shaped seams keep pi wire vocabulary in `camelCase`: `AsyncFileSystem::readTextFile`, `SessionTree::getEntry`, fields like `mtimeMs`, `exitCode`, `filePath`. This is the one sanctioned camelCase region (§15); it does not extend to cch-native code.
 
-3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases; `*Dto` confined to the Glaze layer. An asynchronous operation is identified by its `AsyncResult` return type rather than a mandatory `Async` prefix. Identity-bearing physical capabilities keep domain names such as `AsyncExecutionEnv` where the frozen Interface already uses them.
+3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases; `*Dto` confined to the Glaze layer. An asynchronous operation is identified by its `AsyncResult` return type rather than a mandatory `Async` prefix. Identity-bearing physical capabilities keep domain names such as `AsyncFileSystem` and `AsyncShell` where the frozen Interface already uses them.
 
 3.4. Enums are always `enum class`; enumerators are `PascalCase` unless mirroring wire vocabulary, which keeps its wire spelling.
 

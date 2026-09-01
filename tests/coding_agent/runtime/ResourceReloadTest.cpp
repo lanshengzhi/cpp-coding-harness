@@ -7,7 +7,7 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/LocalShell.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
@@ -418,7 +418,7 @@ TEST_CASE("reload cancellation during Close leaves the Session closed without a 
     AsyncReloadFixture fixture;
     fixture.create();
     auto* session = fixture.session.get();
-    auto blocker = std::make_unique<harness::AsyncLocalExecutionEnv>(
+    auto blocker = std::make_unique<harness::AsyncLocalShell>(
             fixture.runtime_root->make_target(), fixture.workspace.path(), true);
     std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> blocker_result;
     bool blocker_done{false};

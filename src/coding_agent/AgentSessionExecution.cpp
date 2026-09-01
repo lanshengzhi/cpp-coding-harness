@@ -679,7 +679,7 @@ void AgentSession::Impl::close() noexcept {
     }
 }
 
-std::shared_ptr<harness::AsyncExecutionEnv> AgentSession::Impl::release_close_resources() noexcept {
+std::shared_ptr<harness::AsyncFileSystem> AgentSession::Impl::release_close_resources() noexcept {
     if (agent_) {
         agent_->clear_subscriptions();
     }
@@ -692,11 +692,9 @@ std::shared_ptr<harness::AsyncExecutionEnv> AgentSession::Impl::release_close_re
         services_.model_runtime.reset();
     }
 
-    if (services_.env_owned) {
-        return std::move(services_.env);
-    }
-    services_.env.reset();
-    return {};
+    // The session always owns its filesystem capability; Session Close runs
+    // its temporary-resource cleanup after Tool work has quiesced (ADR 0048).
+    return std::move(services_.filesystem);
 }
 
 boost::asio::awaitable<void> AgentSession::Impl::finalize_close_after_active_work() {
@@ -711,12 +709,12 @@ boost::asio::awaitable<void> AgentSession::Impl::finalize_close_after_active_wor
     if (persistence_) {
         co_await persistence_->drain();
     }
-    auto owned_env = release_close_resources();
-    if (owned_env) {
+    auto owned_filesystem = release_close_resources();
+    if (owned_filesystem) {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
-            (void)co_await support::detail::await_async_result(owned_env->cleanup());
+            (void)co_await support::detail::await_async_result(owned_filesystem->cleanup());
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             // cleanup() is best-effort and must not make close fallible.
@@ -733,17 +731,16 @@ void AgentSession::Impl::finalize_close() noexcept {
     // Idle close: no prompt, User Bash, or compaction is admitted, so no
     // Session Event Commitment can still be in flight (submissions only
     // happen inside an admitted run whose settle drains the channel).
-    auto owned_env = release_close_resources();
+    auto owned_filesystem = release_close_resources();
     lifecycle_ = Lifecycle::Closed;
 
-    // Idle close has no host executor to await. Transfer the factory-owned
-    // environment to a posted best-effort cleanup task on the session's
-    // Runtime loop when one exists, so the final application Close drain
-    // quiesces process resources before the loop stops (ADR 0040, issue
-    // #467); a session assembled without a Runtime root falls back to the
-    // shared system executor. Host-owned environments were detached above
-    // without cleanup().
-    if (owned_env) {
+    // Idle close has no host executor to await. Transfer the owned filesystem
+    // to a posted best-effort cleanup task on the session's Runtime loop when
+    // one exists, so the final application Close drain quiesces process
+    // resources before the loop stops (ADR 0040, issue #467); a session
+    // assembled without a Runtime root falls back to the shared system
+    // executor.
+    if (owned_filesystem) {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
@@ -752,17 +749,17 @@ void AgentSession::Impl::finalize_close() noexcept {
             const auto cleanup_executor = services_.runtime_target
                                                   ? services_.runtime_target->executor()
                                                   : boost::asio::any_io_executor{boost::asio::system_executor{}};
-            boost::asio::post(cleanup_executor, [env = std::move(owned_env), cleanup_executor]() mutable {
+            boost::asio::post(cleanup_executor, [filesystem = std::move(owned_filesystem), cleanup_executor]() mutable {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                 try {
 #endif
                     boost::asio::co_spawn(
                             cleanup_executor,
-                            [env = std::move(env)]() -> boost::asio::awaitable<void> {
+                            [filesystem = std::move(filesystem)]() -> boost::asio::awaitable<void> {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 try {
 #endif
-                                    (void)co_await support::detail::await_async_result(env->cleanup());
+                                    (void)co_await support::detail::await_async_result(filesystem->cleanup());
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 } catch (...) {
                                     // cleanup() is best-effort and must not make close fallible.

@@ -20,7 +20,8 @@ namespace cch::harness {
 /// All addressed-path operations reject absolute paths, ".." escapes, and
 /// symlinks that resolve outside the workspace. Metadata and listing use
 /// lstat-equivalent no-follow semantics.
-class SyncLocalExecutionEnv;
+class AsyncLocalFileSystem;
+class AsyncLocalShell;
 
 class WorkspaceFileSystem {
 public:
@@ -72,7 +73,10 @@ public:
             std::optional<std::string> prefix = std::nullopt, std::optional<std::string> suffix = std::nullopt) const;
 
 private:
-    friend class SyncLocalExecutionEnv;
+    friend class AsyncLocalFileSystem;
+    // The Local Shell Adapter validates working-directory overrides through
+    // the same containment implementation; no parallel path validation.
+    friend class AsyncLocalShell;
 
     struct TemporaryResource final {
         std::string name;

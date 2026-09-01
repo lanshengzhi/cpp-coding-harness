@@ -1,7 +1,8 @@
 #pragma once
 
 #include <cch/agent/AgentTool.hpp>
-#include <cch/agent/harness/ExecutionEnv.hpp>
+#include <cch/agent/harness/FileSystem.hpp>
+#include <cch/agent/harness/Shell.hpp>
 
 #include <memory>
 #include <optional>
@@ -31,14 +32,16 @@ struct BashSessionEnvironment {
     std::optional<std::string> reasoning_level{};
 };
 
-[[nodiscard]] agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
-[[nodiscard]] agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
-[[nodiscard]] agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
-/// The model-facing Bash Tool. `session_environment` (when provided) exposes
-/// the live `PI_*` session facts on every executed command; without it the
-/// tool injects no environment (pi `exposeSessionEnvironment: false`).
-[[nodiscard]] agent::Tool make_async_bash_tool(
-    std::shared_ptr<harness::AsyncExecutionEnv> env,
-    std::shared_ptr<BashSessionEnvironment> session_environment = {});
+[[nodiscard]] agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem);
+[[nodiscard]] agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem);
+[[nodiscard]] agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem);
+/// The model-facing Bash Tool. `shell` runs the command; `filesystem` writes
+/// the redacted full-output spill file when streamed output exceeds the
+/// retained bound. `session_environment` (when provided) exposes the live
+/// `PI_*` session facts on every executed command; without it the tool
+/// injects no environment (pi `exposeSessionEnvironment: false`).
+[[nodiscard]] agent::Tool make_async_bash_tool(std::shared_ptr<harness::AsyncShell> shell,
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        std::shared_ptr<BashSessionEnvironment> session_environment = {});
 
 } // namespace cch::tools

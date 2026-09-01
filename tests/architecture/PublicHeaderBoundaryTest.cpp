@@ -16,10 +16,9 @@
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/ExecutionEnv.hpp>
 #include <cch/agent/harness/FileSystem.hpp>
-#include <cch/agent/harness/LocalExecutionEnv.hpp>
 #include <cch/agent/harness/LocalFileSystem.hpp>
+#include <cch/agent/harness/LocalShell.hpp>
 #include <cch/agent/harness/Shell.hpp>
 #include <cch/agent/harness/session/SessionEntry.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -127,9 +126,6 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
     static_assert(std::is_abstract_v<harness::AsyncFileSystem>);
     static_assert(std::is_abstract_v<harness::AsyncShell>);
-    static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
-    static_assert(std::is_base_of_v<harness::AsyncFileSystem, harness::AsyncExecutionEnv>);
-    static_assert(std::is_base_of_v<harness::AsyncShell, harness::AsyncExecutionEnv>);
     static_assert(!std::is_base_of_v<harness::AsyncShell, harness::AsyncFileSystem>);
     using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError> (harness::AsyncFileSystem::*)(
             std::string, std::stop_token);
@@ -267,11 +263,11 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<
                   decltype(static_cast<TerminalStartMethod>(&tui::Terminal::start)),
                   TerminalStartMethod>);
-    // ADR 0006: the local environment uniquely owns its synchronous state, so
-    // environment copies cannot alias live state.
-    static_assert(!std::is_copy_constructible_v<harness::AsyncLocalExecutionEnv>);
-    static_assert(!std::is_copy_assignable_v<harness::AsyncLocalExecutionEnv>);
-    static_assert(std::is_move_constructible_v<harness::AsyncLocalExecutionEnv>);
+    // ADR 0048: the local Shell adapter uniquely owns its runtime state, so
+    // adapter copies cannot alias live state.
+    static_assert(!std::is_copy_constructible_v<harness::AsyncLocalShell>);
+    static_assert(!std::is_copy_assignable_v<harness::AsyncLocalShell>);
+    static_assert(std::is_move_constructible_v<harness::AsyncLocalShell>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const harness::session::SessionStore&>().path()),
                   std::optional<std::filesystem::path>>);

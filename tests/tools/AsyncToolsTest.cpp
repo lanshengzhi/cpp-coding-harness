@@ -1,6 +1,7 @@
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/LocalExecutionEnv.hpp>
+#include <cch/agent/harness/LocalFileSystem.hpp>
+#include <cch/agent/harness/LocalShell.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "agent/ToolArgumentPreparation.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -38,9 +39,9 @@ template <typename T>
         std::expected<void, harness::FileError>{}};
 }
 
-class CapturingEnv final : public harness::AsyncExecutionEnv {
+class CapturingFileSystem final : public harness::AsyncFileSystem {
 public:
-    explicit CapturingEnv(std::filesystem::path workspace_path) : workspace_path_(std::move(workspace_path)) {}
+    explicit CapturingFileSystem(std::filesystem::path workspace_path) : workspace_path_(std::move(workspace_path)) {}
     const std::filesystem::path& workspace() const override { return workspace_path_; }
     support::AsyncResult<std::string, harness::FileError> absolutePath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
     support::AsyncResult<std::string, harness::FileError> joinPath(std::vector<std::string>, std::stop_token) override { return ready_file(std::string{}); }
@@ -62,6 +63,18 @@ public:
     support::AsyncResult<void, harness::FileError> remove(std::string, bool, std::stop_token) override { return ready_file(); }
     support::AsyncResult<std::string, harness::FileError> createTempDir(std::optional<std::string>, std::stop_token) override { return ready_file(std::string{}); }
     support::AsyncResult<std::string, harness::FileError> createTempFile(std::optional<std::string>, std::optional<std::string>, std::stop_token) override { return ready_file(std::string{}); }
+    support::AsyncResult<void, harness::FileError> cleanup() override { return ready_file(); }
+
+    std::stop_token last_stop_token;
+    std::string last_write_path;
+    std::string last_write_content;
+
+private:
+    std::filesystem::path workspace_path_;
+};
+
+class CapturingShell final : public harness::AsyncShell {
+public:
     support::AsyncResult<harness::ShellExecResult, harness::ExecutionError> exec(std::string command, harness::ExecOptions options) override {
         last_command = std::move(command);
         last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
@@ -96,10 +109,6 @@ public:
     std::string streamed_stdout;
     std::string streamed_stderr;
     harness::ShellExecResult next_shell_result{.stdout_output = "ok", .stderr_output = "", .exitCode = 0};
-    std::string last_write_path;
-    std::string last_write_content;
-private:
-    std::filesystem::path workspace_path_;
 };
 
 class TestRuntime final {
@@ -163,12 +172,13 @@ agent::ToolInvocation invocation(std::string name, std::string json) {
 
 TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    auto shell = std::make_shared<CapturingShell>();
 
-    auto read = tools::make_async_read_file_tool(env);
-    auto write = tools::make_async_write_file_tool(env);
-    auto edit = tools::make_async_edit_tool(env);
-    auto bash = tools::make_async_bash_tool(env);
+    auto read = tools::make_async_read_file_tool(filesystem);
+    auto write = tools::make_async_write_file_tool(filesystem);
+    auto edit = tools::make_async_edit_tool(filesystem);
+    auto bash = tools::make_async_bash_tool(shell, filesystem);
 
     CHECK(read.concurrency == agent::ToolConcurrency::Exclusive);
     CHECK(write.concurrency == agent::ToolConcurrency::Exclusive);
@@ -179,7 +189,7 @@ TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
 TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "line1\nline2\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
     auto result = run_tool([&]() {
@@ -196,7 +206,7 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
 TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff details", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "alpha\nbeta\ngamma\ndelta\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -243,7 +253,7 @@ TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff det
 TEST_CASE("async edit tool matches every edit against the original and rejects overlaps", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "one\ntwo\nthree\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -264,7 +274,7 @@ TEST_CASE("async edit tool matches every edit against the original and rejects o
 TEST_CASE("async edit tool rejects missing and duplicate target text with pi messages", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "foo foo foo");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto missing = run_tool([&]() {
@@ -290,7 +300,7 @@ TEST_CASE("async edit tool rejects missing and duplicate target text with pi mes
 TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "\xef\xbb\xbf" "one\r\ntwo\r\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -309,7 +319,7 @@ TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools
     // whitespace; the edit uses ASCII forms without the trailing space,
     // matching pi's fuzzy normalization.
     workspace.write("note.txt", "say \xe2\x80\x9chello\xe2\x80\x9d world\xe2\x80\x94today   \n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -328,7 +338,7 @@ TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools
 TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "content\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -346,7 +356,7 @@ TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][as
 TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "same\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -364,7 +374,7 @@ TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][
 TEST_CASE("edit declared contract validation and execution acceptance agree", "[tools][async][issue77][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     // The agent loop validates every call with prepare_tool_arguments before
@@ -420,7 +430,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     tests::TempWorkspace workspace;
     workspace.write("structured.txt", "from-structured");
     workspace.write("raw.txt", "from-raw");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
     auto structured = support::read_json(R"({"path":"structured.txt"})");
@@ -440,8 +450,9 @@ TEST_CASE(
     "async bash tool preserves its visible command and carries execution options",
     "[tools][async][issue40][issue84]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
-    auto tool = tools::make_async_bash_tool(env);
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
     std::stop_source stop_source;
 
     auto result = run_tool([&]() {
@@ -452,16 +463,17 @@ TEST_CASE(
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    CHECK(env->last_command == "echo hi");
-    CHECK(env->last_timeout == std::chrono::milliseconds(5000));
-    CHECK(env->last_stop_token == stop_source.get_token());
+    CHECK(shell->last_command == "echo hi");
+    CHECK(shell->last_timeout == std::chrono::milliseconds(5000));
+    CHECK(shell->last_stop_token == stop_source.get_token());
 }
 
 TEST_CASE(
     "async bash tool exposes live PI_* session facts when a session environment is provided",
     "[tools][async][issue414]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
     auto session_environment =
         std::make_shared<tools::BashSessionEnvironment>();
     session_environment->session_id = "session-42";
@@ -469,7 +481,7 @@ TEST_CASE(
     session_environment->provider = "openai-codex";
     session_environment->model = "gpt-5.2-codex";
     session_environment->reasoning_level = "high";
-    auto tool = tools::make_async_bash_tool(env, session_environment);
+    auto tool = tools::make_async_bash_tool(shell, filesystem, session_environment);
 
     auto result = run_tool([&]() {
         return tool.execute(
@@ -479,23 +491,24 @@ TEST_CASE(
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    REQUIRE(env->last_env.has_value());
-    CHECK(env->last_env->at("PI_SESSION_ID") == "session-42");
-    CHECK(env->last_env->at("PI_SESSION_FILE") == "/tmp/session-42.jsonl");
-    CHECK(env->last_env->at("PI_PROVIDER") == "openai-codex");
-    CHECK(env->last_env->at("PI_MODEL") == "gpt-5.2-codex");
-    CHECK(env->last_env->at("PI_REASONING_LEVEL") == "high");
+    REQUIRE(shell->last_env.has_value());
+    CHECK(shell->last_env->at("PI_SESSION_ID") == "session-42");
+    CHECK(shell->last_env->at("PI_SESSION_FILE") == "/tmp/session-42.jsonl");
+    CHECK(shell->last_env->at("PI_PROVIDER") == "openai-codex");
+    CHECK(shell->last_env->at("PI_MODEL") == "gpt-5.2-codex");
+    CHECK(shell->last_env->at("PI_REASONING_LEVEL") == "high");
 }
 
 TEST_CASE(
     "async bash tool shadows absent PI_* facts with empty values and injects nothing without a holder",
     "[tools][async][issue414]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
     auto session_environment =
         std::make_shared<tools::BashSessionEnvironment>();
     session_environment->session_id = "session-7";
-    auto tool = tools::make_async_bash_tool(env, session_environment);
+    auto tool = tools::make_async_bash_tool(shell, filesystem, session_environment);
 
     auto result = run_tool([&]() {
         return tool.execute(
@@ -504,33 +517,33 @@ TEST_CASE(
     });
 
     REQUIRE(result);
-    REQUIRE(env->last_env.has_value());
-    CHECK(env->last_env->at("PI_SESSION_ID") == "session-7");
-    CHECK(env->last_env->at("PI_SESSION_FILE") == "");
-    CHECK(env->last_env->at("PI_PROVIDER") == "");
-    CHECK(env->last_env->at("PI_MODEL") == "");
-    CHECK(env->last_env->at("PI_REASONING_LEVEL") == "");
+    REQUIRE(shell->last_env.has_value());
+    CHECK(shell->last_env->at("PI_SESSION_ID") == "session-7");
+    CHECK(shell->last_env->at("PI_SESSION_FILE") == "");
+    CHECK(shell->last_env->at("PI_PROVIDER") == "");
+    CHECK(shell->last_env->at("PI_MODEL") == "");
+    CHECK(shell->last_env->at("PI_REASONING_LEVEL") == "");
 
     // Without a session environment the tool injects no environment at all
     // (pi `exposeSessionEnvironment: false`).
-    auto plain_tool = tools::make_async_bash_tool(env);
+    auto plain_tool = tools::make_async_bash_tool(shell, filesystem);
     auto plain_result = run_tool([&]() {
         return plain_tool.execute(
             invocation("bash", R"({"command":"echo hi"})"),
             std::stop_token{}, agent::ToolUpdateSink{});
     });
     REQUIRE(plain_result);
-    CHECK_FALSE(env->last_env.has_value());
+    CHECK_FALSE(shell->last_env.has_value());
 }
 
 TEST_CASE("async bash tool spill file contains complete output beyond the visible limit", "[tools][async][issue73]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
     const harness::OutputLimit limit;
-    env->streamed_stdout = std::string(limit.max_bytes + 100, 'x') +
-        "\napi_key=super-secret\ncomplete-tail\xc3\xa9";
-    env->next_shell_result.stdout_output = env->streamed_stdout.substr(0, limit.max_bytes);
-    auto tool = tools::make_async_bash_tool(env);
+    shell->streamed_stdout = std::string(limit.max_bytes + 100, 'x') + "\napi_key=super-secret\ncomplete-tail\xc3\xa9";
+    shell->next_shell_result.stdout_output = shell->streamed_stdout.substr(0, limit.max_bytes);
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
 
     auto result = run_tool([&]() {
         return tool.execute(
@@ -545,22 +558,24 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     CHECK(visible.find("super-secret") == std::string::npos);
     CHECK(visible.find("[REDACTED]") != std::string::npos);
     CHECK(visible.size() <= limit.max_bytes + 200);
-    CHECK_FALSE(env->last_write_path.empty());
-    CHECK(env->last_write_content.find("super-secret") == std::string::npos);
-    CHECK(env->last_write_content.find("[REDACTED]") != std::string::npos);
-    CHECK(env->last_write_content.size() > limit.max_bytes);
-    CHECK(env->last_write_content.ends_with("complete-tail\xc3\xa9"));
+    CHECK_FALSE(filesystem->last_write_path.empty());
+    CHECK(filesystem->last_write_content.find("super-secret") == std::string::npos);
+    CHECK(filesystem->last_write_content.find("[REDACTED]") != std::string::npos);
+    CHECK(filesystem->last_write_content.size() > limit.max_bytes);
+    CHECK(filesystem->last_write_content.ends_with("complete-tail\xc3\xa9"));
 }
 
 TEST_CASE("async bash tool without streamed output reports capping at the execution layer without a spill file", "[tools][async][issue73]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
     const harness::OutputLimit limit;
-    // streamed_stdout/streamed_stderr stay empty, so the fake env never fires
-    // the streaming callbacks and only the runner-capped result fields exist.
-    env->next_shell_result.stdout_output = std::string(limit.max_bytes + 100, 'x') +
-        "\napi_key=super-secret\ncomplete-tail";
-    auto tool = tools::make_async_bash_tool(env);
+    // streamed_stdout/streamed_stderr stay empty, so the fake Shell never
+    // fires the streaming callbacks and only the runner-capped result fields
+    // exist.
+    shell->next_shell_result.stdout_output =
+            std::string(limit.max_bytes + 100, 'x') + "\napi_key=super-secret\ncomplete-tail";
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
 
     auto result = run_tool([&]() {
         return tool.execute(
@@ -579,15 +594,16 @@ TEST_CASE("async bash tool without streamed output reports capping at the execut
     CHECK(visible.size() <= limit.max_bytes + 200);
     // No spill file: the capped text is all that exists, so a "complete
     // output" promise would be untruthful.
-    CHECK(env->last_write_path.empty());
+    CHECK(filesystem->last_write_path.empty());
 }
 
 TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<CapturingEnv>(workspace.path());
-    env->streamed_stdout = "\x1b[31mred\x1b[0m";
-    env->next_shell_result.stdout_output = env->streamed_stdout;
-    auto tool = tools::make_async_bash_tool(env);
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->streamed_stdout = "\x1b[31mred\x1b[0m";
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
 
     auto result = run_tool([&]() {
         return tool.execute(
@@ -602,10 +618,11 @@ TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     CHECK(visible.find('\x1b') == std::string::npos);
 }
 
-TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tools][async]") {
+TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", "[tools][async]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path(), false);
-    auto tool = tools::make_async_bash_tool(env);
+    auto shell = std::make_shared<harness::AsyncLocalShell>(test_runtime_target(), workspace.path(), false);
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
 
     auto result = run_tool([&]() {
         return tool.execute(

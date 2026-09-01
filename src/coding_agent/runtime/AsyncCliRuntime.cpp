@@ -59,10 +59,10 @@ constexpr harness::RuntimeLimits kRuntimeLimits{};
 void close_runtime(
     const std::shared_ptr<harness::RuntimeRoot>& runtime_root,
     boost::asio::io_context& io) {
-    // Idle AgentSession close posts owned-environment cleanup to the Runtime
+    // Idle AgentSession close posts owned-filesystem cleanup to the Runtime
     // loop because it cannot await from its synchronous close() seam. Start
     // those cleanup operations before RuntimeRoot stops admission; otherwise
-    // AsyncLocalExecutionEnv::cleanup() is rejected as Busy and tracked
+    // AsyncLocalFileSystem::cleanup() is rejected as Busy and tracked
     // temporary resources leak during CLI teardown.
     if (io.stopped()) {
         io.restart();

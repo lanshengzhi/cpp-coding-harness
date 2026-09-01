@@ -1,7 +1,7 @@
 #pragma once
 
 #include "RuntimeRoot.hpp"
-#include "SyncLocalExecutionEnv.hpp"
+#include "WorkspaceFileSystem.hpp"
 
 #include <cch/support/AsyncResult.hpp>
 
@@ -90,7 +90,7 @@ template <typename T> struct FileOperationState {
 template <typename T, typename Operation>
 [[nodiscard]] support::AsyncResult<T, FileError> submit_filesystem_operation(
         std::shared_ptr<RuntimeTarget> runtime_target,
-        std::shared_ptr<SyncLocalExecutionEnv> sync,
+        std::shared_ptr<WorkspaceFileSystem> filesystem,
         std::size_t byte_charge,
         std::stop_token stop_token,
         std::optional<std::string> path,
@@ -102,7 +102,7 @@ template <typename T, typename Operation>
 
     return support::AsyncResult<T, FileError>{support::AsyncProducer<T, FileError>{
             [runtime_target = std::move(runtime_target),
-                    sync = std::move(sync),
+                    filesystem = std::move(filesystem),
                     byte_charge,
                     stop_token,
                     path = std::move(path),
@@ -137,7 +137,7 @@ template <typename T, typename Operation>
                     state->install(std::move(*admission), std::move(completion));
                     const bool queued =
                             state->admission->post_worker([state,
-                                                                  sync = std::move(sync),
+                                                                  filesystem = std::move(filesystem),
                                                                   stop_token,
                                                                   path = std::move(path),
                                                                   operation = std::move(operation)]() mutable noexcept {
@@ -150,7 +150,7 @@ template <typename T, typename Operation>
                                         // Once the operation starts, return its actual outcome. In
                                         // particular, cancellation cannot rewrite a committed write,
                                         // remove, or temporary-resource creation as Aborted.
-                                        state->outcome = operation(*sync);
+                                        state->outcome = operation(*filesystem);
                                     }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
                                 } catch (const std::exception& error) {

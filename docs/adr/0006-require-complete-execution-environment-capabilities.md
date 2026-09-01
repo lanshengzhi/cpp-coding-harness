@@ -6,6 +6,8 @@ status: accepted
 
 The public execution environment is composed from complete filesystem and shell capability contracts whose required operations have no default `NotSupported` implementations. The existing tool-shaped file and shell methods are removed in favor of one pi-aligned authoritative surface: capability availability is decided explicitly during session/tool assembly, not discovered after a method is invoked.
 
+> Physical composition refined by [ADR 0048](0048-compose-the-execution-environment-without-a-union-interface.md): the Execution Environment remains the Agent Session's assembled filesystem-and-Shell capability bundle, but no polymorphic interface inherits both capability interfaces. Completeness, assembly-time availability, and the rejection of operation-sized interfaces remain authoritative.
+
 ## Considered options
 
 - Retain legacy tool-shaped methods beside pi-shaped methods: rejected because two authoritative paths can drift and compatibility-only surfaces are outside this repository's policy.

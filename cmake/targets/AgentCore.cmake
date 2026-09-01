@@ -11,12 +11,11 @@ cch_parity_declare_target(
         src/agent/AgentPolicyAdapters.cpp
         src/agent/ToolArgumentPreparation.cpp
         src/agent/ToolCallExecutor.cpp
-        src/agent/harness/AsyncLocalExecutionEnv.cpp
         src/agent/harness/AsyncLocalFileSystem.cpp
+        src/agent/harness/AsyncLocalShell.cpp
         src/agent/harness/Process.cpp
         src/agent/harness/RuntimeRoot.cpp
         src/agent/harness/ShellResolver.cpp
-        src/agent/harness/SyncLocalExecutionEnv.cpp
         src/agent/harness/WorkspaceFileSystemFdWalk.cpp
         src/agent/harness/WorkspaceFileSystemLegacy.cpp
         src/agent/harness/WorkspaceFileSystemPi.cpp

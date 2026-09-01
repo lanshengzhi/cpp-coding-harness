@@ -11,6 +11,7 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include <cch/agent/harness/LocalFileSystem.hpp>
+#include <cch/agent/harness/LocalShell.hpp>
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
@@ -490,10 +491,9 @@ void add_project_resource_loading_diagnostics(
     return {};
 }
 
-void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
-    if (env) {
-        std::move(env->cleanup()).start(
-            [](std::expected<void, harness::FileError>) noexcept {});
+void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
+    if (filesystem) {
+        std::move(filesystem->cleanup()).start([](std::expected<void, harness::FileError>) noexcept {});
     }
 }
 
@@ -1664,21 +1664,23 @@ struct PreparedAssemblyTarget final {
     // 6. The runtime is the session's canonical ModelRuntime, held for
     // `model_runtime()` and injected as the Agent's sole stream seam (#326).
 
-    // 7. Resolve execution environment. Secret environment names come from
-    // the runtime's configured models.json apiKey templates. The session
-    // always owns its local execution environment; the former SDK
-    // host-provided environment injection is gone.
+    // 7. Resolve the Execution Environment: Session Assembly supplies the
+    // complete filesystem and Shell capabilities directly to the callers that
+    // need them (ADR 0048). Secret environment names come from the runtime's
+    // configured models.json apiKey templates. The session always owns its
+    // local capabilities; the former SDK host-provided environment injection
+    // is gone.
     std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
-    auto exec_env = std::make_shared<harness::AsyncLocalExecutionEnv>(
-        plan.execution_runtime_target,
-        workspace,
-        /* bash_available */ true,
-        std::move(secret_environment_names),
-        harness::ShellConfig{
-            .shell_path = settings.shell_path,
-            .command_prefix = settings.shell_command_prefix,
-        });
-    auto cleanup_on_failure = [&]() { cleanup_factory_env(exec_env.get()); };
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(plan.execution_runtime_target, workspace);
+    auto shell = std::make_shared<harness::AsyncLocalShell>(plan.execution_runtime_target,
+            workspace,
+            /* bash_available */ true,
+            std::move(secret_environment_names),
+            harness::ShellConfig{
+                    .shell_path = settings.shell_path,
+                    .command_prefix = settings.shell_command_prefix,
+            });
+    auto cleanup_on_failure = [&]() { cleanup_factory_filesystem(filesystem.get()); };
 
     // 8. Build the tool registry: the fixed #331 built-in set (read, write,
     // edit, bash — always available) plus the private test-seam custom tools.
@@ -1686,19 +1688,19 @@ struct PreparedAssemblyTarget final {
     std::set<std::string> builtin_names;
 
     builtin_names.insert("read");
-    if (auto added = tools.add(tools::make_async_read_file_tool(exec_env)); !added) {
+    if (auto added = tools.add(tools::make_async_read_file_tool(filesystem)); !added) {
         cleanup_on_failure();
         co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
     }
     builtin_names.insert("write");
-    if (auto added = tools.add(tools::make_async_write_file_tool(exec_env)); !added) {
+    if (auto added = tools.add(tools::make_async_write_file_tool(filesystem)); !added) {
         cleanup_on_failure();
         co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
     }
     builtin_names.insert("edit");
-    if (auto added = tools.add(tools::make_async_edit_tool(exec_env)); !added) {
+    if (auto added = tools.add(tools::make_async_edit_tool(filesystem)); !added) {
         cleanup_on_failure();
         co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
@@ -1711,9 +1713,7 @@ struct PreparedAssemblyTarget final {
     auto bash_session_environment = plan.bash_session_environment
         ? plan.bash_session_environment
         : std::make_shared<tools::BashSessionEnvironment>();
-    if (auto added = tools.add(tools::make_async_bash_tool(
-            exec_env, bash_session_environment));
-        !added) {
+    if (auto added = tools.add(tools::make_async_bash_tool(shell, filesystem, bash_session_environment)); !added) {
         cleanup_on_failure();
         co_await discard_unpublished_session();
         co_return std::unexpected(added.error());
@@ -1924,8 +1924,7 @@ struct PreparedAssemblyTarget final {
     services.model_runtime = std::move(runtime);
     services.model_runtime_owned = plan.model_runtime_owned;
     services.settings_manager = std::move(snapshot.manager);
-    services.env = std::move(exec_env);
-    services.env_owned = true;
+    services.filesystem = std::move(filesystem);
     services.runtime_target = plan.execution_runtime_target;
     services.user_shell = std::move(user_shell);
     if (!services.user_shell && plan.provide_user_shell) {

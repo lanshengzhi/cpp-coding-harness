@@ -120,7 +120,8 @@ void SessionPersistence::start_operation_locked(
     state->in_flight = true;
     // Keep the pending operation in shared ownership so the worker task can
     // complete its admission without the post_worker call ever observing a
-    // moved-from admission (mirror AsyncLocalExecutionEnv's operation state).
+    // moved-from admission (mirror the filesystem operation state in
+    // AsyncFileSystemOperations).
     auto shared = std::make_shared<PendingOp>(std::move(op));
     const bool queued = shared->admission.post_worker(
         [state, shared]() mutable noexcept {

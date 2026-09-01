@@ -6,7 +6,7 @@ include_guard(GLOBAL)
     add_executable(cch_tests_harness_tools
         tests/Catch2Main.cpp
         tests/harness/AsyncFileSystemTest.cpp
-        tests/harness/AsyncLocalExecutionEnvTest.cpp
+        tests/harness/AsyncLocalShellTest.cpp
         tests/harness/OutputLimiterTest.cpp
         tests/harness/ProcessTest.cpp
         tests/harness/RuntimeRootTest.cpp

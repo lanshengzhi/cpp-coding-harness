@@ -1,4 +1,3 @@
-#include "agent/harness/SyncLocalExecutionEnv.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -368,34 +367,6 @@ TEST_CASE("WorkspaceFileSystem createTempDir and createTempFile", "[harness][fil
     CHECK(file_result->find(".cch-tmp") != std::string::npos);
     CHECK(file_result->find("pfx-") != std::string::npos);
     CHECK(file_result->find("-sfx") != std::string::npos);
-}
-
-TEST_CASE("WorkspaceFileSystem cleanup preserves replacement temporary resources",
-        "[harness][filesystem][cleanup][issue558]") {
-    tests::TempWorkspace workspace;
-    harness::SyncLocalExecutionEnv env(workspace.path());
-
-    auto file = env.createTempFile("owned-");
-    auto directory = env.createTempDir("owned-dir-");
-    REQUIRE(file);
-    REQUIRE(directory);
-
-    std::filesystem::remove(*file);
-    std::ofstream replacement(*file, std::ios::binary | std::ios::trunc);
-    replacement << "replacement";
-    replacement.close();
-
-    std::filesystem::remove_all(*directory);
-    std::filesystem::create_directories(*directory);
-    std::ofstream marker(std::filesystem::path{*directory} / "marker", std::ios::binary);
-    marker << "replacement-dir";
-    marker.close();
-
-    auto cleanup = env.cleanup();
-    REQUIRE(cleanup);
-    CHECK(std::filesystem::exists(*file));
-    CHECK(workspace.read(".cch-tmp/" + std::filesystem::path{*file}.filename().string()) == "replacement");
-    CHECK(std::filesystem::exists(std::filesystem::path{*directory} / "marker"));
 }
 
 TEST_CASE("WorkspaceFileSystem rejects append beyond the fixed file limit without replacement",

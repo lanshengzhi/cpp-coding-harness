@@ -122,8 +122,8 @@ template <typename Args>
     return support::read_json<Args>(*serialized);
 }
 
-[[nodiscard]] support::Error missing_env_error() {
-    return support::make_error(support::ErrorCode::Tool, "missing execution environment");
+[[nodiscard]] support::Error missing_capability_error() {
+    return support::make_error(support::ErrorCode::Tool, "missing capability");
 }
 
 /// Build a pending `AsyncResult` whose producer runs `body` (a fresh
@@ -157,18 +157,18 @@ template <typename Body>
 // ---------------------------------------------------------------------------
 
 boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_file_execute(
-    std::shared_ptr<harness::AsyncExecutionEnv> env,
-    agent::ToolInvocation invocation,
-    std::stop_token stop_token) {
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) {
     auto parsed = parse_invocation_args<detail::ReadFileArgs>(invocation);
     if (!parsed || parsed->path.empty()) {
         co_return error_result("invalid read arguments");
     }
-    if (!env) {
-        co_return std::unexpected(missing_env_error());
+    if (!filesystem) {
+        co_return std::unexpected(missing_capability_error());
     }
-    auto lines =
-            co_await support::detail::await_async_result(env->readTextLines(parsed->path, std::nullopt, stop_token));
+    auto lines = co_await support::detail::await_async_result(
+            filesystem->readTextLines(parsed->path, std::nullopt, stop_token));
     if (!lines) {
         co_return error_result_from(lines.error());
     }
@@ -213,18 +213,18 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
 }
 
 boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> write_file_execute(
-    std::shared_ptr<harness::AsyncExecutionEnv> env,
-    agent::ToolInvocation invocation,
-    std::stop_token stop_token) {
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) {
     auto parsed = parse_invocation_args<detail::WriteFileArgs>(invocation);
     if (!parsed || parsed->path.empty()) {
         co_return error_result("invalid write arguments");
     }
-    if (!env) {
-        co_return std::unexpected(missing_env_error());
+    if (!filesystem) {
+        co_return std::unexpected(missing_capability_error());
     }
-    auto written =
-            co_await support::detail::await_async_result(env->writeFile(parsed->path, parsed->content, stop_token));
+    auto written = co_await support::detail::await_async_result(
+            filesystem->writeFile(parsed->path, parsed->content, stop_token));
     if (!written) {
         co_return error_result_from(written.error());
     }
@@ -236,9 +236,9 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> write
 }
 
 boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_execute(
-    std::shared_ptr<harness::AsyncExecutionEnv> env,
-    agent::ToolInvocation invocation,
-    std::stop_token stop_token) {
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) {
     auto parsed = parse_invocation_args<detail::EditArgs>(invocation);
     if (!parsed || parsed->path.empty()) {
         co_return error_result("invalid edit arguments: missing path");
@@ -246,13 +246,13 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
     if (parsed->edits.empty()) {
         co_return error_result("Edit tool input is invalid. edits must contain at least one replacement.");
     }
-    if (!env) {
-        co_return std::unexpected(missing_env_error());
+    if (!filesystem) {
+        co_return std::unexpected(missing_capability_error());
     }
 
     // pi edit.ts: strip the BOM, detect and preserve the dominant line
     // ending, then apply every edit against the LF-normalized content.
-    auto read = co_await support::detail::await_async_result(env->readTextFile(parsed->path, stop_token));
+    auto read = co_await support::detail::await_async_result(filesystem->readTextFile(parsed->path, stop_token));
     if (!read) {
         co_return error_result_from(read.error());
     }
@@ -280,8 +280,8 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
 
     const std::string final_content =
         bom + tools::restore_line_endings(applied->new_content, original_ending);
-    auto written =
-            co_await support::detail::await_async_result(env->writeFile(parsed->path, final_content, stop_token));
+    auto written = co_await support::detail::await_async_result(
+            filesystem->writeFile(parsed->path, final_content, stop_token));
     if (!written) {
         co_return error_result_from(written.error());
     }
@@ -310,18 +310,19 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
 }
 
 boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_execute(
-    std::shared_ptr<harness::AsyncExecutionEnv> env,
-    std::shared_ptr<BashSessionEnvironment> session_environment,
-    agent::ToolInvocation invocation,
-    std::stop_token stop_token) {
+        std::shared_ptr<harness::AsyncShell> shell,
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        std::shared_ptr<BashSessionEnvironment> session_environment,
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) {
     auto parsed = parse_invocation_args<detail::BashArgs>(invocation);
     if (!parsed || parsed->command.empty()) {
         co_return error_result("invalid bash arguments");
     }
-    if (!env) {
-        co_return std::unexpected(missing_env_error());
+    if (!shell || !filesystem) {
+        co_return std::unexpected(missing_capability_error());
     }
-    // Convert seconds to milliseconds for ExecutionEnv; zero means no timeout.
+    // Convert seconds to milliseconds for the Shell capability; zero means no timeout.
     harness::ExecOptions exec_options;
     exec_options.stop_token = stop_token;
     exec_options.timeout = parsed->timeout
@@ -329,9 +330,9 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         : std::chrono::milliseconds{0};
     // pi `resolveSpawnContext` (`core/tools/bash.ts`): delete the five
     // PI_* variables from the inherited environment, then re-set the ones
-    // present in the live session context. The execution environment
-    // shadows base keys through the override map; absent facts shadow
-    // with an empty value (the closest analogue of pi's delete).
+    // present in the live session context. The Shell capability shadows base
+    // keys through the override map; absent facts shadow with an empty value
+    // (the closest analogue of pi's delete).
     if (session_environment) {
         const auto& session = *session_environment;
         std::map<std::string, std::string> pi_environment;
@@ -348,7 +349,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
     std::string full_stderr;
     bool received_stdout = false;
     bool received_stderr = false;
-    // The environment owns these callbacks only until the awaited exec
+    // The Shell capability owns these callbacks only until the awaited exec
     // completes; the references point into this coroutine frame.
     exec_options.onStdout = [&](std::string_view chunk) -> support::ExpectedVoid {
         received_stdout = true;
@@ -360,17 +361,18 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         full_stderr.append(chunk);
         return {};
     };
-    auto shell = co_await support::detail::await_async_result(env->exec(parsed->command, std::move(exec_options)));
-    if (!shell) {
-        co_return error_result_from(shell.error());
+    auto shell_result =
+            co_await support::detail::await_async_result(shell->exec(parsed->command, std::move(exec_options)));
+    if (!shell_result) {
+        co_return error_result_from(shell_result.error());
     }
 
-    // Streamed callbacks carry pre-truncation output. When the environment
-    // never fires them, the result fields are already capped at the
+    // Streamed callbacks carry pre-truncation output. When the Shell
+    // capability never fires them, the result fields are already capped at the
     // execution layer and no complete output exists to spill.
     const bool streamed = received_stdout || received_stderr;
-    const std::string& stdout_source = streamed ? full_stdout : shell->stdout_output;
-    const std::string& stderr_source = streamed ? full_stderr : shell->stderr_output;
+    const std::string& stdout_source = streamed ? full_stdout : shell_result->stdout_output;
+    const std::string& stderr_source = streamed ? full_stderr : shell_result->stderr_output;
     std::string full_output = tools::strip_terminal_escape_sequences(
         combine_output(stdout_source, stderr_source));
 
@@ -384,7 +386,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         auto ts = std::chrono::system_clock::now().time_since_epoch().count();
         full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
         if (auto write = co_await support::detail::await_async_result(
-                    env->writeFile(full_output_path, redacted_full, stop_token));
+                    filesystem->writeFile(full_output_path, redacted_full, stop_token));
                 !write) {
             full_output_path.clear();
         }
@@ -397,7 +399,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
             std::to_string(output.size()) + " bytes]\n" + output;
     }
     std::ostringstream out;
-    out << "exit_code=" << shell->exitCode;
+    out << "exit_code=" << shell_result->exitCode;
     if (truncated) {
         out << " truncated=true";
     }
@@ -405,15 +407,15 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         out << "\n" << output;
     }
     co_return agent::AsyncToolExecutionResult{
-        .content = std::vector<ai::Content>{ai::text_content(out.str())},
-        .details = std::nullopt,
-        .is_error = shell->exitCode != 0,
+            .content = std::vector<ai::Content>{ai::text_content(out.str())},
+            .details = std::nullopt,
+            .is_error = shell_result->exitCode != 0,
     };
 }
 
 } // namespace
 
-agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem) {
     agent::Tool tool;
     tool.definition = ai::Tool{
         "read",
@@ -429,19 +431,17 @@ agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv
     // pi `core/tools/read.ts` promptSnippet/promptGuidelines (verbatim).
     tool.prompt_snippet = "Read file contents";
     tool.prompt_guidelines = {"Use read to examine files instead of cat or sed."};
-    tool.execute = [env](
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink) -> agent::ToolExecuteResult {
-        return make_tool_result(
-            [env, invocation = std::move(invocation), stop_token]() {
-                return read_file_execute(env, std::move(invocation), stop_token);
-            });
+    tool.execute = [filesystem](agent::ToolInvocation invocation,
+                           std::stop_token stop_token,
+                           agent::ToolUpdateSink) -> agent::ToolExecuteResult {
+        return make_tool_result([filesystem, invocation = std::move(invocation), stop_token]() {
+            return read_file_execute(filesystem, std::move(invocation), stop_token);
+        });
     };
     return tool;
 }
 
-agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem) {
     agent::Tool tool;
     tool.definition = ai::Tool{
         "write",
@@ -456,19 +456,17 @@ agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEn
     // pi `core/tools/write.ts` promptSnippet/promptGuidelines (verbatim).
     tool.prompt_snippet = "Create or overwrite files";
     tool.prompt_guidelines = {"Use write only for new files or complete rewrites."};
-    tool.execute = [env](
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink) -> agent::ToolExecuteResult {
-        return make_tool_result(
-            [env, invocation = std::move(invocation), stop_token]() {
-                return write_file_execute(env, std::move(invocation), stop_token);
-            });
+    tool.execute = [filesystem](agent::ToolInvocation invocation,
+                           std::stop_token stop_token,
+                           agent::ToolUpdateSink) -> agent::ToolExecuteResult {
+        return make_tool_result([filesystem, invocation = std::move(invocation), stop_token]() {
+            return write_file_execute(filesystem, std::move(invocation), stop_token);
+        });
     };
     return tool;
 }
 
-agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem) {
     agent::Tool tool;
     const auto edit_entry_schema = object_schema(
         {
@@ -516,21 +514,19 @@ agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncExecutionEnv> env
         "Keep edits[].oldText as small as possible while still being "
         "unique in the file. Do not pad with large unchanged regions.",
     };
-    tool.execute = [env](
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink) -> agent::ToolExecuteResult {
-        return make_tool_result(
-            [env, invocation = std::move(invocation), stop_token]() {
-                return edit_execute(env, std::move(invocation), stop_token);
-            });
+    tool.execute = [filesystem](agent::ToolInvocation invocation,
+                           std::stop_token stop_token,
+                           agent::ToolUpdateSink) -> agent::ToolExecuteResult {
+        return make_tool_result([filesystem, invocation = std::move(invocation), stop_token]() {
+            return edit_execute(filesystem, std::move(invocation), stop_token);
+        });
     };
     return tool;
 }
 
-agent::Tool make_async_bash_tool(
-    std::shared_ptr<harness::AsyncExecutionEnv> env,
-    std::shared_ptr<BashSessionEnvironment> session_environment) {
+agent::Tool make_async_bash_tool(std::shared_ptr<harness::AsyncShell> shell,
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        std::shared_ptr<BashSessionEnvironment> session_environment) {
     agent::Tool tool;
     tool.definition = ai::Tool{
         "bash",
@@ -553,14 +549,13 @@ agent::Tool make_async_bash_tool(
             "details.",
         };
     }
-    tool.execute = [env, session_environment](
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink) -> agent::ToolExecuteResult {
+    tool.execute = [shell, filesystem, session_environment](agent::ToolInvocation invocation,
+                           std::stop_token stop_token,
+                           agent::ToolUpdateSink) -> agent::ToolExecuteResult {
         return make_tool_result(
-            [env, session_environment, invocation = std::move(invocation), stop_token]() {
-                return bash_execute(env, session_environment, std::move(invocation), stop_token);
-            });
+                [shell, filesystem, session_environment, invocation = std::move(invocation), stop_token]() {
+                    return bash_execute(shell, filesystem, session_environment, std::move(invocation), stop_token);
+                });
     };
     return tool;
 }

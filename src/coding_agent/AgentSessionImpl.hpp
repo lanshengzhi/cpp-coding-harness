@@ -409,7 +409,7 @@ struct AgentSession::Impl {
     /// nullopt when none exists (pi `getLatestCompactionEntry`).
     [[nodiscard]] std::optional<ai::TimestampMs> latest_compaction_timestamp() const;
     [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_active_work();
-    [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;
+    [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> release_close_resources() noexcept;
     void finalize_close() noexcept;
     /// Build the session's AI-owned `ModelStream` factory: the runtime's
     /// Models catalog composed with pi's request-time re-auth guidance
