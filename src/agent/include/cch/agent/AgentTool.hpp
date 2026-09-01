@@ -76,27 +76,6 @@ using AfterToolCallHook = std::move_only_function<
         AfterToolCallContext,
         std::stop_token)>;
 
-/// Named adapters retain ergonomic synchronous policy setup without adding a
-/// synchronous Agent execution path. Cancellable forms receive the active
-/// run's stop token; non-cancellable forms explicitly ignore it.
-using SyncBeforeToolCallPolicy = std::move_only_function<
-    support::Expected<BeforeToolCallResult>(BeforeToolCallContext)>;
-using CancellableSyncBeforeToolCallPolicy = std::move_only_function<
-    support::Expected<BeforeToolCallResult>(BeforeToolCallContext, std::stop_token)>;
-using SyncAfterToolCallPolicy = std::move_only_function<
-    support::Expected<AfterToolCallResult>(AfterToolCallContext)>;
-using CancellableSyncAfterToolCallPolicy = std::move_only_function<
-    support::Expected<AfterToolCallResult>(AfterToolCallContext, std::stop_token)>;
-
-[[nodiscard]] BeforeToolCallHook adapt_sync_before_tool_call(
-    SyncBeforeToolCallPolicy policy);
-[[nodiscard]] BeforeToolCallHook adapt_sync_before_tool_call(
-    CancellableSyncBeforeToolCallPolicy policy);
-[[nodiscard]] AfterToolCallHook adapt_sync_after_tool_call(
-    SyncAfterToolCallPolicy policy);
-[[nodiscard]] AfterToolCallHook adapt_sync_after_tool_call(
-    CancellableSyncAfterToolCallPolicy policy);
-
 enum class ToolConcurrency {
     /// pi `executionMode: "sequential"`: a batch containing a call to this
     /// tool executes entirely through the sequential path (per-tool sequential

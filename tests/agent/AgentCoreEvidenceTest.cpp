@@ -501,19 +501,18 @@ TEST_CASE(
     // prepare-next-turn runs after turn_end: its first update flips the
     // thinking level from medium to high, so the recorded per-turn reasoning
     // for calls 2/3 proves the update landed before the next stream call.
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [&prepare_calls](const agent::PrepareNextTurnContext&)
-                -> support::Expected<
-                    std::optional<agent::AgentLoopTurnUpdate>> {
-                ++prepare_calls;
-                if (prepare_calls == 1) {
-                    return agent::AgentLoopTurnUpdate{
-                        .thinking_level = std::string{"high"},
-                    };
-                }
-                return std::nullopt;
-            });
+    options.prepare_next_turn = [&prepare_calls](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        if (prepare_calls == 1) {
+            return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                    support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
+                            .thinking_level = std::string{"high"},
+                    }}};
+        }
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+    };
 
     agent::Agent subject(
         runtime->factory(),
@@ -641,19 +640,16 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_reasoning_model("gpt-partial", partial_map);
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-                -> support::Expected<
-                    std::optional<agent::AgentLoopTurnUpdate>> {
-                return agent::AgentLoopTurnUpdate{
-                    .model = tests::make_model("gpt-basic"),
-                };
-            });
-    options.validate_turn_update =
-        agent::adapt_sync_validate_turn_update(
-            [](const agent::AgentLoopTurnUpdate&)
-                -> support::ExpectedVoid { return {}; });
+    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
+                        .model = tests::make_model("gpt-basic"),
+                }}};
+    };
+    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    };
 
     agent::Agent subject(
         runtime->factory(),
@@ -967,16 +963,19 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.after_tool_call =
-        agent::adapt_sync_after_tool_call(
-            [](const agent::AfterToolCallContext& context)
-        -> support::Expected<agent::AfterToolCallResult> {
+    options.after_tool_call = [](const agent::AfterToolCallContext& context,
+                                      std::stop_token) -> support::AsyncResult<agent::AfterToolCallResult> {
         const bool terminate =
             context.tool_call.name == "gamma" ||
             context.tool_call.name == "delta";
-        return agent::AfterToolCallResult{
-            std::nullopt, std::nullopt, std::nullopt, terminate};
-    });
+        return support::AsyncResult<agent::AfterToolCallResult>{
+                support::Expected<agent::AfterToolCallResult>{agent::AfterToolCallResult{
+                        .content = std::nullopt,
+                        .details = std::nullopt,
+                        .is_error = std::nullopt,
+                        .terminate = terminate,
+                }}};
+    };
 
     agent::Agent subject(runtime->factory(), std::move(tools), std::move(options));
     auto run = run_agent(subject, "schedule tools");

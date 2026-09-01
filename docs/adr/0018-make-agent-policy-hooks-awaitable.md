@@ -7,6 +7,8 @@ status: accepted
 Agent policy hooks support asynchronous completion and are awaited in the pi-aligned lifecycle order. The C++ contract uses move-only coroutine callables returning `boost::asio::awaitable<std::expected<...>>`; synchronous policies remain ergonomic through adapters that produce an immediately ready awaitable rather than by narrowing the core capability.
 
 > Operation-shape clauses superseded by [ADR 0040](0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md): Boost.Asio awaitable signatures and ready-awaitable adapters are no longer the cross-Owner contract. Fallible asynchronous Owner operations use `cch::support::AsyncResult`; local synchronous policy remains synchronous unless its owning operation is asynchronous. The executor-resumption and ready-awaitable-adapter test obligations below are also superseded; suspension, ordering, cancellation, move-only ownership, failure boundaries, and separation from weak observers remain authoritative through `AsyncResult`.
+>
+> Synchronous policy aliases, named `adapt_sync_*` functions, and their test obligations are superseded by [ADR 0049](0049-keep-agent-policy-convenience-out-of-the-owner-interface.md). The asynchronous Hook interface and lifecycle semantics remain authoritative.
 
 ## Considered options
 

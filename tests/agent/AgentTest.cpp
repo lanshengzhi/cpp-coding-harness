@@ -1115,38 +1115,34 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("model-old");
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [&prepared_turns](const agent::PrepareNextTurnContext&)
-        -> support::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn = [&prepared_turns](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepared_turns;
         if (prepared_turns == 1) {
-            return agent::AgentLoopTurnUpdate{
-                .context = std::nullopt,
-                // The new model supports thinking, so the "high" update
-                // survives model-switch re-clamping (#352).
-                .model = tests::make_full_thinking_model("model-new"),
-                .thinking_level = std::string{"high"},
-            };
+            return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                    support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
+                            .context = std::nullopt,
+                            // The new model supports thinking, so the "high" update
+                            // survives model-switch re-clamping (#352).
+                            .model = tests::make_full_thinking_model("model-new"),
+                            .thinking_level = std::string{"high"},
+                    }}};
         }
-        return std::nullopt;
-    });
-    options.validate_turn_update =
-        agent::adapt_sync_validate_turn_update(
-            [](const agent::AgentLoopTurnUpdate&)
-        -> support::ExpectedVoid { return {}; });
-    options.should_stop_after_turn =
-        agent::adapt_sync_should_stop_after_turn(
-            [&stop_decisions](const agent::PrepareNextTurnContext&)
-        -> support::Expected<bool> {
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+    };
+    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    };
+    options.should_stop_after_turn = [&stop_decisions](
+                                             const agent::PrepareNextTurnContext&) -> support::AsyncResult<bool> {
         ++stop_decisions;
         if (stop_decisions == 2) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Tool,
-                "stop policy failed"));
+            return support::AsyncResult<bool>{support::Expected<bool>{
+                    std::unexpected(support::make_error(support::ErrorCode::Tool, "stop policy failed"))}};
         }
-        return false;
-    });
+        return support::AsyncResult<bool>{support::Expected<bool>{false}};
+    };
 
     agent::Agent subject(client->factory(), std::move(tools), std::move(options));
 

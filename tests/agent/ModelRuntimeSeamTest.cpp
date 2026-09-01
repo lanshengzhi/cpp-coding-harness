@@ -578,19 +578,16 @@ TEST_CASE(
     // "max" level (already clamped to "xhigh" at creation) must re-clamp to
     // the new model's only supported level ("off") before turn 2 (pi
     // agent-session.ts re-clamps on model switch).
-    options.prepare_next_turn =
-        agent::adapt_sync_prepare_next_turn(
-            [](const agent::PrepareNextTurnContext&)
-                -> support::Expected<
-                    std::optional<agent::AgentLoopTurnUpdate>> {
-                return agent::AgentLoopTurnUpdate{
-                    .model = tests::make_model("gpt-basic"),
-                };
-            });
-    options.validate_turn_update =
-        agent::adapt_sync_validate_turn_update(
-            [](const agent::AgentLoopTurnUpdate&)
-                -> support::ExpectedVoid { return {}; });
+    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
+                        .model = tests::make_model("gpt-basic"),
+                }}};
+    };
+    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    };
 
     agent::Agent subject(
         runtime->factory(),

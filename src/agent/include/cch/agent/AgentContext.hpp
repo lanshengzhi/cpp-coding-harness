@@ -53,24 +53,6 @@ using ConvertToLlmHook = std::move_only_function<
     support::AsyncResult<std::vector<ai::MessageVariant>>(
         std::vector<ai::MessageVariant>)>;
 
-using SyncTransformContextPolicy = std::move_only_function<
-    support::Expected<std::vector<ai::MessageVariant>>(
-        std::vector<ai::MessageVariant>)>;
-using CancellableSyncTransformContextPolicy = std::move_only_function<
-    support::Expected<std::vector<ai::MessageVariant>>(
-        std::vector<ai::MessageVariant>,
-        std::stop_token)>;
-using SyncConvertToLlmPolicy = std::move_only_function<
-    support::Expected<std::vector<ai::MessageVariant>>(
-        std::vector<ai::MessageVariant>)>;
-
-[[nodiscard]] TransformContextHook adapt_sync_transform_context(
-    SyncTransformContextPolicy policy);
-[[nodiscard]] TransformContextHook adapt_sync_transform_context(
-    CancellableSyncTransformContextPolicy policy);
-[[nodiscard]] ConvertToLlmHook adapt_sync_convert_to_llm(
-    SyncConvertToLlmPolicy policy);
-
 /// pi-compatible policy for draining one pending input queue.
 enum class InputQueueMode { OneAtATime, All };
 
@@ -124,20 +106,6 @@ using ShouldStopAfterTurnHook = std::move_only_function<
 // into the agent loop.
 using ValidateTurnUpdateHook = std::move_only_function<
     support::AsyncResult<void>(AgentLoopTurnUpdate)>;
-
-using SyncPrepareNextTurnPolicy = std::move_only_function<
-    support::Expected<std::optional<AgentLoopTurnUpdate>>(PrepareNextTurnContext)>;
-using SyncShouldStopAfterTurnPolicy = std::move_only_function<
-    support::Expected<bool>(PrepareNextTurnContext)>;
-using SyncValidateTurnUpdatePolicy = std::move_only_function<
-    support::ExpectedVoid(AgentLoopTurnUpdate)>;
-
-[[nodiscard]] PrepareNextTurnHook adapt_sync_prepare_next_turn(
-    SyncPrepareNextTurnPolicy policy);
-[[nodiscard]] ShouldStopAfterTurnHook adapt_sync_should_stop_after_turn(
-    SyncShouldStopAfterTurnPolicy policy);
-[[nodiscard]] ValidateTurnUpdateHook adapt_sync_validate_turn_update(
-    SyncValidateTurnUpdatePolicy policy);
 
 struct SequentialToolExecution {};
 
