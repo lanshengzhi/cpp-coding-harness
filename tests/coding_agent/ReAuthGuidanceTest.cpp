@@ -25,6 +25,7 @@
 #include "support/FakeModelStream.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -60,6 +61,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
 
     Fixture() {
         dir_guard.set(agent_dir.path().string());
@@ -97,7 +99,7 @@ constexpr std::string_view kKeylessAlphaKeyedBeta = R"({
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime.make_target();
     request.workspace = fixture.workspace.path();
     return request;
 }
@@ -154,6 +156,7 @@ private:
 /// composed over scripted providers, ADR 0034 "primary seam — Agent +
 /// session-assembly composition").
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_scripted_session(
+        tests::RuntimeFixture& runtime,
         std::shared_ptr<tests::ScriptedProvider> client,
         const std::filesystem::path& session_file,
         const std::filesystem::path& workspace) {
@@ -163,7 +166,8 @@ private:
     options.workspace = workspace;
     options.models = cch::tests::models_from_provider(std::move(client));
     options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
-    return coding_agent::create_agent_session(std::move(options));
+    options.execution_runtime_target = runtime.make_target();
+    return runtime.run(coding_agent::create_agent_session_async(std::move(options)));
 }
 
 template <typename T>
@@ -285,7 +289,7 @@ TEST_CASE(
     auto request = cli_request(fixture);
     request.session_facts.provider = "alpha";
     request.session_facts.model = "alpha-1";
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "alpha");
     CHECK(result->resolved_identity.model == "alpha-1");
@@ -312,7 +316,7 @@ TEST_CASE(
     auto request = cli_request(fixture);
     request.session_facts.provider = "kimi-coding";
     request.session_facts.model = "kimi-for-coding";
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "kimi-coding");
 
@@ -334,12 +338,11 @@ TEST_CASE(
     "request-time no-key branch surfaces pi's verbatim guidance through the terminal assistant message",
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::Auth, "Provider is not configured: sdk-host");
     auto created = create_scripted_session(
-        std::move(client),
-        workspace.path() / "test-session.jsonl",
-        workspace.path());
+            runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
     REQUIRE(created.has_value());
     auto* session = created->session.get();
 
@@ -363,12 +366,11 @@ TEST_CASE(
     "request-time OAuth branch surfaces pi's verbatim re-auth guidance for dead credentials",
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
     auto created = create_scripted_session(
-        std::move(client),
-        workspace.path() / "test-session.jsonl",
-        workspace.path());
+            runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
     REQUIRE(created.has_value());
     auto* session = created->session.get();
 
@@ -497,6 +499,7 @@ TEST_CASE(
     // request fails with an auth terminal: the guidance surfaces through the
     // compaction outcome.
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const std::string big(20000, 'x');
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::Auth,
@@ -504,9 +507,7 @@ TEST_CASE(
         "a" + big);
     auto* client_ptr = client.get();
     auto created = create_scripted_session(
-        std::move(client),
-        workspace.path() / "test-session.jsonl",
-        workspace.path());
+            runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
     REQUIRE(created.has_value());
     auto* session = created->session.get();
 

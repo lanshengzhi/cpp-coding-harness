@@ -20,6 +20,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -77,6 +78,7 @@ void expect_json_equal(
 
 struct TestPaths {
     cch::tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     std::filesystem::path session_file;
 
     TestPaths() {
@@ -228,8 +230,9 @@ struct RetrySessionUnderTest {
     options.request_model = tests::scripted_request_model("sdk-host", "gpt-test");
     options.custom_tools = std::move(custom_tools);
     options.models = cch::tests::models_from_provider(std::move(client));
+    options.execution_runtime_target = paths.runtime.make_target();
 
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = paths.runtime.run(coding_agent::create_agent_session_async(std::move(options)));
     REQUIRE(created.has_value());
     return RetrySessionUnderTest{
         std::move(created->session),

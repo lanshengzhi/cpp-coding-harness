@@ -11,8 +11,9 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
-#include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -38,6 +39,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
 
     Fixture() {
         dir_guard.set(agent_dir.path().string());
@@ -138,6 +140,7 @@ constexpr std::string_view kReasoningAndPlainProviders = R"({
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.execution_runtime_target = fixture.runtime.make_target();
     return request;
 }
 
@@ -166,7 +169,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeyedAlphaKeylessBeta);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
 
@@ -195,7 +198,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
 
@@ -250,7 +253,7 @@ TEST_CASE(
     auto bash_environment =
         std::make_shared<tools::BashSessionEnvironment>();
     request.bash_session_environment = bash_environment;
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
 
@@ -289,7 +292,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainProviders);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
     auto raised = result->session->set_thinking_level("high");
@@ -332,7 +335,7 @@ TEST_CASE(
     fixture.write_models(kReasoningAndPlainProviders);
     fixture.write_settings(R"({"defaultProvider": "beta", "defaultModel": "beta-1", "defaultThinkingLevel": "high"})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     // The settings default resolves beta-1 (non-reasoning); the creation
     // clamp lands the level at "off".
@@ -370,8 +373,9 @@ TEST_CASE(
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
+    request.execution_runtime_target = fixture.runtime.make_target();
 
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
 

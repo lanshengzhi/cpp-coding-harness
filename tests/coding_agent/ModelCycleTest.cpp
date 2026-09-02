@@ -12,8 +12,9 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
-#include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -39,6 +40,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
 
     Fixture() {
         dir_guard.set(agent_dir.path().string());
@@ -157,6 +159,7 @@ constexpr std::string_view kNonReasoningProvider = R"({
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.execution_runtime_target = fixture.runtime.make_target();
     return request;
 }
 
@@ -179,7 +182,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kThreeKeyedProviders);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
     REQUIRE(result->session->scoped_models().empty());
@@ -234,7 +237,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kSingleReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
 
     const auto cycled = result->session->cycle_model_blocking("forward");
@@ -256,7 +259,7 @@ TEST_CASE(
     // keyless beta model is never in scope).
     auto request = cli_request(fixture);
     request.session_facts.models = {"alpha*", "beta*"};
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
 
@@ -298,7 +301,7 @@ TEST_CASE(
     // --models "alpha-1:high" carries the explicit level into the scope.
     auto request = cli_request(fixture);
     request.session_facts.models = {"alpha-2:high"};
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     // The scoped initial model is alpha-2 with the explicit level.
     REQUIRE(result->session->scoped_models().size() == 1);
@@ -338,7 +341,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     // Creation clamps the default "medium" against the reasoning model.
     REQUIRE(result->session->snapshot().agent_state.thinking_level == "medium");
@@ -370,7 +373,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kNonReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->session->snapshot().agent_state.thinking_level == "off");
 
@@ -389,7 +392,7 @@ TEST_CASE(
     // settings scope becomes the session's Ctrl+P cycling set.
     fixture.write_settings(R"({"enabledModels": ["alpha-2:high"]})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     // The scoped initial model carries the explicit :level as the initial
     // thinking level (pi main.ts `scopedModels[0].thinkingLevel`).

@@ -21,6 +21,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
@@ -54,6 +55,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
 
     Fixture() {
         dir_guard.set(agent_dir.path().string());
@@ -151,6 +153,7 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.workspace = fixture.workspace.path();
+    request.execution_runtime_target = fixture.runtime.make_target();
     return request;
 }
 
@@ -159,6 +162,7 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.workspace = fixture.workspace.path();
+    request.execution_runtime_target = fixture.runtime.make_target();
     return request;
 }
 
@@ -208,7 +212,7 @@ TEST_CASE("CLI model resolution: --model wins over settings defaults", "[coding_
     request.session_facts.provider = "beta";
     request.session_facts.model = "beta-1";
 
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "beta");
     CHECK(result->resolved_identity.model == "beta-1");
@@ -222,7 +226,7 @@ TEST_CASE("CLI model resolution: settings default wins with configured auth", "[
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"beta","defaultModel":"beta-1"})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "beta");
     CHECK(result->resolved_identity.model == "beta-1");
@@ -239,7 +243,7 @@ TEST_CASE(
     // has configured auth (beta-1), never the keyless alpha-1.
     fixture.write_settings(R"({"defaultProvider":"alpha","defaultModel":"alpha-1"})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "beta");
     CHECK(result->resolved_identity.model == "beta-1");
@@ -253,7 +257,7 @@ TEST_CASE("CLI model resolution: scoped models select the first scoped model for
     auto request = cli_request(fixture);
     request.session_facts.models = {"alpha*"};
 
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "alpha");
     CHECK(result->resolved_identity.model == "alpha-1");
@@ -270,7 +274,7 @@ TEST_CASE(
     auto request = cli_request(fixture);
     request.session_facts.models = {"alpha*", "beta*"};
 
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     // beta-1 is in scope and is the saved default, so it wins over the first
     // scoped model (alpha-1).
@@ -287,14 +291,14 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", 
         auto request = cli_request(fixture);
         request.session_facts.provider = "beta";
         request.session_facts.model = "beta-1";
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
         created->session->close();
     }
 
     // Resume with no CLI model flags: the stored `model_change {beta, beta-1}`
     // re-resolves against the live runtime catalog.
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->resolved_identity.provider == "beta");
     CHECK(resumed->resolved_identity.model == "beta-1");
@@ -312,7 +316,7 @@ TEST_CASE(
         auto request = cli_request(fixture);
         request.session_facts.provider = "beta";
         request.session_facts.model = "beta-1";
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
         created->session->close();
     }
@@ -325,7 +329,7 @@ TEST_CASE(
     // is uncalled) plus the resolved fallback identity.
     fixture.write_models(kKeylessBetaKeyedAlpha);
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->resolved_identity.provider == "alpha");
     CHECK(resumed->resolved_identity.model == "alpha-1");
@@ -345,7 +349,7 @@ TEST_CASE(
         auto request = cli_request(fixture);
         request.session_facts.provider = "beta";
         request.session_facts.model = "beta-1";
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
         created->session->close();
     }
@@ -355,7 +359,7 @@ TEST_CASE(
     // `formatNoModelsAvailableMessage()` (sdk.ts `if (!model)` branch).
     std::filesystem::remove(fixture.agent_dir.path() / "models.json");
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->resolved_identity.provider == "unknown");
     CHECK(resumed->resolved_identity.model == "unknown");
@@ -375,7 +379,7 @@ TEST_CASE(
         auto request = cli_request(fixture);
         request.session_facts.provider = "beta";
         request.session_facts.model = "beta-1";
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
         created->session->close();
     }
@@ -396,7 +400,7 @@ TEST_CASE(
       }
     })");
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->resolved_identity.provider == "gamma");
     CHECK(resumed->resolved_identity.model == "gamma-1");
@@ -416,7 +420,7 @@ TEST_CASE(
         auto request = cli_request(fixture);
         request.session_facts.provider = "beta";
         request.session_facts.model = "beta-1";
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
         created->session->close();
     }
@@ -456,8 +460,7 @@ TEST_CASE(
     // persistent store needs a Runtime channel so the prompt below can admit
     // its session entries.
     auto request = cli_request(fixture);
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
     // The concrete unknown kDefaultModel is the resolved identity, with no
     // construction-time default silently winning.
@@ -494,7 +497,7 @@ TEST_CASE(
     // lands on the unknown placeholder. pi sdk.ts guards the model_change
     // append with `if (model)`; the initial thinking entry still persists
     // (pi appends it unconditionally, clamped to "off" for the placeholder).
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     result->session->close();
 
@@ -524,7 +527,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "beta");
     CHECK(result->resolved_identity.model == "beta-1");
@@ -539,7 +542,7 @@ TEST_CASE(
     // defaultModel alpha-1 (keyless) is skipped; defaultModel beta-1 wins.
     fixture.write_settings(R"({"defaultProvider":"alpha","defaultModel":"alpha-1"})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.provider == "beta");
     CHECK(result->resolved_identity.model == "beta-1");
@@ -553,13 +556,13 @@ TEST_CASE(
     fixture.write_models(kTwoKeyedProviders);
 
     {
-        auto created = coding_agent::create_agent_session(cli_request(fixture));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
         REQUIRE(created.has_value());
         CHECK(created->resolved_identity.provider == "alpha");
         created->session->close();
     }
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->resolved_identity.provider == "alpha");
     CHECK(resumed->resolved_identity.model == "alpha-1");
@@ -580,14 +583,14 @@ TEST_CASE(
         auto request = cli_request(fixture);
         request.session_facts.provider = "beta";
         request.session_facts.model = "beta-1";
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
         CHECK(created->resolved_identity.provider == "beta");
         CHECK(created->resolved_identity.model == "beta-1");
         created->session->close();
     }
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->resolved_identity.provider == "beta");
     CHECK(resumed->resolved_identity.model == "beta-1");
@@ -605,7 +608,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     // The resolution chain landed the first available model with configured
     // auth; the session's model supports reasoning so a level change is real.
@@ -646,7 +649,7 @@ TEST_CASE(
     fixture.write_models(kKeyedReasoningProvider);
 
     {
-        auto result = coding_agent::create_agent_session(cli_request(fixture));
+        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
         REQUIRE(result.has_value());
         auto changed = result->session->set_thinking_level("high");
         REQUIRE(changed.has_value());
@@ -656,7 +659,7 @@ TEST_CASE(
 
     // Resume: the nearest `thinking_level_change` on the active path wins over
     // the settings default and DEFAULT_THINKING_LEVEL (pi sdk.ts).
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->session->snapshot().agent_state.thinking_level == "high");
     resumed->session->close();
@@ -673,7 +676,7 @@ TEST_CASE(
         // `thinking_level_change` entry records the creation level. Strip it
         // so the resumed session genuinely has no thinking entry (the
         // hasThinkingEntry gate pi gates against).
-        auto result = coding_agent::create_agent_session(cli_request(fixture));
+        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
         REQUIRE(result.has_value());
         result->session->close();
 
@@ -692,7 +695,7 @@ TEST_CASE(
 
     fixture.write_settings(R"({"defaultThinkingLevel":"low"})");
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->session->snapshot().agent_state.thinking_level == "low");
     resumed->session->close();
@@ -705,7 +708,7 @@ TEST_CASE(
     fixture.write_models(kKeyedReasoningProvider);
     fixture.write_settings(R"({"defaultThinkingLevel":"high"})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     // The Agent clamped the settings default against the reasoning model; the
     // supported set (no thinkingLevelMap) is off..high, so "high" survives.
@@ -719,7 +722,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->session->snapshot().agent_state.thinking_level == "medium");
 
@@ -749,7 +752,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
 
     // No thinkingLevelMap: supported is off..high, so "max" clamps to "high".
@@ -793,7 +796,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.model == "deepseek-v4-flash");
     result->session->close();
@@ -834,7 +837,7 @@ TEST_CASE(
     // persisted entry records the clamped value, not the request.
     fixture.write_settings(R"({"defaultThinkingLevel":"max"})");
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
     result->session->close();
@@ -855,7 +858,7 @@ TEST_CASE(
     fixture.write_models(kKeyedReasoningProvider);
 
     {
-        auto result = coding_agent::create_agent_session(cli_request(fixture));
+        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
         REQUIRE(result.has_value());
         result->session->close();
 
@@ -876,7 +879,7 @@ TEST_CASE(
 
     fixture.write_settings(R"({"defaultThinkingLevel":"low"})");
 
-    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->session->snapshot().agent_state.thinking_level == "low");
     resumed->session->close();
@@ -899,7 +902,7 @@ TEST_CASE(
     fixture.write_models(kKeyedReasoningProvider);
 
     {
-        auto result = coding_agent::create_agent_session(cli_request(fixture));
+        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
         REQUIRE(result.has_value());
         result->session->close();
 
@@ -934,7 +937,7 @@ TEST_CASE(
     // project's (absent -> "medium").
     auto request = cli_resume_request(fixture);
     request.workspace = other.path();
-    auto resumed = coding_agent::create_agent_session(std::move(request));
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(resumed.has_value());
     CHECK(resumed->session->snapshot().agent_state.thinking_level == "high");
     resumed->session->close();
@@ -950,7 +953,7 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     auto changed = result->session->set_thinking_level("high");
     REQUIRE(changed.has_value());
