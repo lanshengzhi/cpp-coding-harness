@@ -27,7 +27,10 @@
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 
 #include "support/EnvVarGuard.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "coding_agent/AgentSession.hpp"
@@ -45,6 +48,7 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -72,18 +76,27 @@ struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::RuntimeFixture runtime;
+    tests::RuntimeLoopDriver runtime_driver;
 
-    Fixture() { agent_dir_guard.set(agent_dir.path().string()); }
+    Fixture() : runtime_driver(runtime) { agent_dir_guard.set(agent_dir.path().string()); }
 };
 
 /// The replace-session creator shared by these tests (pi `createRuntime`):
 /// creates an in-memory session from the carried request.
-[[nodiscard]] coding_agent::tui::testing::TestSessionFactorySink in_memory_session_creator() {
-    return [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
+[[nodiscard]] coding_agent::tui::AsyncSessionReplacementSink in_memory_session_creator(
+        std::shared_ptr<harness::RuntimeTarget> runtime_target) {
+    const auto models = tests::make_scripted_fake_models();
+    return [runtime_target, models](std::size_t /* action_generation */,
+                   coding_agent::runtime::AgentSessionCreationRequest request,
+                   std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        return coding_agent::create_agent_session(std::move(request));
+        request.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.models = models},
+                stop_token);
     };
 }
 
@@ -105,6 +118,7 @@ void boot(
                        .with_defer_boot(std::move(request))
                        .with_agent_config_directory(fixture.agent_dir.path())
                        .with_action_sink(actions->make_sink())
+                       .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))
                        .build();
     boost::asio::co_spawn(
@@ -127,7 +141,7 @@ TEST_CASE(
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // The boot session was created through one ReplaceSessionAction carried
@@ -160,7 +174,7 @@ TEST_CASE(
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
     // Boot: ReplaceSessionAction@0.
     REQUIRE(actions->generations == std::vector<std::size_t>{0});
@@ -195,7 +209,7 @@ TEST_CASE(
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // Admit a replacement, then close while the run is live (Close race).
@@ -225,21 +239,27 @@ TEST_CASE(
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
     // The host rejects the in-session replacement (returns the creation
-    // error through the closed action value's result channel).
+    // error through the asynchronous replacement result channel).
     int replacement_calls = 0;
-    actions->replace_session =
-        [&replacement_calls](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            ++replacement_calls;
-            if (replacement_calls == 2) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Session,
-                    "host rejected the replacement"));
-            }
-            return coding_agent::create_agent_session(std::move(request));
-        };
+    actions->replace_session_async =
+            [&replacement_calls,
+                    runtime_target = fixture.runtime.make_target(),
+                    models = tests::make_scripted_fake_models()](std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_target;
+        ++replacement_calls;
+        if (replacement_calls == 2) {
+            return support::AsyncResult<coding_agent::CreateAgentSessionResult>{
+                    std::unexpected(support::make_error(support::ErrorCode::Session, "host rejected the replacement"))};
+        }
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.models = models},
+                stop_token);
+    };
     boot(fixture, running, actions);
 
     // `/new` (the in-session replacement after the boot session) is
@@ -310,7 +330,7 @@ TEST_CASE(
 
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // The trust-resolution diagnostic arrived as the closed

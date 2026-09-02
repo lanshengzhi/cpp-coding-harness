@@ -13,11 +13,13 @@
 // single-Owner helper.
 
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include <cch/support/Error.hpp>
 
 #include <filesystem>
 #include <memory>
+#include <stop_token>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -56,6 +58,11 @@ struct ActionSinkRecorder {
         /// When set, creates the session for `ReplaceSessionAction`;
         /// otherwise the action resolves with the unavailable-host error.
         TestSessionFactorySink replace_session{nullptr};
+        /// Asynchronous replacement creator used by tests migrated to the
+        /// Session Assembly adapter. The generation and stop token are
+        /// retained at this seam so cancellation and supersession remain
+        /// observable without routing through the synchronous action value.
+        AsyncSessionReplacementSink replace_session_async{nullptr};
     };
 
     std::shared_ptr<State> state{std::make_shared<State>()};
@@ -68,6 +75,7 @@ struct ActionSinkRecorder {
     std::vector<ReportBootCreationFailureAction>& boot_creation_failure{
         state->boot_creation_failure};
     TestSessionFactorySink& replace_session{state->replace_session};
+    AsyncSessionReplacementSink& replace_session_async{state->replace_session_async};
 
     /// One move-only sink carrying every recorded action (issue #461). The
     /// generation stamped on each action is recorded in `generations`.
@@ -130,6 +138,47 @@ struct ActionSinkRecorder {
                     }
                 },
                 std::move(action));
+        };
+    }
+
+    /// One move-only asynchronous replacement sink for tests that exercise
+    /// the Session Assembly adapter directly. Replacement records use the
+    /// same shared state as the closed action sink so either seam remains
+    /// externally observable in one recorder.
+    [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() {
+        const auto shared = state;
+        return [shared](std::size_t action_generation,
+                       runtime::AgentSessionCreationRequest request,
+                       std::stop_token stop_token) -> support::AsyncResult<CreateAgentSessionResult> {
+            shared->generations.push_back(action_generation);
+            const std::string target = std::visit(
+                    [](const auto& session_target) -> std::string {
+                        using T = std::decay_t<decltype(session_target)>;
+                        if constexpr (std::is_same_v<T, DefaultPersistedSessionTarget>) {
+                            return "default-persisted";
+                        } else if constexpr (std::is_same_v<T, ExplicitOpenOrCreateSessionTarget>) {
+                            return "explicit-open-or-create";
+                        } else if constexpr (std::is_same_v<T, ExplicitResumeSessionTarget>) {
+                            return "explicit-resume";
+                        } else if constexpr (std::is_same_v<T, ForkSessionTarget>) {
+                            return "fork";
+                        } else if constexpr (std::is_same_v<T, ContinueRecentSessionTarget>) {
+                            return "continue-recent";
+                        } else {
+                            return "in-memory";
+                        }
+                    },
+                    request.session_target);
+            shared->replace_sessions.push_back(ReplaceSessionRecord{
+                    .workspace = request.workspace,
+                    .target = target,
+                    .no_skills = request.session_facts.no_skills,
+            });
+            if (!shared->replace_session_async) {
+                return support::AsyncResult<CreateAgentSessionResult>{std::unexpected(
+                        support::make_error(support::ErrorCode::Unknown, "no asynchronous session creator installed"))};
+            }
+            return shared->replace_session_async(action_generation, std::move(request), stop_token);
         };
     }
 };

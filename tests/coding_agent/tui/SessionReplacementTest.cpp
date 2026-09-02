@@ -22,6 +22,8 @@
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "coding_agent/AgentSession.hpp"
@@ -67,8 +69,10 @@ struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::RuntimeFixture runtime;
+    tests::RuntimeLoopDriver runtime_driver;
 
-    Fixture() { agent_dir_guard.set(agent_dir.path().string()); }
+    Fixture() : runtime_driver(runtime) { agent_dir_guard.set(agent_dir.path().string()); }
 };
 
 struct Running {
@@ -81,15 +85,19 @@ struct Running {
 /// every created Session shares one GatedChatProvider, so the Runtime's
 /// provider (Models) resource is reused across replacements and the shared
 /// provider's request/gate state is observable end to end (issue #466).
-[[nodiscard]] coding_agent::tui::testing::TestSessionFactorySink shared_provider_creator(
-    const std::shared_ptr<tests::GatedChatProvider>& provider) {
-    return [provider](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
+[[nodiscard]] coding_agent::tui::AsyncSessionReplacementSink shared_provider_creator(
+        const std::shared_ptr<tests::GatedChatProvider>& provider,
+        std::shared_ptr<harness::RuntimeTarget> runtime_target) {
+    return [provider, runtime_target](std::size_t /* action_generation */,
+                   coding_agent::runtime::AgentSessionCreationRequest request,
+                   std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        request.execution_runtime_target = tests::detail::fixture_runtime_target();
-        return coding_agent::create_agent_session_for_testing(
-            std::move(request), tests::models_from_provider(provider));
+        request.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.models = tests::models_from_provider(provider)},
+                stop_token);
     };
 }
 
@@ -111,6 +119,7 @@ void boot(
                        .with_defer_boot(std::move(request))
                        .with_agent_config_directory(fixture.agent_dir.path())
                        .with_action_sink(actions->make_sink())
+                       .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))
                        .build();
     boost::asio::co_spawn(
@@ -205,7 +214,7 @@ TEST_CASE(
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = shared_provider_creator(provider);
+    actions->replace_session_async = shared_provider_creator(provider, fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // The boot session bound through one ReplaceSessionAction.
@@ -248,22 +257,24 @@ TEST_CASE(
     auto provider = std::make_shared<tests::GatedChatProvider>();
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
     int replacement_calls = 0;
-    actions->replace_session =
-        [&replacement_calls, provider](
-            coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            ++replacement_calls;
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            request.execution_runtime_target = tests::detail::fixture_runtime_target();
-            if (replacement_calls > 1) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Session,
-                    "host rejected the replacement"));
-            }
-            return coding_agent::create_agent_session_for_testing(
-                std::move(request), tests::models_from_provider(provider));
-        };
+    actions->replace_session_async =
+            [&replacement_calls, provider, runtime_target = fixture.runtime.make_target()](
+                    std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        ++replacement_calls;
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_target;
+        if (replacement_calls > 1) {
+            return support::AsyncResult<coding_agent::CreateAgentSessionResult>{
+                    std::unexpected(support::make_error(support::ErrorCode::Session, "host rejected the replacement"))};
+        }
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.models = tests::models_from_provider(provider)},
+                stop_token);
+    };
     boot(fixture, running, actions);
 
     // The in-session replacement is rejected by the host; the error surfaces.
@@ -294,7 +305,7 @@ TEST_CASE(
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = shared_provider_creator(provider);
+    actions->replace_session_async = shared_provider_creator(provider, fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // Start a prompt on the boot Session; the shared provider gates it (the
@@ -337,7 +348,7 @@ TEST_CASE(
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = shared_provider_creator(provider);
+    actions->replace_session_async = shared_provider_creator(provider, fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // Three back-to-back replacements: each installs and retires the previous
@@ -371,7 +382,7 @@ TEST_CASE(
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = shared_provider_creator(provider);
+    actions->replace_session_async = shared_provider_creator(provider, fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // A prompt is in flight on the boot Session when the user replaces and
@@ -402,16 +413,19 @@ TEST_CASE(
     Running running;
     auto shell_state = std::make_shared<SharedGateShell::State>();
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session =
-        [shell_state](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            request.execution_runtime_target = tests::detail::fixture_runtime_target();
-            return coding_agent::create_agent_session_for_testing(std::move(request),
-                    tests::make_scripted_fake_models(),
-                    std::make_unique<SharedGateShell>(shell_state));
-        };
+    actions->replace_session_async =
+            [shell_state, runtime_target = fixture.runtime.make_target()](std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.models = tests::make_scripted_fake_models(),
+                        .user_shell = std::make_unique<SharedGateShell>(shell_state)},
+                stop_token);
+    };
     boot(fixture, running, actions);
 
     // A User Bash starts on the boot Session and stays in flight (gated); its

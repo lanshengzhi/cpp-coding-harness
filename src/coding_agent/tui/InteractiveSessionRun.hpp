@@ -125,6 +125,7 @@ private:
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
         bool is_resume_target{false};
         std::atomic<bool> creation_failure_reported{false};
+        std::optional<AsyncSessionReplacementSink> custom_async_session_replacement_sink{std::nullopt};
         std::optional<TuiActionSink> custom_action_sink{std::nullopt};
     };
 
@@ -177,6 +178,7 @@ public:
         bool is_resume_target) noexcept;
     InteractiveSessionRunBuilder& with_action_sink(
         TuiActionSink sink) noexcept;
+    InteractiveSessionRunBuilder& with_async_session_replacement_sink(AsyncSessionReplacementSink sink) noexcept;
 
     [[nodiscard]] InteractiveSessionRun build();
 

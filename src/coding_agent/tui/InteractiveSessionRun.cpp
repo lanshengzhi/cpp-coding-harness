@@ -147,10 +147,13 @@ support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun:
 
 AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacement_sink() const {
     if (!state_) return nullptr;
-    // An injected action sink is the authoritative host seam for tests and
-    // alternate compositions. Keep boot and in-session replacement on that
-    // synchronous action path rather than bypassing it with the production
-    // asynchronous factory.
+    if (state_->custom_async_session_replacement_sink.has_value()) {
+        return std::move(state_->custom_async_session_replacement_sink.value());
+    }
+    // Keep the synchronous action path available for tests and alternate
+    // compositions that have not migrated to the asynchronous replacement
+    // seam yet. A supplied async sink always takes precedence over this
+    // compatibility fallback, including when both sinks are supplied.
     if (state_->custom_action_sink.has_value()) {
         return nullptr;
     }
@@ -385,6 +388,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_is_resume_targe
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_action_sink(
     TuiActionSink sink) noexcept {
     state_->custom_action_sink = std::move(sink);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_async_session_replacement_sink(
+        AsyncSessionReplacementSink sink) noexcept {
+    state_->custom_async_session_replacement_sink = std::move(sink);
     return *this;
 }
 
