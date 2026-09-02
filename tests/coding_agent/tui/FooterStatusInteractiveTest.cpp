@@ -3,6 +3,8 @@
 
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/ModelsFixture.hpp"
@@ -69,6 +71,7 @@ struct ResumedSessionFixture {
     std::filesystem::path session_file;
     tests::ScriptedRuntimeFixture scripted;
     std::shared_ptr<coding_agent::ModelRuntime> runtime{scripted.runtime};
+    tests::RuntimeFixture runtime_fixture;
     std::unique_ptr<coding_agent::AgentSession> session;
 
     void create() {
@@ -98,12 +101,13 @@ struct ResumedSessionFixture {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.session_target =
             coding_agent::ExplicitResumeSessionTarget{session_file};
-        request.execution_runtime_target = tests::detail::fixture_runtime_target();
+        request.execution_runtime_target = runtime_fixture.make_target();
         request.workspace = workspace.path();
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.model_runtime = runtime;
-        auto created = coding_agent::create_agent_session(std::move(request));
+        auto created =
+                runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created);
         session = std::move(created->session);
     }
@@ -161,6 +165,7 @@ TEST_CASE(
     "[coding_agent][tui][footer][issue411]") {
     ResumedSessionFixture fixture;
     fixture.create();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     // Script one turn with usage so the footer's stats line has data.
     ai::AssistantMessage turn;
@@ -236,13 +241,15 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime_fixture.make_target();
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created =
+            fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
@@ -285,6 +292,7 @@ TEST_CASE(
     const tests::EnvVarGuard agent_dir{
         "PI_CODING_AGENT_DIR", fixture.config.path().string()};
     fixture.create();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
     fixture.config.write(
         "settings.json",
         R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 2000}})");
@@ -360,13 +368,15 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime_fixture.make_target();
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created =
+            fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
@@ -439,13 +449,15 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime_fixture.make_target();
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created =
+            fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
@@ -517,13 +529,15 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime_fixture.make_target();
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created =
+            fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
@@ -587,6 +601,7 @@ TEST_CASE(
     "[coding_agent][tui][suspend][issue411]") {
     ResumedSessionFixture fixture;
     fixture.create();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
     int suspend_calls = 0;
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -651,6 +666,7 @@ TEST_CASE(
     "[coding_agent][tui][external-editor][issue411]") {
     ResumedSessionFixture fixture;
     fixture.create();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     // A fake editor: appends a line to the prompt file, then exits 0.
     fixture.config.write(
@@ -713,18 +729,19 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime_fixture.make_target();
     request.workspace = fixture.workspace.path();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request),
+    auto created = fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
                     .cli_fake = false,
                     .models = nullptr,
-                    .user_shell = std::make_unique<tests::FakeUserShell>()});
+                    .user_shell = std::make_unique<tests::FakeUserShell>()}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;

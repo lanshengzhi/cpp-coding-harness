@@ -31,6 +31,8 @@
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -128,6 +130,7 @@ void capture_golden(std::string_view name, const std::string& screen) {
 struct PipelineSession {
     std::filesystem::path workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
@@ -211,12 +214,13 @@ struct PipelineSession {
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target =
         coding_agent::ExplicitResumeSessionTarget{session_file};
-    resume.execution_runtime_target = tests::detail::fixture_runtime_target();
+    resume.execution_runtime_target = fixture->runtime.make_target();
     resume.workspace = fixture->workspace;
     resume.session_facts.no_skills = true;
     resume.session_facts.no_prompt_templates = true;
-    auto created =
-            coding_agent::create_agent_session_for_testing(std::move(resume), tests::make_scripted_fake_models());
+    auto created = fixture->runtime.run(coding_agent::create_agent_session_async(std::move(resume),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = tests::make_scripted_fake_models()}));
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;
@@ -244,6 +248,7 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
 struct ModelFixture {
     std::filesystem::path workspace;
     tests::TempWorkspace agent_dir;
+    tests::RuntimeFixture runtime;
     tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
@@ -282,6 +287,7 @@ struct InterruptSession {
     std::filesystem::path workspace;
     tests::TempWorkspace config;
     tests::ScriptedRuntimeFixture scripted;
+    tests::RuntimeFixture runtime;
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
@@ -320,12 +326,12 @@ struct InterruptSession {
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture->runtime.make_target();
     request.workspace = fixture->workspace;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture->scripted.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created = fixture->runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;
@@ -337,6 +343,7 @@ TEST_CASE(
     "rendering golden: the full message pipeline renders in pi's shapes",
     "[coding_agent][tui][rendering][issue422]") {
     auto fixture = make_pipeline_session();
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
     // 52 rows keep the whole pipeline (compaction summary through branch
     // summary) in the chat viewport above the status/editor/footer rows.
@@ -395,13 +402,15 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
+    request.execution_runtime_target = fixture.runtime.make_target();
     request.workspace = fixture.workspace;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
     REQUIRE(session->model() == "alpha-1");
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     boost::asio::co_spawn(
         running.io,
@@ -499,16 +508,19 @@ TEST_CASE(
     // dispatch needs the wider terminal (a pre-existing cch_tui input
     // behavior below ~90 columns), and the overlay renders fully.
     Running running{{.columns = 100, .rows = 24}};
+    tests::RuntimeFixture runtime;
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace;
+    request.execution_runtime_target = runtime.make_target();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
     REQUIRE(created->session->message_count() == 5);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     coding_agent::tui::testing::ActionSinkRecorder recorder;
     recorder.replace_session =
@@ -562,6 +574,7 @@ TEST_CASE(
     gated.control->gate_at = 0;
     gated.control->emit_partial_before_gate = true;
     auto fixture = make_interrupt_session(std::move(gated));
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
