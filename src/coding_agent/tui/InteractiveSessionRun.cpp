@@ -122,40 +122,10 @@ void InteractiveSessionRun::suspend_process() const {
     (void)::kill(0, SIGTSTP);
 }
 
-support::Expected<coding_agent::CreateAgentSessionResult> InteractiveSessionRun::replace_session(
-    runtime::AgentSessionCreationRequest request) const {
-    if (!state_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "InteractiveSessionRun is not initialized"));
-    }
-    request.provide_user_shell = true;
-    // The synchronous compatibility bridge owns the loop that drives its
-    // assembly. Do not hand it the interactive RuntimeRoot target: that
-    // target's executor is owned by the caller's loop and cannot be driven by
-    // this synchronous API. The asynchronous production sink below installs
-    // the host target on the Runtime loop instead.
-    return coding_agent::create_agent_session(std::move(request),
-            state_->session_facts,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = state_->shared_runtime,
-                    .cli_fake = state_->model_runtime_cli_fake,
-                    .models = state_->models,
-                    .user_shell = nullptr,
-            });
-}
-
 AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacement_sink() const {
     if (!state_) return nullptr;
     if (state_->custom_async_session_replacement_sink.has_value()) {
         return std::move(state_->custom_async_session_replacement_sink.value());
-    }
-    // Keep the synchronous action path available for tests and alternate
-    // compositions that have not migrated to the asynchronous replacement
-    // seam yet. A supplied async sink always takes precedence over this
-    // compatibility fallback, including when both sinks are supplied.
-    if (state_->custom_action_sink.has_value()) {
-        return nullptr;
     }
     const auto state = state_;
     return [state](std::size_t /* action_generation */,
@@ -239,9 +209,6 @@ support::Expected<TuiActionResultVariant> InteractiveSessionRun::dispatch_action
             } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
                 suspend_process();
                 return TuiActionResultVariant{std::monostate{}};
-            } else if constexpr (std::is_same_v<T, ReplaceSessionAction>) {
-                auto created = replace_session(std::move(payload.request));
-                return TuiActionResultVariant{std::move(created)};
             } else if constexpr (std::is_same_v<T, ReportBootDiagnosticsAction>) {
                 report_boot_diagnostics(payload.diagnostics);
                 return TuiActionResultVariant{std::monostate{}};

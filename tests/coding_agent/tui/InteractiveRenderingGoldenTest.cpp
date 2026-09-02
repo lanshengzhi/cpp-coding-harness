@@ -523,13 +523,6 @@ TEST_CASE(
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
     coding_agent::tui::testing::ActionSinkRecorder recorder;
-    recorder.replace_session =
-        [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            return coding_agent::create_agent_session(std::move(request));
-        };
 
     boost::asio::co_spawn(
         running.io,

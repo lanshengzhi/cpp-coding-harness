@@ -5,8 +5,10 @@
 // one closed action value and one move-only sink).
 //
 // Coverage per the ticket's acceptance criteria:
-// - boot and in-session session replacement both arrive as one
-//   `ReplaceSessionAction` alternative with an owned passive payload;
+// - boot and in-session session replacement both cross the one asynchronous
+//   `AsyncSessionReplacementSink` with an owned passive request payload
+//   (the synchronous `ReplaceSessionAction` alternative was removed in
+//   #581);
 // - the single sink is lossless (every admitted action is delivered exactly
 //   once) while render-state requests stay separate and coalescible;
 // - the session generation stamped on each action advances on Session
@@ -166,7 +168,7 @@ void wait_for_screen(Running& running, const std::string& text) {
 } // namespace
 
 TEST_CASE(
-    "boot and in-session replacement are one ReplaceSessionAction through the single sink",
+    "boot and in-session replacement cross the one asynchronous replacement sink",
     "[coding_agent][tui][actions][issue461]") {
     Fixture fixture;
     Running running;
@@ -174,7 +176,7 @@ TEST_CASE(
     actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
-    // The boot session was created through one ReplaceSessionAction carried
+    // The boot session was created through one replacement request carried
     // by the closed action value (generation 0: no replacement yet).
     REQUIRE(actions->replace_sessions.size() == 1);
     CHECK(actions->replace_sessions[0].workspace == fixture.workspace.path());
@@ -206,7 +208,7 @@ TEST_CASE(
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
     actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
-    // Boot: ReplaceSessionAction@0.
+    // Boot: replacement request @generation 0.
     REQUIRE(actions->generations == std::vector<std::size_t>{0});
 
     // Two rapid in-session replacements: each advances the generation, and

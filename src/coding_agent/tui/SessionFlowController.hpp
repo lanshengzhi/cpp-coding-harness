@@ -66,14 +66,10 @@ struct SessionFlowHostHooks {
         std::filesystem::path,
         SessionTarget)>
         make_session_request{nullptr};
-    /// Ask the composition host to create a replacement Agent Session.
-    std::move_only_function<support::Expected<CreateAgentSessionResult>(
-        std::size_t,
-        runtime::AgentSessionCreationRequest)>
-        request_session_replacement{nullptr};
-    /// Asynchronous Session Assembly door. Production Native TUI flows use
-    /// this hook so resource loading and model prerequisites remain on the
-    /// Runtime loop; the synchronous hook above is retained as a test bridge.
+    /// Ask the composition host to create a replacement Agent Session
+    /// through the asynchronous Session Assembly door (the only Session
+    /// replacement path since issue #581): resource loading and model
+    /// prerequisites remain on the Runtime loop.
     std::move_only_function<support::AsyncResult<CreateAgentSessionResult>(
             std::size_t, runtime::AgentSessionCreationRequest, std::stop_token)>
             request_session_replacement_async{nullptr};
@@ -187,8 +183,6 @@ private:
     void spawn(
         std::move_only_function<boost::asio::awaitable<void>()> start,
         std::string failure_label);
-    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
-    request_session_replacement(runtime::AgentSessionCreationRequest request);
     [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
     request_session_replacement_async(runtime::AgentSessionCreationRequest request,
             std::optional<std::size_t> expected_generation = std::nullopt);

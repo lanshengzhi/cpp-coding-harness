@@ -103,7 +103,7 @@ struct Running {
 }
 
 /// Boot the interactive mode through the deferred-boot entry (the boot
-/// session is created via `ReplaceSessionAction` through the sink).
+/// session is created through the asynchronous replacement sink).
 void boot(
     Fixture& fixture,
     Running& running,
@@ -247,7 +247,7 @@ TEST_CASE(
     actions->replace_session_async = shared_provider_creator(provider, fixture.runtime.make_target());
     boot(fixture, running, actions);
 
-    // The boot session bound through one ReplaceSessionAction.
+    // The boot session bound through one replacement request.
     REQUIRE(actions->replace_sessions.size() == 1);
 
     // A prompt on the boot Session streams through the shared provider.

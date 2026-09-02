@@ -402,7 +402,8 @@ private:
         std::filesystem::path workspace,
         SessionTarget target) const;
 
-    /// The error a null host returns for `ReplaceSessionAction`.
+    /// The error a host without the asynchronous replacement capability
+    /// returns to a Session replacement flow.
     [[nodiscard]] static support::Error session_replacement_unavailable_error();
 
     /// Carry one closed application-level action to the composition host with
@@ -416,12 +417,10 @@ private:
         std::size_t captured_generation,
         TuiActionVariant action);
 
-    /// Create and return a replacement/boot session through the composition
-    /// host (pi `createRuntime`); a null host reports it as unavailable.
-    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
-    request_session_replacement(
-        std::size_t captured_generation,
-        runtime::AgentSessionCreationRequest request);
+    /// Create and return a replacement/boot session through the
+    /// composition host's asynchronous Session replacement strong
+    /// capability (pi `createRuntime`); a host without the capability
+    /// reports it as unavailable.
     [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
     request_session_replacement_async(std::size_t captured_generation,
             runtime::AgentSessionCreationRequest request,

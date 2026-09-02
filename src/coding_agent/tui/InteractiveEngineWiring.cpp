@@ -207,18 +207,6 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         request.session_target = std::move(target);
         return request;
     };
-    hooks.request_session_replacement = [weak](
-        std::size_t generation,
-        runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-        if (const auto self = weak.lock()) {
-            return self->request_session_replacement(
-                generation, std::move(request));
-        }
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Session flow host is no longer active"));
-    };
     hooks.request_session_replacement_async =
             [weak, executor = executor_](std::size_t generation,
                     runtime::AgentSessionCreationRequest request,

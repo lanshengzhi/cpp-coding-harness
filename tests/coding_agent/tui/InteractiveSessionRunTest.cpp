@@ -1,6 +1,8 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include "coding_agent/tui/TestTuiActionSink.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/AgentSession.hpp"
@@ -9,6 +11,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <filesystem>
@@ -28,7 +31,6 @@ using coding_agent::tui::InteractiveSessionRun;
 using coding_agent::tui::InteractiveSessionRunBuilder;
 using coding_agent::tui::TuiActionVariant;
 using coding_agent::tui::OpenBrowserAction;
-using coding_agent::tui::ReplaceSessionAction;
 using coding_agent::tui::ReportBootCreationFailureAction;
 using coding_agent::tui::ReportBootDiagnosticsAction;
 
@@ -131,7 +133,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "InteractiveSessionRun dispatches host effects for ReplaceSessionAction installing runtime capabilities",
+    "InteractiveSessionRun's asynchronous replacement sink installs runtime capabilities",
     "[coding_agent][tui][session_run][issue517]") {
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
@@ -154,16 +156,28 @@ TEST_CASE(
     request.workspace = workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
 
-    auto result = run.dispatch_action(0, TuiActionVariant{ReplaceSessionAction{std::move(request)}});
-    REQUIRE(result.has_value());
+    auto sink = run.make_async_session_replacement_sink();
+    REQUIRE(sink != nullptr);
+    std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> outcome;
+    boost::asio::co_spawn(
+        *io,
+        support::detail::await_async_result(sink(0, std::move(request), {})),
+        [&](std::exception_ptr exception,
+            support::Expected<coding_agent::CreateAgentSessionResult> created) {
+            CHECK(exception == nullptr);
+            outcome.emplace(std::move(created));
+        });
+    // RuntimeRoot holds a work guard on the loop, so pump until the sink
+    // completes instead of draining with run().
+    REQUIRE(tests::pump_until(*io, [&] { return outcome.has_value(); }));
 
-    auto* session_result =
-        std::get_if<support::Expected<coding_agent::CreateAgentSessionResult>>(&*result);
-    REQUIRE(session_result != nullptr);
-    REQUIRE(session_result->has_value());
-    CHECK((*session_result)->session != nullptr);
-    CHECK((*session_result)->resolved_identity.provider == "fake");
-    CHECK((*session_result)->resolved_identity.model == "fake-model");
+    REQUIRE(outcome->has_value());
+    CHECK((*outcome)->session != nullptr);
+    CHECK((*outcome)->resolved_identity.provider == "fake");
+    CHECK((*outcome)->resolved_identity.model == "fake-model");
+    (*outcome)->session->close();
+    runtime_root->close();
+    tests::drain_ready(*io);
 }
 
 TEST_CASE(
