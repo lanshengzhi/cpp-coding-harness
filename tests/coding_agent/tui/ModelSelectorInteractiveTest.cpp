@@ -11,6 +11,8 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/tui/VirtualTerminal.hpp>
@@ -43,6 +45,8 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
 
     Fixture() {
         dir_guard.set(agent_dir.path().string());
@@ -110,7 +114,8 @@ struct Running {
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.session_facts.models = std::move(models);
-    auto created = coding_agent::create_agent_session(std::move(request));
+    request.execution_runtime_target = fixture.runtime.make_target();
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
@@ -127,6 +132,7 @@ struct Running {
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
+    fixture.runtime_driver.emplace(fixture.runtime);
     drain_ready(running.io);
     return std::move(created->session);
 }

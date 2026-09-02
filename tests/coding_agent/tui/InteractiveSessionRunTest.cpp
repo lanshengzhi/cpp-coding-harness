@@ -1,6 +1,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include "coding_agent/tui/TestTuiActionSink.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -91,7 +92,9 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.session_facts.no_skills = true;
     options.session_facts.no_prompt_templates = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    tests::RuntimeFixture runtime;
+    options.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(options), std::nullopt, {}));
     REQUIRE(created.has_value());
 
     // 1. BindExistingSession via with_session

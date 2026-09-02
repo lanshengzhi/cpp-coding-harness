@@ -22,6 +22,8 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/support/Error.hpp>
@@ -168,6 +170,7 @@ struct LoginFixture {
     tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
+    tests::RuntimeFixture runtime;
 
     LoginFixture() {
         dir_guard.set(agent_dir.path().string());
@@ -223,24 +226,28 @@ struct LoginFixture {
     /// Create a session on the injected runtime (the private E2E seam), so
     /// the real resolution chain lands on the unknown placeholder while no
     /// provider has configured auth — pi's `isUnknownModel` boot state.
-    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_session(
-        std::shared_ptr<coding_agent::ModelRuntime> runtime) {
+    [[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
+            std::shared_ptr<coding_agent::ModelRuntime> model_runtime) {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.workspace = workspace.path();
         request.session_target = coding_agent::InMemorySessionTarget{};
-        request.model_runtime = std::move(runtime);
-        return coding_agent::create_agent_session(std::move(request));
+        request.execution_runtime_target = runtime.make_target();
+        request.model_runtime = std::move(model_runtime);
+        return coding_agent::create_agent_session_async(std::move(request), std::nullopt, {});
     }
 };
 
 struct InteractiveRun {
+    explicit InteractiveRun(tests::RuntimeFixture& runtime) : runtime_driver(runtime) {}
+
     // Wide enough that status lines never wrap mid-assertion.
     tui::VirtualTerminal terminal{{.columns = 220, .rows = 40}};
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     std::vector<std::string> opened_urls;
+    tests::RuntimeLoopDriver runtime_driver;
 
     void start(
         coding_agent::AgentSession& session,
@@ -334,10 +341,10 @@ TEST_CASE(
     kimi->install_ambient_api_key("Kimi API key");
     auto runtime = fixture.create_runtime({codex, kimi});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     // /login with no reference opens the auth-type picker (pi's generic
@@ -423,10 +430,10 @@ TEST_CASE(
         });
     auto runtime = fixture.create_runtime({kimi});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     // A single (provider, auth-type) match skips both pickers (pi
@@ -471,10 +478,10 @@ TEST_CASE(
     // composed api-key method carries pi's generic "Enter API key" login.
     auto runtime = fixture.create_runtime();
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login deepseek\r");
@@ -514,10 +521,10 @@ TEST_CASE(
         codex_url_then_manual_code(std::make_shared<std::optional<std::string>>()));
     auto runtime = fixture.create_runtime({codex});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login openai-codex\r");
@@ -556,10 +563,10 @@ TEST_CASE(
         });
     auto runtime = fixture.create_runtime({codex});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login openai-codex\r");
@@ -592,10 +599,10 @@ TEST_CASE(
         codex_url_then_manual_code(std::make_shared<std::optional<std::string>>()));
     auto runtime = fixture.create_runtime({codex});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login no-such-provider\r");
@@ -638,10 +645,10 @@ TEST_CASE(
         });
     auto runtime = fixture.create_runtime({codex});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/login openai-codex\r");
@@ -674,10 +681,10 @@ TEST_CASE(
     kimi->install_ambient_api_key("Kimi API key");
     auto runtime = fixture.create_runtime({kimi});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     // One provider with both auth types lands on the auth-type picker for
@@ -729,10 +736,10 @@ TEST_CASE(
         });
     auto runtime = fixture.create_runtime({codex});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("/logout\r");
@@ -793,12 +800,12 @@ TEST_CASE(
         });
     auto runtime = fixture.create_runtime({codex});
     REQUIRE(runtime != nullptr);
-    auto session = fixture.create_session(std::move(runtime));
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
     // The stored credential resolves the settings default at boot.
     REQUIRE(session->session->snapshot().agent_state.model.id == "gpt-5.5");
 
-    InteractiveRun run;
+    InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir.path());
 
     run.type("hello\r");
