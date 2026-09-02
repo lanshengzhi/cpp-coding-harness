@@ -12,9 +12,10 @@
 #include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
-#include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -22,15 +23,20 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/io_context.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <deque>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace cch;
@@ -44,6 +50,7 @@ struct Fixture {
     tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
 
     Fixture() {
         dir_guard.set(agent_dir.path().string());
@@ -152,25 +159,44 @@ public:
 };
 
 /// Open the session over the existing file (resume path).
-[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> open_session(
-    const Fixture& fixture,
-    std::shared_ptr<ai::Models> models = nullptr) {
+[[nodiscard]] coding_agent::AgentSession* open_session(Fixture& fixture, std::shared_ptr<ai::Models> models = nullptr) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime.make_target();
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    auto created = models
-        ? coding_agent::create_agent_session_for_testing(std::move(request), std::move(models))
-        : coding_agent::create_agent_session_for_testing(
-              std::move(request),
-              tests::models_from_provider(
-                  std::make_shared<QuietProvider>()));
+    if (!models) {
+        models = tests::models_from_provider(std::make_shared<QuietProvider>());
+    }
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = std::move(models);
+    auto created = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    return std::move(created->session);
+    return &fixture.runtime.adopt_session(std::move(created->session));
+}
+
+/// Run a Session prompt on the fixture Runtime loop so persisted event
+/// commitments use the same serialized domain as Session Assembly.
+[[nodiscard]] support::ExpectedVoid run_prompt(
+        tests::RuntimeFixture& runtime_fixture, coding_agent::AgentSession& session, std::string text) {
+    return runtime_fixture.run(support::detail::make_async_result(
+            [&session, text = std::move(text)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await session.prompt(std::move(text));
+            }));
+}
+
+/// Yield one turn on the fixture Runtime loop while a composed Session
+/// operation settles.
+[[nodiscard]] boost::asio::awaitable<void> wait_for_next_loop_turn() {
+    boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
+    timer.expires_after(std::chrono::milliseconds{1});
+    boost::system::error_code error;
+    co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+    co_return;
 }
 
 /// The user texts in the live session context.
@@ -238,15 +264,13 @@ public:
         (void)context;
         (void)options;
         started = true;
-        if (release_timer_) {
-            boost::system::error_code wait_error;
-            co_await release_timer_->async_wait(
-                boost::asio::redirect_error(
-                    boost::asio::use_awaitable, wait_error));
-            // Bound to the run's executor; release before that io_context
-            // dies so the provider can outlive the run (ASan, #473).
-            release_timer_.reset();
-        }
+        release_timer_.emplace(co_await boost::asio::this_coro::executor);
+        release_timer_->expires_at(std::chrono::steady_clock::time_point::max());
+        boost::system::error_code wait_error;
+        co_await release_timer_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+        // Bound to the fixture Runtime loop; release before that loop dies so
+        // the provider can outlive the operation (ASan, #473).
+        release_timer_.reset();
         ai::AssistantMessage message = ai::assistant_text_message("held reply");
         message.api = model.api;
         message.provider = model.provider;
@@ -256,6 +280,12 @@ public:
         }
         co_return message;
                 });
+    }
+
+    void release() noexcept {
+        if (release_timer_) {
+            (void)release_timer_->cancel();
+        }
     }
 
     std::atomic<bool> started{false};
@@ -364,36 +394,44 @@ TEST_CASE(
     auto models = tests::models_from_provider(std::move(provider));
     auto session = open_session(fixture, std::move(models));
 
-    boost::asio::io_context io;
-    boost::asio::steady_timer release(io);
-    provider_ptr->release_timer_.emplace(io);
-    provider_ptr->release_timer_->expires_at(
-        std::chrono::steady_clock::time_point::max());
+    // Compose the prompt, streaming guard probe, and release on the fixture
+    // Runtime loop. This keeps the persisted Session's Runtime mailbox
+    // moving while the provider is deliberately held in flight.
+    std::optional<support::Expected<coding_agent::TreeNavigationResult>> navigation_result;
+    const auto prompt_result = fixture.runtime.run(support::detail::make_async_result(
+            [session, provider_ptr, &navigation_result]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                auto prompt_operation = session->prompt("first");
+                std::optional<support::ExpectedVoid> prompt_outcome;
+                bool prompt_done{false};
+                const auto executor = co_await boost::asio::this_coro::executor;
+                boost::asio::co_spawn(
+                        executor,
+                        [&, operation = std::move(prompt_operation)]() mutable -> boost::asio::awaitable<void> {
+                            prompt_outcome = co_await std::move(operation);
+                            prompt_done = true;
+                            co_return;
+                        },
+                        boost::asio::detached);
+                while (!provider_ptr->started.load(std::memory_order_acquire) && !prompt_done) {
+                    co_await wait_for_next_loop_turn();
+                }
+                REQUIRE(provider_ptr->started.load(std::memory_order_acquire));
 
-    std::optional<support::ExpectedVoid> prompt_result;
-    boost::asio::co_spawn(
-        io,
-        session->prompt("first"),
-        [&](std::exception_ptr, support::ExpectedVoid result) {
-            prompt_result.emplace(std::move(result));
-        });
-    // Drive the io until the stream is in flight; the request reaches the
-    // provider through Runtime hops, so pump until the flag is observable
-    // rather than draining a fixed number of ready handlers (PumpUntil.hpp).
-    REQUIRE(tests::pump_until(io, [&] { return provider_ptr->started.load(); }));
+                // The streaming guard rejects navigation without moving the leaf.
+                navigation_result.emplace(session->navigate_tree("some-entry"));
+                provider_ptr->release();
 
-    // The streaming guard rejects navigation without moving the leaf.
-    auto result = session->navigate_tree("some-entry");
-    REQUIRE_FALSE(result.has_value());
-    CHECK(
-        result.error().message ==
-        "Wait for the current response to finish before navigating the session tree.");
-
-    // Release the held response; the completion posts back through Runtime
-    // hops, so pump until it is observable.
-    provider_ptr->release_timer_->cancel();
-    REQUIRE(tests::pump_until(io, [&] { return prompt_result.has_value(); }));
-    REQUIRE(prompt_result->has_value());
+                while (!prompt_done) {
+                    co_await wait_for_next_loop_turn();
+                }
+                REQUIRE(prompt_outcome.has_value());
+                co_return std::move(*prompt_outcome);
+            }));
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(navigation_result.has_value());
+    REQUIRE_FALSE(navigation_result->has_value());
+    CHECK(navigation_result->error().message ==
+            "Wait for the current response to finish before navigating the session tree.");
 }
 
 TEST_CASE(
@@ -457,12 +495,15 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), std::move(models));
+    request.execution_runtime_target = fixture.runtime.make_target();
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = std::move(models);
+    auto created = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
-    REQUIRE(session.prompt_blocking("first").has_value());
-    REQUIRE(session.prompt_blocking("second").has_value());
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
+    REQUIRE(run_prompt(fixture.runtime, session, "first").has_value());
+    REQUIRE(run_prompt(fixture.runtime, session, "second").has_value());
     REQUIRE(live_user_texts(session).size() == 2);
 
     // Navigate back to the first user message: the leaf moves to its
@@ -499,7 +540,7 @@ TEST_CASE(
 
     // The next prompt continues from the navigated point: its user message
     // is the new first message of the live context (a fresh branch).
-    REQUIRE(session.prompt_blocking("branch prompt").has_value());
+    REQUIRE(run_prompt(fixture.runtime, session, "branch prompt").has_value());
     const auto users = live_user_texts(session);
     REQUIRE(users.size() == 1);
     CHECK(users[0] == "branch prompt");
@@ -522,12 +563,15 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), tests::models_from_provider(scripted));
+    request.execution_runtime_target = fixture.runtime.make_target();
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = tests::models_from_provider(scripted);
+    auto created = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    auto& source_session = *created->session;
-    REQUIRE(source_session.prompt_blocking("first").has_value());
-    REQUIRE(source_session.prompt_blocking("second").has_value());
+    auto& source_session = fixture.runtime.adopt_session(std::move(created->session));
+    REQUIRE(run_prompt(fixture.runtime, source_session, "first").has_value());
+    REQUIRE(run_prompt(fixture.runtime, source_session, "second").has_value());
 
     // Fork before the second user message: the seed carries the first turn.
     const auto fork_messages = source_session.get_user_messages_for_forking();
@@ -547,10 +591,13 @@ TEST_CASE(
     fork_request.session_target = coding_agent::InMemorySessionTarget{};
     fork_request.request_model = tests::scripted_request_model("fake", "fake-model");
     fork_request.in_memory_branch_seed = std::move(*prepared->in_memory_seed);
-    auto forked = coding_agent::create_agent_session_for_testing(
-        std::move(fork_request), tests::models_from_provider(scripted));
+    fork_request.execution_runtime_target = fixture.runtime.make_target();
+    coding_agent::runtime::AssemblyOverrides fork_overrides;
+    fork_overrides.models = tests::models_from_provider(scripted);
+    auto forked = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(fork_request), std::nullopt, std::move(fork_overrides)));
     REQUIRE(forked.has_value());
-    auto& forked_session = *forked->session;
+    auto& forked_session = fixture.runtime.adopt_session(std::move(forked->session));
     CHECK(live_user_texts(forked_session) == std::vector<std::string>{"first"});
 
     auto topology = forked_session.session_tree();
@@ -572,7 +619,7 @@ TEST_CASE(
     CHECK(live_user_texts(forked_session).empty());
 
     // The next prompt starts a fresh branch off the root position.
-    REQUIRE(forked_session.prompt_blocking("branch prompt").has_value());
+    REQUIRE(run_prompt(fixture.runtime, forked_session, "branch prompt").has_value());
     CHECK(
         live_user_texts(forked_session) ==
         std::vector<std::string>{"branch prompt"});
@@ -597,11 +644,13 @@ TEST_CASE(
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
     request.in_memory_branch_seed = std::move(seed);
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request),
-        tests::models_from_provider(std::make_shared<QuietProvider>()));
+    request.execution_runtime_target = fixture.runtime.make_target();
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = tests::models_from_provider(std::make_shared<QuietProvider>());
+    auto created = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
 
     // Live Agent state carries the seeded level, not the settings default.
     CHECK(session.snapshot().agent_state.thinking_level == "off");
@@ -643,12 +692,14 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture.runtime.make_target();
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    auto created = coding_agent::create_agent_session_for_testing(
-        std::move(request), std::move(models));
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = std::move(models);
+    auto created = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
     const auto ids = message_entry_ids(fixture.session_file);
 
     // Navigate to the first assistant message (ids[1]): the leaf moves there.
@@ -661,7 +712,7 @@ TEST_CASE(
 
     // The next prompt appends under the navigated leaf: the new message is a
     // child of ids[1] in the file (the leaf marker moved the append parent).
-    REQUIRE(session.prompt_blocking("branch prompt").has_value());
+    REQUIRE(run_prompt(fixture.runtime, session, "branch prompt").has_value());
 
     auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());

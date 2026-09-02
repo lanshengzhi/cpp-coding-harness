@@ -12,9 +12,8 @@
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
 #include "support/ModelsFixture.hpp"
-#include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
@@ -23,9 +22,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <chrono>
@@ -67,22 +66,36 @@ public:
     std::vector<ai::AiContext> requests;
 };
 
-/// Drives one `AgentSession::reload()` on a temporary executor and returns
-/// the outcome.
+/// Drives one `AgentSession::reload()` on the fixture Runtime loop and returns
+/// the exact asynchronous outcome.
 [[nodiscard]] support::Expected<coding_agent::AgentSessionReloadResult> run_reload(
-        coding_agent::AgentSession& session, std::stop_token stop_token = {}) {
-    boost::asio::io_context io;
-    std::optional<support::Expected<coding_agent::AgentSessionReloadResult>> result;
-    boost::asio::co_spawn(
-            io,
-            [&]() -> boost::asio::awaitable<void> {
-                result = co_await session.reload(stop_token);
-                co_return;
-            },
-            boost::asio::detached);
-    io.run();
-    REQUIRE(result.has_value());
-    return std::move(*result);
+        tests::RuntimeFixture& runtime, coding_agent::AgentSession& session, std::stop_token stop_token = {}) {
+    return runtime.run(support::detail::make_async_result(
+            [&session,
+                    stop_token]() -> boost::asio::awaitable<support::Expected<coding_agent::AgentSessionReloadResult>> {
+                co_return co_await session.reload(stop_token);
+            }));
+}
+
+/// Runs a Session prompt on the fixture Runtime loop. Persisted Sessions route
+/// their event commitments through that same loop, so a separate blocking
+/// executor would leave the commitment mailbox undriven.
+[[nodiscard]] support::ExpectedVoid run_prompt(
+        tests::RuntimeFixture& runtime, coding_agent::AgentSession& session, std::string text) {
+    return runtime.run(support::detail::make_async_result(
+            [&session, text = std::move(text)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await session.prompt(std::move(text));
+            }));
+}
+
+/// Yield to the fixture Runtime loop without introducing a production timeout
+/// or a second event-loop owner into the test.
+[[nodiscard]] boost::asio::awaitable<void> wait_for_next_loop_turn() {
+    boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
+    timer.expires_after(std::chrono::milliseconds{1});
+    boost::system::error_code error;
+    co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+    co_return;
 }
 
 /// Creates a trusted session whose workspace carries one skill, one prompt
@@ -91,7 +104,8 @@ public:
 struct ReloadFixture {
     tests::TempWorkspace workspace;
     std::shared_ptr<ReloadRecordingProvider> client;
-    std::unique_ptr<coding_agent::AgentSession> session;
+    tests::RuntimeFixture runtime;
+    coding_agent::AgentSession* session{nullptr};
 
     void create(bool trusted = true) {
         workspace.write(
@@ -120,9 +134,16 @@ struct ReloadFixture {
         options.request_model =
             cch::tests::scripted_request_model("sdk-host", "sdk-model");
         options.project_trust_override = trusted;
-        auto created = coding_agent::create_agent_session(std::move(options));
+
+        auto models = std::move(options.models);
+        coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+        request.execution_runtime_target = runtime.make_target();
+        coding_agent::runtime::AssemblyOverrides overrides;
+        overrides.models = std::move(models);
+        auto created = runtime.run(
+                coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
         REQUIRE(created.has_value());
-        session = std::move(created->session);
+        session = &runtime.adopt_session(std::move(created->session));
     }
 };
 
@@ -132,18 +153,16 @@ struct ReloadFixture {
 /// admitted Runtime operation.
 struct AsyncReloadFixture {
     tests::TempWorkspace workspace;
-    std::shared_ptr<boost::asio::io_context> io;
-    std::shared_ptr<harness::RuntimeRoot> runtime_root;
-    std::unique_ptr<coding_agent::AgentSession> session;
+    tests::RuntimeFixture runtime;
+    std::shared_ptr<harness::RuntimeTarget> target;
+    coding_agent::AgentSession* session{nullptr};
+
+    AsyncReloadFixture() : runtime(harness::RuntimeLimits{.worker_count = 1}) {}
 
     void create() {
-        io = std::make_shared<boost::asio::io_context>();
-        harness::RuntimeLimits limits;
-        limits.worker_count = 1;
-        runtime_root = std::make_shared<harness::RuntimeRoot>(io, limits);
-
+        target = runtime.make_target();
         coding_agent::runtime::AgentSessionCreationRequest request;
-        request.execution_runtime_target = runtime_root->make_target();
+        request.execution_runtime_target = target;
         request.project_trust_override = false;
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
@@ -155,38 +174,10 @@ struct AsyncReloadFixture {
 
         coding_agent::runtime::AssemblyOverrides overrides;
         overrides.models = tests::make_scripted_fake_models();
-        std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> created;
-        bool finished{false};
-        boost::asio::co_spawn(
-                *io,
-                [&,
-                        request = std::move(request),
-                        overrides = std::move(overrides)]() mutable -> boost::asio::awaitable<void> {
-                    created = co_await support::detail::await_async_result(coding_agent::create_agent_session_async(
-                            std::move(request), std::nullopt, std::move(overrides)));
-                    finished = true;
-                    co_return;
-                },
-                boost::asio::detached);
-        REQUIRE(tests::pump_until(*io, [&] { return finished; }));
+        auto created = runtime.run(
+                coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
         REQUIRE(created.has_value());
-        REQUIRE(created->has_value());
-        session = std::move((*created)->session);
-    }
-
-    ~AsyncReloadFixture() {
-        if (session) {
-            session->close();
-        }
-        if (io) {
-            tests::drain_ready(*io);
-        }
-        if (runtime_root) {
-            runtime_root->close();
-        }
-        if (io) {
-            tests::drain_ready(*io);
-        }
+        session = &runtime.adopt_session(std::move(created->session));
     }
 };
 
@@ -196,7 +187,7 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
         "[coding_agent][reload][issue418]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
-    auto* session = fixture.session.get();
+    auto* session = fixture.session;
 
     // The creation-time system prompt reflects the initial resources.
     const auto initial_prompt = session->snapshot().agent_state.system_prompt;
@@ -226,7 +217,7 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
     fixture.workspace.write(".pi/APPEND_SYSTEM.md", "reloaded append from APPEND_SYSTEM.md\n");
     fixture.workspace.write("AGENTS.md", "reloaded project instructions\n");
 
-    auto result = run_reload(*session);
+    auto result = run_reload(fixture.runtime, *session);
     REQUIRE(result.has_value());
 
     // Skills/templates swap live; the loader resolved the fresh files.
@@ -264,7 +255,7 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
 
     // The next prompt streams the rebuilt System Prompt (pi
     // `AgentContext.system_prompt`).
-    REQUIRE(session->prompt_blocking("hello").has_value());
+    REQUIRE(run_prompt(fixture.runtime, *session, "hello").has_value());
     REQUIRE_FALSE(fixture.client->requests.empty());
     CHECK(fixture.client->requests.back().system_prompt == reloaded_prompt);
 }
@@ -277,9 +268,9 @@ TEST_CASE(
     {
         ReloadFixture trusted;
         trusted.create(/*trusted*/ true);
-        auto* session = trusted.session.get();
+        auto* session = trusted.session;
         REQUIRE(coding_agent::detail::AgentSessionInteractiveAccess::is_project_trusted(*session));
-        REQUIRE(run_reload(*session).has_value());
+        REQUIRE(run_reload(trusted.runtime, *session).has_value());
         CHECK(coding_agent::detail::AgentSessionInteractiveAccess::is_project_trusted(*session));
         CHECK(session->skills().size() == 1);
     }
@@ -288,11 +279,11 @@ TEST_CASE(
     {
         ReloadFixture untrusted;
         untrusted.create(/*trusted*/ false);
-        auto* session = untrusted.session.get();
+        auto* session = untrusted.session;
         CHECK_FALSE(coding_agent::detail::AgentSessionInteractiveAccess::is_project_trusted(*session));
         // Untrusted: no project resources load at creation.
         CHECK(session->skills().empty());
-        REQUIRE(run_reload(*session).has_value());
+        REQUIRE(run_reload(untrusted.runtime, *session).has_value());
         CHECK_FALSE(coding_agent::detail::AgentSessionInteractiveAccess::is_project_trusted(*session));
         CHECK(session->skills().empty());
         CHECK(session->templates().empty());
@@ -310,8 +301,8 @@ TEST_CASE(
         fixture.workspace.write(
             ".pi/themes/custom.json",
             R"({"name":"custom","colors":{"bg":"#000000","fg":"#ffffff","accent":"#00ff00","border":"#ffffff","error":"#ff0000","warning":"#ffff00","muted":"#888888","dim":"#666666","mdHeading":"#ffffff","mdCode":"#ffffff","mdCodeBg":"#222222","mdLink":"#00ffff","mdQuote":"#888888","mdListMarker":"#ffffff","mdHr":"#ffffff","mdInlineCode":"#ffffff","mdInlineCodeBg":"#222222","toolBg":"#111111","toolHeaderBg":"#222222","toolArgs":"#bbbbbb","toolOutput":"#cccccc","toolSuccessBg":"#003300","toolErrorBg":"#330000","toolPendingBg":"#222222","toolBorder":"#444444","userBg":"#1a1a2e","userText":"#ffffff","assistantBg":"#000000","assistantText":"#ffffff","thinkingBg":"#000000","thinkingText":"#888888","compactionBg":"#000000","customMessageBg":"#000000","customMessageText":"#cccccc","customMessageLabel":"#ffffff","scrollbarThumb":"#444444","selectedBg":"#333366","bashBg":"#111111","bashText":"#00ff00","bashHeaderBg":"#111111","bashHeaderText":"#00ff00","borderAccent":"#00ff00","borderMuted":"#444444","statusAccent":"#00ff00","statusWarning":"#ffff00","statusError":"#ff0000","statusMuted":"#888888","statusDim":"#666666","selectionBg":"#333366","selectionFg":"#ffffff","inputBg":"#000000","inputFg":"#ffffff","spinner":"#00ff00","errorText":"#ff0000","warningText":"#ffff00","idleStatus":"#666666","idleStatusDim":"#444444","footerBg":"#111111","footerText":"#bbbbbb","footerMuted":"#888888","footerDim":"#666666","footerAccent":"#00ff00","tuiBg":"#000000","tuiFg":"#ffffff","tuiBorder":"#444444"}})");
-        auto* session = fixture.session.get();
-        auto result = run_reload(*session);
+        auto* session = fixture.session;
+        auto result = run_reload(fixture.runtime, *session);
         REQUIRE(result.has_value());
         REQUIRE(result->themes.size() == 1);
         CHECK(result->themes.front().scope == coding_agent::SourceScope::Project);
@@ -340,14 +331,20 @@ TEST_CASE(
             cch::tests::scripted_request_model("sdk-host", "sdk-model");
         options.project_trust_override = true;
         options.session_facts.prompt_template_paths = {"explicit-template.md"};
-        auto created = coding_agent::create_agent_session(std::move(options));
+        auto models = std::move(options.models);
+        coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+        request.execution_runtime_target = fixture.runtime.make_target();
+        coding_agent::runtime::AssemblyOverrides overrides;
+        overrides.models = std::move(models);
+        auto created = fixture.runtime.run(
+                coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
         REQUIRE(created.has_value());
-        auto second = std::move(created->session);
+        auto& second = fixture.runtime.adopt_session(std::move(created->session));
         // The project prompt plus the explicit template are both present.
-        REQUIRE(second->templates().size() == 2);
+        REQUIRE(second.templates().size() == 2);
         REQUIRE(std::filesystem::remove(fixture.workspace.path() / "explicit-template.md"));
 
-        const auto failed = run_reload(*second);
+        const auto failed = run_reload(fixture.runtime, second);
         REQUIRE_FALSE(failed.has_value());
         CHECK(failed.error().message.find("reload") != std::string::npos);
     }
@@ -362,7 +359,7 @@ TEST_CASE("reload treats removed resource roots as an empty completed refresh", 
     (void)std::filesystem::remove_all(fixture.workspace.path() / ".pi", remove_error);
     REQUIRE_FALSE(remove_error);
 
-    auto result = run_reload(*fixture.session);
+    auto result = run_reload(fixture.runtime, *fixture.session);
     REQUIRE(result.has_value());
     CHECK(fixture.session->skills().empty());
     CHECK(fixture.session->templates().empty());
@@ -383,7 +380,7 @@ TEST_CASE("reload reports an oversized resource without publishing a partial ref
     fixture.workspace.write(
             ".pi/themes/oversized.json", std::string(harness::kFileSystemCapacity.max_file_bytes + 1, 'x'));
 
-    auto result = run_reload(*fixture.session);
+    auto result = run_reload(fixture.runtime, *fixture.session);
     REQUIRE(result.has_value());
     CHECK(result->themes.empty());
     bool reported_resource_limit = false;
@@ -405,7 +402,7 @@ TEST_CASE("reload cancellation preserves the last completed resource snapshot",
     std::stop_source stop_source;
     stop_source.request_stop();
 
-    auto result = run_reload(*fixture.session, stop_source.get_token());
+    auto result = run_reload(fixture.runtime, *fixture.session, stop_source.get_token());
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == support::ErrorCode::Cancelled);
     CHECK(fixture.session->snapshot().agent_state.system_prompt == initial_prompt);
@@ -417,9 +414,8 @@ TEST_CASE("reload cancellation during Close leaves the Session closed without a 
         "[coding_agent][reload][close][issue563]") {
     AsyncReloadFixture fixture;
     fixture.create();
-    auto* session = fixture.session.get();
-    auto blocker = std::make_unique<harness::AsyncLocalShell>(
-            fixture.runtime_root->make_target(), fixture.workspace.path(), true);
+    auto* session = fixture.session;
+    auto blocker = std::make_unique<harness::AsyncLocalShell>(fixture.target, fixture.workspace.path(), true);
     std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> blocker_result;
     bool blocker_done{false};
     std::move(blocker->exec("sleep 1"))
@@ -428,31 +424,51 @@ TEST_CASE("reload cancellation during Close leaves the Session closed without a 
                 blocker_done = true;
             });
 
-    auto reload_operation = session->reload();
-    std::optional<support::Expected<coding_agent::AgentSessionReloadResult>> reload_result;
-    bool reload_started{false};
-    bool reload_done{false};
-    boost::asio::co_spawn(
-            *fixture.io,
-            [&, operation = std::move(reload_operation)]() mutable -> boost::asio::awaitable<void> {
-                reload_started = true;
-                reload_result = co_await std::move(operation);
-                reload_done = true;
-                co_return;
-            },
-            boost::asio::detached);
-    REQUIRE(tests::pump_until(*fixture.io, [&] { return reload_started; }));
+    // Run both the reload and the Close request on the fixture loop. The
+    // blocker occupies the sole Runtime worker, so reload remains admitted but
+    // unsettled until Close cancels it; no independent loop can race the
+    // fixture-owned Runtime lifecycle.
+    const auto result = fixture.runtime.run(support::detail::make_async_result(
+            [session, &blocker_done]()
+                    -> boost::asio::awaitable<support::Expected<coding_agent::AgentSessionReloadResult>> {
+                auto reload_operation = session->reload();
+                std::optional<support::Expected<coding_agent::AgentSessionReloadResult>> reload_result;
+                bool reload_started{false};
+                bool reload_done{false};
+                const auto executor = co_await boost::asio::this_coro::executor;
+                boost::asio::co_spawn(
+                        executor,
+                        [&, operation = std::move(reload_operation)]() mutable -> boost::asio::awaitable<void> {
+                            reload_started = true;
+                            reload_result = co_await std::move(operation);
+                            reload_done = true;
+                            co_return;
+                        },
+                        boost::asio::detached);
+                while (!reload_started) {
+                    co_await wait_for_next_loop_turn();
+                }
+                session->close();
+                while (!reload_done) {
+                    co_await wait_for_next_loop_turn();
+                }
+                // Keep the Runtime loop pumping until the earlier admitted
+                // blocker also settles; Close must not outrun its worker
+                // completion when the fixture tears down.
+                while (!blocker_done) {
+                    co_await wait_for_next_loop_turn();
+                }
+                REQUIRE(reload_result.has_value());
+                co_return std::move(*reload_result);
+            }));
 
-    session->close();
-    REQUIRE(tests::pump_until(*fixture.io, [&] { return reload_done; }));
-    REQUIRE(reload_result.has_value());
-    REQUIRE_FALSE(reload_result->has_value());
-    CHECK(reload_result->error().code == support::ErrorCode::Cancelled);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
     CHECK_FALSE(session->is_open());
     // Close owns the terminal teardown and therefore clears the Agent state;
     // the cancellation/error result above proves no reload snapshot was
     // published before that teardown.
-    REQUIRE(tests::pump_until(*fixture.io, [&] { return blocker_done; }));
+    CHECK(blocker_done);
     CHECK(blocker_result.has_value());
 }
 
@@ -488,20 +504,26 @@ TEST_CASE(
     options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
     options.project_trust_override = true;
     options.session_facts.skill_paths = {"dup-skill/SKILL.md"};
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = fixture.runtime.make_target();
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = std::move(models);
+    auto created = fixture.runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    auto* session = created->session.get();
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
 
     // The explicit duplicate collides with the discovered project skill
     // (first wins); the collision diagnostic lands in the skill bucket.
-    auto result = run_reload(*session);
+    auto result = run_reload(fixture.runtime, session);
     REQUIRE(result.has_value());
     REQUIRE_FALSE(result->skill_diagnostics.empty());
     const auto& collision = result->skill_diagnostics.front();
     CHECK(collision.type == coding_agent::ResourceDiagnosticType::Collision);
     REQUIRE(collision.collision.has_value());
     CHECK(collision.collision->name == "dup");
-    CHECK(session->skill_diagnostics().size() == result->skill_diagnostics.size());
+    CHECK(session.skill_diagnostics().size() == result->skill_diagnostics.size());
 }
 
 namespace {
@@ -523,13 +545,15 @@ public:
         requests.push_back(context);
         if (gate_request_number && request_count == *gate_request_number) {
             gated = true;
+            // The gate lives on the same fixture Runtime loop as the
+            // compaction operation, so no second loop must be pumped.
             gate_.emplace(co_await boost::asio::this_coro::executor);
             gate_->expires_at(std::chrono::steady_clock::time_point::max());
             boost::system::error_code error;
             co_await gate_->async_wait(
                 boost::asio::redirect_error(boost::asio::use_awaitable, error));
-            // The timer is bound to the caller's io_context; release it before
-            // that context dies so the provider can outlive it (ASan, #473).
+            // Release the timer before the provider can outlive the fixture
+            // loop (ASan, #473).
             gate_.reset();
         }
         auto response = std::move(responses.front());
@@ -582,6 +606,7 @@ TEST_CASE(
     "manual compaction exposes is_compacting while is_streaming stays false (reload refusal signal)",
     "[coding_agent][reload][compaction][issue418]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const auto session_file = workspace.path() / "session.jsonl";
     const std::string big(20000, 'x');
     auto client = std::make_shared<GatedCompactionProvider>();
@@ -591,43 +616,54 @@ TEST_CASE(
     client_ptr->responses.push_back(big_assistant("a3 " + big));
     client_ptr->gate_request_number = 4; // the summarization call
 
-    tests::ModelsSessionOptions options;
-    options.session_target =
-        coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(client);
-    options.request_model =
-        cch::tests::scripted_request_model("sdk-host", "sdk-model");
-    auto created = coding_agent::create_agent_session(std::move(options));
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.execution_runtime_target = runtime.make_target();
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+    request.workspace = workspace.path();
+    request.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
+    coding_agent::runtime::AssemblyOverrides overrides;
+    overrides.models = cch::tests::models_from_provider(client);
+    auto created = runtime.run(
+            coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
-    auto* session = created->session.get();
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    auto& session = runtime.adopt_session(std::move(created->session));
+    REQUIRE(run_prompt(runtime, session, big + " u1").has_value());
+    REQUIRE(run_prompt(runtime, session, big + " u2").has_value());
+    REQUIRE(run_prompt(runtime, session, big + " u3").has_value());
     client_ptr->responses.push_back(summarization_response());
 
-    // Drive a manual compaction on a dedicated executor and observe the
+    // Drive a manual compaction on the fixture Runtime loop and observe the
     // mid-flight signals: `is_compacting` true while `is_streaming` stays
     // false (pi `isCompacting` ≠ `isStreaming`), so the TUI's `/reload`
     // refusal shows the compaction warning.
-    boost::asio::io_context io;
-    std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            compact_result = co_await session->compact();
-            co_return;
-        },
-        boost::asio::detached);
-    while (!client_ptr->gated && io.poll() != 0) {
-    }
-    REQUIRE(client_ptr->gated);
-    CHECK(session->is_compacting());
-    CHECK_FALSE(session->is_streaming());
-    CHECK(session->is_busy());
+    const auto compact_result = runtime.run(support::detail::make_async_result(
+            [&session, client_ptr]() -> boost::asio::awaitable<support::Expected<coding_agent::CompactionResult>> {
+                auto compact_operation = session.compact();
+                std::optional<support::Expected<coding_agent::CompactionResult>> result;
+                bool compact_done{false};
+                const auto executor = co_await boost::asio::this_coro::executor;
+                boost::asio::co_spawn(
+                        executor,
+                        [&, operation = std::move(compact_operation)]() mutable -> boost::asio::awaitable<void> {
+                            result = co_await std::move(operation);
+                            compact_done = true;
+                            co_return;
+                        },
+                        boost::asio::detached);
+                while (!client_ptr->gated && !compact_done) {
+                    co_await wait_for_next_loop_turn();
+                }
+                REQUIRE(client_ptr->gated);
+                CHECK(session.is_compacting());
+                CHECK_FALSE(session.is_streaming());
+                CHECK(session.is_busy());
 
-    client_ptr->release_gate();
-    io.run();
+                client_ptr->release_gate();
+                while (!compact_done) {
+                    co_await wait_for_next_loop_turn();
+                }
+                REQUIRE(result.has_value());
+                co_return std::move(*result);
+            }));
     REQUIRE(compact_result.has_value());
-    REQUIRE(compact_result->has_value());
 }
