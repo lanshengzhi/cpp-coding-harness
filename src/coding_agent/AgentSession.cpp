@@ -648,9 +648,8 @@ support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(runtim
 }
 
 support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
-    runtime::AgentSessionCreationRequest request) {
-    return create_agent_session_async(
-            std::move(request), std::nullopt, runtime::AssemblyOverrides{});
+        runtime::AgentSessionCreationRequest request) {
+    return create_agent_session_async(std::move(request), std::nullopt, runtime::AssemblyOverrides{});
 }
 
 } // namespace cch::coding_agent

@@ -113,7 +113,8 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     cch::coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            cch::coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+            cch::coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 

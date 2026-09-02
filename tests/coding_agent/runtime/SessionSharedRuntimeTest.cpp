@@ -159,8 +159,8 @@ TEST_CASE(
     owned_request.execution_runtime_target = fixture.runtime.make_target();
     auto created_owned = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(owned_request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr
-                        }));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
     REQUIRE(created_owned);
     auto& owned_session = fixture.runtime.adopt_session(std::move(created_owned->session));
     REQUIRE(owned_session.model_runtime() != nullptr);

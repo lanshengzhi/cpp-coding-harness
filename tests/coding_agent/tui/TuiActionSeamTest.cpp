@@ -98,7 +98,8 @@ struct Fixture {
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
                 stop_token);
     };
 }
@@ -136,9 +137,8 @@ void boot(
     // The deferred boot's session creation is asynchronous: wait until the
     // replacement result has crossed the seam, then drain so the engine's
     // installation continuation has run before the test drives input.
-    REQUIRE(tests::pump_until(running.io, [&] {
-        return actions->replacement_completions.load(std::memory_order_acquire) >= 1;
-    }));
+    REQUIRE(tests::pump_until(
+            running.io, [&] { return actions->replacement_completions.load(std::memory_order_acquire) >= 1; }));
     drain_ready(running.io);
 }
 
@@ -146,13 +146,11 @@ void boot(
 /// crossed the seam and the engine has installed the outcome before the
 /// test drives more input or asserts the screen (a `/new` replacement is
 /// still in flight until then; input driven mid-transition is dropped).
-void wait_replacement(
-    Running& running,
-    const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions,
-    std::size_t completions) {
-    REQUIRE(tests::pump_until(running.io, [&] {
-        return actions->replacement_completions.load(std::memory_order_acquire) >= completions;
-    }));
+void wait_replacement(Running& running,
+        const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions,
+        std::size_t completions) {
+    REQUIRE(tests::pump_until(running.io,
+            [&] { return actions->replacement_completions.load(std::memory_order_acquire) >= completions; }));
     drain_ready(running.io);
 }
 
@@ -160,16 +158,14 @@ void wait_replacement(
 /// notice can render one loop turn after a plain drain observed a quiet
 /// queue.
 void wait_for_screen(Running& running, const std::string& text) {
-    REQUIRE(tests::pump_until(running.io, [&] {
-        return visible_screen(running.terminal).find(text) != std::string::npos;
-    }));
+    REQUIRE(tests::pump_until(
+            running.io, [&] { return visible_screen(running.terminal).find(text) != std::string::npos; }));
 }
 
 } // namespace
 
-TEST_CASE(
-    "boot and in-session replacement cross the one asynchronous replacement sink",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("boot and in-session replacement cross the one asynchronous replacement sink",
+        "[coding_agent][tui][actions][issue461]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -292,7 +288,8 @@ TEST_CASE(
         }
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
                 stop_token);
     };
     boot(fixture, running, actions);

@@ -195,9 +195,7 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         const auto self = weak.lock();
         return self != nullptr ? self->action_generation_ : 0;
     };
-    hooks.make_session_request = [weak](
-        std::filesystem::path workspace,
-        SessionTarget target) {
+    hooks.make_session_request = [weak](std::filesystem::path workspace, SessionTarget target) {
         if (const auto self = weak.lock()) {
             return self->make_session_request(
                 std::move(workspace), std::move(target));

@@ -15,6 +15,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/ReleaseGate.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -24,8 +25,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
@@ -257,39 +256,31 @@ public:
     ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        (void)model;
-        (void)context;
-        (void)options;
-        started = true;
-        release_timer_.emplace(co_await boost::asio::this_coro::executor);
-        release_timer_->expires_at(std::chrono::steady_clock::time_point::max());
-        boost::system::error_code wait_error;
-        co_await release_timer_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
-        // Bound to the fixture Runtime loop; release before that loop dies so
-        // the provider can outlive the operation (ASan, #473).
-        release_timer_.reset();
-        ai::AssistantMessage message = ai::assistant_text_message("held reply");
-        message.api = model.api;
-        message.provider = model.provider;
-        message.model = model.id;
-        if (sink) {
-            (void)sink(ai::AssistantStartEvent{message});
-        }
-        co_return message;
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    (void)model;
+                    (void)context;
+                    (void)options;
+                    started = true;
+                    co_await release_gate_.wait();
+                    // Bound to the fixture Runtime loop; release before that loop dies so
+                    // the provider can outlive the operation (ASan, #473).
+                    ai::AssistantMessage message = ai::assistant_text_message("held reply");
+                    message.api = model.api;
+                    message.provider = model.provider;
+                    message.model = model.id;
+                    if (sink) {
+                        (void)sink(ai::AssistantStartEvent{message});
+                    }
+                    co_return message;
                 });
     }
 
-    void release() noexcept {
-        if (release_timer_) {
-            (void)release_timer_->cancel();
-        }
-    }
+    void release() noexcept { release_gate_.release(); }
 
     std::atomic<bool> started{false};
-    std::optional<boost::asio::steady_timer> release_timer_;
+    tests::ReleaseGate release_gate_;
 };
 
 } // namespace

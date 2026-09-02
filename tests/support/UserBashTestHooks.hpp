@@ -55,15 +55,11 @@ inline void require_completed(boost::asio::io_context& io, const Slot& slot) {
 /// `slot` is borrowed: it must outlive the operation's completion (the
 /// scenario keeps it alive across the wait_until that observes it).
 template <typename Awaitable, typename Slot>
-inline void spawn_to_slot(
-    const boost::asio::any_io_executor& executor, Awaitable operation, Slot& slot) {
-    boost::asio::co_spawn(
-        executor,
-        std::move(operation),
-        [&slot](std::exception_ptr exception, auto result) {
-            REQUIRE(exception == nullptr);
-            slot.emplace(std::move(result));
-        });
+inline void spawn_to_slot(const boost::asio::any_io_executor& executor, Awaitable operation, Slot& slot) {
+    boost::asio::co_spawn(executor, std::move(operation), [&slot](std::exception_ptr exception, auto result) {
+        REQUIRE(exception == nullptr);
+        slot.emplace(std::move(result));
+    });
 }
 
 inline void spawn_prompt(

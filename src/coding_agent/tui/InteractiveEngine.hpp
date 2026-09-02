@@ -121,9 +121,7 @@ public:
     /// be awaited once this is true: a timer cancel only releases waits that
     /// are already pending, so a later await would block until the
     /// never-arriving expiry.
-    [[nodiscard]] bool exit_requested() const noexcept {
-        return exit_requested_;
-    }
+    [[nodiscard]] bool exit_requested() const noexcept { return exit_requested_; }
 
     /// Final application Close (ADR 0040): cancel the extracted modal/session
     /// flows, stop admission, retire the action generation, and await every

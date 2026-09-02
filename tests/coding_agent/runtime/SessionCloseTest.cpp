@@ -281,7 +281,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
 
@@ -322,7 +323,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto* session = &fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -389,7 +391,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -457,7 +460,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -497,7 +501,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -556,7 +561,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -619,7 +625,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = std::move(model_runtime), .models = nullptr, .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);

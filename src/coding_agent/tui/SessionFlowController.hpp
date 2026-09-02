@@ -180,9 +180,7 @@ private:
         std::filesystem::path workspace,
         SessionTarget target);
     void post(std::move_only_function<void()> action);
-    void spawn(
-        std::move_only_function<boost::asio::awaitable<void>()> start,
-        std::string failure_label);
+    void spawn(std::move_only_function<boost::asio::awaitable<void>()> start, std::string failure_label);
     [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
     request_session_replacement_async(runtime::AgentSessionCreationRequest request,
             std::optional<std::size_t> expected_generation = std::nullopt);

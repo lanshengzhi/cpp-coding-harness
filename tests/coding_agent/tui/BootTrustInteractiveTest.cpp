@@ -106,7 +106,8 @@ struct BootTrustRun {
             req.execution_runtime_target = runtime_target;
             return coding_agent::create_agent_session_async(std::move(req),
                     std::nullopt,
-                    coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                    coding_agent::runtime::AssemblyOverrides{
+                            .model_runtime = nullptr, .models = models, .user_shell = nullptr},
                     stop_token);
         };
         auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
@@ -148,9 +149,7 @@ struct BootTrustRun {
     /// Pump until the boot (or a prompted replacement) creation has crossed
     /// the seam and the engine has installed the result. Only valid once no
     /// trust prompt is still awaiting an answer.
-    void wait_booted() {
-        wait_replacement(1);
-    }
+    void wait_booted() { wait_replacement(1); }
 
     /// Pump until the `completions`-th asynchronous replacement result has
     /// crossed the seam and the engine has installed the outcome, so the
@@ -522,8 +521,11 @@ TEST_CASE(
                     std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         req.provide_user_shell = true;
         req.execution_runtime_target = runtime_target;
-        return coding_agent::create_agent_session_async(
-                std::move(req), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr}, stop_token);
+        return coding_agent::create_agent_session_async(std::move(req),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                stop_token);
     };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_agent_config_directory(fixture.agent_dir)

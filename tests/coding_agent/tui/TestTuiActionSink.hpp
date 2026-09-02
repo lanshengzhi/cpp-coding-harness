@@ -76,6 +76,7 @@ struct ActionSinkRecorder {
     std::vector<ReportBootDiagnosticsAction>& boot_diagnostics{state->boot_diagnostics};
     std::vector<ReportBootCreationFailureAction>& boot_creation_failure{
         state->boot_creation_failure};
+    // Borrowed aliases; `state` must outlive these references.
     AsyncSessionReplacementSink& replace_session_async{state->replace_session_async};
     std::atomic<std::size_t>& replacement_completions{state->replacement_completions};
 
@@ -151,7 +152,7 @@ struct ActionSinkRecorder {
             auto inner = shared->replace_session_async(action_generation, std::move(request), stop_token);
             return support::detail::make_async_result(
                     [shared, inner = std::move(inner)]() mutable
-                        -> boost::asio::awaitable<support::Expected<CreateAgentSessionResult>> {
+                            -> boost::asio::awaitable<support::Expected<CreateAgentSessionResult>> {
                         auto outcome = co_await support::detail::await_async_result(std::move(inner));
                         shared->replacement_completions.fetch_add(1, std::memory_order_release);
                         co_return outcome;

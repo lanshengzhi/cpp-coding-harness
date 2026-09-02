@@ -72,19 +72,16 @@ struct ReportBootCreationFailureAction {
 /// owned passive payload; the composition host performs the operation.
 /// Session replacement is not an action value: it crosses the asynchronous
 /// `AsyncSessionReplacementSink` strong capability exclusively (issue #581).
-using TuiActionVariant = std::variant<
-    OpenBrowserAction,
-    WriteClipboardAction,
-    SuspendProcessAction,
-    ReportBootDiagnosticsAction,
-    ReportBootCreationFailureAction>;
+using TuiActionVariant = std::variant<OpenBrowserAction,
+        WriteClipboardAction,
+        SuspendProcessAction,
+        ReportBootDiagnosticsAction,
+        ReportBootCreationFailureAction>;
 
 /// The result the host returns for one dispatched action. Fire-and-forget
 /// operations return `std::monostate`; `WriteClipboardAction` returns the
 /// clipboard-tool success.
-using TuiActionResultVariant = std::variant<
-    std::monostate,
-    bool>;
+using TuiActionResultVariant = std::variant<std::monostate, bool>;
 
 /// Move-only sink carrying closed Native TUI actions to the composition host.
 /// The host dispatches on `TuiActionVariant` and returns the matching

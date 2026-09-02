@@ -42,17 +42,15 @@ enum class RuntimeTeardownEvent {
 ///
 /// Sessions created with a fixture target may be transferred to
 /// adopt_session(). The fixture then requests Session Close, pumps until every
-/// adopted Session reports closed, destroys those Sessions, and only then
-/// closes the RuntimeRoot. This is the strongest ordering the existing
-/// synchronous AgentSession::close() request and is_open() observation expose.
+/// adopted Session reports closed and quiescent, destroys those Sessions, and
+/// only then closes the RuntimeRoot. Adopted objects must provide close(),
+/// is_open(), and is_busy(); the latter keeps admitted work alive until it
+/// settles.
 class RuntimeFixture final {
 public:
     explicit RuntimeFixture(
-        harness::RuntimeLimits limits = {},
-        std::chrono::milliseconds wait_budget = std::chrono::milliseconds{5000})
-        : loop_(std::make_shared<boost::asio::io_context>()),
-          root_(loop_, limits),
-          wait_budget_(wait_budget) {
+            harness::RuntimeLimits limits = {}, std::chrono::milliseconds wait_budget = std::chrono::milliseconds{5000})
+        : loop_(std::make_shared<boost::asio::io_context>()), root_(loop_, limits), wait_budget_(wait_budget) {
         teardown_events_.reserve(6);
     }
 
@@ -65,16 +63,13 @@ public:
     /// Create a target backed by this fixture's RuntimeRoot. Each target has
     /// its own ordered mailbox while all targets share this fixture's loop and
     /// worker pool.
-    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() const {
-        return root_.make_target();
-    }
+    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() const { return root_.make_target(); }
 
     /// Consume one production AsyncResult on this fixture's loop and return
     /// its exact std::expected<T, E> terminal outcome. A stalled operation is
     /// reported as a test failure after wait_budget_; timeout is not translated
     /// into a production error alternative.
-    template <typename T, typename E>
-    [[nodiscard]] std::expected<T, E> run(support::AsyncResult<T, E> operation) {
+    template <typename T, typename E> [[nodiscard]] std::expected<T, E> run(support::AsyncResult<T, E> operation) {
         loop_->restart();
 
         struct RunState final {
@@ -84,14 +79,13 @@ public:
         const auto state = std::make_shared<RunState>();
 
         boost::asio::co_spawn(
-            *loop_,
-            [operation = std::move(operation), state]() mutable -> boost::asio::awaitable<void> {
-                state->outcome.emplace(
-                    co_await support::detail::await_async_result(std::move(operation)));
-                state->done.store(true, std::memory_order_release);
-                co_return;
-            },
-            boost::asio::detached);
+                *loop_,
+                [operation = std::move(operation), state]() mutable -> boost::asio::awaitable<void> {
+                    state->outcome.emplace(co_await support::detail::await_async_result(std::move(operation)));
+                    state->done.store(true, std::memory_order_release);
+                    co_return;
+                },
+                boost::asio::detached);
 
         const bool completed = pump_until(*loop_, state->done, wait_budget_);
         REQUIRE(completed);
@@ -100,11 +94,10 @@ public:
     }
 
     /// Transfer ownership of a Session-like object to this fixture. The type
-    /// must provide close() and is_open(); no production Session interface is
-    /// introduced or required by the generic Runtime harness. The adopted
-    /// object is closed and destroyed before RuntimeRoot::close().
-    template <typename Session>
-    [[nodiscard]] Session& adopt_session(std::unique_ptr<Session> session) {
+    /// must provide close(), is_open(), and is_busy(); no production Session
+    /// interface is introduced or required by the generic Runtime harness.
+    /// The adopted object is closed and destroyed before RuntimeRoot::close().
+    template <typename Session> [[nodiscard]] Session& adopt_session(std::unique_ptr<Session> session) {
         if (closed_ || !session) {
             std::terminate();
         }
@@ -114,11 +107,11 @@ public:
         return reference;
     }
 
-    /// Close adopted Sessions in place, wait for their observable closed state,
-    /// destroy them, then perform RuntimeRoot Close and the final loop drain.
-    /// RuntimeRoot::close() remains the authority for worker drain and join;
-    /// this wrapper only supplies the Session-before-Runtime ordering and its
-    /// test-visible record.
+    /// Close adopted Sessions in place, wait for their observable quiescent
+    /// state, destroy them, then perform RuntimeRoot Close and the final loop
+    /// drain. RuntimeRoot::close() remains the authority for worker drain and
+    /// join; this wrapper only supplies the Session-before-Runtime ordering and
+    /// its test-visible record.
     void close() noexcept {
         if (closed_) {
             return;
@@ -131,14 +124,13 @@ public:
             }
 
             const bool sessions_closed = pump_until(
-                *loop_,
-                [this] {
-                    return std::all_of(
-                        sessions_.begin(), sessions_.end(), [](const auto& session) {
-                            return !session->is_open();
+                    *loop_,
+                    [this] {
+                        return std::all_of(sessions_.begin(), sessions_.end(), [](const auto& session) {
+                            return session->is_quiescent();
                         });
-                },
-                wait_budget_);
+                    },
+                    wait_budget_);
             REQUIRE(sessions_closed);
             teardown_events_.push_back(RuntimeTeardownEvent::SessionsQuiesced);
 
@@ -163,9 +155,7 @@ public:
 
     [[nodiscard]] bool closed() const noexcept { return closed_; }
 
-    [[nodiscard]] const std::vector<RuntimeTeardownEvent>& teardown_events() const noexcept {
-        return teardown_events_;
-    }
+    [[nodiscard]] const std::vector<RuntimeTeardownEvent>& teardown_events() const noexcept { return teardown_events_; }
 
 private:
     friend class RuntimeLoopDriver;
@@ -174,23 +164,22 @@ private:
     /// this loop on its helper thread; tests must not pump the loop while a
     /// driver for this fixture is alive.
     [[nodiscard]] boost::asio::io_context& loop() const noexcept { return *loop_; }
+
     class SessionHolderBase {
     public:
         virtual ~SessionHolderBase() = default;
         virtual void close() noexcept = 0;
-        [[nodiscard]] virtual bool is_open() const noexcept = 0;
+        [[nodiscard]] virtual bool is_quiescent() const noexcept = 0;
     };
 
-    template <typename Session>
-    class SessionHolder final : public SessionHolderBase {
+    template <typename Session> class SessionHolder final : public SessionHolderBase {
     public:
-        explicit SessionHolder(std::unique_ptr<Session> session)
-            : session_(std::move(session)) {}
+        explicit SessionHolder(std::unique_ptr<Session> session) : session_(std::move(session)) {}
 
         void close() noexcept override { session_->close(); }
 
-        [[nodiscard]] bool is_open() const noexcept override {
-            return session_->is_open();
+        [[nodiscard]] bool is_quiescent() const noexcept override {
+            return !session_->is_open() && !session_->is_busy();
         }
 
         [[nodiscard]] Session& session() noexcept { return *session_; }
@@ -206,5 +195,12 @@ private:
     std::vector<RuntimeTeardownEvent> teardown_events_;
     bool closed_{false};
 };
+
+template <typename T> [[nodiscard]] T run_awaitable(RuntimeFixture& runtime, boost::asio::awaitable<T> awaitable) {
+    return runtime.run(support::detail::make_async_result(
+            [awaitable = std::move(awaitable)]() mutable -> boost::asio::awaitable<T> {
+                co_return co_await std::move(awaitable);
+            }));
+}
 
 } // namespace cch::tests

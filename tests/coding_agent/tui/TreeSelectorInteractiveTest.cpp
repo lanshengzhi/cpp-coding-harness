@@ -140,56 +140,49 @@ struct Running {
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
-    request.session_target =
-        coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
 
     // The replacement Runtime Root shares the interactive loop: assembly
     // work and the install continuation are both pumped by the test.
-    auto runtime_io = std::shared_ptr<boost::asio::io_context>(
-        &running.io, [](boost::asio::io_context*) {});
-    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
-        std::move(runtime_io), harness::RuntimeLimits{});
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(&running.io, [](boost::asio::io_context*) {});
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
 
     // Create the boot session through the one asynchronous Session Assembly
     // door on the interactive loop (RuntimeRoot holds a work guard on the
     // loop, so pump until creation completes rather than draining).
     request.execution_runtime_target = runtime_root->make_target();
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
-    boost::asio::co_spawn(
-        running.io,
-        support::detail::await_async_result(
-            coding_agent::create_agent_session_async(std::move(request))),
-        [&](std::exception_ptr exception,
-            support::Expected<coding_agent::CreateAgentSessionResult> created) {
-            CHECK(exception == nullptr);
-            booted.emplace(std::move(created));
-        });
+    boost::asio::co_spawn(running.io,
+            support::detail::await_async_result(coding_agent::create_agent_session_async(std::move(request))),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
+                CHECK(exception == nullptr);
+                booted.emplace(std::move(created));
+            });
     REQUIRE(tests::pump_until(running.io, [&] { return booted.has_value(); }));
     REQUIRE(booted->has_value());
     auto created = std::move(**booted);
 
     actions->replace_session_async =
-        [runtime_root](std::size_t /* action_generation */,
-            coding_agent::runtime::AgentSessionCreationRequest request,
-            std::stop_token stop_token)
-        -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            request.execution_runtime_target = runtime_root->make_target();
-            return coding_agent::create_agent_session_async(
-                std::move(request), std::nullopt,
+            [runtime_root](std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_root->make_target();
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
+                        .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
                 stop_token);
-        };
+    };
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created.session)
-        .with_agent_config_directory(fixture.agent_dir.path())
-        .with_action_sink(actions->make_sink())
-        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
-        .with_runtime_root(std::move(runtime_root))
-        .build();
+                       .with_session(*created.session)
+                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_action_sink(actions->make_sink())
+                       .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
+                       .with_runtime_root(std::move(runtime_root))
+                       .build();
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(
@@ -347,10 +340,8 @@ TEST_CASE(
     // empty session.
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    auto runtime_io = std::shared_ptr<boost::asio::io_context>(
-        &running.io, [](boost::asio::io_context*) {});
-    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
-        std::move(runtime_io), harness::RuntimeLimits{});
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(&running.io, [](boost::asio::io_context*) {});
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
@@ -359,40 +350,36 @@ TEST_CASE(
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.execution_runtime_target = runtime_root->make_target();
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
-    boost::asio::co_spawn(
-        running.io,
-        support::detail::await_async_result(
-            coding_agent::create_agent_session_async(std::move(request))),
-        [&](std::exception_ptr exception,
-            support::Expected<coding_agent::CreateAgentSessionResult> created) {
-            CHECK(exception == nullptr);
-            booted.emplace(std::move(created));
-        });
+    boost::asio::co_spawn(running.io,
+            support::detail::await_async_result(coding_agent::create_agent_session_async(std::move(request))),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
+                CHECK(exception == nullptr);
+                booted.emplace(std::move(created));
+            });
     REQUIRE(tests::pump_until(running.io, [&] { return booted.has_value(); }));
     REQUIRE(booted->has_value());
     auto created = std::move(**booted);
 
     actions->replace_session_async =
-        [runtime_root](std::size_t /* action_generation */,
-            coding_agent::runtime::AgentSessionCreationRequest request,
-            std::stop_token stop_token)
-        -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            request.execution_runtime_target = runtime_root->make_target();
-            return coding_agent::create_agent_session_async(
-                std::move(request), std::nullopt,
+            [runtime_root](std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_root->make_target();
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
+                        .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
                 stop_token);
-        };
+    };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created.session)
-        .with_agent_config_directory(fixture.agent_dir.path())
-        .with_action_sink(actions->make_sink())
-        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
-        .with_runtime_root(std::move(runtime_root))
-        .build();
+                       .with_session(*created.session)
+                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_action_sink(actions->make_sink())
+                       .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
+                       .with_runtime_root(std::move(runtime_root))
+                       .build();
     boost::asio::co_spawn(
         running.io,
         coding_agent::tui::run_interactive_mode(

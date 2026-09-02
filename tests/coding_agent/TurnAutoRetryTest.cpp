@@ -82,12 +82,12 @@ struct TestPaths {
     cch::tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The Session's turn work (provider requests, retry backoff timers) is
-    // admitted to the fixture Runtime loop; drive it for the Session's
-    // lifetime so prompt_blocking can make progress between run() calls.
-    tests::RuntimeLoopDriver runtime_driver;
+    // admitted to the fixture Runtime loop; the driver starts only after
+    // Session Assembly has completed so it never races RuntimeFixture::run().
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     std::filesystem::path session_file;
 
-    TestPaths() : runtime_driver(runtime) {
+    TestPaths() {
         session_file = workspace.path() / "test-session.jsonl";
     }
 
@@ -211,11 +211,10 @@ struct RetrySessionUnderTest {
     RetryScriptedProvider* client{nullptr};
 };
 
-[[nodiscard]] RetrySessionUnderTest make_retry_session(
-    TestPaths& paths,
-    std::deque<ai::AssistantMessage> responses,
-    std::string settings_json = {},
-    std::vector<agent::Tool> custom_tools = {}) {
+[[nodiscard]] RetrySessionUnderTest make_retry_session(TestPaths& paths,
+        std::deque<ai::AssistantMessage> responses,
+        std::string settings_json = {},
+        std::vector<agent::Tool> custom_tools = {}) {
     // Every retry test isolates its settings scope under a fresh agent
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
@@ -241,11 +240,12 @@ struct RetrySessionUnderTest {
     // silently drop it (the one-argument overload cannot recover it).
     auto models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = paths.runtime.run(coding_agent::create_agent_session_async(
-            std::move(options),
+    auto created = paths.runtime.run(coding_agent::create_agent_session_async(std::move(options),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
+    paths.runtime_driver.emplace(paths.runtime);
     return RetrySessionUnderTest{
         std::move(created->session),
         client_ptr,

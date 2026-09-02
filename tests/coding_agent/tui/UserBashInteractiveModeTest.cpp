@@ -363,7 +363,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -458,7 +459,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -530,7 +532,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -651,7 +654,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -716,7 +720,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -791,7 +796,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -867,7 +873,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -941,7 +948,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1057,7 +1065,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1175,7 +1184,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1286,7 +1296,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1370,7 +1381,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1458,7 +1470,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1548,7 +1561,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1669,8 +1683,10 @@ TEST_CASE(
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto resumed = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto resumed = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(resumed);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1749,7 +1765,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1840,7 +1857,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1909,7 +1927,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2008,7 +2027,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2075,7 +2095,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2156,7 +2177,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2252,7 +2274,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2310,7 +2333,8 @@ TEST_CASE(
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 

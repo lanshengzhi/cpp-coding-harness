@@ -91,10 +91,10 @@ struct TestRunOptions {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    return coding_agent::create_agent_session_async(
-            std::move(request),
+    return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
 }
 
 [[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
@@ -102,10 +102,10 @@ struct TestRunOptions {
         coding_agent::runtime::AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models) {
     request.execution_runtime_target = runtime.make_target();
-    return coding_agent::create_agent_session_async(
-            std::move(request),
+    return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
 }
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
@@ -172,7 +172,8 @@ struct RichThinkingSession {
         request.workspace = workspace.path();
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        auto resumed = runtime.run(create_session_async(runtime, std::move(request), tests::make_scripted_fake_models()));
+        auto resumed =
+                runtime.run(create_session_async(runtime, std::move(request), tests::make_scripted_fake_models()));
         REQUIRE(resumed);
         return resumed;
     }
@@ -1778,13 +1779,12 @@ TEST_CASE(
     runtime_driver.emplace(runtime);
     boost::asio::io_context setup_io;
     std::optional<support::ExpectedVoid> setup_result;
-    boost::asio::co_spawn(
-        setup_io,
-        fresh->session->prompt("equivalent prompt"),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            setup_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(setup_io,
+            fresh->session->prompt("equivalent prompt"),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                setup_result.emplace(std::move(result));
+            });
     REQUIRE(tests::pump_until(setup_io, [&] { return setup_result.has_value(); }));
     REQUIRE(setup_result);
     CHECK(*setup_result);
@@ -2138,7 +2138,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
@@ -2264,7 +2265,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::make_shared<AcceptedOutcomeChatProvider>())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, std::make_shared<AcceptedOutcomeChatProvider>())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -2328,7 +2330,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -2362,7 +2365,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -2398,7 +2402,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3030,7 +3035,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3235,7 +3241,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3624,7 +3631,8 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.interrupt":"f6"})");
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3670,7 +3678,8 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3754,7 +3763,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::make_shared<FailOnceChatProvider>())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, std::make_shared<FailOnceChatProvider>())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3991,7 +4001,8 @@ TEST_CASE(
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);

@@ -171,10 +171,10 @@ private:
     // override: slicing ModelsSessionOptions into the base request would
     // silently drop it (the one-argument overload cannot recover it).
     auto models = cch::tests::models_from_provider(std::move(client));
-    return runtime.run(coding_agent::create_agent_session_async(
-            std::move(options),
+    return runtime.run(coding_agent::create_agent_session_async(std::move(options),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
 }
 
 template <typename T>
@@ -349,13 +349,13 @@ TEST_CASE(
     // The scripted Session's turn work is admitted to the fixture Runtime
     // loop; drive it for the Session's lifetime so prompt_blocking can make
     // progress between run() calls.
-    tests::RuntimeLoopDriver runtime_driver(runtime);
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::Auth, "Provider is not configured: sdk-host");
     auto created = create_scripted_session(
             runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
     REQUIRE(created.has_value());
     auto* session = created->session.get();
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     // Preflight passes (the scripted provider resolves as configured); the
     // request-time auth terminal is rewritten to the verbatim no-key branch
@@ -381,13 +381,13 @@ TEST_CASE(
     // The scripted Session's turn work is admitted to the fixture Runtime
     // loop; drive it for the Session's lifetime so prompt_blocking can make
     // progress between run() calls.
-    tests::RuntimeLoopDriver runtime_driver(runtime);
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
     auto created = create_scripted_session(
             runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
     REQUIRE(created.has_value());
     auto* session = created->session.get();
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     // Dead credentials stay in auth.json and every subsequent request fails
     // with the re-auth guidance (pi `_getRequiredRequestAuth` OAuth branch).
@@ -518,7 +518,6 @@ TEST_CASE(
     // The scripted Session's turn work is admitted to the fixture Runtime
     // loop; drive it for the Session's lifetime so the compaction prompt can
     // make progress between run() calls.
-    tests::RuntimeLoopDriver runtime_driver(runtime);
     const std::string big(20000, 'x');
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::Auth,
@@ -529,6 +528,7 @@ TEST_CASE(
             runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
     REQUIRE(created.has_value());
     auto* session = created->session.get();
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     // Preflight passes; the first three prompts stream normally (the scripted
     // client serves every request with the auth terminal, which is what the

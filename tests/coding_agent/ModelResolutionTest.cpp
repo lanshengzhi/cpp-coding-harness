@@ -57,13 +57,8 @@ struct Fixture {
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
     tests::RuntimeFixture runtime;
-    // Sessions assembled on the fixture Runtime target run their turn work
-    // (provider streams, timers) on the fixture loop; drive it for the
-    // Session's lifetime so prompt/prompt_blocking make progress between
-    // run() calls.
-    tests::RuntimeLoopDriver runtime_driver;
 
-    Fixture() : runtime_driver(runtime) {
+    Fixture() {
         dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
         kimi_guard.unset();
@@ -468,6 +463,7 @@ TEST_CASE(
     auto request = cli_request(fixture);
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
     REQUIRE(result.has_value());
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
     // The concrete unknown kDefaultModel is the resolved identity, with no
     // construction-time default silently winning.
     CHECK(result->resolved_identity.provider == "unknown");

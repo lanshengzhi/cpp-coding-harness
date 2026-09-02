@@ -105,7 +105,8 @@ struct ReloadFixture {
     tests::TempWorkspace workspace;
     std::shared_ptr<ReloadRecordingProvider> client;
     tests::RuntimeFixture runtime;
-    coding_agent::AgentSession* session{nullptr};
+    coding_agent::AgentSession* session{
+            nullptr}; // borrows a Session owned by runtime; runtime must outlive this pointer.
 
     void create(bool trusted = true) {
         workspace.write(
@@ -155,7 +156,8 @@ struct AsyncReloadFixture {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     std::shared_ptr<harness::RuntimeTarget> target;
-    coding_agent::AgentSession* session{nullptr};
+    coding_agent::AgentSession* session{
+            nullptr}; // borrows a Session owned by runtime; runtime must outlive this pointer.
 
     AsyncReloadFixture() : runtime(harness::RuntimeLimits{.worker_count = 1}) {}
 

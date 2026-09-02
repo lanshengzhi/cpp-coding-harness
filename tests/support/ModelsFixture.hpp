@@ -249,5 +249,4 @@ inline ai::Model scripted_request_model(
     return model;
 }
 
-
 } // namespace cch::tests

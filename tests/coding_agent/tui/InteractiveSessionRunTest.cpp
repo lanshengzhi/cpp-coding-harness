@@ -29,10 +29,10 @@ namespace {
 using coding_agent::PromptOptions;
 using coding_agent::tui::InteractiveSessionRun;
 using coding_agent::tui::InteractiveSessionRunBuilder;
-using coding_agent::tui::TuiActionVariant;
 using coding_agent::tui::OpenBrowserAction;
 using coding_agent::tui::ReportBootCreationFailureAction;
 using coding_agent::tui::ReportBootDiagnosticsAction;
+using coding_agent::tui::TuiActionVariant;
 
 class DummyClipboardReader final : public coding_agent::tui::AsyncClipboardReader {
 public:
@@ -132,9 +132,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(defer->request.session_target));
 }
 
-TEST_CASE(
-    "InteractiveSessionRun's asynchronous replacement sink installs runtime capabilities",
-    "[coding_agent][tui][session_run][issue517]") {
+TEST_CASE("InteractiveSessionRun's asynchronous replacement sink installs runtime capabilities",
+        "[coding_agent][tui][session_run][issue517]") {
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, harness::RuntimeLimits{});
@@ -159,14 +158,12 @@ TEST_CASE(
     auto sink = run.make_async_session_replacement_sink();
     REQUIRE(sink != nullptr);
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> outcome;
-    boost::asio::co_spawn(
-        *io,
-        support::detail::await_async_result(sink(0, std::move(request), {})),
-        [&](std::exception_ptr exception,
-            support::Expected<coding_agent::CreateAgentSessionResult> created) {
-            CHECK(exception == nullptr);
-            outcome.emplace(std::move(created));
-        });
+    boost::asio::co_spawn(*io,
+            support::detail::await_async_result(sink(0, std::move(request), {})),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
+                CHECK(exception == nullptr);
+                outcome.emplace(std::move(created));
+            });
     // RuntimeRoot holds a work guard on the loop, so pump until the sink
     // completes instead of draining with run().
     REQUIRE(tests::pump_until(*io, [&] { return outcome.has_value(); }));

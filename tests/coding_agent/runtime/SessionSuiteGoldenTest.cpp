@@ -424,8 +424,10 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
 
-    auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created);
     auto* session = &runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -485,7 +487,8 @@ TEST_CASE("session resume golden: persisted history restores at message level",
         coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
         auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
         REQUIRE(created);
         tests::RuntimeLoopDriver runtime_driver(runtime);
         REQUIRE(created->session->prompt_blocking("hi").has_value());
@@ -502,8 +505,10 @@ TEST_CASE("session resume golden: persisted history restores at message level",
     options.models = tests::models_from_provider(provider);
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created);
     auto* session = &runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -565,8 +570,10 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
     options.models = tests::models_from_provider(provider);
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created);
     auto* session = &runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -628,8 +635,10 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     options.models = tests::models_from_provider(provider);
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created);
     auto* session = &runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
