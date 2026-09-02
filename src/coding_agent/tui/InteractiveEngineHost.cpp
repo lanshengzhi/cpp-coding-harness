@@ -260,6 +260,14 @@ support::ExpectedVoid InteractiveEngine::replace_session(
             view_->clear_status_indicator();
             view_->clear_user_bash_progress();
         }
+        // Clearing the retired Session's active-work facts removes the
+        // blockers a deferred exit was waiting on: a quit requested during
+        // the transition must still release the exit wait once nothing is
+        // active (the retired work's late completions early-return on the
+        // generation check and never re-arm this).
+        if (exit_requested_) {
+            signal_exit();
+        }
     }
     // Retain the replaced Session while its admitted work is still
     // settling; drop any whose Close already finalised (Closed with no
