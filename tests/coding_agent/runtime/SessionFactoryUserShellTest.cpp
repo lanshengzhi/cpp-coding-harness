@@ -3,12 +3,14 @@
 #include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <boost/asio/io_context.hpp>
+#include <boost/asio/awaitable.hpp>
 
 #include <optional>
 #include <string>
@@ -22,22 +24,21 @@ namespace runtime = cch::coding_agent::runtime;
 namespace {
 
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_cli_session(
-    const tests::TempWorkspace& workspace,
-    bool provide_user_shell) {
+        tests::RuntimeFixture& runtime, const tests::TempWorkspace& workspace, bool provide_user_shell) {
     runtime::AgentSessionCreationRequest request;
     request.provide_user_shell = provide_user_shell;
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = runtime.make_target();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
-    auto runtime = tests::detail::scripted_fake_runtime();
-    if (!runtime) {
-        return std::unexpected(runtime.error());
+    auto model_runtime = tests::detail::scripted_fake_runtime();
+    if (!model_runtime) {
+        return std::unexpected(model_runtime.error());
     }
-    request.model_runtime = std::move(*runtime);
+    request.model_runtime = std::move(*model_runtime);
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    return coding_agent::create_agent_session(std::move(request));
+    return runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
 }
 
 [[nodiscard]] std::vector<const ai::ToolResultMessage*> tool_results(
@@ -60,26 +61,28 @@ namespace {
     return count;
 }
 
-[[nodiscard]] support::Expected<runtime::UserBashCompletion> run_user_bash_blocking(
-    coding_agent::AgentSession& session,
-    std::string command) {
-    boost::asio::io_context io;
-    tests::BashResult slot;
-    tests::spawn_bash(io, session, std::move(command), slot);
-    io.run();
-    REQUIRE(slot.has_value());
-    return std::move(*slot);
+/// The Session must outlive `runtime.run`; the one-shot async factory captures
+/// its reference while the prompt or User Bash settles on the fixture loop.
+[[nodiscard]] support::Expected<runtime::UserBashCompletion> run_user_bash(
+        tests::RuntimeFixture& runtime, coding_agent::AgentSession& session, std::string command) {
+    return runtime.run(support::detail::make_async_result(
+            [&session, command = std::move(command)]()
+                    -> boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>> {
+                co_return co_await coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
+                        session, std::move(command), false, [](const coding_agent::runtime::UserBashProgress&) {
+                            return support::ExpectedVoid{};
+                        });
+            }));
 }
 
-[[nodiscard]] support::ExpectedVoid run_prompt_blocking(
-    coding_agent::AgentSession& session,
-    std::string text) {
-    boost::asio::io_context io;
-    tests::PromptResult slot;
-    tests::spawn_prompt(io, session, std::move(text), slot);
-    io.run();
-    REQUIRE(slot.has_value());
-    return *slot;
+/// The Session must outlive `runtime.run`; the one-shot async factory captures
+/// its reference while the prompt settles on the fixture loop.
+[[nodiscard]] support::ExpectedVoid run_prompt(
+        tests::RuntimeFixture& runtime, coding_agent::AgentSession& session, std::string text) {
+    return runtime.run(support::detail::make_async_result(
+            [&session, text = std::move(text)]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await session.prompt(std::move(text));
+            }));
 }
 
 } // namespace
@@ -88,13 +91,14 @@ TEST_CASE(
     "Native TUI session assembly provides its independent User Shell",
     "[coding_agent][runtime][assembly][issue90]") {
     tests::TempWorkspace workspace;
-    auto created = create_cli_session(workspace, true);
+    tests::RuntimeFixture runtime_fixture;
+    auto created = create_cli_session(runtime_fixture, workspace, true);
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime_fixture.adopt_session(std::move(created->session));
 
     REQUIRE(coding_agent::detail::AgentSessionInteractiveAccess::has_user_shell(session));
 
-    const auto completion = run_user_bash_blocking(session, "printf 'assembly-output\\n'");
+    const auto completion = run_user_bash(runtime_fixture, session, "printf 'assembly-output\\n'");
     REQUIRE(completion);
     CHECK(completion->message.command == "printf 'assembly-output\\n'");
     CHECK(completion->message.output.find("assembly-output") != std::string::npos);
@@ -107,23 +111,25 @@ TEST_CASE(
     "CLI assembly without the Native TUI leaves the User Shell absent",
     "[coding_agent][runtime][assembly][issue90]") {
     tests::TempWorkspace workspace;
-    auto created = create_cli_session(workspace, false);
+    tests::RuntimeFixture runtime_fixture;
+    auto created = create_cli_session(runtime_fixture, workspace, false);
     REQUIRE(created);
-    CHECK_FALSE(
-        coding_agent::detail::AgentSessionInteractiveAccess::has_user_shell(*created->session));
+    auto& session = runtime_fixture.adopt_session(std::move(created->session));
+    CHECK_FALSE(coding_agent::detail::AgentSessionInteractiveAccess::has_user_shell(session));
 }
 
 TEST_CASE(
     "the model Bash tool is always registered alongside the Session-owned User Shell",
     "[coding_agent][runtime][assembly][issue90]") {
     tests::TempWorkspace workspace;
-    auto created = create_cli_session(workspace, true);
+    tests::RuntimeFixture runtime_fixture;
+    auto created = create_cli_session(runtime_fixture, workspace, true);
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime_fixture.adopt_session(std::move(created->session));
 
     // The model Bash Tool is always available under the fixed tool set (the
     // --enable-bash opt-in is gone) and executes in the workspace.
-    const auto prompted = run_prompt_blocking(session, "bash echo model-tool-output");
+    const auto prompted = run_prompt(runtime_fixture, session, "bash echo model-tool-output");
     REQUIRE(prompted);
     const auto snapshot = session.snapshot();
     const auto results = tool_results(snapshot.agent_state.messages);
@@ -135,7 +141,7 @@ TEST_CASE(
 
     // User Bash keeps its independent execution: direct invocation, own
     // capability instance, and the !/!! exclusion policy.
-    const auto included = run_user_bash_blocking(session, "printf 'still-direct\\n'");
+    const auto included = run_user_bash(runtime_fixture, session, "printf 'still-direct\\n'");
     REQUIRE(included);
     CHECK(included->message.output.find("still-direct") != std::string::npos);
     CHECK_FALSE(included->message.exclude_from_context);

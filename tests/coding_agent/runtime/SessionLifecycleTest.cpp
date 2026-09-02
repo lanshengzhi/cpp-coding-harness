@@ -3,10 +3,13 @@
 
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <boost/asio/awaitable.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -50,6 +53,16 @@ support::Expected<runtime::OpenSession> open_resumed_session(
         return std::unexpected(prepared.error());
     }
     return runtime::publish_resume_session(*prepared);
+}
+
+/// `session` must outlive `runtime.run`; the one-shot factory captures its
+/// reference while the prompt settles on the fixture's serialized loop.
+[[nodiscard]] support::ExpectedVoid run_prompt(
+        tests::RuntimeFixture& runtime_fixture, coding_agent::AgentSession& session, std::string text) {
+    return runtime_fixture.run(support::detail::make_async_result(
+            [&session, text = std::move(text)]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await session.prompt(std::move(text));
+            }));
 }
 
 } // namespace
@@ -138,6 +151,7 @@ TEST_CASE("resumed session uses active leaf path", "[coding_agent][runtime][sess
 
 TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point", "[coding_agent][runtime][session]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime_fixture;
     auto path = workspace.path() / "leaf-continuation.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
@@ -159,17 +173,19 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = runtime_fixture.make_target();
 
-    auto runtime = tests::scripted_fake_runtime();
-    REQUIRE(runtime);
-    request.model_runtime = std::move(*runtime);
+    auto model_runtime = tests::scripted_fake_runtime();
+    REQUIRE(model_runtime);
+    request.model_runtime = std::move(*model_runtime);
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    auto session_result = coding_agent::create_agent_session(std::move(request));
+    auto session_result =
+            runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(session_result);
-    auto prompt_result = session_result->session->prompt_blocking("continue branch");
+    auto& session = runtime_fixture.adopt_session(std::move(session_result->session));
+    auto prompt_result = run_prompt(runtime_fixture, session, "continue branch");
     REQUIRE(prompt_result);
-    session_result->session->close();
+    session.close();
 
     auto reopened = open_resumed_session(path, workspace);
     REQUIRE(reopened);
@@ -185,6 +201,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
 TEST_CASE("resumed AgentSession recovers when the message write succeeds but its leaf write fails",
         "[coding_agent][runtime][session][persistence-failure]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime_fixture;
     auto path = workspace.path() / "leaf-partial-append.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
     REQUIRE(store);
@@ -206,30 +223,31 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = runtime_fixture.make_target();
 
-    auto runtime = tests::scripted_fake_runtime();
-    REQUIRE(runtime);
-    request.model_runtime = std::move(*runtime);
+    auto model_runtime = tests::scripted_fake_runtime();
+    REQUIRE(model_runtime);
+    request.model_runtime = std::move(*model_runtime);
     request.request_model = tests::scripted_request_model("fake", "fake-model");
-    auto session_result = coding_agent::create_agent_session(std::move(request));
+    auto session_result =
+            runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(session_result);
-    auto& session = session_result->session;
+    auto& session = runtime_fixture.adopt_session(std::move(session_result->session));
 
     // A resumed branch message append writes the message and then its active
     // leaf marker. Fail only the second physical write: the user message
     // lands but its leaf marker does not, so the append reports a persistence
     // failure after the message was already admitted.
     harness::session::testing::fail_nth_append_for_test(path, 2);
-    auto failed = session->prompt_blocking("continue after partial write");
+    auto failed = run_prompt(runtime_fixture, session, "continue after partial write");
     REQUIRE_FALSE(failed);
     CHECK(failed.error().code == support::ErrorCode::Session);
     CHECK(failed.error().message == "could not persist session entry");
-    CHECK(session->is_open());
+    CHECK(session.is_open());
     // No rollback theatre: the admitted user and assistant messages stay in
     // live Session state (admission is asynchronous; there is no mid-flight
     // veto).
-    CHECK(session->message_count() == 3);
+    CHECK(session.message_count() == 3);
 
     // Reopening follows the durable message even though its leaf marker was
     // the failed physical write. Whether the assistant reply settled before
@@ -245,14 +263,14 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     // The recorded failure is session-scoped sticky state (ADR 0040): a later
     // prompt is rejected with the typed persistence failure instead of
     // recovering.
-    auto recovered = session->prompt_blocking("recover branch");
+    auto recovered = run_prompt(runtime_fixture, session, "recover branch");
     REQUIRE_FALSE(recovered);
     CHECK(recovered.error().code == support::ErrorCode::Session);
     CHECK(
         recovered.error().message ==
         "session persistence failed; rejecting new prompt");
-    CHECK(session->message_count() == 3);
-    session->close();
+    CHECK(session.message_count() == 3);
+    session.close();
 }
 
 TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime][session]") {

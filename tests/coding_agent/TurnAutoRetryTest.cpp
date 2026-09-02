@@ -14,12 +14,15 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -77,6 +80,11 @@ void expect_json_equal(
 
 struct TestPaths {
     cch::tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    // The Session's turn work (provider requests, retry backoff timers) is
+    // admitted to the fixture Runtime loop; the driver starts only after
+    // Session Assembly has completed so it never races RuntimeFixture::run().
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     std::filesystem::path session_file;
 
     TestPaths() {
@@ -203,11 +211,10 @@ struct RetrySessionUnderTest {
     RetryScriptedProvider* client{nullptr};
 };
 
-[[nodiscard]] RetrySessionUnderTest make_retry_session(
-    const TestPaths& paths,
-    std::deque<ai::AssistantMessage> responses,
-    std::string settings_json = {},
-    std::vector<agent::Tool> custom_tools = {}) {
+[[nodiscard]] RetrySessionUnderTest make_retry_session(TestPaths& paths,
+        std::deque<ai::AssistantMessage> responses,
+        std::string settings_json = {},
+        std::vector<agent::Tool> custom_tools = {}) {
     // Every retry test isolates its settings scope under a fresh agent
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
@@ -227,10 +234,18 @@ struct RetrySessionUnderTest {
     options.workspace = paths.workspace.path();
     options.request_model = tests::scripted_request_model("sdk-host", "gpt-test");
     options.custom_tools = std::move(custom_tools);
-    options.models = cch::tests::models_from_provider(std::move(client));
+    options.execution_runtime_target = paths.runtime.make_target();
+    // The scripted provider catalog crosses the assembly seam as an explicit
+    // override: slicing ModelsSessionOptions into the base request would
+    // silently drop it (the one-argument overload cannot recover it).
+    auto models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = paths.runtime.run(coding_agent::create_agent_session_async(std::move(options),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
+    paths.runtime_driver.emplace(paths.runtime);
     return RetrySessionUnderTest{
         std::move(created->session),
         client_ptr,

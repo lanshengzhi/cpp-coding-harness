@@ -5,6 +5,8 @@
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -38,6 +40,8 @@ using tests::pump_until;
 using tests::spawn_prompt;
 
 struct PersistentSession {
+    explicit PersistentSession(tests::RuntimeFixture& runtime) : runtime_(&runtime) {}
+
     tests::TempWorkspace workspace;
     std::filesystem::path session_path = workspace.path() / "session.jsonl";
 
@@ -46,6 +50,7 @@ struct PersistentSession {
         options.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
         options.workspace = workspace.path();
+        options.execution_runtime_target = runtime_->make_target();
         options.models = tests::models_from_provider(std::move(provider));
         return options;
     }
@@ -64,6 +69,9 @@ struct PersistentSession {
         }
         return texts;
     }
+
+private:
+    tests::RuntimeFixture* runtime_; // must outlive every Session created from this fixture
 };
 
 /// Abort-aware gated provider: blocks every request until release(), but a
@@ -131,11 +139,19 @@ private:
 TEST_CASE(
     "an admitted event advances live Session state before weak observers are notified",
     "[coding_agent][runtime][commitment][issue464]") {
-    PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
+    tests::RuntimeFixture runtime;
+    PersistentSession fixture{runtime};
+    auto options = fixture.options(tests::make_scripted_fake_provider());
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
-    auto* session = created->session.get();
+    auto* session = &runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     std::vector<std::size_t> counts_at_message_end;
     auto subscription = session->subscribe(
         [session, &counts_at_message_end](const agent::AgentLifecycleEvent& event)
@@ -160,10 +176,18 @@ TEST_CASE(
 TEST_CASE(
     "session event persistence executes off the interaction loop in admission order",
     "[coding_agent][runtime][commitment][issue464]") {
-    PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
+    tests::RuntimeFixture runtime;
+    PersistentSession fixture{runtime};
+    auto options = fixture.options(tests::make_scripted_fake_provider());
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     harness::session::testing::record_append_threads_for_test(fixture.session_path);
     const auto driving_thread = std::this_thread::get_id();
@@ -190,10 +214,18 @@ TEST_CASE(
 TEST_CASE(
     "a persistence failure keeps live state and rejects later prompts with a typed failure",
     "[coding_agent][runtime][commitment][issue464]") {
-    PersistentSession fixture;
-    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
+    tests::RuntimeFixture runtime;
+    PersistentSession fixture{runtime};
+    auto options = fixture.options(tests::make_scripted_fake_provider());
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     // Fresh sessions write one line per append: the user message lands, the
     // assistant message write fails.
@@ -223,12 +255,20 @@ TEST_CASE(
 TEST_CASE(
     "an aborted prompt settles the commitment channel with a consistent session file",
     "[coding_agent][runtime][commitment][issue464]") {
-    PersistentSession fixture;
+    tests::RuntimeFixture runtime;
+    PersistentSession fixture{runtime};
     auto provider = std::make_shared<AbortAwareGatedChatProvider>();
     auto* gated = provider.get();
-    auto created = coding_agent::create_agent_session(fixture.options(std::move(provider)));
+    auto options = fixture.options(std::move(provider));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     boost::asio::io_context io;
     PromptResult prompt_result;
@@ -257,16 +297,24 @@ TEST_CASE(
 TEST_CASE(
     "interaction and timers progress while session persistence is slow",
     "[coding_agent][runtime][commitment][issue464]") {
-    PersistentSession fixture;
+    tests::RuntimeFixture runtime;
+    PersistentSession fixture{runtime};
     // Hold the model response on the ReleaseGate so the timer observation
     // below is event-driven: without the gate, heavy parallel load can
     // starve this thread past the persistence delay, letting the prompt
     // complete before the 50ms timer is serviced and inverting the ordering
     // the test exists to pin (issue #526).
     auto provider = std::make_shared<tests::GatedChatProvider>();
-    auto created = coding_agent::create_agent_session(fixture.options(provider));
+    auto options = fixture.options(provider);
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     harness::session::testing::delay_appends_for_test(
         fixture.session_path, std::chrono::milliseconds{300});
@@ -308,14 +356,30 @@ TEST_CASE(
 TEST_CASE(
     "a second session on the same Runtime root completes while persistence is slow",
     "[coding_agent][runtime][commitment][issue464]") {
-    PersistentSession slow_fixture;
-    PersistentSession fast_fixture;
-    auto slow_created = coding_agent::create_agent_session(slow_fixture.options(tests::make_scripted_fake_provider()));
-    auto fast_created = coding_agent::create_agent_session(fast_fixture.options(tests::make_scripted_fake_provider()));
+    tests::RuntimeFixture runtime;
+    PersistentSession slow_fixture{runtime};
+    PersistentSession fast_fixture{runtime};
+
+    auto slow_options = slow_fixture.options(tests::make_scripted_fake_provider());
+    auto slow_models = std::move(slow_options.models);
+    coding_agent::runtime::AgentSessionCreationRequest slow_request = std::move(slow_options);
+    auto slow_created = runtime.run(coding_agent::create_agent_session_async(std::move(slow_request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(slow_models), .user_shell = nullptr}));
     REQUIRE(slow_created.has_value());
+    auto& slow_session = runtime.adopt_session(std::move(slow_created->session));
+
+    auto fast_options = fast_fixture.options(tests::make_scripted_fake_provider());
+    auto fast_models = std::move(fast_options.models);
+    coding_agent::runtime::AgentSessionCreationRequest fast_request = std::move(fast_options);
+    auto fast_created = runtime.run(coding_agent::create_agent_session_async(std::move(fast_request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(fast_models), .user_shell = nullptr}));
     REQUIRE(fast_created.has_value());
-    auto& slow_session = *slow_created->session;
-    auto& fast_session = *fast_created->session;
+    auto& fast_session = runtime.adopt_session(std::move(fast_created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     harness::session::testing::delay_appends_for_test(
         slow_fixture.session_path, std::chrono::milliseconds{300});

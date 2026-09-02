@@ -15,7 +15,6 @@
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
-#include "coding_agent/AsyncTask.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
@@ -24,27 +23,19 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
-#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/use_future.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <format>
-#include <future>
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -106,38 +97,6 @@ using NormalizedSessionTarget = std::variant<
     ResumeSessionTarget,
     ForkTarget,
     ContinueRecentTarget>;
-
-/// Loop and RuntimeRoot owner used only by the synchronous compatibility
-/// bridge. The public Session retains this owner so its canonical async
-/// filesystem capabilities remain usable after creation returns.
-struct CompatibilityRuntime final {
-    CompatibilityRuntime()
-        : loop(std::make_shared<boost::asio::io_context>()),
-          root(std::make_shared<harness::RuntimeRoot>(loop, harness::RuntimeLimits{})),
-          loop_thread([loop = loop] { loop->run(); }) {}
-
-    ~CompatibilityRuntime() {
-        // RuntimeRoot::close() drains admitted workers and releases the loop
-        // guard. Let the loop thread finish queued terminal/cleanup handlers
-        // before joining; stopping it here would discard those handlers.
-        root->close();
-        if (!loop_thread.joinable()) {
-            return;
-        }
-        if (loop_thread.get_id() == std::this_thread::get_id()) {
-            loop_thread.detach();
-        } else {
-            loop_thread.join();
-        }
-    }
-
-    CompatibilityRuntime(const CompatibilityRuntime&) = delete;
-    CompatibilityRuntime& operator=(const CompatibilityRuntime&) = delete;
-
-    std::shared_ptr<boost::asio::io_context> loop;
-    std::shared_ptr<harness::RuntimeRoot> root;
-    std::jthread loop_thread;
-};
 
 [[nodiscard]] support::Error runtime_work_cancelled_error() {
     return support::make_error(support::ErrorCode::Cancelled, "Session assembly was cancelled");
@@ -311,9 +270,6 @@ struct AssemblyPlan {
     /// One target of the CLI-owned Runtime root. It is shared by the Session's
     /// filesystem and Shell capabilities and survives Session replacement.
     std::shared_ptr<harness::RuntimeTarget> execution_runtime_target;
-    /// Keeps the synchronous compatibility RuntimeRoot's loop driver alive
-    /// when this plan created the target for a legacy/test caller.
-    std::shared_ptr<void> runtime_keepalive;
     /// pi `switchSession` cwdOverride (in-session resume only): bind the
     /// resumed session's runtime to this cwd even when the header stores a
     /// different (missing) cwd.
@@ -1384,8 +1340,8 @@ struct PreparedAssemblyTarget final {
     std::vector<std::string> append_system_prompt_texts;
     // Loaded-resources presentation + `/reload` inputs (pi
     // `getSystemPromptSource()`/`getAppendSystemPromptSources()` and the
-    // per-kind diagnostics): dropped from the runtime today, must flow into
-    // the runtime config (#418).
+    // per-kind diagnostics), flowed into the session config at publication
+    // (#418).
     std::optional<std::string> system_prompt_source;
     std::vector<std::string> append_system_prompt_sources;
     std::vector<ResourceDiagnostic> skill_diagnostics;
@@ -1920,7 +1876,6 @@ struct PreparedAssemblyTarget final {
     const auto shell_command_prefix = settings.shell_command_prefix;
 
     RuntimeServices services;
-    services.runtime_keepalive = std::move(plan.runtime_keepalive);
     services.model_runtime = std::move(runtime);
     services.model_runtime_owned = plan.model_runtime_owned;
     services.settings_manager = std::move(snapshot.manager);
@@ -1963,53 +1918,6 @@ struct PreparedAssemblyTarget final {
             std::move(model_fallback_message),
             std::move(theme_documents),
             std::move(identity));
-}
-
-/// The synchronous expand-contract bridge owns a private RuntimeRoot only for
-/// legacy tests; its loop owner transfers into the published Session so later
-/// async operations still use the canonical capability. Production calls
-/// `finish_creation_async` on the CLI Runtime loop and never enters this bridge.
-[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> run_assembly_sync(
-        AssemblyPlan plan, SettingsSnapshot& snapshot, std::unique_ptr<AsyncUserShell> user_shell) {
-    std::shared_ptr<CompatibilityRuntime> compatibility_runtime;
-    std::shared_ptr<boost::asio::io_context> loop;
-    if (!plan.execution_runtime_target) {
-        compatibility_runtime = std::make_shared<CompatibilityRuntime>();
-        loop = compatibility_runtime->loop;
-        plan.execution_runtime_target = compatibility_runtime->root->make_target();
-        plan.runtime_keepalive = compatibility_runtime;
-    } else {
-        loop = std::make_shared<boost::asio::io_context>();
-    }
-
-    auto future = boost::asio::co_spawn(
-            *loop, run_assembly_async(std::move(plan), snapshot, std::move(user_shell), {}), boost::asio::use_future);
-    if (compatibility_runtime) {
-        // The compatibility RuntimeRoot owns a dedicated loop driver. Keep it
-        // alive in the published Session so subsequent async operations use
-        // the same canonical filesystem capability rather than a closed or
-        // undriven target.
-        return future.get();
-    }
-    loop->run();
-    return future.get();
-}
-
-/// Shared synchronous creation tail: normalize produced a plan (or the
-/// attempt's first error), assembly runs against the same snapshot, and any
-/// failure carries the settings load warnings through the error context field.
-[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> finish_creation(
-    support::Expected<AssemblyPlan> plan,
-    SettingsSnapshot& snapshot,
-    std::unique_ptr<AsyncUserShell> user_shell = {}) {
-    if (!plan) {
-        return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
-    }
-    auto result = run_assembly_sync(std::move(*plan), snapshot, std::move(user_shell));
-    if (!result) {
-        return std::unexpected(with_settings_fallback_context(result.error(), snapshot));
-    }
-    return result;
 }
 
 [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> finish_creation_async(
@@ -2131,52 +2039,6 @@ support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::cre
                         std::move(overrides.user_shell),
                         stop_token);
             });
-}
-
-support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::create(
-    AgentSessionCreationRequest request,
-    std::optional<InteractiveSessionFacts> session_facts,
-    AssemblyOverrides overrides) {
-    // One door (map #508 D5/D7): an engine-built replacement request crosses
-    // with the CLI-owned facts, re-applied before any assembly step reads the
-    // request.
-    if (session_facts.has_value()) {
-        apply_cli_facts(request, *session_facts);
-    }
-    auto snapshot = load_settings_snapshot(request.workspace);
-    if (overrides.model_runtime) {
-        auto plan = normalize_cli(std::move(request), snapshot.manager);
-        if (!plan) {
-            return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
-        }
-        if (!plan->model_runtime) {
-            plan->model_runtime = std::move(overrides.model_runtime);
-            plan->model_runtime_owned = false;
-            plan->cli_fake = overrides.cli_fake;
-        }
-        return finish_creation(std::move(plan), snapshot, std::move(overrides.user_shell));
-    }
-    if (overrides.models) {
-        // Transitional test assembly override: wrap the already-composed Models
-        // value without exposing its Provider capability to this Owner.
-        auto wrapped = std::make_shared<ModelRuntime>(std::move(overrides.models));
-        auto plan = normalize_cli(std::move(request), snapshot.manager);
-        if (!plan) {
-            return std::unexpected(
-                with_settings_fallback_context(plan.error(), snapshot));
-        }
-        if (!plan->model_runtime) {
-            plan->model_runtime = std::move(wrapped);
-            plan->model_runtime_owned = true;
-            plan->cli_fake = true;
-        }
-        return finish_creation(
-            std::move(plan), snapshot, std::move(overrides.user_shell));
-    }
-    return finish_creation(
-        normalize_cli(std::move(request), snapshot.manager),
-        snapshot,
-        std::move(overrides.user_shell));
 }
 
 } // namespace cch::coding_agent::runtime

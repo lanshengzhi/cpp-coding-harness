@@ -11,6 +11,8 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -34,6 +36,7 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -85,24 +88,34 @@ struct BootTrustRun {
     /// override.
     std::vector<std::optional<bool>> request_overrides;
     coding_agent::tui::testing::ActionSinkRecorder recorder;
+    tests::RuntimeFixture runtime;
+    tests::RuntimeLoopDriver runtime_driver;
+
+    BootTrustRun() : runtime_driver(runtime) {}
 
     void start(const TrustIsolatedWorkspace& fixture,
             coding_agent::runtime::AgentSessionCreationRequest request,
             std::shared_ptr<ai::Models> models,
             std::shared_ptr<harness::AsyncFileSystem> resource_filesystem = nullptr) {
-        recorder.replace_session =
-            [this, models](coding_agent::runtime::AgentSessionCreationRequest req)
-            -> support::Expected<coding_agent::CreateAgentSessionResult> {
-                request_overrides.push_back(req.project_trust_override);
-                req.provide_user_shell = true;
-                return coding_agent::create_agent_session_for_testing(
-                    std::move(req), models);
-            };
+        recorder.replace_session_async =
+                [this, models, runtime_target = runtime.make_target()](std::size_t /* action_generation */,
+                        coding_agent::runtime::AgentSessionCreationRequest req,
+                        std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+            request_overrides.push_back(req.project_trust_override);
+            req.provide_user_shell = true;
+            req.execution_runtime_target = runtime_target;
+            return coding_agent::create_agent_session_async(std::move(req),
+                    std::nullopt,
+                    coding_agent::runtime::AssemblyOverrides{
+                            .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                    stop_token);
+        };
         auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
         auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
         auto builder = coding_agent::tui::InteractiveSessionRunBuilder{};
         builder.with_agent_config_directory(fixture.agent_dir)
                 .with_action_sink(recorder.make_sink())
+                .with_async_session_replacement_sink(recorder.make_async_session_replacement_sink())
                 .with_defer_boot(std::move(request))
                 .with_runtime_root(std::move(runtime_root));
         if (resource_filesystem) {
@@ -120,6 +133,32 @@ struct BootTrustRun {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
             });
+        // The deferred boot's session creation is asynchronous. Wait until
+        // the creation has crossed the replacement seam, the trust prompt
+        // is asking for the decision the creation is waiting on, or the
+        // boot aborted before creation (a trust-detection failure resolves
+        // the run with an error and never reaches the seam).
+        REQUIRE(tests::pump_until(io, [this] {
+            return recorder.replacement_completions.load(std::memory_order_acquire) >= 1 ||
+                   visible_screen(terminal).find("Trust project folder?") != std::string::npos ||
+                   run_result.has_value();
+        }));
+        drain_ready(io);
+    }
+
+    /// Pump until the boot (or a prompted replacement) creation has crossed
+    /// the seam and the engine has installed the result. Only valid once no
+    /// trust prompt is still awaiting an answer.
+    void wait_booted() { wait_replacement(1); }
+
+    /// Pump until the `completions`-th asynchronous replacement result has
+    /// crossed the seam and the engine has installed the outcome, so the
+    /// next input is not dropped mid-transition and screen assertions see
+    /// the installed Session.
+    void wait_replacement(std::size_t completions) {
+        REQUIRE(tests::pump_until(io, [this, completions] {
+            return recorder.replacement_completions.load(std::memory_order_acquire) >= completions;
+        }));
         drain_ready(io);
     }
 
@@ -188,6 +227,7 @@ TEST_CASE(
 
     // The first option ("Trust") is preselected; confirm it.
     run.type("\r");
+    run.wait_booted();
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
 
@@ -221,10 +261,12 @@ TEST_CASE(
     // Cancel the prompt (tui.select.cancel: escape/ctrl+c): the run
     // proceeds untrusted.
     run.type("\x03");
+    run.wait_booted();
+    // pi renderProjectTrustWarningIfNeeded: the untrusted-project warning
+    // renders in the chat once the untrusted Session has installed.
+    run.wait_for_screen("Use /trust to save a trust decision");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
-    // pi renderProjectTrustWarningIfNeeded: the untrusted-project warning
-    // renders in the chat.
     CHECK(screen.find("This project is not trusted.") != std::string::npos);
     CHECK(screen.find("Use /trust to save a trust decision") != std::string::npos);
 
@@ -368,6 +410,7 @@ TEST_CASE(
     // Pick "Trust (this session only)" (the third option): no store write,
     // yet the boot session binds trusted (no untrusted-project warning).
     run.type("\x1b[B\x1b[B\r");
+    run.wait_booted();
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
     CHECK(screen.find("This project is not trusted.") == std::string::npos);
@@ -378,6 +421,8 @@ TEST_CASE(
     // workspace (pi projectTrustByCwd): the replacement request carries the
     // decided trust instead of dropping to ask-without-UI → untrusted.
     run.type("\x1b[19~");
+    run.wait_replacement(2);
+    run.wait_for_screen("New session started");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("New session started") != std::string::npos);
     REQUIRE(run.request_overrides.size() == 2);
@@ -463,21 +508,31 @@ TEST_CASE(
     auto request = boot_request(fixture);
     request.workspace = fixture.workspace.path() / "missing";
 
+    tests::RuntimeFixture runtime;
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal{{.columns = 120, .rows = 30}};
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     coding_agent::tui::testing::ActionSinkRecorder recorder;
-    recorder.replace_session = [models = tests::make_scripted_fake_models()](
-                                       coding_agent::runtime::AgentSessionCreationRequest req)
-            -> support::Expected<coding_agent::CreateAgentSessionResult> {
+    recorder.replace_session_async =
+            [models = tests::make_scripted_fake_models(), runtime_target = runtime.make_target()](
+                    std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest req,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         req.provide_user_shell = true;
-        return coding_agent::create_agent_session_for_testing(std::move(req), models);
+        req.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(std::move(req),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                stop_token);
     };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_agent_config_directory(fixture.agent_dir)
-        .with_action_sink(recorder.make_sink())
-        .with_defer_boot(std::move(request))
-        .build();
+                       .with_agent_config_directory(fixture.agent_dir)
+                       .with_action_sink(recorder.make_sink())
+                       .with_async_session_replacement_sink(recorder.make_async_session_replacement_sink())
+                       .with_defer_boot(std::move(request))
+                       .build();
     boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
@@ -487,7 +542,8 @@ TEST_CASE(
             CHECK(exception == nullptr);
             run_result.emplace(std::move(result));
         });
-    drain_ready(io);
+    REQUIRE(tests::pump_until(
+            io, [&] { return recorder.boot_creation_failure.size() == 1 || run_result.has_value(); }));
 
     // The creation failure was reported through the closed action seam.
     REQUIRE(recorder.boot_creation_failure.size() == 1);

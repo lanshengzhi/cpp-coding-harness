@@ -25,6 +25,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -59,6 +60,7 @@ struct AssemblyFixture {
     tests::EnvVarGuard gamma_guard{"GAMMA_KEY"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     tests::EnvVarGuard deepseek_guard{"DEEPSEEK_API_KEY"};
+    tests::RuntimeFixture runtime;
 
     AssemblyFixture() {
         dir_guard.set(agent_dir.path().string());
@@ -75,7 +77,7 @@ struct AssemblyFixture {
     [[nodiscard]] runtime::AgentSessionCreationRequest make_request(
         std::optional<bool> trust_override = std::nullopt) const {
         runtime::AgentSessionCreationRequest request;
-        request.execution_runtime_target = tests::detail::fixture_runtime_target();
+        request.execution_runtime_target = runtime.make_target();
         request.project_trust_override = trust_override;
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
@@ -85,8 +87,8 @@ struct AssemblyFixture {
     }
 
     [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create(
-        runtime::AgentSessionCreationRequest request) const {
-        return coding_agent::create_agent_session(std::move(request));
+            runtime::AgentSessionCreationRequest request) {
+        return runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     }
 };
 
@@ -164,11 +166,12 @@ TEST_CASE(
 
     StreamCapture capture_out{STDOUT_FILENO};
     StreamCapture capture_err{STDERR_FILENO};
-    const auto created = fix.create(fix.make_request());
+    auto created = fix.create(fix.make_request());
     capture_out.restore();
     capture_err.restore();
 
     REQUIRE(created);
+    (void)fix.runtime.adopt_session(std::move(created->session));
     CHECK(capture_out.content().empty());
     CHECK(capture_err.content().empty());
 }
@@ -214,6 +217,7 @@ TEST_CASE(
     // Trusted: the project settings default wins over first-available.
     auto trusted = fix.create(fix.make_request(/*trust_override=*/true));
     REQUIRE(trusted);
+    (void)fix.runtime.adopt_session(std::move(trusted->session));
     CHECK(trusted->resolved_identity.provider == "beta");
     CHECK(trusted->resolved_identity.model == "beta-2");
 
@@ -221,6 +225,7 @@ TEST_CASE(
     // invisible to the resolution chain.
     auto untrusted = fix.create(fix.make_request(/*trust_override=*/false));
     REQUIRE(untrusted);
+    (void)fix.runtime.adopt_session(std::move(untrusted->session));
     CHECK(untrusted->resolved_identity.provider != "beta");
     CHECK(untrusted->resolved_identity.model != "beta-2");
 }
@@ -245,8 +250,9 @@ TEST_CASE(
     // nothing is stored and no override exists.
     auto ambient = fix.create(fix.make_request());
     REQUIRE(ambient);
+    auto& ambient_session = fix.runtime.adopt_session(std::move(ambient->session));
     {
-        auto auth = tests::run_async_result(ambient->session->model_runtime()->get_auth("gamma"));
+        auto auth = tests::run_async_result(ambient_session.model_runtime()->get_auth("gamma"));
         REQUIRE(auth);
         REQUIRE(*auth);
         CHECK((*auth)->auth.api_key == "env-configured-key");
@@ -268,8 +274,9 @@ TEST_CASE(
 
     auto with_stored = fix.create(fix.make_request());
     REQUIRE(with_stored);
+    auto& stored_session = fix.runtime.adopt_session(std::move(with_stored->session));
     {
-        auto auth = tests::run_async_result(with_stored->session->model_runtime()->get_auth("gamma"));
+        auto auth = tests::run_async_result(stored_session.model_runtime()->get_auth("gamma"));
         REQUIRE(auth);
         REQUIRE(*auth);
         CHECK((*auth)->auth.api_key == "stored-key");
@@ -283,9 +290,10 @@ TEST_CASE(
     override_request.session_facts.api_key = "cli-override-key";
     auto overridden = fix.create(std::move(override_request));
     REQUIRE(overridden);
-    CHECK(overridden->session->model_runtime()->has_runtime_api_key("gamma"));
+    auto& overridden_session = fix.runtime.adopt_session(std::move(overridden->session));
+    CHECK(overridden_session.model_runtime()->has_runtime_api_key("gamma"));
     {
-        auto auth = tests::run_async_result(overridden->session->model_runtime()->get_auth("gamma"));
+        auto auth = tests::run_async_result(overridden_session.model_runtime()->get_auth("gamma"));
         REQUIRE(auth);
         REQUIRE(*auth);
         CHECK((*auth)->auth.api_key == "cli-override-key");
@@ -312,8 +320,9 @@ TEST_CASE(
 
     auto request = fix.make_request(/*trust_override=*/true);
     request.session_facts.no_skills = false;
-    const auto created = fix.create(std::move(request));
+    auto created = fix.create(std::move(request));
     REQUIRE(created);
+    (void)fix.runtime.adopt_session(std::move(created->session));
     const auto& diagnostics = created->diagnostics;
     REQUIRE_FALSE(diagnostics.empty());
 

@@ -4,19 +4,15 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/executor_work_guard.hpp>
-#include <boost/asio/io_context.hpp>
 
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -29,35 +25,6 @@ class ScriptedProvider;
 [[nodiscard]] std::shared_ptr<ai::Models> make_scripted_fake_models();
 
 namespace detail {
-
-class FixtureRuntime final {
-public:
-    FixtureRuntime()
-        : loop_(std::make_shared<boost::asio::io_context>()),
-          work_guard_(boost::asio::make_work_guard(*loop_)),
-          root_(loop_, harness::RuntimeLimits{}),
-          loop_thread_([this] { loop_->run(); }) {}
-
-    ~FixtureRuntime() {
-        work_guard_.reset();
-        loop_->stop();
-    }
-
-    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() {
-        return root_.make_target();
-    }
-
-private:
-    std::shared_ptr<boost::asio::io_context> loop_;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
-    harness::RuntimeRoot root_;
-    std::jthread loop_thread_;
-};
-
-[[nodiscard]] inline std::shared_ptr<harness::RuntimeTarget> fixture_runtime_target() {
-    static FixtureRuntime runtime;
-    return runtime.make_target();
-}
 
 class FixtureCredentialStore final : public ai::CredentialStore {
 public:
@@ -282,67 +249,4 @@ inline ai::Model scripted_request_model(
     return model;
 }
 
-inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
-    ModelsSessionOptions options) {
-    auto models = std::move(options.models);
-    auto model_runtime = std::move(options.model_runtime);
-    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    if (!request.execution_runtime_target) {
-        request.execution_runtime_target = detail::fixture_runtime_target();
-    }
-    if (model_runtime) {
-        request.model_runtime = std::move(model_runtime);
-        return coding_agent::create_agent_session(std::move(request),
-                std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = nullptr, .cli_fake = false, .models = nullptr, .user_shell = nullptr});
-    }
-    return coding_agent::create_agent_session(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .cli_fake = false, .models = std::move(models), .user_shell = nullptr});
-}
-
-inline support::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
-    ModelsSessionOptions options,
-    std::unique_ptr<coding_agent::runtime::AsyncUserShell> user_shell) {
-    auto models = std::move(options.models);
-    auto model_runtime = std::move(options.model_runtime);
-    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    if (!request.execution_runtime_target) {
-        request.execution_runtime_target = detail::fixture_runtime_target();
-    }
-    if (model_runtime) {
-        request.model_runtime = std::move(model_runtime);
-        return coding_agent::create_agent_session(std::move(request),
-                std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
-                        .cli_fake = false,
-                        .models = nullptr,
-                        .user_shell = std::move(user_shell)});
-    }
-    return coding_agent::create_agent_session(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
-                    .cli_fake = false,
-                    .models = std::move(models),
-                    .user_shell = std::move(user_shell)});
-}
-
 } // namespace cch::tests
-
-namespace cch::coding_agent {
-
-inline support::Expected<CreateAgentSessionResult> create_agent_session(
-    tests::ModelsSessionOptions options) {
-    return tests::create_agent_session(std::move(options));
-}
-
-inline support::Expected<CreateAgentSessionResult> create_agent_session(
-    tests::ModelsSessionOptions options,
-    std::unique_ptr<runtime::AsyncUserShell> user_shell) {
-    return tests::create_agent_session(
-        std::move(options), std::move(user_shell));
-}
-
-} // namespace cch::coding_agent

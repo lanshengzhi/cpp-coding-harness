@@ -191,19 +191,10 @@ void SessionFlowController::spawn(
         std::move(failure_label));
 }
 
-support::Expected<coding_agent::CreateAgentSessionResult>
-SessionFlowController::request_session_replacement(
-    runtime::AgentSessionCreationRequest request) {
-    if (hooks_.request_session_replacement == nullptr) {
-        return std::unexpected(session_replacement_unavailable_error());
-    }
-    return hooks_.request_session_replacement(action_generation(), std::move(request));
-}
-
 boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
 SessionFlowController::request_session_replacement_async(
         runtime::AgentSessionCreationRequest request, std::optional<std::size_t> expected_generation) {
-    if (hooks_.request_session_replacement_async == nullptr && hooks_.request_session_replacement == nullptr) {
+    if (hooks_.request_session_replacement_async == nullptr) {
         co_return std::unexpected(session_replacement_unavailable_error());
     }
 
@@ -226,26 +217,12 @@ SessionFlowController::request_session_replacement_async(
 
     replacement_active_ = true;
     const auto captured_generation = action_generation();
-    if (hooks_.request_session_replacement_async != nullptr) {
-        if (closed_ || stop_source_.stop_requested()) {
-            release_session_replacement();
-            co_return superseded();
-        }
-        auto created = co_await support::detail::await_async_result(hooks_.request_session_replacement_async(
-                captured_generation, std::move(request), stop_source_.get_token()));
-        if (closed_ || stop_source_.stop_requested() || captured_generation != action_generation()) {
-            if (created && created->session) {
-                created->session->close();
-            }
-            co_return superseded();
-        }
-        co_return created;
-    }
     if (closed_ || stop_source_.stop_requested()) {
         release_session_replacement();
         co_return superseded();
     }
-    auto created = hooks_.request_session_replacement(captured_generation, std::move(request));
+    auto created = co_await support::detail::await_async_result(hooks_.request_session_replacement_async(
+            captured_generation, std::move(request), stop_source_.get_token()));
     if (closed_ || stop_source_.stop_requested() || captured_generation != action_generation()) {
         if (created && created->session) {
             created->session->close();
@@ -277,7 +254,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_resume_session(
     if (session == nullptr) co_return;
     const auto captured_generation = action_generation();
     const auto fallback_cwd = session->workspace();
-    if (hooks_.request_session_replacement == nullptr && hooks_.request_session_replacement_async == nullptr) {
+    if (hooks_.request_session_replacement_async == nullptr) {
         presenter_->show_error("Session switching is not available in this host");
         co_return;
     }
@@ -332,7 +309,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_new_session() {
     auto* session = current_session();
     if (session == nullptr) co_return;
     const auto captured_generation = action_generation();
-    if (hooks_.request_session_replacement == nullptr && hooks_.request_session_replacement_async == nullptr) {
+    if (hooks_.request_session_replacement_async == nullptr) {
         presenter_->show_error("Session switching is not available in this host");
         co_return;
     }
@@ -420,7 +397,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_fork_session(
     auto* session = current_session();
     if (session == nullptr) co_return;
     const auto captured_generation = action_generation();
-    if (hooks_.request_session_replacement == nullptr && hooks_.request_session_replacement_async == nullptr) {
+    if (hooks_.request_session_replacement_async == nullptr) {
         presenter_->show_error("Session switching is not available in this host");
         co_return;
     }

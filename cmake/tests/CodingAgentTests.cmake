@@ -78,6 +78,7 @@ include_guard(GLOBAL)
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
         tests/coding_agent/runtime/SessionAssemblyContractTest.cpp
+        tests/coding_agent/runtime/RuntimeFixtureTest.cpp
         tests/coding_agent/runtime/SessionForkTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
         tests/coding_agent/runtime/SessionReplacementFactsTest.cpp

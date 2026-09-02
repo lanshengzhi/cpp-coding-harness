@@ -2,6 +2,8 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PseudoTerminal.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "coding_agent/AgentSession.hpp"
@@ -20,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -101,12 +104,19 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
 
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace config;
+    cch::tests::RuntimeFixture runtime;
     cch::tests::ModelsSessionOptions options;
     options.session_target = cch::coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
-    auto created = cch::coding_agent::create_agent_session(std::move(options));
+    options.execution_runtime_target = runtime.make_target();
+    auto models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
+    cch::coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            cch::coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created);
+    cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
     cch::tui::ProcessTerminal terminal({
         .input_fd = pty->slave.get(),

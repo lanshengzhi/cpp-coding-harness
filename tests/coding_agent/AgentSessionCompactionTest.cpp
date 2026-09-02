@@ -13,6 +13,7 @@
 #include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -39,6 +40,7 @@
 #include <vector>
 
 using namespace cch;
+using tests::run_awaitable;
 
 namespace {
 
@@ -150,36 +152,6 @@ public:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-template <typename T>
-[[nodiscard]] T run_awaitable(boost::asio::awaitable<T> awaitable) {
-    boost::asio::io_context io;
-    std::optional<T> result;
-    std::exception_ptr exception;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                result = co_await std::move(awaitable);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                exception = std::current_exception();
-            }
-#endif
-            co_return;
-        },
-        boost::asio::detached);
-    io.run();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    if (exception) {
-        std::rethrow_exception(exception);
-    }
-#endif
-    REQUIRE(result.has_value());
-    return std::move(*result);
-}
-
 /// A persisted session whose live history reaches the 20000-token
 /// keepRecentTokens budget with a deterministic cut: three 20K-char
 /// user/assistant pairs (each ~5001 estimated tokens). The cut keeps
@@ -189,7 +161,7 @@ struct SessionUnderTest {
     CompactionScriptedProvider* client{nullptr};
 };
 
-[[nodiscard]] SessionUnderTest make_big_session(const TestPaths& paths) {
+[[nodiscard]] SessionUnderTest make_big_session(const TestPaths& paths, tests::RuntimeFixture& runtime) {
     const std::string big(20000, 'x');
     auto client = std::make_shared<CompactionScriptedProvider>();
     auto* client_ptr = client.get();
@@ -202,12 +174,18 @@ struct SessionUnderTest {
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
     CHECK(session->message_count() == 6);
     return SessionUnderTest{
         std::move(created->session),
@@ -233,13 +211,14 @@ TEST_CASE(
     "manual compaction on an idle session persists a CompactionEntry and rebuilds context",
     "[coding_agent][compaction][issue358]") {
     TestPaths paths;
-    auto under_test = make_big_session(paths);
+    tests::RuntimeFixture runtime;
+    auto under_test = make_big_session(paths, runtime);
     auto* session = under_test.session.get();
     auto* client = under_test.client;
     client->responses.push_back(summarization_response());
     client->responses.push_back(ai::assistant_text_message("after compaction"));
 
-    auto result = run_awaitable(session->compact());
+    auto result = run_awaitable(runtime, session->compact());
     REQUIRE(result.has_value());
     CHECK(result->summary.find("## Goal\nCompacted history summary") != std::string::npos);
     CHECK_FALSE(result->first_kept_entry_id.empty());
@@ -286,7 +265,7 @@ TEST_CASE(
 
     // The next prompt's model context is exactly compactionSummary + retained
     // tail (pi: `agent.state.messages = sessionContext.messages`).
-    REQUIRE(session->prompt_blocking("after compaction").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt("after compaction")).has_value());
     REQUIRE(client->requests.size() == 5);
     const auto& next_request = client->requests[4];
     REQUIRE(next_request.context.messages.size() == 6);
@@ -308,6 +287,7 @@ TEST_CASE(
     "manual compaction aborts an in-flight run before compacting",
     "[coding_agent][compaction][issue358]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     const std::string big(20000, 'x');
     auto client = std::make_shared<CompactionScriptedProvider>();
     auto* client_ptr = client.get();
@@ -326,41 +306,58 @@ TEST_CASE(
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
 
-    boost::asio::io_context io;
     std::optional<support::ExpectedVoid> prompt_result;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            prompt_result = co_await session->prompt(big + " u3");
-            co_return;
-        },
-        boost::asio::detached);
-    while (client_ptr->request_count < 3) {
-        REQUIRE(io.poll_one() == 1);
-    }
-
     std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            compact_result = co_await session->compact();
-            co_return;
-        },
-        boost::asio::detached);
+    auto combined =
+            runtime.run(support::detail::make_async_result([&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                const auto executor = co_await boost::asio::this_coro::executor;
+                boost::asio::co_spawn(
+                        executor,
+                        [&]() -> boost::asio::awaitable<void> {
+                            prompt_result = co_await session->prompt(big + " u3");
+                            co_return;
+                        },
+                        boost::asio::detached);
+                while (client_ptr->request_count < 3) {
+                    boost::asio::steady_timer yield_timer{executor};
+                    yield_timer.expires_after(std::chrono::milliseconds{1});
+                    boost::system::error_code error;
+                    co_await yield_timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                }
 
-    // Release the in-flight prompt: it observes the cancellation requested by
-    // compact() and settles with the ordinary aborted terminal.
-    client_ptr->release_gate();
-    if (io.stopped()) {
-        io.restart();
-    }
-    io.run();
+                boost::asio::co_spawn(
+                        executor,
+                        [&]() -> boost::asio::awaitable<void> {
+                            compact_result = co_await session->compact();
+                            co_return;
+                        },
+                        boost::asio::detached);
+
+                // Release the in-flight prompt: it observes the cancellation
+                // requested by compact() and settles with the ordinary aborted
+                // terminal.
+                client_ptr->release_gate();
+                while (!prompt_result || !compact_result) {
+                    boost::asio::steady_timer yield_timer{executor};
+                    yield_timer.expires_after(std::chrono::milliseconds{1});
+                    boost::system::error_code error;
+                    co_await yield_timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                }
+                co_return support::ExpectedVoid{};
+            }));
+    REQUIRE(combined.has_value());
 
     // The aborted prompt completes normally; compaction succeeded and used
     // the aborted run's committed history.
@@ -392,16 +389,23 @@ TEST_CASE(
     "[coding_agent][compaction][issue358]") {
     // A small session fits the keepRecentTokens budget: nothing to summarize.
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<CompactionScriptedProvider>();
     client->responses.push_back(ai::assistant_text_message("small reply"));
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
-    REQUIRE(created->session->prompt_blocking("small prompt").has_value());
-    auto rejected = run_awaitable(created->session->compact());
+    REQUIRE(run_awaitable(runtime, created->session->prompt("small prompt")).has_value());
+    auto rejected = run_awaitable(runtime, created->session->compact());
     REQUIRE_FALSE(rejected.has_value());
     CHECK(rejected.error().code == support::ErrorCode::Validation);
     CHECK(rejected.error().message == "Nothing to compact (session too small)");
@@ -416,9 +420,15 @@ TEST_CASE(
     memory_options.session_target = coding_agent::InMemorySessionTarget{};
     memory_options.workspace = in_memory_paths.workspace.path();
     memory_options.models = cch::tests::models_from_provider(std::move(memory_client));
-    auto memory_created = coding_agent::create_agent_session(std::move(memory_options));
+    auto memory_models = std::move(memory_options.models);
+    coding_agent::runtime::AgentSessionCreationRequest memory_request = std::move(memory_options);
+    memory_request.execution_runtime_target = runtime.make_target();
+    auto memory_created = runtime.run(coding_agent::create_agent_session_async(std::move(memory_request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(memory_models), .user_shell = nullptr}));
     REQUIRE(memory_created.has_value());
-    auto memory_rejected = run_awaitable(memory_created->session->compact());
+    auto memory_rejected = run_awaitable(runtime, memory_created->session->compact());
     REQUIRE_FALSE(memory_rejected.has_value());
     CHECK(memory_rejected.error().message ==
           "compaction requires a persisted session file");
@@ -539,10 +549,10 @@ struct TriggerSessionUnderTest {
     TriggerPolicyScriptedProvider* client{nullptr};
 };
 
-[[nodiscard]] TriggerSessionUnderTest make_trigger_session(
-    const TestPaths& paths,
-    std::deque<ai::AssistantMessage> responses,
-    std::uint64_t context_window = 128000) {
+[[nodiscard]] TriggerSessionUnderTest make_trigger_session(const TestPaths& paths,
+        tests::RuntimeFixture& runtime,
+        std::deque<ai::AssistantMessage> responses,
+        std::uint64_t context_window = 128000) {
     auto client = std::make_shared<TriggerPolicyScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses = std::move(responses);
@@ -553,7 +563,13 @@ struct TriggerSessionUnderTest {
     options.request_model = trigger_model(context_window);
     options.models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
     return TriggerSessionUnderTest{
         std::move(created->session),
@@ -575,27 +591,28 @@ TEST_CASE(
     "overflow terminal compacts and retries the turn exactly once; success continues normally",
     "[coding_agent][compaction][issue359]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
-    auto under_test = make_trigger_session(
-        paths,
-        {
-            big_assistant("a1 " + big),
-            big_assistant("a2 " + big),
-            big_assistant("a3 " + big),
-            overflow_terminal(),
-            summarization_response(),
-            big_assistant("recovered"),
-        });
+    auto under_test = make_trigger_session(paths,
+            runtime,
+            {
+                    big_assistant("a1 " + big),
+                    big_assistant("a2 " + big),
+                    big_assistant("a3 " + big),
+                    overflow_terminal(),
+                    summarization_response(),
+                    big_assistant("recovered"),
+            });
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
     CHECK(session->message_count() == 6);
 
     // The overflowing prompt succeeds after one compact-and-retry.
-    REQUIRE(session->prompt_blocking(big + " u4").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u4")).has_value());
 
     // Requests: 4 agent turns + 1 summarization + 1 retry turn — exactly one
     // retry, and the summarization ran once.
@@ -622,7 +639,7 @@ TEST_CASE(
 
     // The retried success continues the session normally: the next prompt
     // streams over the compacted context.
-    REQUIRE(session->prompt_blocking(big + " u5").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u5")).has_value());
     REQUIRE(client->request_count == 7);
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
         client->requests[6].context.messages[0]));
@@ -634,25 +651,26 @@ TEST_CASE(
     "a second overflow after the compact-and-retry fails with pi's verbatim recovery message",
     "[coding_agent][compaction][issue359]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
-    auto under_test = make_trigger_session(
-        paths,
-        {
-            big_assistant("a1 " + big),
-            big_assistant("a2 " + big),
-            big_assistant("a3 " + big),
-            overflow_terminal(),
-            summarization_response(),
-            overflow_terminal(),
-        });
+    auto under_test = make_trigger_session(paths,
+            runtime,
+            {
+                    big_assistant("a1 " + big),
+                    big_assistant("a2 " + big),
+                    big_assistant("a3 " + big),
+                    overflow_terminal(),
+                    summarization_response(),
+                    overflow_terminal(),
+            });
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
 
-    const auto failed = session->prompt_blocking(big + " u4");
+    const auto failed = run_awaitable(runtime, session->prompt(big + " u4"));
     REQUIRE_FALSE(failed.has_value());
     // The verbatim overflow-recovery message, pinned by the committed golden.
     CHECK(failed.error().message == read_golden_text("overflow-recovery-message.txt"));
@@ -676,28 +694,29 @@ TEST_CASE(
     "threshold compaction fires over contextWindow - reserveTokens and never retries",
     "[coding_agent][compaction][issue359]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
     // 30000 window: threshold boundary = 30000 - 16384 = 13616.
-    auto under_test = make_trigger_session(
-        paths,
-        {
-            big_assistant("a1 " + big),
-            big_assistant("a2 " + big),
-            big_assistant("a3 " + big),
-            usage_assistant("huge", 20000),
-            summarization_response(),
-        },
-        /*context_window=*/30000);
+    auto under_test = make_trigger_session(paths,
+            runtime,
+            {
+                    big_assistant("a1 " + big),
+                    big_assistant("a2 " + big),
+                    big_assistant("a3 " + big),
+                    usage_assistant("huge", 20000),
+                    summarization_response(),
+            },
+            /*context_window=*/30000);
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
 
     // The fourth prompt's response crosses the threshold: the session compacts
     // and the turn is NOT retried (the completed answer stays).
-    REQUIRE(session->prompt_blocking(big + " u4").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u4")).has_value());
     REQUIRE(client->request_count == 5);
     const auto value = find_compaction_entry(paths);
     REQUIRE(value.has_value());
@@ -717,6 +736,7 @@ TEST_CASE(
     "disabled compaction settings suppress both automatic triggers",
     "[coding_agent][compaction][issue359]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     paths.workspace.write(
         "agent/settings.json",
         R"({"compaction": {"enabled": false}})");
@@ -724,13 +744,13 @@ TEST_CASE(
         "PI_CODING_AGENT_DIR",
         (paths.workspace.path() / "agent").string()};
 
-    auto under_test = make_trigger_session(paths, {overflow_terminal()});
+    auto under_test = make_trigger_session(paths, runtime, {overflow_terminal()});
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 
     // The overflow error terminal completes the run normally: no compaction,
     // no retry (pi's settings.enabled gate returns before any decision).
-    REQUIRE(session->prompt_blocking("u1").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt("u1")).has_value());
     REQUIRE(client->request_count == 1);
     CHECK(session->message_count() == 2);
     CHECK_FALSE(find_compaction_entry(paths).has_value());
@@ -741,37 +761,38 @@ TEST_CASE(
     "pre-prompt compaction check catches an aborted response over the threshold",
     "[coding_agent][compaction][issue359]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
     auto aborted = usage_assistant("", 20000);
     aborted.stop_reason = ai::AssistantStopReason::Aborted;
     aborted.error_message = "Request was aborted";
     // 30000 window: threshold boundary = 13616.
-    auto under_test = make_trigger_session(
-        paths,
-        {
-            big_assistant("a1 " + big),
-            big_assistant("a2 " + big),
-            big_assistant("a3 " + big),
-            aborted,
-            summarization_response(),
-            big_assistant("after pre-prompt compaction"),
-        },
-        /*context_window=*/30000);
+    auto under_test = make_trigger_session(paths,
+            runtime,
+            {
+                    big_assistant("a1 " + big),
+                    big_assistant("a2 " + big),
+                    big_assistant("a3 " + big),
+                    aborted,
+                    summarization_response(),
+                    big_assistant("after pre-prompt compaction"),
+            },
+            /*context_window=*/30000);
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
 
     // The fourth run is aborted (user cancellation path); the post-run check
     // skips aborted messages.
-    REQUIRE(session->prompt_blocking(big + " u4").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u4")).has_value());
     REQUIRE(client->request_count == 4);
 
     // The next prompt's pre-send check (skipAbortedCheck=false) compacts the
     // aborted response's over-threshold usage before the new prompt streams.
-    REQUIRE(session->prompt_blocking(big + " u5").has_value());
+    REQUIRE(run_awaitable(runtime, session->prompt(big + " u5")).has_value());
     REQUIRE(client->request_count == 6);
     REQUIRE(find_compaction_entry(paths).has_value());
     // The u5 request runs on the compacted context.

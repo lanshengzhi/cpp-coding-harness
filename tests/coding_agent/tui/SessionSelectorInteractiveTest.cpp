@@ -7,13 +7,16 @@
 // credentials, no network validation.
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include "agent/harness/RuntimeRoot.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -23,10 +26,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 
 using namespace cch;
@@ -125,33 +131,61 @@ struct Running {
 }
 
 /// Boot the interactive mode against the fixture session with the real
-/// session-factory replacement surface (pi `createRuntime`).
-[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(
-    Fixture& fixture,
-    Running& running) {
+/// session-factory replacement surface (pi `createRuntime`) routed through
+/// the asynchronous Session replacement test adapter (issue #580): the
+/// resume, new-session, and fork flows reach AsyncSessionReplacementSink
+/// exclusively, and tests wait on the seam completion counter before
+/// asserting the post-replacement screen.
+[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(Fixture& fixture,
+        Running& running,
+        const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
-    request.session_target =
-        coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    auto created = coding_agent::create_agent_session(std::move(request));
-    REQUIRE(created.has_value());
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
 
-    coding_agent::tui::testing::ActionSinkRecorder recorder;
-    recorder.replace_session =
-        [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            return coding_agent::create_agent_session(std::move(request));
-        };
+    // The replacement Runtime Root shares the interactive loop: assembly
+    // work and the install continuation are both pumped by the test.
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(&running.io, [](boost::asio::io_context*) {});
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
+
+    // Create the boot session through the one asynchronous Session Assembly
+    // door on the interactive loop (RuntimeRoot holds a work guard on the
+    // loop, so pump until creation completes rather than draining).
+    request.execution_runtime_target = runtime_root->make_target();
+    std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
+    boost::asio::co_spawn(running.io,
+            support::detail::await_async_result(coding_agent::create_agent_session_async(std::move(request))),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
+                CHECK(exception == nullptr);
+                booted.emplace(std::move(created));
+            });
+    REQUIRE(tests::pump_until(running.io, [&] { return booted.has_value(); }));
+    REQUIRE(booted->has_value());
+    auto created = std::move(**booted);
+
+    actions->replace_session_async =
+            [runtime_root](std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_root->make_target();
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
+                stop_token);
+    };
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created->session)
-        .with_agent_config_directory(fixture.agent_dir.path())
-        .with_action_sink(recorder.make_sink())
-        .build();
+                       .with_session(*created.session)
+                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_action_sink(actions->make_sink())
+                       .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
+                       .with_runtime_root(std::move(runtime_root))
+                       .build();
 
     boost::asio::co_spawn(
         running.io,
@@ -163,7 +197,18 @@ struct Running {
             running.run_result.emplace(std::move(result));
         });
     drain_ready(running.io);
-    return std::move(created->session);
+    return std::move(created.session);
+}
+
+/// Pump until the asynchronous replacement completed at the seam, then
+/// drain: the engine's installation continuation is queued on the same loop
+/// by the time the count is observed (issue #579).
+void wait_replacement(Running& running,
+        const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions,
+        std::size_t completions) {
+    REQUIRE(tests::pump_until(running.io,
+            [&] { return actions->replacement_completions.load(std::memory_order_acquire) >= completions; }));
+    drain_ready(running.io);
 }
 
 } // namespace
@@ -176,7 +221,8 @@ TEST_CASE(
     fixture.write_session(
         fixture.workspace.path() / "other.jsonl", {"hello from other"});
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     // alt+r opens the session selector (user-assigned keybinding on the
     // recognized-but-unbound app.session.resume).
@@ -189,11 +235,14 @@ TEST_CASE(
     CHECK(screen.find("re:<pattern> regex") != std::string::npos);
 
     // The current boot session (no messages) is newest, so the target sits
-    // one row below: Down + Enter resumes it.
+    // one row below: Down + Enter resumes it through the asynchronous
+    // replacement adapter.
     REQUIRE(running.terminal.inject_input("\x1b[B"));
     drain_ready(running.io);
     REQUIRE(running.terminal.inject_input("\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 1);
+    REQUIRE(actions->replace_sessions.size() == 1);
+    CHECK(actions->replace_sessions[0].target == "explicit-resume");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Resumed session") != std::string::npos);
     CHECK(screen.find("hello from other") != std::string::npos);
@@ -211,7 +260,8 @@ TEST_CASE(
     fixture.write_session(
         fixture.workspace.path() / "other.jsonl", {"hello from other"});
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
@@ -247,7 +297,8 @@ TEST_CASE(
         std::nullopt,
         "named-session");
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
@@ -291,7 +342,8 @@ TEST_CASE(
     const auto other = fixture.workspace.path() / "other.jsonl";
     fixture.write_session(other, {"hello from other"});
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
@@ -338,7 +390,8 @@ TEST_CASE(
     const auto other = fixture.workspace.path() / "other.jsonl";
     fixture.write_session(other, {"hello from other"});
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
@@ -376,7 +429,8 @@ TEST_CASE(
         std::nullopt,
         "boot-session");
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
     REQUIRE(session->message_count() == 5);
 
     // alt+f opens the user-message selector with the last message
@@ -387,11 +441,14 @@ TEST_CASE(
     CHECK(screen.find("Fork from Message") != std::string::npos);
     CHECK(screen.find("Message 3 of 3") != std::string::npos);
 
-    // Enter forks before the last user message: a branched session with the
+    // Enter forks before the last user message through the asynchronous
+    // replacement adapter: a branched session with the
     // first two turns, the editor pre-filled with "user-2", and the pi
     // status.
     REQUIRE(running.terminal.inject_input("\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 1);
+    REQUIRE(actions->replace_sessions.size() == 1);
+    CHECK(actions->replace_sessions[0].target == "explicit-open-or-create");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Forked to new session") != std::string::npos);
     CHECK(screen.find("user-2") != std::string::npos);
@@ -434,7 +491,8 @@ TEST_CASE(
     "[coding_agent][tui][session-selector][e2e][issue409]") {
     Fixture fixture;
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[18~"));
     drain_ready(running.io);
@@ -460,7 +518,8 @@ TEST_CASE(
         missing_cwd.string(),
         "vanished-session");
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
@@ -479,9 +538,12 @@ TEST_CASE(
     CHECK(screen.find(missing_cwd.string()) != std::string::npos);
     CHECK(screen.find("continue in current cwd") != std::string::npos);
 
-    // "Yes" continues in the current cwd.
+    // "Yes" continues in the current cwd: the resume completes through
+    // the asynchronous replacement adapter.
     REQUIRE(running.terminal.inject_input("\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 1);
+    REQUIRE(actions->replace_sessions.size() == 1);
+    CHECK(actions->replace_sessions[0].target == "explicit-resume");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Resumed session in current cwd") != std::string::npos);
     CHECK(screen.find("hello from the vanished project") != std::string::npos);
@@ -503,7 +565,8 @@ TEST_CASE(
         missing_cwd.string(),
         "vanished-session");
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
 
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
@@ -516,13 +579,15 @@ TEST_CASE(
     auto screen = visible_screen(running.terminal);
     CHECK(screen.find("Session cwd not found") != std::string::npos);
 
-    // Down to "No" + Enter cancels the resume.
+    // Down to "No" + Enter cancels the resume before any replacement is
+    // requested.
     REQUIRE(running.terminal.inject_input("\x1b[B"));
     drain_ready(running.io);
     REQUIRE(running.terminal.inject_input("\r"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Resume cancelled") != std::string::npos);
+    CHECK(actions->replace_sessions.empty());
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -536,11 +601,14 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"old turn"}, std::nullopt, "boot-session");
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
     REQUIRE(session->message_count() == 1);
 
     REQUIRE(running.terminal.inject_input("\x1b[19~"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 1);
+    REQUIRE(actions->replace_sessions.size() == 1);
+    CHECK(actions->replace_sessions[0].target == "default-persisted");
     auto screen = visible_screen(running.terminal);
     CHECK(screen.find("New session started") != std::string::npos);
     CHECK(screen.find("old turn") == std::string::npos);

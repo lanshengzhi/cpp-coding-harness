@@ -546,8 +546,9 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
     }
 
     boost::system::error_code wait_error;
-    co_await engine->exit_wait().async_wait(
-        boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    if (!engine->exit_requested()) {
+        co_await engine->exit_wait().async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    }
     co_return co_await engine->finish();
 }
 

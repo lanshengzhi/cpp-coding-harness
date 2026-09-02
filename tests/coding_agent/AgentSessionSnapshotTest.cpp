@@ -1,5 +1,6 @@
 #include "ai/ModelStreamBridge.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Content.hpp>
@@ -30,6 +31,7 @@
 #include <variant>
 
 using namespace cch;
+using tests::run_awaitable;
 
 namespace {
 
@@ -64,14 +66,17 @@ struct TestPaths {
 }
 
 [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
-    const TestPaths& paths) {
+        const TestPaths& paths, tests::RuntimeFixture& runtime) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = paths.workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
-    return coding_agent::create_agent_session_for_testing(std::move(request), tests::make_scripted_fake_models());
+    request.execution_runtime_target = runtime.make_target();
+    return runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
 }
 
 class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
@@ -148,9 +153,15 @@ TEST_CASE(
     "SDK fresh persisted snapshot is passive session and Agent state",
     "[sdk][snapshot][issue42]") {
     TestPaths paths;
-    auto created = coding_agent::create_agent_session(new_session_options(
-        paths,
-        coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file}));
+    tests::RuntimeFixture runtime;
+    auto options = new_session_options(paths, coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file});
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto snapshot = created->session->snapshot();
@@ -182,9 +193,15 @@ TEST_CASE(
     "SDK in-memory snapshot retains metadata without inventing a session file",
     "[sdk][snapshot][issue42]") {
     TestPaths paths;
-    auto created = coding_agent::create_agent_session(new_session_options(
-        paths,
-        coding_agent::InMemorySessionTarget{}));
+    tests::RuntimeFixture runtime;
+    auto options = new_session_options(paths, coding_agent::InMemorySessionTarget{});
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     const auto snapshot = created->session->snapshot();
@@ -202,13 +219,18 @@ TEST_CASE(
     "SDK active snapshot copies running and streaming state on the prompt executor",
     "[sdk][snapshot][async][issue42]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<GatedSnapshotChatProvider>();
     auto* client_ptr = client.get(); // options/session owns it until this test closes the session
 
-    auto created = coding_agent::create_agent_session(new_session_options(
-        paths,
-        coding_agent::InMemorySessionTarget{},
-        std::move(client)));
+    auto options = new_session_options(paths, coding_agent::InMemorySessionTarget{}, std::move(client));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     boost::asio::io_context io;
@@ -250,9 +272,15 @@ TEST_CASE(
     "SDK snapshot retains live messages and diagnostics after subscriber failure",
     "[sdk][snapshot][subscriber-failure][issue42]") {
     TestPaths paths;
-    auto created = coding_agent::create_agent_session(new_session_options(
-        paths,
-        coding_agent::InMemorySessionTarget{}));
+    tests::RuntimeFixture runtime;
+    auto options = new_session_options(paths, coding_agent::InMemorySessionTarget{});
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto failing = created->session->subscribe(
@@ -262,7 +290,7 @@ TEST_CASE(
                 "snapshot subscriber failed"));
         });
     REQUIRE(failing.has_value());
-    REQUIRE(created->session->prompt_blocking("subscriber failure").has_value());
+    REQUIRE(run_awaitable(runtime, created->session->prompt("subscriber failure")).has_value());
 
     const auto snapshot = created->session->snapshot();
     CHECK(snapshot.agent_state.messages.size() == 2);
@@ -278,15 +306,22 @@ TEST_CASE(
     "SDK snapshot retains Live Session State after persistence failure",
     "[sdk][snapshot][persistence-failure][issue42]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::make_shared<CapturingSnapshotChatProvider>());
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
-    auto prompted = created->session->prompt_blocking("persistence failure");
+    auto prompted = run_awaitable(runtime, created->session->prompt("persistence failure"));
     REQUIRE_FALSE(prompted.has_value());
 
     const auto snapshot = created->session->snapshot();
@@ -304,6 +339,7 @@ TEST_CASE(
     "Frontend resumed snapshot reflects compacted active-path context",
     "[sdk][snapshot][resume][issue42]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     auto store = harness::session::SessionStore::create_new(
         paths.session_file,
         test_metadata(paths));
@@ -327,7 +363,7 @@ TEST_CASE(
         }));
     REQUIRE(resumed_store->append(user_message("after compaction")).has_value());
 
-    auto resumed = resume_for_frontend(paths);
+    auto resumed = resume_for_frontend(paths, runtime);
     REQUIRE(resumed.has_value());
     const auto snapshot = resumed->session->snapshot();
     CHECK(snapshot.topology == harness::session::SessionTopology::Compacted);
@@ -346,6 +382,7 @@ TEST_CASE(
     "Frontend resumed snapshot preserves branch-summary active-path meaning",
     "[sdk][snapshot][resume][issue42]") {
     TestPaths paths;
+    tests::RuntimeFixture runtime;
     auto store = harness::session::SessionStore::create_new(
         paths.session_file,
         test_metadata(paths));
@@ -358,7 +395,7 @@ TEST_CASE(
         std::nullopt,
         std::nullopt));
 
-    auto resumed = resume_for_frontend(paths);
+    auto resumed = resume_for_frontend(paths, runtime);
     REQUIRE(resumed.has_value());
     const auto snapshot = resumed->session->snapshot();
     CHECK(snapshot.topology == harness::session::SessionTopology::Branched);

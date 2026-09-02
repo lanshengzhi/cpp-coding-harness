@@ -56,28 +56,6 @@ struct WriteClipboardAction {
 /// Fire-and-forget; a null host performs the platform SIGTSTP directly.
 struct SuspendProcessAction {};
 
-/// In-session session replacement (pi `AgentSessionRuntime` createRuntime
-/// closure): create the next Agent Session for `switchSession`/`newSession`/
-/// `fork`, and the boot path's deferred boot-session creation. The host
-/// installs the host-only capabilities on the request and crosses the
-/// Session Assembly boundary with the CLI-owned facts; the boundary
-/// re-applies them and returns the created session for binding.
-///
-/// Field ownership seam (issue #507): session trust is engine-authoritative —
-/// `project_trust_override` arrives resolved (the CLI `--approve`/
-/// `--no-approve` override, the boot prompt decision, or the boot-workspace
-/// inheritance, pi `projectTrustByCwd`) and the boundary's facts merge only
-/// fills it in when the engine left it unset. The pure CLI-owned resource and
-/// model facts are re-applied unconditionally (load-bearing for the fields
-/// `make_session_request` deliberately omits — `no_themes`, `theme_paths`,
-/// `no_context_files`, `system_prompt`, `append_system_prompt`); host-only
-/// capabilities (User Shell, Runtime target, shared Models runtime) are
-/// always host-set. The merge lives behind the Session Assembly boundary
-/// (`SessionFactory::apply_cli_facts`).
-struct ReplaceSessionAction {
-    runtime::AgentSessionCreationRequest request;
-};
-
 /// Report session-creation diagnostics on the boot path (pi
 /// `reportDiagnostics`); the host wires this to stderr.
 struct ReportBootDiagnosticsAction {
@@ -92,22 +70,18 @@ struct ReportBootCreationFailureAction {
 
 /// One closed application-level Native TUI operation. Each alternative is an
 /// owned passive payload; the composition host performs the operation.
-using TuiActionVariant = std::variant<
-    OpenBrowserAction,
-    WriteClipboardAction,
-    SuspendProcessAction,
-    ReplaceSessionAction,
-    ReportBootDiagnosticsAction,
-    ReportBootCreationFailureAction>;
+/// Session replacement is not an action value: it crosses the asynchronous
+/// `AsyncSessionReplacementSink` strong capability exclusively (issue #581).
+using TuiActionVariant = std::variant<OpenBrowserAction,
+        WriteClipboardAction,
+        SuspendProcessAction,
+        ReportBootDiagnosticsAction,
+        ReportBootCreationFailureAction>;
 
 /// The result the host returns for one dispatched action. Fire-and-forget
 /// operations return `std::monostate`; `WriteClipboardAction` returns the
-/// clipboard-tool success; `ReplaceSessionAction` returns the created session
-/// (or its creation error).
-using TuiActionResultVariant = std::variant<
-    std::monostate,
-    bool,
-    support::Expected<coding_agent::CreateAgentSessionResult>>;
+/// clipboard-tool success.
+using TuiActionResultVariant = std::variant<std::monostate, bool>;
 
 /// Move-only sink carrying closed Native TUI actions to the composition host.
 /// The host dispatches on `TuiActionVariant` and returns the matching
@@ -116,8 +90,7 @@ using TuiActionResultVariant = std::variant<
 /// generation (ADR 0040, issue #461; consumed by the in-session replacement
 /// host in #466). Delivery is lossless: every admitted action is carried
 /// exactly once (render-state coalescing never applies here). A null sink
-/// falls back to the TUI-local platform defaults for environment operations;
-/// session replacement reports an unavailable host.
+/// falls back to the TUI-local platform defaults for environment operations.
 using TuiActionSink = std::move_only_function<
     support::Expected<TuiActionResultVariant>(std::size_t action_generation,
                                            TuiActionVariant action)>;

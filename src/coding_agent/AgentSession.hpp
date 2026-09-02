@@ -90,7 +90,7 @@ struct ResolvedSessionIdentity {
 };
 
 /// Result of a successful session creation: the publication bundle returned
-/// by the one Session Assembly boundary (`create_agent_session`). Behavior-
+/// by the one Session Assembly boundary (`create_agent_session_async`). Behavior-
 /// bearing fields sit at the top level; `resolved_identity` is observation
 /// only.
 struct CreateAgentSessionResult {
@@ -222,7 +222,7 @@ struct SessionTreeTopology {
 
 // ── AgentSession ─────────────────────────────────────────────────────────────
 
-/// Move-only session handle. Created by create_agent_session().
+/// Move-only session handle. Created by create_agent_session_async().
 ///
 /// Lifecycle: Open → (prompt)* → Closed.
 ///   - prompt() is awaitable and serial; reentrant calls return an error.
@@ -602,45 +602,24 @@ private:
 ///
 /// Validates the request, resolves the workspace, opens or creates the
 /// selected persisted session, assembles the provider client, execution
-/// environment, tools, and resources, and returns a session handle with
-/// diagnostics.
+/// environment, tools, and resources, and completes with a session handle
+/// plus diagnostics. The one door is asynchronous (issue #582): `session_facts`
+/// is re-applied under the issue #507 field-ownership rules, authorized
+/// resource loading and model prerequisites are awaited on the Runtime loop,
+/// and publication happens only after the assembled value is complete.
+/// Cancellation is explicit and is resolved by the assembly operation's
+/// domain error.
 ///
 /// Does not write to stdout/stderr or read RPC stdin.
-[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
-    runtime::AgentSessionCreationRequest request);
-
-/// The full synchronous expand-contract bridge. `session_facts` carries the
-/// CLI-owned facts beside an engine-built request (in-session session
-/// replacement, pi `createRuntime`); production hosts use
-/// `create_agent_session_async` instead.
-[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session(
-    runtime::AgentSessionCreationRequest request,
-    std::optional<runtime::InteractiveSessionFacts> session_facts,
-    runtime::AssemblyOverrides overrides);
-
-/// The one asynchronous production Session Assembly door. It re-applies
-/// `session_facts` under the issue #507 field-ownership rules, awaits
-/// authorized resource loading and model prerequisites, and publishes only
-/// after the assembled value is complete. Cancellation is explicit and is
-/// resolved by the assembly operation's domain error.
 [[nodiscard]] support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
         runtime::AgentSessionCreationRequest request,
         std::optional<runtime::InteractiveSessionFacts> session_facts,
         runtime::AssemblyOverrides overrides,
         std::stop_token stop_token = {});
 
-/// Private test-support wrapper around SessionFactory's Models assembly seam
-/// (the deterministic provider surface the deleted fake-provider CLI flag
-/// used to drive).
-[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-    runtime::AgentSessionCreationRequest request,
-    std::shared_ptr<ai::Models> models);
-
-/// Private test-support wrapper around SessionFactory's Models assembly seam
-/// with an injected Session-owned User Shell.
-[[nodiscard]] support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-    runtime::AgentSessionCreationRequest request,
-    std::shared_ptr<ai::Models> models,
-    std::unique_ptr<runtime::AsyncUserShell> user_shell);
+/// Convenience overload for callers without CLI-owned facts or assembly
+/// overrides; forwards to the one asynchronous door above.
+[[nodiscard]] support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
+        runtime::AgentSessionCreationRequest request);
 
 } // namespace cch::coding_agent

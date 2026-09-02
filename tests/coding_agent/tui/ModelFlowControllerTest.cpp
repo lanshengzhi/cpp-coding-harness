@@ -14,6 +14,8 @@
 #include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/ModelResolver.hpp>
@@ -140,7 +142,9 @@ struct ModelFlowFixture {
         cch::tui::TerminalColorCapability::TrueColor};
     std::shared_ptr<void> host_token{std::make_shared<int>(0)};
 
+    tests::RuntimeFixture runtime;
     std::unique_ptr<coding_agent::AgentSession> session;
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     std::optional<coding_agent::SettingsManager> settings{std::nullopt};
     std::shared_ptr<coding_agent::tui::ModelFlowController> flows;
 
@@ -170,9 +174,11 @@ struct ModelFlowFixture {
         request.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
         request.session_facts.models = std::move(models);
-        auto created = coding_agent::create_agent_session(std::move(request));
+        request.execution_runtime_target = runtime.make_target();
+        auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created.has_value());
         session = std::move(created->session);
+        runtime_driver.emplace(runtime);
         settings.emplace(
             coding_agent::SettingsManager::create({}, agent_dir.path(), false));
 

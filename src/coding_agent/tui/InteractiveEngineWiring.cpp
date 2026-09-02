@@ -195,9 +195,7 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         const auto self = weak.lock();
         return self != nullptr ? self->action_generation_ : 0;
     };
-    hooks.make_session_request = [weak](
-        std::filesystem::path workspace,
-        SessionTarget target) {
+    hooks.make_session_request = [weak](std::filesystem::path workspace, SessionTarget target) {
         if (const auto self = weak.lock()) {
             return self->make_session_request(
                 std::move(workspace), std::move(target));
@@ -206,18 +204,6 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         request.workspace = std::move(workspace);
         request.session_target = std::move(target);
         return request;
-    };
-    hooks.request_session_replacement = [weak](
-        std::size_t generation,
-        runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-        if (const auto self = weak.lock()) {
-            return self->request_session_replacement(
-                generation, std::move(request));
-        }
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Session flow host is no longer active"));
     };
     hooks.request_session_replacement_async =
             [weak, executor = executor_](std::size_t generation,

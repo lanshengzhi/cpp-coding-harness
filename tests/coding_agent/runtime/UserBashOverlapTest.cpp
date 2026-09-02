@@ -3,17 +3,20 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/SessionResume.hpp>
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
-#include "support/PumpUntil.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/ReleaseGate.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -38,13 +41,6 @@ using namespace cch;
 namespace {
 
 using tests::bash_message_count;
-using tests::BashResult;
-using tests::drain_ready;
-using tests::PromptResult;
-using tests::pump_until;
-using tests::require_completed;
-using tests::spawn_bash;
-using tests::spawn_prompt;
 
 [[nodiscard]] ai::TimestampMs now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -121,12 +117,48 @@ private:
     return false;
 }
 
+template <typename Factory> [[nodiscard]] auto run_on_runtime(tests::RuntimeFixture& runtime, Factory factory) {
+    return runtime.run(support::detail::make_async_result(std::move(factory)));
+}
+
+template <typename Predicate> [[nodiscard]] boost::asio::awaitable<void> wait_until(Predicate predicate) {
+    const auto executor = co_await boost::asio::this_coro::executor;
+    boost::asio::steady_timer timer(executor);
+    while (!predicate()) {
+        timer.expires_after(std::chrono::milliseconds{1});
+        boost::system::error_code error;
+        co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+    }
+    co_return;
+}
+
+[[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> make_session_async(
+        tests::RuntimeFixture& runtime,
+        const std::filesystem::path& workspace,
+        std::shared_ptr<tests::ScriptedProvider> client,
+        std::unique_ptr<tests::FakeUserShell> shell,
+        std::optional<std::filesystem::path> session_path = std::nullopt) {
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.session_target =
+            session_path ? coding_agent::SessionTarget{coding_agent::ExplicitOpenOrCreateSessionTarget{*session_path}}
+                         : coding_agent::SessionTarget{coding_agent::InMemorySessionTarget{}};
+    request.workspace = workspace;
+    request.execution_runtime_target = runtime.make_target();
+    return coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
+                    .cli_fake = false,
+                    .models = tests::models_from_provider(std::move(client)),
+                    .user_shell = std::move(shell)});
+}
+
 } // namespace
 
 TEST_CASE(
     "User Bash completed during an Agent run commits once after the whole run settles",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -138,60 +170,58 @@ TEST_CASE(
         .gated = true,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(make_session_async(runtime, workspace.path(), std::move(client), std::move(shell)));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    PromptResult prompt_result;
-    BashResult bash_result;
-    spawn_prompt(io, session, "start run", prompt_result);
-    // Provider admission crosses Runtime hops; wait for the observable
-    // request instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 1; }));
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::size_t messages_before_run_settle = 0;
+    bool steering_succeeded = false;
+    bool second_request_omits_bash = false;
+    ai::TimestampMs before_completion = 0;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor, session.prompt("start run"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-    REQUIRE(session.steer("steer input"));
+        steering_succeeded = static_cast<bool>(session.steer("steer input"));
 
-    spawn_bash(io, session, "during run", bash_result);
-    // Shell admission settles through Runtime hops; wait for the observable
-    // start instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "during run",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-    const auto before_completion = now_ms();
-    shell_pointer->release();
-    drain_ready(io);
-    // The execution finished but the run is active: no commitment, no return.
-    CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
-    REQUIRE_FALSE(bash_result.has_value());
+        before_completion = now_ms();
+        shell_pointer->release();
+        messages_before_run_settle = bash_message_count(session.snapshot().agent_state.messages);
 
-    client_pointer->release();
-    // The steering continuation keeps the run active; Bash stays pending.
-    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 2; }));
-    CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
-    REQUIRE_FALSE(bash_result.has_value());
-    CHECK_FALSE(context_has_bash_command(client_pointer->requests[1], "during run"));
+        client_pointer->release();
+        co_await wait_until([&] { return client_pointer->requests.size() == 2; });
+        second_request_omits_bash = !context_has_bash_command(client_pointer->requests[1], "during run");
 
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    CHECK(steering_succeeded);
+    CHECK(messages_before_run_settle == 0);
+    CHECK(second_request_omits_bash);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
-    require_completed(io, bash_result);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
-    CHECK((*bash_result)->message.command == "during run");
-    CHECK((*bash_result)->message.output == "overlap output");
+    CHECK(bash_result->value().message.command == "during run");
+    CHECK(bash_result->value().message.output == "overlap output");
     // The timestamp records process completion, not the delayed commitment.
-    CHECK((*bash_result)->message.timestamp >= before_completion);
-    CHECK((*bash_result)->message.timestamp <= now_ms());
+    CHECK(bash_result->value().message.timestamp >= before_completion);
+    CHECK(bash_result->value().message.timestamp <= now_ms());
 
-    // The deferred commitment lands in Live Session State through mailbox
-    // hops behind the completion callback; wait for the observable snapshot
-    // instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return session.snapshot().agent_state.messages.size() == 5; }));
     const auto& messages = session.snapshot().agent_state.messages;
     REQUIRE(messages.size() == 5);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
@@ -207,6 +237,7 @@ TEST_CASE(
     "an ordinary Prompt is admitted during active User Bash and orders deterministically",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -218,43 +249,44 @@ TEST_CASE(
         .gated = true,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(make_session_async(runtime, workspace.path(), std::move(client), std::move(shell)));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    PromptResult prompt_result;
-    BashResult bash_result;
-    spawn_bash(io, session, "first bash", bash_result);
-    // Shell admission settles through Runtime hops; wait for the observable
-    // start instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::size_t messages_before_bash_release = 0;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "first bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-    spawn_prompt(io, session, "during bash", prompt_result);
-    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 1; }));
+        tests::spawn_to_slot(executor, session.prompt("during bash"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        messages_before_bash_release = bash_message_count(session.snapshot().agent_state.messages);
+
+        shell_pointer->release();
+        co_await wait_until([&] { return bash_result.has_value(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
     // The run settled while Bash was still active: nothing committed yet.
-    CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
-    REQUIRE_FALSE(bash_result.has_value());
+    CHECK(messages_before_bash_release == 0);
 
-    shell_pointer->release();
-    require_completed(io, bash_result);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
-    CHECK((*bash_result)->message.exit_code == 3);
+    CHECK(bash_result->value().message.exit_code == 3);
 
-    // The deferred commitment lands in Live Session State through mailbox
-    // hops behind the completion callback; wait for the observable snapshot
-    // instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return session.snapshot().agent_state.messages.size() == 3; }));
     const auto& messages = session.snapshot().agent_state.messages;
     REQUIRE(messages.size() == 3);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
@@ -268,6 +300,7 @@ TEST_CASE(
     "a second User Bash is rejected before runtime mutation and the Session stays usable",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -285,44 +318,56 @@ TEST_CASE(
         .gated = false,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(make_session_async(runtime, workspace.path(), std::move(client), std::move(shell)));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    BashResult first_result;
-    spawn_bash(io, session, "first bash", first_result);
-    // Shell admission settles through Runtime hops; wait for the observable
-    // start instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> first_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> second_result;
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::size_t commands_before_release = 0;
+    std::size_t messages_before_release = 0;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "first bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                first_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-    BashResult second_result;
-    spawn_bash(io, session, "second bash", second_result);
-    drain_ready(io);
-    require_completed(io, second_result);
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "second bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                second_result);
+        co_await wait_until([&] { return second_result.has_value(); });
+        commands_before_release = shell_pointer->commands.size();
+        messages_before_release = session.snapshot().agent_state.messages.size();
+
+        shell_pointer->release();
+        co_await wait_until([&] { return first_result.has_value(); });
+
+        tests::spawn_to_slot(executor, session.prompt("after rejection"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    REQUIRE(second_result.has_value());
     REQUIRE_FALSE(*second_result);
     CHECK(second_result->error().message.find("User Bash") != std::string::npos);
     // Rejected before mutation: the shell never saw the second command and
     // Live Session State is untouched.
-    CHECK(shell_pointer->commands.size() == 1);
-    CHECK(session.snapshot().agent_state.messages.empty());
+    CHECK(commands_before_release == 1);
+    CHECK(messages_before_release == 0);
 
-    shell_pointer->release();
-    drain_ready(io);
-    require_completed(io, first_result);
+    REQUIRE(first_result.has_value());
     REQUIRE(*first_result);
-
-    PromptResult prompt_result;
-    spawn_prompt(io, session, "after rejection", prompt_result);
-    drain_ready(io);
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
     CHECK(client_pointer->requests.size() == 1);
 }
@@ -331,6 +376,7 @@ TEST_CASE(
     "deferred User Bash commits exactly once through JSONL and resumes in Session order",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "overlap.jsonl";
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
@@ -343,36 +389,46 @@ TEST_CASE(
         .gated = true,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(
+            make_session_async(runtime, workspace.path(), std::move(client), std::move(shell), session_path));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    PromptResult prompt_result;
-    BashResult bash_result;
-    spawn_prompt(io, session, "persisted run", prompt_result);
-    drain_ready(io);
-    spawn_bash(io, session, "deferred bash", bash_result);
-    drain_ready(io);
-    shell_pointer->release();
-    drain_ready(io);
-    REQUIRE_FALSE(bash_result.has_value());
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::size_t messages_before_run_settle = 0;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor, session.prompt("persisted run"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
+
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "deferred bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
+        shell_pointer->release();
+        messages_before_run_settle = bash_message_count(session.snapshot().agent_state.messages);
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
+        // The deferred commitment's JSONL append crosses a Runtime
+        // persistence worker; wait for the journal to carry the Bash entry
+        // instead of assuming the completion callback implies the write
+        // landed (#531).
+        co_await wait_until([&] { return journal_contains(session_path, "deferred bash"); });
+        session.close();
+        co_await wait_until([&] { return !session.is_open() && !session.is_busy(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
-    require_completed(io, bash_result);
+    CHECK(messages_before_run_settle == 0);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
-    // The deferred commitment's JSONL append crosses a Runtime persistence
-    // worker; wait for the journal to carry the Bash entry instead of
-    // assuming the completion callback implies the write landed (#531).
-    REQUIRE(pump_until(io, [&] { return journal_contains(session_path, "deferred bash"); }));
-    session.close();
 
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
@@ -391,6 +447,7 @@ TEST_CASE(
     "pending User Bash never splits a tool-call/tool-result sequence",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     workspace.write("note.txt", "note contents");
     const auto note_path = (workspace.path() / "note.txt").string();
     auto client = std::make_shared<ToolCallThenGatedProvider>(note_path);
@@ -404,46 +461,60 @@ TEST_CASE(
         .gated = false,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(make_session_async(runtime, workspace.path(), std::move(client), std::move(shell)));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    PromptResult first_prompt;
-    spawn_prompt(io, session, "read the note", first_prompt);
-    // Filesystem completion is worker-backed, so pump the session loop until
-    // its tool result advances the provider to the gated second request
-    // (#531); the budget only bounds the already-failing path.
-    REQUIRE(pump_until(io, [&] { return client_pointer->requests.size() == 2; }));
-    // Turn 1 produced the tool call; the run is held on the post-tool turn.
-    REQUIRE(client_pointer->requests.size() == 2);
+    std::optional<support::ExpectedVoid> first_prompt;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::optional<support::ExpectedVoid> second_prompt;
+    std::vector<ai::MessageVariant> settled_messages;
+    std::size_t messages_before_run_settle = 0;
+    bool bash_deferred_before_run_settle = false;
+    bool first_context_omits_bash = false;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor, session.prompt("read the note"), first_prompt);
+        // Filesystem completion is worker-backed, so wait until its tool
+        // result advances the provider to the gated second request.
+        co_await wait_until([&] { return client_pointer->requests.size() == 2; });
 
-    BashResult bash_result;
-    spawn_bash(io, session, "mid-run bash", bash_result);
-    drain_ready(io);
-    // Ungated Bash completed during the run but stays uncommitted, and the
-    // in-flight turn's context never saw it.
-    REQUIRE_FALSE(bash_result.has_value());
-    CHECK(bash_message_count(session.snapshot().agent_state.messages) == 0);
-    CHECK_FALSE(context_has_bash_command(client_pointer->requests[1], "mid-run bash"));
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "mid-run bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
+        // Ungated Bash completed during the run but stays uncommitted, and
+        // the in-flight turn's context never saw it.
+        messages_before_run_settle = bash_message_count(session.snapshot().agent_state.messages);
+        bash_deferred_before_run_settle = messages_before_run_settle == 0;
+        first_context_omits_bash = !context_has_bash_command(client_pointer->requests[1], "mid-run bash");
 
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, first_prompt);
+        client_pointer->release();
+        co_await wait_until([&] { return first_prompt.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
+
+        co_await wait_until([&] { return session.snapshot().agent_state.messages.size() == 5; });
+        // The five-message settled state is pinned before the follow-up
+        // prompt appends to it (the post-scenario assertion reads this
+        // snapshot, not the then-current live state).
+        settled_messages = session.snapshot().agent_state.messages;
+        tests::spawn_to_slot(executor, session.prompt("after overlap"), second_prompt);
+        co_await wait_until([&] { return second_prompt.has_value(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    CHECK(messages_before_run_settle == 0);
+    CHECK(bash_deferred_before_run_settle);
+    CHECK(first_context_omits_bash);
+    REQUIRE(first_prompt.has_value());
     CHECK(*first_prompt);
-    require_completed(io, bash_result);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
 
-    // The deferred commitment lands in Live Session State through mailbox
-    // hops behind the completion callback; wait for the observable snapshot
-    // instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return session.snapshot().agent_state.messages.size() == 5; }));
-    const auto& messages = session.snapshot().agent_state.messages;
+    const auto& messages = settled_messages;
     REQUIRE(messages.size() == 5);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
     const auto* tool_call_turn = std::get_if<ai::AssistantMessage>(&messages[1]);
@@ -454,10 +525,7 @@ TEST_CASE(
     REQUIRE(bash != nullptr);
     CHECK(bash->command == "mid-run bash");
 
-    PromptResult second_prompt;
-    spawn_prompt(io, session, "after overlap", second_prompt);
-    drain_ready(io);
-    require_completed(io, second_prompt);
+    REQUIRE(second_prompt.has_value());
     CHECK(*second_prompt);
     REQUIRE(client_pointer->requests.size() == 3);
     // The idle Prompt's context carries the flushed Bash after the completed
@@ -476,6 +544,7 @@ TEST_CASE(
     "deferred User Bash persistence failure is reported without rolling back Live Session State",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "overlap-failure.jsonl";
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
@@ -488,54 +557,69 @@ TEST_CASE(
         .gated = true,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(
+            make_session_async(runtime, workspace.path(), std::move(client), std::move(shell), session_path));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    PromptResult prompt_result;
-    BashResult bash_result;
-    spawn_prompt(io, session, "failing persist run", prompt_result);
-    drain_ready(io);
-    spawn_bash(io, session, "unpersisted bash", bash_result);
-    drain_ready(io);
-    shell_pointer->release();
-    drain_ready(io);
-    REQUIRE_FALSE(bash_result.has_value());
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::optional<support::ExpectedVoid> second_prompt;
+    std::size_t messages_before_release = 0;
+    bool bash_committed_live = false;
+    std::size_t requests_after_follow_up = 0;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor, session.prompt("failing persist run"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-    // The deferred Bash commitment must be the second append after the
-    // run's user entry (then the assistant entry), and appends cross
-    // Runtime persistence workers: wait until the user entry has landed in
-    // the journal so the counted failure pins exactly the Bash write no
-    // matter when the earlier append lands (#531).
-    REQUIRE(pump_until(io, [&] { return journal_contains(session_path, "failing persist run"); }));
-    harness::session::testing::fail_nth_append_for_test(session_path, 2);
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "unpersisted bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
+        shell_pointer->release();
+        messages_before_release = bash_message_count(session.snapshot().agent_state.messages);
+
+        // The deferred Bash commitment must be the second append after the
+        // run's user entry (then the assistant entry), and appends cross
+        // Runtime persistence workers: wait until the user entry has
+        // landed in the journal so the counted failure pins exactly the
+        // Bash write no matter when the earlier append lands (#531).
+        co_await wait_until([&] { return journal_contains(session_path, "failing persist run"); });
+        harness::session::testing::fail_nth_append_for_test(session_path, 2);
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
+        co_await wait_until([&] { return bash_message_count(session.snapshot().agent_state.messages) == 1; });
+        bash_committed_live = true;
+
+        // The Session stays usable: a later prompt runs and persists again.
+        tests::spawn_to_slot(executor, session.prompt("still usable"), second_prompt);
+        co_await wait_until([&] { return client_pointer->requests.size() == 2; });
+        client_pointer->release();
+        co_await wait_until([&] { return second_prompt.has_value(); });
+        requests_after_follow_up = client_pointer->requests.size();
+        session.close();
+        co_await wait_until([&] { return !session.is_open() && !session.is_busy(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    CHECK(messages_before_release == 0);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
-    require_completed(io, bash_result);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
     // Live Session State advanced; only persistence failed, reported explicitly.
-    REQUIRE((*bash_result)->diagnostic.has_value());
-    REQUIRE(pump_until(io, [&] { return bash_message_count(session.snapshot().agent_state.messages) == 1; }));
-    CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
-
-    // The Session stays usable: a later prompt runs and persists again.
-    PromptResult second_prompt;
-    spawn_prompt(io, session, "still usable", second_prompt);
-    drain_ready(io);
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, second_prompt);
+    // (snapshot() reads the owned Agent, which Close releases — the live-state
+    // observation is captured inside the scenario before Close.)
+    REQUIRE(bash_result->value().diagnostic.has_value());
+    CHECK(bash_committed_live);
+    REQUIRE(second_prompt.has_value());
     CHECK(*second_prompt);
-    CHECK(client_pointer->requests.size() == 2);
-    session.close();
+    CHECK(requests_after_follow_up == 2);
 
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
@@ -546,6 +630,7 @@ TEST_CASE(
     "Session Close during an active run commits a pending User Bash before teardown",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "close-overlap.jsonl";
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
@@ -558,41 +643,52 @@ TEST_CASE(
         .gated = true,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(
+            make_session_async(runtime, workspace.path(), std::move(client), std::move(shell), session_path));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
 
-    boost::asio::io_context io;
-    PromptResult prompt_result;
-    BashResult bash_result;
-    spawn_prompt(io, session, "close during run", prompt_result);
-    drain_ready(io);
-    spawn_bash(io, session, "pending at close", bash_result);
-    drain_ready(io);
-    shell_pointer->release();
-    drain_ready(io);
-    REQUIRE_FALSE(bash_result.has_value());
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::size_t messages_before_close = 0;
+    bool busy_after_close = false;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor, session.prompt("close during run"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-    // Close cancels the active run but must still commit the deferred Bash
-    // through Live Session State and the Session Store before teardown.
-    session.close();
-    CHECK(session.is_busy());
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "pending at close",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
+        shell_pointer->release();
+        messages_before_close = bash_message_count(session.snapshot().agent_state.messages);
+
+        // Close cancels the active run but must still commit the deferred
+        // Bash through Live Session State and the Session Store before
+        // teardown.
+        session.close();
+        busy_after_close = session.is_busy();
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
+        // Close finalization settles through Runtime hops behind the
+        // completion callbacks; wait for quiescence instead of asserting
+        // after one drain pass (#531).
+        co_await wait_until([&] { return !session.is_open() && !session.is_busy(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    CHECK(messages_before_close == 0);
+    CHECK(busy_after_close);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
-    require_completed(io, bash_result);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
-    CHECK((*bash_result)->message.command == "pending at close");
-    // Close finalization settles through Runtime hops behind the completion
-    // callbacks; wait for quiescence instead of asserting after one drain
-    // pass (#531).
-    REQUIRE(pump_until(io, [&] { return !session.is_open() && !session.is_busy(); }));
+    CHECK(bash_result->value().message.command == "pending at close");
     CHECK_FALSE(session.is_open());
     CHECK_FALSE(session.is_busy());
 
@@ -610,6 +706,7 @@ TEST_CASE(
     "Session Close cancels an overlapping User Bash and finalizes after the last work settles",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -621,51 +718,62 @@ TEST_CASE(
         .gated = true,
     });
 
-    tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
-    options.workspace = workspace.path();
-    options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto created = runtime.run(make_session_async(runtime, workspace.path(), std::move(client), std::move(shell)));
     REQUIRE(created);
-    auto& session = *created->session;
+    auto& session = runtime.adopt_session(std::move(created->session));
+    const auto shell_counters = shell_pointer->counters();
 
-    boost::asio::io_context io;
-    PromptResult prompt_result;
-    BashResult bash_result;
-    spawn_prompt(io, session, "run", prompt_result);
-    drain_ready(io);
-    spawn_bash(io, session, "overlapping bash", bash_result);
-    // Shell admission settles through Runtime hops; wait for the observable
-    // start instead of asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return shell_pointer->started_count == 1; }));
+    std::optional<support::ExpectedVoid> prompt_result;
+    std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
+    std::size_t messages_before_close = 0;
+    bool busy_after_close = false;
+    ai::TimestampMs before_close = 0;
+    const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        tests::spawn_to_slot(executor, session.prompt("run"), prompt_result);
+        co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-    const auto before_close = now_ms();
-    session.close();
-    // Cancellation propagates to the shell through the stop_token across
-    // Runtime hops; wait for the observable cancellation instead of
-    // asserting after one drain pass (#531).
-    REQUIRE(pump_until(io, [&] { return shell_pointer->cancellation_request_count == 1; }));
-    // Close cancelled the Bash while the run was still active: the cancelled
-    // completion defers to the run's settle like any other mid-run result.
-    REQUIRE_FALSE(bash_result.has_value());
-    CHECK(session.is_busy());
+        tests::spawn_to_slot(executor,
+                coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
+                        "overlapping bash",
+                        false,
+                        [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+                bash_result);
+        co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-    client_pointer->release();
-    drain_ready(io);
-    require_completed(io, prompt_result);
+        before_close = now_ms();
+        session.close();
+        // Cancellation propagates to the shell through the stop_token
+        // across Runtime hops; wait for the observable cancellation.
+        co_await wait_until([&] { return shell_pointer->cancellation_request_count == 1; });
+        messages_before_close = bash_message_count(session.snapshot().agent_state.messages);
+        busy_after_close = session.is_busy();
+
+        // Close cancelled the Bash while the run was still active: the
+        // cancelled completion defers to the run's settle like any other
+        // mid-run result.
+        client_pointer->release();
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
+        // Close finalization settles through Runtime hops behind the
+        // completion callbacks; wait for quiescence instead of asserting
+        // after one drain pass (#531).
+        co_await wait_until([&] { return !session.is_open() && !session.is_busy(); });
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(scenario);
+    CHECK(shell_counters->cancellation_request_count == 1);
+    CHECK(messages_before_close == 0);
+    CHECK(busy_after_close);
+    REQUIRE(prompt_result.has_value());
     CHECK(*prompt_result);
-    require_completed(io, bash_result);
+    REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
     // The cancelled terminal outcome is committed exactly once, timestamped at
     // the observed cancellation rather than the deferred commitment.
-    CHECK((*bash_result)->message.cancelled);
-    CHECK((*bash_result)->message.timestamp >= before_close);
-    CHECK((*bash_result)->message.timestamp <= now_ms());
-    // Close finalization settles through Runtime hops behind the completion
-    // callbacks; wait for quiescence instead of asserting after one drain
-    // pass (#531).
-    REQUIRE(pump_until(io, [&] { return !session.is_open() && !session.is_busy(); }));
+    CHECK(bash_result->value().message.cancelled);
+    CHECK(bash_result->value().message.timestamp >= before_close);
+    CHECK(bash_result->value().message.timestamp <= now_ms());
     CHECK_FALSE(session.is_open());
     CHECK_FALSE(session.is_busy());
 }

@@ -5,8 +5,10 @@
 // one closed action value and one move-only sink).
 //
 // Coverage per the ticket's acceptance criteria:
-// - boot and in-session session replacement both arrive as one
-//   `ReplaceSessionAction` alternative with an owned passive payload;
+// - boot and in-session session replacement both cross the one asynchronous
+//   `AsyncSessionReplacementSink` with an owned passive request payload
+//   (the synchronous `ReplaceSessionAction` alternative was removed in
+//   #581);
 // - the single sink is lossless (every admitted action is delivered exactly
 //   once) while render-state requests stay separate and coalescible;
 // - the session generation stamped on each action advances on Session
@@ -27,7 +29,10 @@
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 
 #include "support/EnvVarGuard.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "coding_agent/AgentSession.hpp"
@@ -45,6 +50,8 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <atomic>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -72,23 +79,33 @@ struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::RuntimeFixture runtime;
+    tests::RuntimeLoopDriver runtime_driver;
 
-    Fixture() { agent_dir_guard.set(agent_dir.path().string()); }
+    Fixture() : runtime_driver(runtime) { agent_dir_guard.set(agent_dir.path().string()); }
 };
 
 /// The replace-session creator shared by these tests (pi `createRuntime`):
 /// creates an in-memory session from the carried request.
-[[nodiscard]] coding_agent::tui::testing::TestSessionFactorySink in_memory_session_creator() {
-    return [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
+[[nodiscard]] coding_agent::tui::AsyncSessionReplacementSink in_memory_session_creator(
+        std::shared_ptr<harness::RuntimeTarget> runtime_target) {
+    const auto models = tests::make_scripted_fake_models();
+    return [runtime_target, models](std::size_t /* action_generation */,
+                   coding_agent::runtime::AgentSessionCreationRequest request,
+                   std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        return coding_agent::create_agent_session(std::move(request));
+        request.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                stop_token);
     };
 }
 
 /// Boot the interactive mode through the deferred-boot entry (the boot
-/// session is created via `ReplaceSessionAction` through the sink).
+/// session is created through the asynchronous replacement sink).
 void boot(
     Fixture& fixture,
     Running& running,
@@ -105,6 +122,7 @@ void boot(
                        .with_defer_boot(std::move(request))
                        .with_agent_config_directory(fixture.agent_dir.path())
                        .with_action_sink(actions->make_sink())
+                       .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))
                        .build();
     boost::asio::co_spawn(
@@ -116,21 +134,45 @@ void boot(
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
+    // The deferred boot's session creation is asynchronous: wait until the
+    // replacement result has crossed the seam, then drain so the engine's
+    // installation continuation has run before the test drives input.
+    REQUIRE(tests::pump_until(
+            running.io, [&] { return actions->replacement_completions.load(std::memory_order_acquire) >= 1; }));
     drain_ready(running.io);
+}
+
+/// Wait until the `completions`-th asynchronous replacement result has
+/// crossed the seam and the engine has installed the outcome before the
+/// test drives more input or asserts the screen (a `/new` replacement is
+/// still in flight until then; input driven mid-transition is dropped).
+void wait_replacement(Running& running,
+        const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions,
+        std::size_t completions) {
+    REQUIRE(tests::pump_until(running.io,
+            [&] { return actions->replacement_completions.load(std::memory_order_acquire) >= completions; }));
+    drain_ready(running.io);
+}
+
+/// Pump until the screen shows `text`: a replacement install or an error
+/// notice can render one loop turn after a plain drain observed a quiet
+/// queue.
+void wait_for_screen(Running& running, const std::string& text) {
+    REQUIRE(tests::pump_until(
+            running.io, [&] { return visible_screen(running.terminal).find(text) != std::string::npos; }));
 }
 
 } // namespace
 
-TEST_CASE(
-    "boot and in-session replacement are one ReplaceSessionAction through the single sink",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("boot and in-session replacement cross the one asynchronous replacement sink",
+        "[coding_agent][tui][actions][issue461]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
-    // The boot session was created through one ReplaceSessionAction carried
+    // The boot session was created through one replacement request carried
     // by the closed action value (generation 0: no replacement yet).
     REQUIRE(actions->replace_sessions.size() == 1);
     CHECK(actions->replace_sessions[0].workspace == fixture.workspace.path());
@@ -139,14 +181,14 @@ TEST_CASE(
 
     // The in-session `/new` flow is the same closed alternative.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(actions->replace_sessions.size() == 2);
     CHECK(actions->replace_sessions[1].workspace == fixture.workspace.path());
     CHECK(actions->generations == std::vector<std::size_t>{0, 0});
 
     // The replacement bound a fresh in-memory session and the run is still
     // responsive (the pi `✓ New session started` chat line).
-    CHECK(visible_screen(running.terminal).find("✓ New session started") != std::string::npos);
+    wait_for_screen(running, "✓ New session started");
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -160,17 +202,20 @@ TEST_CASE(
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
-    // Boot: ReplaceSessionAction@0.
+    // Boot: replacement request @generation 0.
     REQUIRE(actions->generations == std::vector<std::size_t>{0});
 
     // Two rapid in-session replacements: each advances the generation, and
     // every admitted action is still delivered exactly once (lossless seam).
+    // Each replacement is awaited before the next is driven: input driven
+    // mid-transition is dropped while the asynchronous creation is in
+    // flight.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 3);
     REQUIRE(actions->replace_sessions.size() == 3);
     // Boot@0, first replacement@0 (admitted before the retirement), second
     // replacement@1 (admitted after the first replacement retired gen 0).
@@ -179,13 +224,13 @@ TEST_CASE(
     // A post-replacement action carries the newest generation (the retired
     // generation never leaks into later deliveries).
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 4);
     REQUIRE(actions->generations.size() == 4);
     CHECK(actions->generations.back() == 2);
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
-    REQUIRE(running.run_result);
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
 }
 
@@ -195,15 +240,15 @@ TEST_CASE(
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // Admit a replacement, then close while the run is live (Close race).
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
-    REQUIRE(running.run_result);
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
 
     // Close retired the generation: every action was delivered exactly once
@@ -225,34 +270,40 @@ TEST_CASE(
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
     // The host rejects the in-session replacement (returns the creation
-    // error through the closed action value's result channel).
+    // error through the asynchronous replacement result channel).
     int replacement_calls = 0;
-    actions->replace_session =
-        [&replacement_calls](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
-            request.session_facts.no_skills = true;
-            request.session_facts.no_prompt_templates = true;
-            ++replacement_calls;
-            if (replacement_calls == 2) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Session,
-                    "host rejected the replacement"));
-            }
-            return coding_agent::create_agent_session(std::move(request));
-        };
+    actions->replace_session_async =
+            [&replacement_calls,
+                    runtime_target = fixture.runtime.make_target(),
+                    models = tests::make_scripted_fake_models()](std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_target;
+        ++replacement_calls;
+        if (replacement_calls == 2) {
+            return support::AsyncResult<coding_agent::CreateAgentSessionResult>{
+                    std::unexpected(support::make_error(support::ErrorCode::Session, "host rejected the replacement"))};
+        }
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                stop_token);
+    };
     boot(fixture, running, actions);
 
     // `/new` (the in-session replacement after the boot session) is
     // rejected by the host.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("host rejected the replacement") !=
-          std::string::npos);
+    wait_replacement(running, actions, 2);
+    wait_for_screen(running, "host rejected the replacement");
 
     // The TUI survives the rejection and remains interactive.
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
-    REQUIRE(running.run_result);
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
 }
 
@@ -310,7 +361,7 @@ TEST_CASE(
 
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
-    actions->replace_session = in_memory_session_creator();
+    actions->replace_session_async = in_memory_session_creator(fixture.runtime.make_target());
     boot(fixture, running, actions);
 
     // The trust-resolution diagnostic arrived as the closed

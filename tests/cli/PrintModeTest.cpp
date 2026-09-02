@@ -1,6 +1,8 @@
 #include "ai/ModelStreamBridge.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 
 #include "cli/PrintMode.hpp"
 
@@ -169,17 +171,31 @@ struct CreatedSession {
     coding_agent::CreateAgentSessionResult created;
 };
 
-CreatedSession make_session(const tests::TempWorkspace& workspace) {
-    auto created = coding_agent::create_agent_session(fake_in_memory_options(workspace.path()));
+CreatedSession make_session(tests::RuntimeFixture& runtime, const tests::TempWorkspace& workspace) {
+    auto options = fake_in_memory_options(workspace.path());
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
     return CreatedSession{std::move(*created)};
 }
 
-CreatedSession make_session(
-        const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> chat_client) {
+CreatedSession make_session(tests::RuntimeFixture& runtime,
+        const tests::TempWorkspace& workspace,
+        std::shared_ptr<tests::ScriptedProvider> chat_client) {
     auto options = fake_in_memory_options(workspace.path());
     options.models = cch::tests::models_from_provider(std::move(chat_client));
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
     return CreatedSession{std::move(*created)};
 }
@@ -203,7 +219,12 @@ TEST_CASE(
     "print mode prints only the final assistant text blocks and exits 0",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
+    auto session = make_session(runtime, workspace);
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -220,10 +241,14 @@ TEST_CASE(
     "print mode reports a terminal error outcome on stderr and exits 1",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(
-        workspace,
-        std::make_shared<TerminalOutcomeChatProvider>(
-            ai::AssistantStopReason::Error, "host transport lost"));
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
+    auto session = make_session(runtime,
+            workspace,
+            std::make_shared<TerminalOutcomeChatProvider>(ai::AssistantStopReason::Error, "host transport lost"));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -240,10 +265,13 @@ TEST_CASE(
     "print mode falls back to Request <stopReason> without an error message",
     "[cli][print]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
     auto session = make_session(
-        workspace,
-        std::make_shared<TerminalOutcomeChatProvider>(
-            ai::AssistantStopReason::Error, ""));
+            runtime, workspace, std::make_shared<TerminalOutcomeChatProvider>(ai::AssistantStopReason::Error, ""));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -260,10 +288,15 @@ TEST_CASE(
     "print mode reports a terminal aborted outcome on stderr and exits 1",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(
-        workspace,
-        std::make_shared<TerminalOutcomeChatProvider>(
-            ai::AssistantStopReason::Aborted, "host cancelled the request"));
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
+    auto session = make_session(runtime,
+            workspace,
+            std::make_shared<TerminalOutcomeChatProvider>(
+                    ai::AssistantStopReason::Aborted, "host cancelled the request"));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -280,13 +313,17 @@ TEST_CASE(
     "print mode redacts and bounds a terminal diagnostic on stderr",
     "[cli][print]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
     const std::string secret = "sk-hostsecret123456789";
     std::string diagnostic = "provider rejected " + secret + " detail ";
     diagnostic += std::string(9000, 'x');
-    auto session = make_session(
-        workspace,
-        std::make_shared<TerminalOutcomeChatProvider>(
-            ai::AssistantStopReason::Error, diagnostic));
+    auto session = make_session(runtime,
+            workspace,
+            std::make_shared<TerminalOutcomeChatProvider>(ai::AssistantStopReason::Error, diagnostic));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -307,9 +344,14 @@ TEST_CASE(
     "print mode prompts remaining positionals sequentially and outputs the last response",
     "[cli][print]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
     auto client = std::make_shared<CapturingChatProvider>();
     auto* probe = client.get();
-    auto session = make_session(workspace, std::move(client));
+    auto session = make_session(runtime, workspace, std::move(client));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -338,7 +380,12 @@ TEST_CASE(
     "print mode with no prompt prints nothing and exits 0",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive it for the test lifetime.
+    auto session = make_session(runtime, workspace);
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -354,7 +401,12 @@ TEST_CASE(
     "print mode reports a prompt preflight rejection as loop failed and exits 1",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
+    auto session = make_session(runtime, workspace);
+    tests::RuntimeLoopDriver runtime_driver{runtime};
     session.created.session->close();
 
     std::ostringstream output;
@@ -372,9 +424,14 @@ TEST_CASE(
     "print mode disposes the session and exits 143 on SIGTERM",
     "[cli][print][signals]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
     auto client = std::make_shared<SignalGateProvider>();
     auto* probe = client.get();
-    auto session = make_session(workspace, std::move(client));
+    auto session = make_session(runtime, workspace, std::move(client));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -400,9 +457,14 @@ TEST_CASE(
     "print mode disposes the session and exits 129 on SIGHUP",
     "[cli][print][signals]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
     auto client = std::make_shared<SignalGateProvider>();
     auto* probe = client.get();
-    auto session = make_session(workspace, std::move(client));
+    auto session = make_session(runtime, workspace, std::move(client));
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -428,7 +490,12 @@ TEST_CASE(
     "print mode keeps the session open after a normal run",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
+    auto session = make_session(runtime, workspace);
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     std::ostringstream output;
     std::ostringstream error;
@@ -444,7 +511,12 @@ TEST_CASE(
     "print mode output failure surfaces as exit 1",
     "[cli][print]") {
     tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
+    tests::RuntimeFixture runtime;
+    // The print plan prompts through the session's runtime target: the
+    // turn work runs on the fixture loop while run_print pumps its own
+    // local io_context, so drive the fixture loop for the test lifetime.
+    auto session = make_session(runtime, workspace);
+    tests::RuntimeLoopDriver runtime_driver{runtime};
 
     FailingStreambuf failing;
     std::ostream broken_output{&failing};

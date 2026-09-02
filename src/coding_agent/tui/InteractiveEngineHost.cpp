@@ -156,7 +156,8 @@ runtime::AgentSessionCreationRequest InteractiveEngine::make_session_request(
     return request;
 }
 
-/// The error a null host returns for `ReplaceSessionAction`.
+/// The error a host without the asynchronous replacement capability returns
+/// to a Session replacement flow.
 support::Error InteractiveEngine::session_replacement_unavailable_error() {
     return support::make_error(
         support::ErrorCode::Unknown,
@@ -191,35 +192,11 @@ support::Expected<TuiActionResultVariant> InteractiveEngine::deliver_action(
             } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
                 (void)::kill(0, SIGTSTP);
                 return TuiActionResultVariant{std::monostate{}};
-            } else if constexpr (std::is_same_v<T, ReplaceSessionAction>) {
-                return TuiActionResultVariant{
-                    support::Expected<coding_agent::CreateAgentSessionResult>{
-                        std::unexpected(
-                            session_replacement_unavailable_error())}};
             } else {
                 return TuiActionResultVariant{std::monostate{}};
             }
         },
         std::move(action));
-}
-
-support::Expected<coding_agent::CreateAgentSessionResult>
-InteractiveEngine::request_session_replacement(
-    std::size_t captured_generation,
-    runtime::AgentSessionCreationRequest request) {
-    auto result = deliver_action(
-        captured_generation,
-        TuiActionVariant{ReplaceSessionAction{std::move(request)}});
-    if (!result) {
-        return std::unexpected(result.error());
-    }
-    auto* created =
-        std::get_if<support::Expected<coding_agent::CreateAgentSessionResult>>(
-            &*result);
-    if (created == nullptr) {
-        return std::unexpected(session_replacement_unavailable_error());
-    }
-    return std::move(*created);
 }
 
 boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
@@ -229,16 +206,16 @@ InteractiveEngine::request_session_replacement_async(
         co_return std::unexpected(support::make_error(
                 support::ErrorCode::Cancelled, "Native TUI action rejected", "retired session generation"));
     }
-    if (async_session_replacement_sink_) {
-        auto created = co_await support::detail::await_async_result(
-                async_session_replacement_sink_(captured_generation, std::move(request), stop_token));
-        if (captured_generation != action_generation_) {
-            co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Cancelled, "Native TUI action rejected", "retired session generation"));
-        }
-        co_return created;
+    if (!async_session_replacement_sink_) {
+        co_return std::unexpected(session_replacement_unavailable_error());
     }
-    co_return request_session_replacement(captured_generation, std::move(request));
+    auto created = co_await support::detail::await_async_result(
+            async_session_replacement_sink_(captured_generation, std::move(request), stop_token));
+    if (captured_generation != action_generation_) {
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Cancelled, "Native TUI action rejected", "retired session generation"));
+    }
+    co_return created;
 }
 
 support::ExpectedVoid InteractiveEngine::replace_session(
@@ -259,6 +236,14 @@ support::ExpectedVoid InteractiveEngine::replace_session(
         if (view_ != nullptr) {
             view_->clear_status_indicator();
             view_->clear_user_bash_progress();
+        }
+        // Clearing the retired Session's active-work facts removes the
+        // blockers a deferred exit was waiting on: a quit requested during
+        // the transition must still release the exit wait once nothing is
+        // active (the retired work's late completions early-return on the
+        // generation check and never re-arm this).
+        if (exit_requested_) {
+            signal_exit();
         }
     }
     // Retain the replaced Session while its admitted work is still

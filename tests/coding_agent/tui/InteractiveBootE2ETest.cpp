@@ -20,6 +20,8 @@
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -102,6 +104,7 @@ struct E2eSession {
     std::filesystem::path workspace;
     tests::TempWorkspace config;
     tests::ScriptedRuntimeFixture scripted;
+    tests::RuntimeFixture runtime;
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
@@ -163,11 +166,11 @@ struct E2eSession {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.workspace = fixture->workspace;
-    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    request.execution_runtime_target = fixture->runtime.make_target();
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture->scripted.runtime;
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created = fixture->runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;
@@ -220,6 +223,7 @@ TEST_CASE(
     "E2E: interactive boot renders pi's main-screen composition and the initial snapshot",
     "[coding_agent][tui][e2e][issue399]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
@@ -265,6 +269,7 @@ TEST_CASE(
 TEST_CASE("E2E: a focused-editor submission streams a scripted-runtime turn in the pi shape",
         "[coding_agent][tui][e2e][issue399]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
     const auto& control = *fixture->scripted.control;
 
     // 25 rows keep the typed user message visible below the two-line compact
@@ -367,6 +372,7 @@ TEST_CASE(
     gated.control->gate_at = 0;
     gated.control->emit_partial_before_gate = true;
     auto fixture = make_e2e_session(gated);
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;
@@ -404,7 +410,9 @@ TEST_CASE(
     REQUIRE(terminal.inject_input(""));
     // Abort finalization and its notice render asynchronously across loop
     // passes.
-    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("Operation aborted") != std::string::npos; }));
+    REQUIRE(pump_until(io, [&] {
+        return visible_screen(terminal).find("Operation aborted") != std::string::npos && !fixture->session->is_busy();
+    }));
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("Operation aborted") != std::string::npos);
 
@@ -425,6 +433,7 @@ TEST_CASE(
     "E2E: the model fallback message renders as a boot warning line",
     "[coding_agent][tui][e2e][issue404]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
     boost::asio::io_context io;

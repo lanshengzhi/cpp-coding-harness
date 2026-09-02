@@ -48,23 +48,14 @@ public:
     /// has them re-applied under the issue #507 field-ownership rules before
     /// any assembly step reads the request; a host-built request (boot, print
     /// mode, list-models) arrives complete and passes no facts.
-    /// The asynchronous production Session Assembly door. The operation is
-    /// lazy and consumes the request once; filesystem work uses the
-    /// composition-authorized capability collection and cancellation is
-    /// propagated through `stop_token`.
+    /// The operation is lazy and consumes the request once; filesystem work
+    /// uses the composition-authorized capability collection and cancellation
+    /// is propagated through `stop_token`.
     [[nodiscard]] static support::AsyncResult<coding_agent::CreateAgentSessionResult> create_async(
             AgentSessionCreationRequest request,
             std::optional<InteractiveSessionFacts> session_facts,
             AssemblyOverrides overrides = {},
             std::stop_token stop_token = {});
-
-    /// Temporary synchronous expand-contract bridge for tests and legacy
-    /// callers. Production CLI paths use `create_async` and await it on their
-    /// Runtime loop.
-    [[nodiscard]] static support::Expected<coding_agent::CreateAgentSessionResult>
-    create(AgentSessionCreationRequest request,
-           std::optional<InteractiveSessionFacts> session_facts,
-           AssemblyOverrides overrides = {});
 
     /// Compose all filesystem capabilities that Session Assembly may use.
     /// Every returned capability shares the request's one Runtime root target;
@@ -91,8 +82,8 @@ public:
     /// Publication step used by the assembly implementation: hand the one
     /// assembled value to the session handle (which constructs its own Impl)
     /// and carry the bundle together. The class itself is the private
-    /// implementation of the `create_agent_session` boundary, so this member
-    /// is Owner-internal by construction.
+    /// implementation of the `create_agent_session_async` boundary, so this
+    /// member is Owner-internal by construction.
     [[nodiscard]] static coding_agent::CreateAgentSessionResult publish(AgentSessionAssembly assembly,
             std::vector<coding_agent::SessionDiagnostic> diagnostics,
             std::optional<std::string> model_fallback_message,

@@ -116,6 +116,13 @@ public:
         return exit_wait_;
     }
 
+    /// Whether exit was already requested (for example a quit input delivered
+    /// while the deferred boot was still in flight). `exit_wait()` must not
+    /// be awaited once this is true: a timer cancel only releases waits that
+    /// are already pending, so a later await would block until the
+    /// never-arriving expiry.
+    [[nodiscard]] bool exit_requested() const noexcept { return exit_requested_; }
+
     /// Final application Close (ADR 0040): cancel the extracted modal/session
     /// flows, stop admission, retire the action generation, and await every
     /// admitted detached flow to reach a terminal outcome before terminal
@@ -393,7 +400,8 @@ private:
         std::filesystem::path workspace,
         SessionTarget target) const;
 
-    /// The error a null host returns for `ReplaceSessionAction`.
+    /// The error a host without the asynchronous replacement capability
+    /// returns to a Session replacement flow.
     [[nodiscard]] static support::Error session_replacement_unavailable_error();
 
     /// Carry one closed application-level action to the composition host with
@@ -407,12 +415,10 @@ private:
         std::size_t captured_generation,
         TuiActionVariant action);
 
-    /// Create and return a replacement/boot session through the composition
-    /// host (pi `createRuntime`); a null host reports it as unavailable.
-    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
-    request_session_replacement(
-        std::size_t captured_generation,
-        runtime::AgentSessionCreationRequest request);
+    /// Create and return a replacement/boot session through the
+    /// composition host's asynchronous Session replacement strong
+    /// capability (pi `createRuntime`); a host without the capability
+    /// reports it as unavailable.
     [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
     request_session_replacement_async(std::size_t captured_generation,
             runtime::AgentSessionCreationRequest request,

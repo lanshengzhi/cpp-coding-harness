@@ -27,6 +27,26 @@ namespace cch::coding_agent::tui {
 class InteractiveSessionRun;
 class InteractiveSessionRunBuilder;
 
+/// The one asynchronous Session replacement strong capability (issues #579,
+/// #581): in-session replacement (pi `AgentSessionRuntime` createRuntime
+/// closure — `switchSession`/`newSession`/`fork`) and the boot path's
+/// deferred boot-session creation cross Session Assembly exclusively through
+/// this sink. The host installs the host-only capabilities on the request
+/// and crosses the Session Assembly boundary with the CLI-owned facts; the
+/// boundary re-applies them and completes with the created session for
+/// binding.
+///
+/// Field ownership seam (issue #507): session trust is engine-authoritative —
+/// `project_trust_override` arrives resolved (the CLI `--approve`/
+/// `--no-approve` override, the boot prompt decision, or the boot-workspace
+/// inheritance, pi `projectTrustByCwd`) and the boundary's facts merge only
+/// fills it in when the engine left it unset. The pure CLI-owned resource and
+/// model facts are re-applied unconditionally (load-bearing for the fields
+/// `make_session_request` deliberately omits — `no_themes`, `theme_paths`,
+/// `no_context_files`, `system_prompt`, `append_system_prompt`); host-only
+/// capabilities (User Shell, Runtime target, shared Models runtime) are
+/// always host-set. The merge lives behind the Session Assembly boundary
+/// (`SessionFactory::apply_cli_facts`).
 using AsyncSessionReplacementSink =
         std::move_only_function<support::AsyncResult<coding_agent::CreateAgentSessionResult>(
                 std::size_t, runtime::AgentSessionCreationRequest, std::stop_token)>;
@@ -90,8 +110,6 @@ public:
     void open_browser(std::string url) const;
     [[nodiscard]] bool write_clipboard_text(const std::string& text) const;
     void suspend_process() const;
-    [[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> replace_session(
-        runtime::AgentSessionCreationRequest request) const;
     [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() const;
     void report_boot_diagnostics(
         const std::vector<coding_agent::SessionDiagnostic>& diagnostics) const;
@@ -125,6 +143,7 @@ private:
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
         bool is_resume_target{false};
         std::atomic<bool> creation_failure_reported{false};
+        std::optional<AsyncSessionReplacementSink> custom_async_session_replacement_sink{std::nullopt};
         std::optional<TuiActionSink> custom_action_sink{std::nullopt};
     };
 
@@ -177,6 +196,7 @@ public:
         bool is_resume_target) noexcept;
     InteractiveSessionRunBuilder& with_action_sink(
         TuiActionSink sink) noexcept;
+    InteractiveSessionRunBuilder& with_async_session_replacement_sink(AsyncSessionReplacementSink sink) noexcept;
 
     [[nodiscard]] InteractiveSessionRun build();
 

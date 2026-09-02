@@ -13,6 +13,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 
 #include "support/ScriptedRuntimeFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/ModelsFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -171,7 +172,10 @@ TEST_CASE(
 
     auto installed = engine_request();
     installed.provide_user_shell = true;
-    installed.execution_runtime_target = tests::detail::fixture_runtime_target();
+    // A fixture-local Runtime target stands in for the CLI Runtime root's
+    // target: the merge must leave the host-installed capability untouched.
+    tests::RuntimeFixture runtime_fixture;
+    installed.execution_runtime_target = runtime_fixture.make_target();
     tests::ScriptedRuntimeFixture scripted;
     installed.model_runtime = scripted.runtime;
     const auto target = installed.execution_runtime_target;
