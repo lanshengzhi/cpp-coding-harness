@@ -17,6 +17,8 @@
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -83,17 +85,19 @@ template <typename T>
 struct CloseFixture {
     tests::TempWorkspace workspace;
     std::filesystem::path session_path = workspace.path() / "close.jsonl";
+    tests::RuntimeFixture runtime;
 
     [[nodiscard]] tests::ModelsSessionOptions options(std::shared_ptr<tests::ScriptedProvider> provider) const {
         tests::ModelsSessionOptions options;
         options.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
         options.workspace = workspace.path();
-        auto runtime = tests::runtime_from_provider(std::move(provider));
-        if (!runtime) {
+        options.execution_runtime_target = runtime.make_target();
+        auto model_runtime = tests::runtime_from_provider(std::move(provider));
+        if (!model_runtime) {
             std::terminate();
         }
-        options.model_runtime = std::move(*runtime);
+        options.model_runtime = std::move(*model_runtime);
         options.request_model = tests::scripted_request_model("fake", "fake-model");
         return options;
     }
@@ -272,9 +276,14 @@ TEST_CASE(
     "repeated Session Close is idempotent and rejects every work admission",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
+    auto options = fixture.options(tests::make_scripted_fake_provider());
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
 
     session.close();
     // A repeated Close is a no-op: resources are released exactly once.
@@ -308,9 +317,15 @@ TEST_CASE(
     "Session Close requested from an event subscriber finalizes after the run settles",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
+    auto options = fixture.options(tests::make_scripted_fake_provider());
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto* session = created->session.get();
+    auto* session = &fixture.runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     bool closed_from_sink = false;
     auto subscribed = session->subscribe(
@@ -369,10 +384,15 @@ TEST_CASE(
     // the test releases it, so Close arrives mid-compaction.
     gated->gate_request_number = 4;
 
-    auto created = coding_agent::create_agent_session(
-        fixture.options(std::move(provider)));
+    auto options = fixture.options(std::move(provider));
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
     REQUIRE(session.prompt_blocking(big + " u1").has_value());
     REQUIRE(session.prompt_blocking(big + " u2").has_value());
     REQUIRE(session.prompt_blocking(big + " u3").has_value());
@@ -432,9 +452,15 @@ TEST_CASE(
     // settles before close(), collapsing the deferral assertions into a
     // wall-clock race (issue #526).
     auto provider = std::make_shared<tests::GatedChatProvider>();
-    auto created = coding_agent::create_agent_session(fixture.options(provider));
+    auto options = fixture.options(provider);
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     harness::session::testing::delay_appends_for_test(
         fixture.session_path, std::chrono::milliseconds{300});
@@ -466,9 +492,15 @@ TEST_CASE(
     "subscriptions and late callbacks after Close are suppressed or benignly dropped",
     "[coding_agent][runtime][close][issue467]") {
     CloseFixture fixture;
-    auto created = coding_agent::create_agent_session(fixture.options(tests::make_scripted_fake_provider()));
+    auto options = fixture.options(tests::make_scripted_fake_provider());
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     std::size_t delivered = 0;
     auto subscribed = session.subscribe(
@@ -519,10 +551,15 @@ TEST_CASE(
 
     // Keep an owning copy: Close releases the Session's provider after
     // quiescence, and the assertions below still observe the fake.
-    auto created = coding_agent::create_agent_session(
-        fixture.options(provider));
+    auto options = fixture.options(provider);
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     bool retry_started = false;
     bool retry_cancelled = false;
@@ -577,9 +614,15 @@ TEST_CASE(
     // before close(), making the is_busy assertion a wall-clock race
     // (issue #526).
     auto provider = std::make_shared<tests::GatedChatProvider>();
-    auto created = coding_agent::create_agent_session(fixture.options(provider));
+    auto options = fixture.options(provider);
+    auto model_runtime = std::move(options.model_runtime);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime)}));
     REQUIRE(created.has_value());
-    auto& session = *created->session;
+    auto& session = fixture.runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     // The user message lands; the assistant append fails slowly, so the
     // failing persistence channel is still ahead of the run when Close

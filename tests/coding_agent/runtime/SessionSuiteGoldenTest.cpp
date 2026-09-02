@@ -22,6 +22,8 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/JsonCompare.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
@@ -412,15 +414,21 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
     model.name = "One";
     provider->set_model(model);
 
+    tests::RuntimeFixture runtime;
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
     options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
     options.request_model = model;
     options.models = tests::models_from_provider(provider);
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
 
-    auto created = tests::create_agent_session(std::move(options));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created);
-    auto& session = created->session;
+    auto* session = &runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     REQUIRE(session->prompt_blocking("hi").has_value());
     REQUIRE(session->prompt_blocking("again").has_value());
 
@@ -455,6 +463,7 @@ TEST_CASE("session resume golden: persisted history restores at message level",
         "[coding_agent][runtime][golden][issue421]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "resume.jsonl";
+    tests::RuntimeFixture runtime;
 
     auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
             text_turn("Hello there!"),
@@ -469,10 +478,16 @@ TEST_CASE("session resume golden: persisted history restores at message level",
         tests::ModelsSessionOptions options;
         options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
         options.workspace = workspace.path();
+        options.execution_runtime_target = runtime.make_target();
         options.request_model = model;
         options.models = tests::models_from_provider(provider);
-        auto created = tests::create_agent_session(std::move(options));
+        auto models = std::move(options.models);
+        coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+        auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
         REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
         REQUIRE(created->session->prompt_blocking("hi").has_value());
         REQUIRE(created->session->prompt_blocking("again").has_value());
         created->session->close();
@@ -483,10 +498,15 @@ TEST_CASE("session resume golden: persisted history restores at message level",
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitResumeSessionTarget{path};
     options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
     options.models = tests::models_from_provider(provider);
-    auto created = tests::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created);
-    auto& session = created->session;
+    auto* session = &runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     const auto snapshot = session->snapshot();
     const auto messages = snapshot.agent_state.messages;
@@ -523,6 +543,7 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
     // exercise is deterministic on both engines (same settings on the TS side).
     SettingsFixture settings(R"({"compaction":{"keepRecentTokens":0}})");
     const auto path = workspace.path() / "compaction.jsonl";
+    tests::RuntimeFixture runtime;
 
     auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
             text_turn("first reply."),
@@ -539,11 +560,16 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
     options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
     options.request_model = model;
     options.models = tests::models_from_provider(provider);
-    auto created = tests::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created);
-    auto& session = created->session;
+    auto* session = &runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     REQUIRE(session->prompt_blocking("first").has_value());
     REQUIRE(session->prompt_blocking("second").has_value());
@@ -582,6 +608,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     tests::TempWorkspace workspace;
     SettingsFixture settings(R"({})");
     const auto path = workspace.path() / "model-switch.jsonl";
+    tests::RuntimeFixture runtime;
 
     auto provider = std::make_shared<ScriptedTurnProvider>(std::vector<ai::AssistantMessage>{
             text_turn("Hello there!"),
@@ -596,11 +623,16 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{path};
     options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
     options.request_model = model;
     options.models = tests::models_from_provider(provider);
-    auto created = tests::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created);
-    auto& session = created->session;
+    auto* session = &runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     REQUIRE(session->prompt_blocking("hi").has_value());
     auto switched = session->set_model_blocking(reasoning_model("faux-2", "Two"));
