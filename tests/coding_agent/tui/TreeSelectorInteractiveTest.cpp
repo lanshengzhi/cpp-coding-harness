@@ -10,6 +10,7 @@
 // values. No live credentials, no network validation.
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
@@ -17,6 +18,7 @@
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include "agent/harness/RuntimeRoot.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -29,7 +31,9 @@
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -122,8 +126,10 @@ struct Running {
 }
 
 /// Boot the interactive mode against the fixture session with the real
-/// session-replacement surface (pi `createRuntime`). The recorder shares its
-/// state with the closed action sink, so it stays valid while the run lives.
+/// session-replacement surface (pi `createRuntime`) routed through the
+/// asynchronous Session replacement test adapter (issue #580). The recorder
+/// shares its state with the closed action sink, so it stays valid while
+/// the run lives.
 [[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(
     Fixture& fixture,
     Running& running,
@@ -138,18 +144,33 @@ struct Running {
     auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created.has_value());
 
-    actions->replace_session =
-        [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
+    // The replacement Runtime Root shares the interactive loop: assembly
+    // work and the install continuation are both pumped by the test.
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(
+        &running.io, [](boost::asio::io_context*) {});
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
+        std::move(runtime_io), harness::RuntimeLimits{});
+    actions->replace_session_async =
+        [runtime_root](std::size_t /* action_generation */,
+            coding_agent::runtime::AgentSessionCreationRequest request,
+            std::stop_token stop_token)
+        -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
             request.session_facts.no_skills = true;
             request.session_facts.no_prompt_templates = true;
-            return coding_agent::create_agent_session(std::move(request));
+            request.execution_runtime_target = runtime_root->make_target();
+            return coding_agent::create_agent_session_async(
+                std::move(request), std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
+                stop_token);
         };
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
         .with_session(*created->session)
         .with_agent_config_directory(fixture.agent_dir.path())
         .with_action_sink(actions->make_sink())
+        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
+        .with_runtime_root(std::move(runtime_root))
         .build();
     boost::asio::co_spawn(
         running.io,
@@ -310,18 +331,31 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(request));
     REQUIRE(created.has_value());
 
-    coding_agent::tui::testing::ActionSinkRecorder actions;
-    actions.replace_session =
-        [](coding_agent::runtime::AgentSessionCreationRequest request)
-        -> support::Expected<coding_agent::CreateAgentSessionResult> {
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(
+        &running.io, [](boost::asio::io_context*) {});
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
+        std::move(runtime_io), harness::RuntimeLimits{});
+    actions->replace_session_async =
+        [runtime_root](std::size_t /* action_generation */,
+            coding_agent::runtime::AgentSessionCreationRequest request,
+            std::stop_token stop_token)
+        -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
             request.session_facts.no_skills = true;
             request.session_facts.no_prompt_templates = true;
-            return coding_agent::create_agent_session(std::move(request));
+            request.execution_runtime_target = runtime_root->make_target();
+            return coding_agent::create_agent_session_async(
+                std::move(request), std::nullopt,
+                coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
+                stop_token);
         };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
         .with_session(*created->session)
         .with_agent_config_directory(fixture.agent_dir.path())
-        .with_action_sink(actions.make_sink())
+        .with_action_sink(actions->make_sink())
+        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
+        .with_runtime_root(std::move(runtime_root))
         .build();
     boost::asio::co_spawn(
         running.io,
