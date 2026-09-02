@@ -104,7 +104,7 @@ struct Fixture {
 }
 
 /// Boot the interactive mode through the deferred-boot entry (the boot
-/// session is created via `ReplaceSessionAction` through the sink).
+/// session is created through the asynchronous replacement sink).
 void boot(
     Fixture& fixture,
     Running& running,

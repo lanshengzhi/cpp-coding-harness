@@ -252,7 +252,8 @@ TEST_CASE(
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1", "user-2"});
     Running running;
-    auto session = boot(fixture, running);
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
     REQUIRE(session->message_count() == 5);
 
     double_escape(running);
@@ -279,6 +280,10 @@ TEST_CASE(
     // entry): no assistant replies remain in the transcript.
     CHECK(screen.find("assistant reply") == std::string::npos);
     CHECK(session->message_count() == 0);
+    // Tree navigation is an in-place `navigate_tree` on the live Session
+    // (pi `navigateTree`), not a Session replacement: the asynchronous
+    // replacement adapter is never crossed.
+    CHECK(actions->replace_sessions.empty());
 
     // The editor carries the pre-filled text: clear it (ctrl+c) before the
     // empty-editor exit (ctrl+d).

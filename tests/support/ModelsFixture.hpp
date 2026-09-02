@@ -4,19 +4,15 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/executor_work_guard.hpp>
-#include <boost/asio/io_context.hpp>
 
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -29,35 +25,6 @@ class ScriptedProvider;
 [[nodiscard]] std::shared_ptr<ai::Models> make_scripted_fake_models();
 
 namespace detail {
-
-class FixtureRuntime final {
-public:
-    FixtureRuntime()
-        : loop_(std::make_shared<boost::asio::io_context>()),
-          work_guard_(boost::asio::make_work_guard(*loop_)),
-          root_(loop_, harness::RuntimeLimits{}),
-          loop_thread_([this] { loop_->run(); }) {}
-
-    ~FixtureRuntime() {
-        work_guard_.reset();
-        loop_->stop();
-    }
-
-    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() {
-        return root_.make_target();
-    }
-
-private:
-    std::shared_ptr<boost::asio::io_context> loop_;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
-    harness::RuntimeRoot root_;
-    std::jthread loop_thread_;
-};
-
-[[nodiscard]] inline std::shared_ptr<harness::RuntimeTarget> fixture_runtime_target() {
-    static FixtureRuntime runtime;
-    return runtime.make_target();
-}
 
 class FixtureCredentialStore final : public ai::CredentialStore {
 public:

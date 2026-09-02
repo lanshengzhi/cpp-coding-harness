@@ -11,7 +11,8 @@ namespace cch::tests {
 /// Drive a RuntimeFixture's interaction loop on a helper thread while a test
 /// exercises a Session through another synchronous or asynchronous seam. The
 /// fixture remains the owner of the loop and RuntimeRoot; this driver only
-/// keeps the loop serviced until it is destroyed.
+/// keeps the loop serviced until it is destroyed. The fixture is borrowed:
+/// it must outlive this driver (declare the driver after the fixture).
 ///
 /// The driver services the loop directly instead of routing through
 /// RuntimeFixture::run: run() carries a bounded wait budget that fails the

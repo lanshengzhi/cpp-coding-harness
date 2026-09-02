@@ -15,7 +15,6 @@
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
-#include "coding_agent/AsyncTask.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
@@ -24,27 +23,19 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
-#include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/use_future.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <format>
-#include <future>
 #include <map>
 #include <optional>
 #include <set>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -1349,8 +1340,8 @@ struct PreparedAssemblyTarget final {
     std::vector<std::string> append_system_prompt_texts;
     // Loaded-resources presentation + `/reload` inputs (pi
     // `getSystemPromptSource()`/`getAppendSystemPromptSources()` and the
-    // per-kind diagnostics): dropped from the runtime today, must flow into
-    // the runtime config (#418).
+    // per-kind diagnostics), flowed into the session config at publication
+    // (#418).
     std::optional<std::string> system_prompt_source;
     std::vector<std::string> append_system_prompt_sources;
     std::vector<ResourceDiagnostic> skill_diagnostics;

@@ -52,8 +52,10 @@ inline void require_completed(boost::asio::io_context& io, const Slot& slot) {
 /// strands the operation's inner coroutine frames (the spawned frame stack
 /// is never pumped again, so e.g. run_user_bash never reaches the Session
 /// body), so overlap scenarios observe completion through slots instead.
+/// `slot` is borrowed: it must outlive the operation's completion (the
+/// scenario keeps it alive across the wait_until that observes it).
 template <typename Awaitable, typename Slot>
-inline void spawn_tracked(
+inline void spawn_to_slot(
     const boost::asio::any_io_executor& executor, Awaitable operation, Slot& slot) {
     boost::asio::co_spawn(
         executor,

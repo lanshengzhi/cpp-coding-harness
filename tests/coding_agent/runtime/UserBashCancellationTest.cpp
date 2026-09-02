@@ -257,7 +257,7 @@ TEST_CASE(
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "echo cancel me",
                         false,
@@ -336,7 +336,7 @@ TEST_CASE(
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> first;
     const auto first_scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "first command",
                         false,
@@ -372,7 +372,7 @@ TEST_CASE(
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> second;
     const auto second_scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "second command",
                         false,
@@ -463,10 +463,10 @@ TEST_CASE(
     std::size_t messages_before_release = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("long run"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("long run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "mid run bash",
                         false,
@@ -535,7 +535,7 @@ TEST_CASE(
     std::size_t cancellations_after_request = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "close me",
                         false,
@@ -549,8 +549,8 @@ TEST_CASE(
         cancellations_after_request = shell_pointer->cancellation_request_count;
 
         // Close rejects new work while winding down.
-        tests::spawn_tracked(executor, session.prompt("too late"), rejected_prompt);
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor, session.prompt("too late"), rejected_prompt);
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "also too late",
                         false,

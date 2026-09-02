@@ -182,12 +182,12 @@ TEST_CASE(
     ai::TimestampMs before_completion = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("start run"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("start run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
         steering_succeeded = static_cast<bool>(session.steer("steer input"));
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "during run",
                         false,
@@ -258,7 +258,7 @@ TEST_CASE(
     std::size_t messages_before_bash_release = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "first bash",
                         false,
@@ -266,7 +266,7 @@ TEST_CASE(
                 bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-        tests::spawn_tracked(executor, session.prompt("during bash"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("during bash"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
         client_pointer->release();
@@ -329,7 +329,7 @@ TEST_CASE(
     std::size_t messages_before_release = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "first bash",
                         false,
@@ -337,7 +337,7 @@ TEST_CASE(
                 first_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "second bash",
                         false,
@@ -350,7 +350,7 @@ TEST_CASE(
         shell_pointer->release();
         co_await wait_until([&] { return first_result.has_value(); });
 
-        tests::spawn_tracked(executor, session.prompt("after rejection"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("after rejection"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
         client_pointer->release();
         co_await wait_until([&] { return prompt_result.has_value(); });
@@ -399,10 +399,10 @@ TEST_CASE(
     std::size_t messages_before_run_settle = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("persisted run"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("persisted run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "deferred bash",
                         false,
@@ -474,12 +474,12 @@ TEST_CASE(
     bool first_context_omits_bash = false;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("read the note"), first_prompt);
+        tests::spawn_to_slot(executor, session.prompt("read the note"), first_prompt);
         // Filesystem completion is worker-backed, so wait until its tool
         // result advances the provider to the gated second request.
         co_await wait_until([&] { return client_pointer->requests.size() == 2; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "mid-run bash",
                         false,
@@ -501,7 +501,7 @@ TEST_CASE(
         // prompt appends to it (the post-scenario assertion reads this
         // snapshot, not the then-current live state).
         settled_messages = session.snapshot().agent_state.messages;
-        tests::spawn_tracked(executor, session.prompt("after overlap"), second_prompt);
+        tests::spawn_to_slot(executor, session.prompt("after overlap"), second_prompt);
         co_await wait_until([&] { return second_prompt.has_value(); });
         co_return support::ExpectedVoid{};
     });
@@ -569,10 +569,10 @@ TEST_CASE(
     bool bash_committed_live = false;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("failing persist run"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("failing persist run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "unpersisted bash",
                         false,
@@ -596,7 +596,7 @@ TEST_CASE(
         bash_committed_live = true;
 
         // The Session stays usable: a later prompt runs and persists again.
-        tests::spawn_tracked(executor, session.prompt("still usable"), second_prompt);
+        tests::spawn_to_slot(executor, session.prompt("still usable"), second_prompt);
         co_await wait_until([&] { return client_pointer->requests.size() == 2; });
         client_pointer->release();
         co_await wait_until([&] { return second_prompt.has_value(); });
@@ -652,10 +652,10 @@ TEST_CASE(
     bool busy_after_close = false;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("close during run"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("close during run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "pending at close",
                         false,
@@ -728,10 +728,10 @@ TEST_CASE(
     ai::TimestampMs before_close = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        tests::spawn_tracked(executor, session.prompt("run"), prompt_result);
+        tests::spawn_to_slot(executor, session.prompt("run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        tests::spawn_tracked(executor,
+        tests::spawn_to_slot(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "overlapping bash",
                         false,
