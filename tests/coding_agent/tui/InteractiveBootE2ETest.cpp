@@ -410,7 +410,9 @@ TEST_CASE(
     REQUIRE(terminal.inject_input(""));
     // Abort finalization and its notice render asynchronously across loop
     // passes.
-    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("Operation aborted") != std::string::npos; }));
+    REQUIRE(pump_until(io, [&] {
+        return visible_screen(terminal).find("Operation aborted") != std::string::npos && !fixture->session->is_busy();
+    }));
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("Operation aborted") != std::string::npos);
 

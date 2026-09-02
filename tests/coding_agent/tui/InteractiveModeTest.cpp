@@ -49,6 +49,7 @@
 
 using namespace cch;
 using tests::drain_ready;
+using tests::pump_until;
 
 namespace {
 
@@ -1190,8 +1191,7 @@ TEST_CASE(
             CHECK(exception == nullptr);
             prompt_result.emplace(std::move(result));
         });
-    drain_ready(io);
-    REQUIRE(prompt_result);
+    REQUIRE(pump_until(io, [&] { return prompt_result.has_value() && terminal.images().size() == 7; }));
     CHECK(*prompt_result);
     REQUIRE(terminal.images().size() == 7);
     for (std::size_t index = 0; index < resumed_resource_ids.size(); ++index) {
@@ -1752,13 +1752,13 @@ TEST_CASE(
         "compacted persisted context");
 
     REQUIRE(terminal.inject_input("continue here\r"));
-    drain_ready(io);
-    CHECK(resumed->session->message_count() == authoritative_before.size() + 2);
+    REQUIRE(pump_until(io, [&] {
+        return resumed->session->message_count() == authoritative_before.size() + 2 && !resumed->session->is_busy();
+    }));
     CHECK(visible_screen(terminal).find("fake: continue here") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -3660,14 +3660,16 @@ TEST_CASE(
     // the header and dispatch observe the new binding live (ADR 0035).
     config.write("keybindings.json", R"({"app.interrupt":"f7"})");
     REQUIRE(terminal.inject_input("/reload\r"));
-    drain_ready(io);
+    REQUIRE(pump_until(io, [&] {
+        const auto reloaded_screen = visible_screen(terminal);
+        return reloaded_screen.find("f7") != std::string::npos && reloaded_screen.find("f6") == std::string::npos;
+    }));
     screen = visible_screen(terminal);
     CHECK(screen.find("f7") != std::string::npos);
     CHECK(screen.find("f6") == std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 

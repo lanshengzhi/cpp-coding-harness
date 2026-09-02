@@ -567,6 +567,7 @@ TEST_CASE(
     std::optional<support::ExpectedVoid> second_prompt;
     std::size_t messages_before_release = 0;
     bool bash_committed_live = false;
+    std::size_t requests_after_follow_up = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
         tests::spawn_to_slot(executor, session.prompt("failing persist run"), prompt_result);
@@ -600,6 +601,7 @@ TEST_CASE(
         co_await wait_until([&] { return client_pointer->requests.size() == 2; });
         client_pointer->release();
         co_await wait_until([&] { return second_prompt.has_value(); });
+        requests_after_follow_up = client_pointer->requests.size();
         session.close();
         co_await wait_until([&] { return !session.is_open() && !session.is_busy(); });
         co_return support::ExpectedVoid{};
@@ -617,7 +619,7 @@ TEST_CASE(
     CHECK(bash_committed_live);
     REQUIRE(second_prompt.has_value());
     CHECK(*second_prompt);
-    CHECK(client_pointer->requests.size() == 2);
+    CHECK(requests_after_follow_up == 2);
 
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
