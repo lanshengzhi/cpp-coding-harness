@@ -14,6 +14,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -57,34 +58,47 @@ public:
     std::vector<ai::AiContext> requests;
 };
 
+template <typename T>
+[[nodiscard]] T run_awaitable(tests::RuntimeFixture& runtime, boost::asio::awaitable<T> awaitable) {
+    return runtime.run(support::detail::make_async_result(
+            [awaitable = std::move(awaitable)]() mutable -> boost::asio::awaitable<T> {
+                co_return co_await std::move(awaitable);
+            }));
+}
+
 /// Session creation against the scripted-client seam (a real ModelRuntime
 /// composed over scripted providers, ADR 0034 "primary seam — Agent +
 /// session-assembly composition").
-[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult>
-create_scripted_session(
-    std::shared_ptr<RecordingProvider> client,
-    const std::filesystem::path& session_file,
-    const std::filesystem::path& workspace) {
+[[nodiscard]] support::Expected<coding_agent::CreateAgentSessionResult> create_scripted_session(
+        std::shared_ptr<RecordingProvider> client,
+        const std::filesystem::path& session_file,
+        const std::filesystem::path& workspace,
+        tests::RuntimeFixture& runtime) {
     tests::ModelsSessionOptions options;
     options.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     options.workspace = workspace;
     options.models = cch::tests::models_from_provider(std::move(client));
     options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
-    return coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    return runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
 }
 
 } // namespace
 
 TEST_CASE("system prompt is built at session construction and flows through AgentContext.system_prompt", "[coding_agent][system-prompt][issue414]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const auto session_file = workspace.path() / "session.jsonl";
     auto client = std::make_shared<RecordingProvider>();
 
-    auto created = create_scripted_session(client, session_file, workspace.path());
+    auto created = create_scripted_session(client, session_file, workspace.path(), runtime);
     REQUIRE(created.has_value());
 
-    auto prompted = created->session->prompt_blocking("hello");
+    auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
     REQUIRE(prompted.has_value());
     REQUIRE(client->requests.size() == 1);
 
@@ -125,7 +139,7 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     CHECK(created->session->snapshot().agent_state.system_prompt == prompt);
 
     // Every subsequent run carries the same built prompt.
-    auto second = created->session->prompt_blocking("again");
+    auto second = run_awaitable(runtime, created->session->prompt("again"));
     REQUIRE(second.has_value());
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].system_prompt.has_value());
@@ -161,6 +175,7 @@ TEST_CASE(
     "system prompt default branch renders project context files in pi's order",
     "[coding_agent][system-prompt][context-files][issue416]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     // Controlled ancestor chain: parent (AGENTS.md) and child (CLAUDE.md),
     // global agent dir absent (isolated test home).
     workspace.write("parent/AGENTS.md", "parent instructions\n");
@@ -170,10 +185,14 @@ TEST_CASE(
     auto client = std::make_shared<RecordingProvider>();
 
     auto options = context_session_options(session_file, child, client);
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created.has_value());
 
-    auto prompted = created->session->prompt_blocking("hello");
+    auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
     REQUIRE(prompted.has_value());
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].system_prompt.has_value());
@@ -207,6 +226,7 @@ TEST_CASE(
     "system prompt custom branch renders the custom prompt, joined appends, and context files",
     "[coding_agent][system-prompt][context-files][issue416]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     workspace.write("parent/AGENTS.md", "parent instructions\n");
     workspace.write("parent/child/AGENTS.md", "child instructions\n");
     workspace.write("parent/child/custom.md", "custom file prompt\n");
@@ -219,10 +239,14 @@ TEST_CASE(
     options.session_facts.system_prompt = (child / "custom.md").string();
     // pi `--append-system-prompt` repeatable: joined with "\n\n".
     options.session_facts.append_system_prompt = {"first append", "second append"};
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created.has_value());
 
-    auto prompted = created->session->prompt_blocking("hello");
+    auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
     REQUIRE(prompted.has_value());
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].system_prompt.has_value());
@@ -256,6 +280,7 @@ TEST_CASE(
     "system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md through the custom branch",
     "[coding_agent][system-prompt][context-files][issue416]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     workspace.write(".pi/SYSTEM.md", "custom system prompt from SYSTEM.md\n");
     workspace.write(".pi/APPEND_SYSTEM.md", "append from APPEND_SYSTEM.md\n");
     const auto session_file = workspace.path() / "session.jsonl";
@@ -265,10 +290,14 @@ TEST_CASE(
     // The `.pi/` markers trigger the trust decision; `--approve` trusts the
     // project so the project SYSTEM.md/APPEND_SYSTEM.md load.
     options.project_trust_override = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created.has_value());
 
-    auto prompted = created->session->prompt_blocking("hello");
+    auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
     REQUIRE(prompted.has_value());
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].system_prompt.has_value());
@@ -290,16 +319,21 @@ TEST_CASE(
     "system prompt drops project context files under --no-context-files",
     "[coding_agent][system-prompt][context-files][issue416]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     workspace.write("AGENTS.md", "should not appear\n");
     const auto session_file = workspace.path() / "session.jsonl";
     auto client = std::make_shared<RecordingProvider>();
 
     auto options = context_session_options(session_file, workspace.path(), client);
     options.session_facts.no_context_files = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(created.has_value());
 
-    auto prompted = created->session->prompt_blocking("hello");
+    auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
     REQUIRE(prompted.has_value());
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests[0].system_prompt.has_value());
