@@ -6,6 +6,8 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/ImageFixture.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
@@ -84,6 +86,28 @@ struct TestRunOptions {
     return options;
 }
 
+[[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
+        tests::RuntimeFixture& runtime, tests::ModelsSessionOptions options) {
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    return coding_agent::create_agent_session_async(
+            std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models)});
+}
+
+[[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
+        tests::RuntimeFixture& runtime,
+        coding_agent::runtime::AgentSessionCreationRequest request,
+        std::shared_ptr<ai::Models> models) {
+    request.execution_runtime_target = runtime.make_target();
+    return coding_agent::create_agent_session_async(
+            std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models)});
+}
+
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
     std::string text;
     for (const auto& line : terminal.screen()) {
@@ -113,6 +137,7 @@ struct TestRunOptions {
 struct RichThinkingSession {
     tests::TempWorkspace workspace;
     std::filesystem::path session_file;
+    tests::RuntimeFixture runtime;
 
     void create() {
         session_file = workspace.path() / "rich-session.jsonl";
@@ -141,15 +166,13 @@ struct RichThinkingSession {
         REQUIRE(store->append(ai::MessageVariant{assistant}));
     }
 
-    [[nodiscard]] auto resume() const {
+    [[nodiscard]] auto resume() {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
-        request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.workspace = workspace.path();
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        auto resumed =
-                coding_agent::create_agent_session_for_testing(std::move(request), tests::make_scripted_fake_models());
+        auto resumed = runtime.run(create_session_async(runtime, std::move(request), tests::make_scripted_fake_models()));
         REQUIRE(resumed);
         return resumed;
     }
@@ -1045,6 +1068,7 @@ private:
 TEST_CASE(
     "Native TUI renders resumed and live message images in source order without mutating content",
     "[coding_agent][tui][image][issue63]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "image-session.jsonl";
@@ -1109,10 +1133,12 @@ TEST_CASE(
     resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume_options.workspace = workspace.path();
     resume_options.models = tests::make_scripted_fake_models();
-    auto resumed = coding_agent::create_agent_session(std::move(resume_options));
+    auto resumed = runtime.run(create_session_async(runtime, std::move(resume_options)));
     REQUIRE(resumed);
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
 
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
+    runtime_driver.emplace(runtime);
     tui::VirtualTerminal terminal({
         .columns = 72,
         .rows = 300,
@@ -1193,13 +1219,15 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
 
+    runtime_driver.reset();
     tests::ModelsSessionOptions fallback_resume;
     fallback_resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     fallback_resume.workspace = workspace.path();
     fallback_resume.models = tests::make_scripted_fake_models();
-    auto fallback_session = coding_agent::create_agent_session(std::move(fallback_resume));
+    auto fallback_session = runtime.run(create_session_async(runtime, std::move(fallback_resume)));
     REQUIRE(fallback_session);
     const auto fallback_before = fallback_session->session->snapshot().agent_state.messages;
+    runtime_driver.emplace(runtime);
     tui::VirtualTerminal fallback_terminal({.columns = 72, .rows = 50});
     boost::asio::io_context fallback_io;
     std::optional<support::ExpectedVoid> fallback_result;
@@ -1237,6 +1265,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI renders a live image-bearing tool result through the transcript path",
     "[coding_agent][tui][image][tool][issue63]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
     auto options = session_options(
@@ -1244,9 +1273,10 @@ TEST_CASE(
         std::make_shared<RepeatedReadCallChatProvider>());
     options.custom_tools.push_back(make_image_read_tool(
         std::string{tests::kTinyPngBase64}));
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({
         .columns = 80,
         .rows = 80,
@@ -1297,6 +1327,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI keeps tail image sidecars visible while the old transcript scrolled into scrollback",
     "[coding_agent][tui][image][viewport][issue63]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
     const auto session_file = workspace.path() / "viewport-images.jsonl";
@@ -1329,8 +1360,9 @@ TEST_CASE(
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
     resume.models = tests::make_scripted_fake_models();
-    auto created = coding_agent::create_agent_session(std::move(resume));
+    auto created = runtime.run(create_session_async(runtime, std::move(resume)));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({
         .columns = 72,
         .rows = 42,
@@ -1390,10 +1422,11 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI clipboard images become distinct supported temporary paths",
     "[coding_agent][tui][clipboard][issue63]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
     auto reader = std::make_unique<FakeClipboardReader>();
@@ -1410,6 +1443,7 @@ TEST_CASE(
         });
     }
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 120, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -1476,10 +1510,11 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI clipboard falls back to text at the cursor and ignores read failures",
     "[coding_agent][tui][clipboard][issue63]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
     auto reader = std::make_unique<FakeClipboardReader>();
@@ -1489,6 +1524,8 @@ TEST_CASE(
     });
     reader->text = "clipboard text";
 
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
+    runtime_driver.emplace(runtime);
     tui::VirtualTerminal terminal({.columns = 80, .rows = 12});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -1522,9 +1559,11 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
 
+    runtime_driver.reset();
     auto failed_options = session_options(workspace, tests::make_scripted_fake_provider());
-    auto failed_session = coding_agent::create_agent_session(std::move(failed_options));
+    auto failed_session = runtime.run(create_session_async(runtime, std::move(failed_options)));
     REQUIRE(failed_session);
+    runtime_driver.emplace(runtime);
     auto failed_reader = std::make_unique<FakeClipboardReader>();
     failed_reader->image_error = true;
     failed_reader->text_error = true;
@@ -1562,6 +1601,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI renders a resumed rich transcript before accepting continued input",
     "[coding_agent][tui][resume][issue59]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write(
@@ -1636,13 +1676,12 @@ TEST_CASE(
 
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
-    resume.execution_runtime_target = tests::detail::fixture_runtime_target();
     resume.workspace = workspace.path();
     resume.session_facts.no_skills = true;
     resume.session_facts.no_prompt_templates = true;
-    auto resumed =
-            coding_agent::create_agent_session_for_testing(std::move(resume), tests::make_scripted_fake_models());
+    auto resumed = runtime.run(create_session_async(runtime, std::move(resume), tests::make_scripted_fake_models()));
     REQUIRE(resumed);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
     REQUIRE(authoritative_before.size() == 6);
@@ -1725,15 +1764,30 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI presents fresh and resumed persisted history equivalently",
     "[coding_agent][tui][persistence][issue59]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "equivalent-session.jsonl";
 
     auto create = session_options(workspace, tests::make_scripted_fake_provider());
     create.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
-    auto fresh = coding_agent::create_agent_session(std::move(create));
+    auto fresh = runtime.run(create_session_async(runtime, std::move(create)));
     REQUIRE(fresh);
-    REQUIRE(fresh->session->prompt_blocking("equivalent prompt"));
+
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
+    runtime_driver.emplace(runtime);
+    boost::asio::io_context setup_io;
+    std::optional<support::ExpectedVoid> setup_result;
+    boost::asio::co_spawn(
+        setup_io,
+        fresh->session->prompt("equivalent prompt"),
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            setup_result.emplace(std::move(result));
+        });
+    REQUIRE(tests::pump_until(setup_io, [&] { return setup_result.has_value(); }));
+    REQUIRE(setup_result);
+    CHECK(*setup_result);
 
     tui::VirtualTerminal fresh_terminal({.columns = 64, .rows = 10});
     boost::asio::io_context fresh_io;
@@ -1753,13 +1807,15 @@ TEST_CASE(
     drain_ready(fresh_io);
     REQUIRE(fresh_result);
     CHECK(*fresh_result);
+    runtime_driver.reset();
 
     tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
     resume.models = tests::make_scripted_fake_models();
-    auto resumed = coding_agent::create_agent_session(std::move(resume));
+    auto resumed = runtime.run(create_session_async(runtime, std::move(resume)));
     REQUIRE(resumed);
+    runtime_driver.emplace(runtime);
 
     tui::VirtualTerminal resumed_terminal({.columns = 64, .rows = 10});
     boost::asio::io_context resumed_io;
@@ -1785,6 +1841,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI correlates repeated Tool Call IDs and locally expands long output",
     "[coding_agent][tui][tools][issue59]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto options = session_options(
@@ -1793,9 +1850,10 @@ TEST_CASE(
     auto tool = make_gated_partial_read_tool();
     auto* tool_pointer = tool.state.get();
     options.custom_tools.push_back(std::move(tool.tool));
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 32});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -1867,15 +1925,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI interrupt cancels autocomplete before aborting active work and recovers",
     "[coding_agent][tui][abort][issue61]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -1942,6 +2000,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI repeated interrupt and shutdown input restores the terminal once",
     "[coding_agent][tui][abort][shutdown][issue61]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write(
@@ -1951,11 +2010,10 @@ TEST_CASE(
     auto* client_pointer = client.get();
     // Keep an owning copy: shutdown closes the Session, which releases its
     // provider; the assertions below still observe the fake.
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        client));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, client)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 12});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -1994,6 +2052,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI waits for cancelled tool quiescence before accepting the next prompt",
     "[coding_agent][tui][abort][tools][issue61]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.interrupt":"f7"})");
@@ -2003,9 +2062,10 @@ TEST_CASE(
     auto tool = make_delayed_cancellation_tool();
     auto* tool_pointer = tool.state.get();
     options.custom_tools.push_back(std::move(tool.tool));
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2075,9 +2135,10 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI distinguishes subscriber diagnostics and remains usable",
     "[coding_agent][tui][diagnostics][issue61]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
@@ -2094,6 +2155,7 @@ TEST_CASE(
         failing_subscriptions.push_back(std::move(*subscription));
     }
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 40});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2140,16 +2202,18 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI distinguishes persistence failures and remains usable",
     "[coding_agent][tui][diagnostics][persistence][issue61]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "persistence-recovery.jsonl";
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
     // 24 rows leave room for the two-line compact header (#418) plus the
     // loaded-resources sections the fixture workspace renders.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2197,13 +2261,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI renders accepted provider outcomes once and remains usable",
     "[coding_agent][tui][provider-outcome][issue59]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::make_shared<AcceptedOutcomeChatProvider>()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::make_shared<AcceptedOutcomeChatProvider>())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 20});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2261,11 +2325,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI redacts startup failures and leaves the Session closed",
     "[coding_agent][tui][failure][issue58]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     FailingStartTerminal terminal;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2293,11 +2359,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI reports both post-acquisition startup and restoration failures",
     "[coding_agent][tui][failure][issue58]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     FailingCleanupTerminal terminal;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2327,11 +2395,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI submits two fresh prompts and replaces streamed assistant state",
     "[coding_agent][tui][issue58]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2373,6 +2443,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI steers and follows up in pi-compatible turn order",
     "[coding_agent][tui][queues][issue62]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
@@ -2380,9 +2451,10 @@ TEST_CASE(
     auto options = session_options(workspace, std::move(client));
     options.max_queued_messages = 3;
     options.max_queued_bytes = 64;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2466,6 +2538,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI preserves bounded rejected input and dequeues pending text",
     "[coding_agent][tui][queues][limits][issue62]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
@@ -2473,9 +2546,10 @@ TEST_CASE(
     auto options = session_options(workspace, std::move(client));
     options.max_queued_messages = 2;
     options.max_queued_bytes = 4;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2578,16 +2652,16 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI preserves follow-up after an accepted error and remains usable",
     "[coding_agent][tui][queues][error][issue62]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
     client_pointer->first_request_errors = true;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2643,15 +2717,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI restores pending input before abort and accepts it after quiescence",
     "[coding_agent][tui][queues][abort][issue62]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2708,15 +2782,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI records accepted follow-up in editor history and queues slash text while a run is active",
     "[coding_agent][tui][queues][issue401]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2792,15 +2866,17 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI rejects follow-up admission at capacity and restores the text unchanged",
     "[coding_agent][tui][queues][limits][issue401]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
     auto options = session_options(workspace, std::move(client));
     options.max_queued_messages = 1;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 80, .rows = 20});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2860,15 +2936,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI dequeue restores steering, then follow-up, then draft with blank lines",
     "[coding_agent][tui][queues][issue401]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2951,11 +3027,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI expanded header hints assemble followUp and dequeue with pi's keys",
     "[coding_agent][tui][hints][issue401]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 90, .rows = 26});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -2989,15 +3067,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI queues batched submissions across deferred prompt dispatch",
     "[coding_agent][tui][async][issue58][issue62]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<GatedChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3042,17 +3120,19 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI replaces one visible assistant entry during incremental streaming",
     "[coding_agent][tui][streaming][issue58]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<IncrementalGatedChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
     // The pi-shaped composition reserves fixed rows for the header (three
     // wrapped compact lines plus the two-line loaded-resources notice, #418),
     // the status, the editor borders, and the footer; 15 rows keep the chat
     // tail anchored so the streaming message's head scrolls out.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 30, .rows = 15});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3100,13 +3180,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI keeps input and resize responsive while a prompt is suspended",
     "[coding_agent][tui][async][issue58]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<GatedChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 40, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3150,11 +3232,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI routes slash commands without submitting builtins as Agent Prompts",
     "[coding_agent][tui][commands][issue502]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3243,6 +3327,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI command autocomplete includes effective commands and project resources",
     "[coding_agent][tui][autocomplete][issue60]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     workspace.write(
@@ -3260,11 +3345,12 @@ TEST_CASE(
         "Expanded project prompt: $ARGUMENTS\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
     // 24 rows leave room for the two-line compact header (#418) plus the
     // loaded-resources sections the fixture workspace renders.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3325,6 +3411,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI skill commands autocomplete follows the enableSkillCommands setting",
     "[coding_agent][tui][autocomplete][issue412]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     // The global setting gates `/skill:` registration + autocomplete.
@@ -3338,11 +3425,12 @@ TEST_CASE(
         "Project skill body.\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
     // 24 rows leave room for the two-line compact header (#418) plus the
     // loaded-resources sections the fixture workspace renders.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3402,14 +3490,15 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI /reload refuses while streaming with pi's verbatim warning",
     "[coding_agent][tui][reload][issue418]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<IncrementalGatedChatProvider>();
     auto* client_pointer = client.get();
-    auto created = coding_agent::create_agent_session(
-        session_options(workspace, std::move(client)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3450,6 +3539,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI /reload re-reads resources, refreshes the presentation, and reports the pi status",
     "[coding_agent][tui][reload][issue418]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     workspace.write(
@@ -3467,9 +3557,10 @@ TEST_CASE(
         "Initial prompt body: $ARGUMENTS\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3529,12 +3620,14 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI /reload re-catalogs keybindings.json into the shared slot",
     "[coding_agent][tui][reload][keybindings][issue418]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.interrupt":"f6"})");
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3573,12 +3666,14 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI settings and hotkeys commands open only supported overlays",
     "[coding_agent][tui][overlays][issue60]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3656,13 +3751,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI retains bounded terminal provider failures and allows retry",
     "[coding_agent][tui][failure][issue58]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(
-        workspace,
-        std::make_shared<FailOnceChatProvider>()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::make_shared<FailOnceChatProvider>())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 20});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3706,6 +3801,7 @@ TEST_CASE(
         "keybindings.json",
         R"({"app.thinking.toggle":"f8","app.exit":"f6"})");
     auto resumed = fixture.resume();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
@@ -3760,6 +3856,7 @@ TEST_CASE(
         "settings.json",
         R"({"hideThinkingBlock": true, "outputPad": 0})");
     auto resumed = fixture.resume();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
@@ -3799,6 +3896,8 @@ TEST_CASE(
     config.write("keybindings.json", R"({"app.exit":"f6"})");
     auto resumed = fixture.resume();
 
+    std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
+    runtime_driver.emplace(fixture.runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3857,10 +3956,12 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(run_result);
     CHECK(*run_result);
+    runtime_driver.reset();
 
     // A fresh boot with the same config directory applies the persisted
     // render settings (hideThinkingBlock true, outputPad 0).
     auto rebooted = fixture.resume();
+    runtime_driver.emplace(fixture.runtime);
     tui::VirtualTerminal reboot_terminal({.columns = 72, .rows = 30});
     boost::asio::io_context reboot_io;
     std::optional<support::ExpectedVoid> reboot_result;
@@ -3887,11 +3988,13 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI /compact and /trust bind to their runtime flows without changing Agent Session history",
     "[coding_agent][tui][commands][issue419]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto created = coding_agent::create_agent_session(session_options(workspace, tests::make_scripted_fake_provider()));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -3940,6 +4043,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI exit during an admitted manual compaction waits for the compaction to settle",
     "[coding_agent][tui][close][issue467]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     // Compaction requires a persisted session file and history above the
@@ -3957,9 +4061,10 @@ TEST_CASE(
         workspace.path() / "compact-exit.jsonl"};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
@@ -4014,6 +4119,7 @@ TEST_CASE(
 TEST_CASE(
     "Native TUI autocomplete prefixes discovered templates and skills with their scope tags",
     "[coding_agent][tui][autocomplete][issue419]") {
+    tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     workspace.write(
@@ -4024,9 +4130,10 @@ TEST_CASE(
         "Expanded project prompt: $ARGUMENTS\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
-    auto created = coding_agent::create_agent_session(std::move(options));
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
