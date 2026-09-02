@@ -11,6 +11,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
@@ -145,8 +146,6 @@ struct Running {
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    auto created = coding_agent::create_agent_session(std::move(request));
-    REQUIRE(created.has_value());
 
     // The replacement Runtime Root shares the interactive loop: assembly
     // work and the install continuation are both pumped by the test.
@@ -154,6 +153,25 @@ struct Running {
         &running.io, [](boost::asio::io_context*) {});
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(
         std::move(runtime_io), harness::RuntimeLimits{});
+
+    // Create the boot session through the one asynchronous Session Assembly
+    // door on the interactive loop (RuntimeRoot holds a work guard on the
+    // loop, so pump until creation completes rather than draining).
+    request.execution_runtime_target = runtime_root->make_target();
+    std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
+    boost::asio::co_spawn(
+        running.io,
+        support::detail::await_async_result(
+            coding_agent::create_agent_session_async(std::move(request))),
+        [&](std::exception_ptr exception,
+            support::Expected<coding_agent::CreateAgentSessionResult> created) {
+            CHECK(exception == nullptr);
+            booted.emplace(std::move(created));
+        });
+    REQUIRE(tests::pump_until(running.io, [&] { return booted.has_value(); }));
+    REQUIRE(booted->has_value());
+    auto created = std::move(**booted);
+
     actions->replace_session_async =
         [runtime_root](std::size_t /* action_generation */,
             coding_agent::runtime::AgentSessionCreationRequest request,
@@ -170,7 +188,7 @@ struct Running {
         };
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created->session)
+        .with_session(*created.session)
         .with_agent_config_directory(fixture.agent_dir.path())
         .with_action_sink(actions->make_sink())
         .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
@@ -187,7 +205,7 @@ struct Running {
             running.run_result.emplace(std::move(result));
         });
     drain_ready(running.io);
-    return std::move(created->session);
+    return std::move(created.session);
 }
 
 /// Pump until the asynchronous replacement completed at the seam, then

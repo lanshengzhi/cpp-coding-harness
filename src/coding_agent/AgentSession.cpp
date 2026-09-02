@@ -639,19 +639,6 @@ std::unique_ptr<AgentSession> AgentSession::bind_assembly(runtime::AgentSessionA
     return session;
 }
 
-support::Expected<CreateAgentSessionResult> create_agent_session(
-    runtime::AgentSessionCreationRequest request) {
-    return runtime::SessionFactory::create(std::move(request), std::nullopt);
-}
-
-support::Expected<CreateAgentSessionResult> create_agent_session(
-    runtime::AgentSessionCreationRequest request,
-    std::optional<runtime::InteractiveSessionFacts> session_facts,
-    runtime::AssemblyOverrides overrides) {
-    return runtime::SessionFactory::create(
-        std::move(request), std::move(session_facts), std::move(overrides));
-}
-
 support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(runtime::AgentSessionCreationRequest request,
         std::optional<runtime::InteractiveSessionFacts> session_facts,
         runtime::AssemblyOverrides overrides,
@@ -664,27 +651,6 @@ support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
     runtime::AgentSessionCreationRequest request) {
     return create_agent_session_async(
             std::move(request), std::nullopt, runtime::AssemblyOverrides{});
-}
-
-support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-    runtime::AgentSessionCreationRequest request,
-    std::shared_ptr<ai::Models> models) {
-    return runtime::SessionFactory::create(std::move(request),
-            std::nullopt,
-            runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .cli_fake = false, .models = std::move(models), .user_shell = nullptr});
-}
-
-support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-    runtime::AgentSessionCreationRequest request,
-    std::shared_ptr<ai::Models> models,
-    std::unique_ptr<runtime::AsyncUserShell> user_shell) {
-    return runtime::SessionFactory::create(std::move(request),
-            std::nullopt,
-            runtime::AssemblyOverrides{.model_runtime = nullptr,
-                    .cli_fake = false,
-                    .models = std::move(models),
-                    .user_shell = std::move(user_shell)});
 }
 
 } // namespace cch::coding_agent
