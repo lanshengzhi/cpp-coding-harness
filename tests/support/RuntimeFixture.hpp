@@ -168,6 +168,12 @@ public:
     }
 
 private:
+    friend class RuntimeLoopDriver;
+
+    /// Driver-only access to the fixture loop. RuntimeLoopDriver services
+    /// this loop on its helper thread; tests must not pump the loop while a
+    /// driver for this fixture is alive.
+    [[nodiscard]] boost::asio::io_context& loop() const noexcept { return *loop_; }
     class SessionHolderBase {
     public:
         virtual ~SessionHolderBase() = default;

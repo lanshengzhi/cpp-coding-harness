@@ -182,17 +182,17 @@ TEST_CASE(
     ai::TimestampMs before_completion = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("start run"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("start run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
         steering_succeeded = static_cast<bool>(session.steer("steer input"));
 
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "during run",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
         before_completion = now_ms();
@@ -204,8 +204,8 @@ TEST_CASE(
         second_request_omits_bash = !context_has_bash_command(client_pointer->requests[1], "during run");
 
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
         co_return support::ExpectedVoid{};
     });
     REQUIRE(scenario);
@@ -258,23 +258,23 @@ TEST_CASE(
     std::size_t messages_before_bash_release = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "first bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("during bash"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("during bash"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
+        co_await wait_until([&] { return prompt_result.has_value(); });
         messages_before_bash_release = bash_message_count(session.snapshot().agent_state.messages);
 
         shell_pointer->release();
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return bash_result.has_value(); });
         co_return support::ExpectedVoid{};
     });
     REQUIRE(scenario);
@@ -329,31 +329,31 @@ TEST_CASE(
     std::size_t messages_before_release = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto first = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "first bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                first_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
-        auto second = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "second bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
-        second_result.emplace(co_await std::move(second));
+                second_result);
+        co_await wait_until([&] { return second_result.has_value(); });
         commands_before_release = shell_pointer->commands.size();
         messages_before_release = session.snapshot().agent_state.messages.size();
 
         shell_pointer->release();
-        first_result.emplace(co_await std::move(first));
+        co_await wait_until([&] { return first_result.has_value(); });
 
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("after rejection"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("after rejection"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
+        co_await wait_until([&] { return prompt_result.has_value(); });
         co_return support::ExpectedVoid{};
     });
     REQUIRE(scenario);
@@ -399,21 +399,21 @@ TEST_CASE(
     std::size_t messages_before_run_settle = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("persisted run"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("persisted run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "deferred bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
         shell_pointer->release();
         messages_before_run_settle = bash_message_count(session.snapshot().agent_state.messages);
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
         // The deferred commitment's JSONL append crosses a Runtime
         // persistence worker; wait for the journal to carry the Bash entry
         // instead of assuming the completion callback implies the write
@@ -468,22 +468,23 @@ TEST_CASE(
     std::optional<support::ExpectedVoid> first_prompt;
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
     std::optional<support::ExpectedVoid> second_prompt;
+    std::vector<ai::MessageVariant> settled_messages;
     std::size_t messages_before_run_settle = 0;
     bool bash_deferred_before_run_settle = false;
     bool first_context_omits_bash = false;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("read the note"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("read the note"), first_prompt);
         // Filesystem completion is worker-backed, so wait until its tool
         // result advances the provider to the gated second request.
         co_await wait_until([&] { return client_pointer->requests.size() == 2; });
 
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "mid-run bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
         // Ungated Bash completed during the run but stays uncommitted, and
         // the in-flight turn's context never saw it.
@@ -492,12 +493,16 @@ TEST_CASE(
         first_context_omits_bash = !context_has_bash_command(client_pointer->requests[1], "mid-run bash");
 
         client_pointer->release();
-        first_prompt.emplace(co_await std::move(prompt));
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return first_prompt.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
 
         co_await wait_until([&] { return session.snapshot().agent_state.messages.size() == 5; });
-        auto next_prompt = boost::asio::co_spawn(executor, session.prompt("after overlap"), boost::asio::use_awaitable);
-        second_prompt.emplace(co_await std::move(next_prompt));
+        // The five-message settled state is pinned before the follow-up
+        // prompt appends to it (the post-scenario assertion reads this
+        // snapshot, not the then-current live state).
+        settled_messages = session.snapshot().agent_state.messages;
+        tests::spawn_tracked(executor, session.prompt("after overlap"), second_prompt);
+        co_await wait_until([&] { return second_prompt.has_value(); });
         co_return support::ExpectedVoid{};
     });
     REQUIRE(scenario);
@@ -509,7 +514,7 @@ TEST_CASE(
     REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
 
-    const auto& messages = session.snapshot().agent_state.messages;
+    const auto& messages = settled_messages;
     REQUIRE(messages.size() == 5);
     CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
     const auto* tool_call_turn = std::get_if<ai::AssistantMessage>(&messages[1]);
@@ -561,18 +566,18 @@ TEST_CASE(
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
     std::optional<support::ExpectedVoid> second_prompt;
     std::size_t messages_before_release = 0;
+    bool bash_committed_live = false;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto prompt =
-                boost::asio::co_spawn(executor, session.prompt("failing persist run"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("failing persist run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "unpersisted bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
         shell_pointer->release();
         messages_before_release = bash_message_count(session.snapshot().agent_state.messages);
@@ -585,15 +590,16 @@ TEST_CASE(
         co_await wait_until([&] { return journal_contains(session_path, "failing persist run"); });
         harness::session::testing::fail_nth_append_for_test(session_path, 2);
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
         co_await wait_until([&] { return bash_message_count(session.snapshot().agent_state.messages) == 1; });
+        bash_committed_live = true;
 
         // The Session stays usable: a later prompt runs and persists again.
-        auto next_prompt = boost::asio::co_spawn(executor, session.prompt("still usable"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("still usable"), second_prompt);
         co_await wait_until([&] { return client_pointer->requests.size() == 2; });
         client_pointer->release();
-        second_prompt.emplace(co_await std::move(next_prompt));
+        co_await wait_until([&] { return second_prompt.has_value(); });
         session.close();
         co_await wait_until([&] { return !session.is_open() && !session.is_busy(); });
         co_return support::ExpectedVoid{};
@@ -605,8 +611,10 @@ TEST_CASE(
     REQUIRE(bash_result.has_value());
     REQUIRE(*bash_result);
     // Live Session State advanced; only persistence failed, reported explicitly.
+    // (snapshot() reads the owned Agent, which Close releases — the live-state
+    // observation is captured inside the scenario before Close.)
     REQUIRE(bash_result->value().diagnostic.has_value());
-    CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
+    CHECK(bash_committed_live);
     REQUIRE(second_prompt.has_value());
     CHECK(*second_prompt);
     CHECK(client_pointer->requests.size() == 2);
@@ -644,15 +652,15 @@ TEST_CASE(
     bool busy_after_close = false;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("close during run"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("close during run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "pending at close",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
         shell_pointer->release();
         messages_before_close = bash_message_count(session.snapshot().agent_state.messages);
@@ -663,8 +671,8 @@ TEST_CASE(
         session.close();
         busy_after_close = session.is_busy();
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
         // Close finalization settles through Runtime hops behind the
         // completion callbacks; wait for quiescence instead of asserting
         // after one drain pass (#531).
@@ -720,15 +728,15 @@ TEST_CASE(
     ai::TimestampMs before_close = 0;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto prompt = boost::asio::co_spawn(executor, session.prompt("run"), boost::asio::use_awaitable);
+        tests::spawn_tracked(executor, session.prompt("run"), prompt_result);
         co_await wait_until([&] { return client_pointer->requests.size() == 1; });
 
-        auto bash = boost::asio::co_spawn(executor,
+        tests::spawn_tracked(executor,
                 coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(session,
                         "overlapping bash",
                         false,
                         [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
-                boost::asio::use_awaitable);
+                bash_result);
         co_await wait_until([&] { return shell_pointer->started_count == 1; });
 
         before_close = now_ms();
@@ -743,8 +751,8 @@ TEST_CASE(
         // cancelled completion defers to the run's settle like any other
         // mid-run result.
         client_pointer->release();
-        prompt_result.emplace(co_await std::move(prompt));
-        bash_result.emplace(co_await std::move(bash));
+        co_await wait_until([&] { return prompt_result.has_value(); });
+        co_await wait_until([&] { return bash_result.has_value(); });
         // Close finalization settles through Runtime hops behind the
         // completion callbacks; wait for quiescence instead of asserting
         // after one drain pass (#531).

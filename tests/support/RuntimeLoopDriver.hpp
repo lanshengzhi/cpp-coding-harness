@@ -2,11 +2,6 @@
 
 #include "support/RuntimeFixture.hpp"
 
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
-
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -17,6 +12,14 @@ namespace cch::tests {
 /// exercises a Session through another synchronous or asynchronous seam. The
 /// fixture remains the owner of the loop and RuntimeRoot; this driver only
 /// keeps the loop serviced until it is destroyed.
+///
+/// The driver services the loop directly instead of routing through
+/// RuntimeFixture::run: run() carries a bounded wait budget that fails the
+/// test when a long-lived keep-alive operation is still pending, which is the
+/// driver's normal state for any test body that outlives the budget.
+/// RuntimeRoot holds a work guard until close(), so run_one() blocks for
+/// work at full speed rather than busy-polling; destruction stops the loop
+/// to release a blocked run_one().
 class RuntimeLoopDriver final {
 public:
     explicit RuntimeLoopDriver(RuntimeFixture& runtime) : runtime_(&runtime), thread_([this] { drive(); }) {
@@ -27,6 +30,7 @@ public:
 
     ~RuntimeLoopDriver() {
         stop_.store(true, std::memory_order_release);
+        runtime_->loop().stop();
         if (thread_.joinable()) {
             thread_.join();
         }
@@ -40,23 +44,20 @@ public:
 private:
     void drive() noexcept {
         started_.store(true, std::memory_order_release);
-        const auto result = runtime_->run(
-                support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                    while (!stop_.load(std::memory_order_acquire)) {
-                        boost::asio::steady_timer timer(
-                                co_await boost::asio::this_coro::executor, std::chrono::milliseconds{1});
-                        boost::system::error_code error;
-                        co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
-                    }
-                    co_return support::ExpectedVoid{};
-                }));
-        completed_.store(result.has_value(), std::memory_order_release);
+        auto& loop = runtime_->loop();
+        while (!stop_.load(std::memory_order_acquire)) {
+            if (loop.stopped()) {
+                loop.restart();
+            }
+            // Bounded so a stop() racing the restart above cannot leave a
+            // blocked run_one() past the destructor's join.
+            (void)loop.run_one_for(std::chrono::milliseconds{50});
+        }
     }
 
     RuntimeFixture* runtime_;
     std::atomic<bool> started_{false};
     std::atomic<bool> stop_{false};
-    std::atomic<bool> completed_{false};
     std::thread thread_;
 };
 

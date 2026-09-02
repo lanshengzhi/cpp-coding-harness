@@ -47,6 +47,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <atomic>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -96,7 +97,7 @@ struct Running {
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.models = tests::models_from_provider(provider)},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = tests::models_from_provider(provider), .user_shell = nullptr},
                 stop_token);
     };
 }
@@ -131,7 +132,36 @@ void boot(
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
+    // The deferred boot's session creation is asynchronous: wait until the
+    // replacement result has crossed the seam, then drain so the engine's
+    // installation continuation has run before the test drives input.
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return actions->replacement_completions.load(std::memory_order_acquire) >= 1;
+    }));
     drain_ready(running.io);
+}
+
+/// Wait until the `completions`-th asynchronous replacement result has
+/// crossed the seam and the engine has installed the outcome before the
+/// test drives more input or asserts the screen (a `/new` replacement is
+/// still in flight until then; input driven mid-transition is dropped).
+void wait_replacement(
+    Running& running,
+    const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions,
+    std::size_t completions) {
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return actions->replacement_completions.load(std::memory_order_acquire) >= completions;
+    }));
+    drain_ready(running.io);
+}
+
+/// Pump until the screen shows `text`: a replacement install, a turn
+/// completion, or a warning can render one loop turn after a plain drain
+/// observed a quiet queue.
+void wait_for_screen(Running& running, const std::string& text) {
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return visible_screen(running.terminal).find(text) != std::string::npos;
+    }));
 }
 
 /// A User Shell whose gating and recording live in one shared state, so the
@@ -225,12 +255,11 @@ TEST_CASE(
     drain_ready(running.io);
     REQUIRE(provider->requests.size() == 1);
     provider->release();
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("turn 1") != std::string::npos);
+    wait_for_screen(running, "turn 1");
 
     // /new replaces the Session; the replacement binds and stays interactive.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     CHECK(visible_screen(running.terminal).find("✓ New session started") != std::string::npos);
     REQUIRE(actions->replace_sessions.size() == 2);
 
@@ -240,8 +269,7 @@ TEST_CASE(
     drain_ready(running.io);
     REQUIRE(provider->requests.size() == 2);
     provider->release();
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("turn 2") != std::string::npos);
+    wait_for_screen(running, "turn 2");
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -272,16 +300,15 @@ TEST_CASE(
         }
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.models = tests::models_from_provider(provider)},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = tests::models_from_provider(provider), .user_shell = nullptr},
                 stop_token);
     };
     boot(fixture, running, actions);
 
     // The in-session replacement is rejected by the host; the error surfaces.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("host rejected the replacement") !=
-          std::string::npos);
+    wait_replacement(running, actions, 2);
+    wait_for_screen(running, "host rejected the replacement");
 
     // The previous Session was never closed (the replacement was not
     // installed) and still accepts a prompt.
@@ -289,8 +316,7 @@ TEST_CASE(
     drain_ready(running.io);
     REQUIRE(provider->requests.size() == 1);
     provider->release();
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("turn 1") != std::string::npos);
+    wait_for_screen(running, "turn 1");
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -318,22 +344,19 @@ TEST_CASE(
     // /new during the active run: the previous Session's prompt admission
     // stops and its active work is cancelled before the replacement installs.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     CHECK(visible_screen(running.terminal).find("✓ New session started") != std::string::npos);
 
     // The replacement accepts a fresh prompt immediately: the retired
     // Session's in-flight prompt no longer gates the current Session (exactly
     // one Session accepts prompts during the transition).
     REQUIRE(running.terminal.inject_input("start B\r"));
-    drain_ready(running.io);
-    REQUIRE(provider->requests.size() == 2);
+    REQUIRE(tests::pump_until(running.io, [&] { return provider->requests.size() == 2; }));
 
     // The replacement's turn completes and renders; the retired Session's
     // late completion is dropped and cannot render as the new Session.
     provider->release();
-    drain_ready(running.io);
-    const auto screen = visible_screen(running.terminal);
-    CHECK(screen.find("turn 2") != std::string::npos);
+    wait_for_screen(running, "turn 2");
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -352,13 +375,15 @@ TEST_CASE(
     boot(fixture, running, actions);
 
     // Three back-to-back replacements: each installs and retires the previous
-    // Session without blocking the run.
+    // Session without blocking the run. Each replacement is awaited before
+    // the next is driven: input driven mid-transition is dropped by the
+    // engine while the asynchronous creation is still in flight.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 3);
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 4);
     REQUIRE(actions->replace_sessions.size() == 4);
 
     // The final Session is interactive.
@@ -366,8 +391,7 @@ TEST_CASE(
     drain_ready(running.io);
     REQUIRE(provider->requests.size() == 1);
     provider->release();
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("turn 1") != std::string::npos);
+    wait_for_screen(running, "turn 1");
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -398,8 +422,9 @@ TEST_CASE(
     drain_ready(running.io);
 
     // The retired Session's prompt is still gated when the app closes; the
-    // run must not hang.
-    REQUIRE(running.run_result);
+    // run must not hang. The exit completes once the in-flight transition
+    // settles, which can cross the Runtime loop after a drain went quiet.
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
     // Settle the orphaned prompt so the test's loop can be destroyed cleanly.
     provider->release();
@@ -422,7 +447,7 @@ TEST_CASE(
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.models = tests::make_scripted_fake_models(),
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = tests::make_scripted_fake_models(),
                         .user_shell = std::make_unique<SharedGateShell>(shell_state)},
                 stop_token);
     };
@@ -440,7 +465,7 @@ TEST_CASE(
     // bash block is cleared from the replacement's view (criterion 5), and
     // the old Session's close requested cancellation of the in-flight bash.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     CHECK(shell_state->cancellation_requests == 1);
     CHECK(visible_screen(running.terminal).find("Running...") == std::string::npos);
     CHECK(visible_screen(running.terminal).find("✓ New session started") != std::string::npos);

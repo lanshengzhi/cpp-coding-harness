@@ -82,7 +82,7 @@ template <typename T>
     request.execution_runtime_target = runtime.make_target();
     return runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.models = tests::make_scripted_fake_models()}));
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
 }
 
 class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
@@ -165,7 +165,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto snapshot = created->session->snapshot();
@@ -203,7 +203,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     const auto snapshot = created->session->snapshot();
@@ -230,7 +230,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     boost::asio::io_context io;
@@ -278,7 +278,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto failing = created->session->subscribe(
@@ -313,7 +313,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);

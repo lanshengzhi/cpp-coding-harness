@@ -106,7 +106,7 @@ struct BootTrustRun {
             req.execution_runtime_target = runtime_target;
             return coding_agent::create_agent_session_async(std::move(req),
                     std::nullopt,
-                    coding_agent::runtime::AssemblyOverrides{.models = models},
+                    coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr},
                     stop_token);
         };
         auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
@@ -132,6 +132,34 @@ struct BootTrustRun {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
             });
+        // The deferred boot's session creation is asynchronous. Wait until
+        // the creation has crossed the replacement seam, the trust prompt
+        // is asking for the decision the creation is waiting on, or the
+        // boot aborted before creation (a trust-detection failure resolves
+        // the run with an error and never reaches the seam).
+        REQUIRE(tests::pump_until(io, [this] {
+            return recorder.replacement_completions.load(std::memory_order_acquire) >= 1 ||
+                   visible_screen(terminal).find("Trust project folder?") != std::string::npos ||
+                   run_result.has_value();
+        }));
+        drain_ready(io);
+    }
+
+    /// Pump until the boot (or a prompted replacement) creation has crossed
+    /// the seam and the engine has installed the result. Only valid once no
+    /// trust prompt is still awaiting an answer.
+    void wait_booted() {
+        wait_replacement(1);
+    }
+
+    /// Pump until the `completions`-th asynchronous replacement result has
+    /// crossed the seam and the engine has installed the outcome, so the
+    /// next input is not dropped mid-transition and screen assertions see
+    /// the installed Session.
+    void wait_replacement(std::size_t completions) {
+        REQUIRE(tests::pump_until(io, [this, completions] {
+            return recorder.replacement_completions.load(std::memory_order_acquire) >= completions;
+        }));
         drain_ready(io);
     }
 
@@ -200,6 +228,7 @@ TEST_CASE(
 
     // The first option ("Trust") is preselected; confirm it.
     run.type("\r");
+    run.wait_booted();
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
 
@@ -233,10 +262,12 @@ TEST_CASE(
     // Cancel the prompt (tui.select.cancel: escape/ctrl+c): the run
     // proceeds untrusted.
     run.type("\x03");
+    run.wait_booted();
+    // pi renderProjectTrustWarningIfNeeded: the untrusted-project warning
+    // renders in the chat once the untrusted Session has installed.
+    run.wait_for_screen("Use /trust to save a trust decision");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
-    // pi renderProjectTrustWarningIfNeeded: the untrusted-project warning
-    // renders in the chat.
     CHECK(screen.find("This project is not trusted.") != std::string::npos);
     CHECK(screen.find("Use /trust to save a trust decision") != std::string::npos);
 
@@ -380,6 +411,7 @@ TEST_CASE(
     // Pick "Trust (this session only)" (the third option): no store write,
     // yet the boot session binds trusted (no untrusted-project warning).
     run.type("\x1b[B\x1b[B\r");
+    run.wait_booted();
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
     CHECK(screen.find("This project is not trusted.") == std::string::npos);
@@ -390,6 +422,8 @@ TEST_CASE(
     // workspace (pi projectTrustByCwd): the replacement request carries the
     // decided trust instead of dropping to ask-without-UI → untrusted.
     run.type("\x1b[19~");
+    run.wait_replacement(2);
+    run.wait_for_screen("New session started");
     screen = visible_screen(run.terminal);
     CHECK(screen.find("New session started") != std::string::npos);
     REQUIRE(run.request_overrides.size() == 2);
@@ -489,7 +523,7 @@ TEST_CASE(
         req.provide_user_shell = true;
         req.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(
-                std::move(req), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = models}, stop_token);
+                std::move(req), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr}, stop_token);
     };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_agent_config_directory(fixture.agent_dir)

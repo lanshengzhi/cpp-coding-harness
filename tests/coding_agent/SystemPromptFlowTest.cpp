@@ -84,7 +84,7 @@ template <typename T>
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     return runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
 }
 
 } // namespace
@@ -189,7 +189,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
@@ -243,7 +243,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
@@ -294,7 +294,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
@@ -330,7 +330,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
     auto created = runtime.run(coding_agent::create_agent_session_async(
-            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));

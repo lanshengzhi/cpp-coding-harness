@@ -26,6 +26,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -164,10 +165,16 @@ private:
     options.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     options.workspace = workspace;
-    options.models = cch::tests::models_from_provider(std::move(client));
     options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
     options.execution_runtime_target = runtime.make_target();
-    return runtime.run(coding_agent::create_agent_session_async(std::move(options)));
+    // The scripted provider catalog crosses the assembly seam as an explicit
+    // override: slicing ModelsSessionOptions into the base request would
+    // silently drop it (the one-argument overload cannot recover it).
+    auto models = cch::tests::models_from_provider(std::move(client));
+    return runtime.run(coding_agent::create_agent_session_async(
+            std::move(options),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
 }
 
 template <typename T>
@@ -339,6 +346,10 @@ TEST_CASE(
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
+    // The scripted Session's turn work is admitted to the fixture Runtime
+    // loop; drive it for the Session's lifetime so prompt_blocking can make
+    // progress between run() calls.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::Auth, "Provider is not configured: sdk-host");
     auto created = create_scripted_session(
@@ -367,6 +378,10 @@ TEST_CASE(
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
+    // The scripted Session's turn work is admitted to the fixture Runtime
+    // loop; drive it for the Session's lifetime so prompt_blocking can make
+    // progress between run() calls.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
     auto created = create_scripted_session(
@@ -500,6 +515,10 @@ TEST_CASE(
     // compaction outcome.
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
+    // The scripted Session's turn work is admitted to the fixture Runtime
+    // loop; drive it for the Session's lifetime so the compaction prompt can
+    // make progress between run() calls.
+    tests::RuntimeLoopDriver runtime_driver(runtime);
     const std::string big(20000, 'x');
     auto client = std::make_shared<AuthTerminalProvider>(
         support::ErrorCode::Auth,

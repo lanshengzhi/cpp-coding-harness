@@ -22,6 +22,7 @@
 #include "support/ModelFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
@@ -56,8 +57,13 @@ struct Fixture {
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
     tests::RuntimeFixture runtime;
+    // Sessions assembled on the fixture Runtime target run their turn work
+    // (provider streams, timers) on the fixture loop; drive it for the
+    // Session's lifetime so prompt/prompt_blocking make progress between
+    // run() calls.
+    tests::RuntimeLoopDriver runtime_driver;
 
-    Fixture() {
+    Fixture() : runtime_driver(runtime) {
         dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
         kimi_guard.unset();

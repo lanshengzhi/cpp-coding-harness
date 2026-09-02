@@ -14,6 +14,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -21,6 +22,7 @@
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -79,9 +81,13 @@ void expect_json_equal(
 struct TestPaths {
     cch::tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
+    // The Session's turn work (provider requests, retry backoff timers) is
+    // admitted to the fixture Runtime loop; drive it for the Session's
+    // lifetime so prompt_blocking can make progress between run() calls.
+    tests::RuntimeLoopDriver runtime_driver;
     std::filesystem::path session_file;
 
-    TestPaths() {
+    TestPaths() : runtime_driver(runtime) {
         session_file = workspace.path() / "test-session.jsonl";
     }
 
@@ -229,10 +235,16 @@ struct RetrySessionUnderTest {
     options.workspace = paths.workspace.path();
     options.request_model = tests::scripted_request_model("sdk-host", "gpt-test");
     options.custom_tools = std::move(custom_tools);
-    options.models = cch::tests::models_from_provider(std::move(client));
     options.execution_runtime_target = paths.runtime.make_target();
+    // The scripted provider catalog crosses the assembly seam as an explicit
+    // override: slicing ModelsSessionOptions into the base request would
+    // silently drop it (the one-argument overload cannot recover it).
+    auto models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = paths.runtime.run(coding_agent::create_agent_session_async(std::move(options)));
+    auto created = paths.runtime.run(coding_agent::create_agent_session_async(
+            std::move(options),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
     REQUIRE(created.has_value());
     return RetrySessionUnderTest{
         std::move(created->session),

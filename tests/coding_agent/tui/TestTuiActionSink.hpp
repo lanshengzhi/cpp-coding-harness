@@ -14,9 +14,13 @@
 
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "support/AsyncResultBridge.hpp"
 
 #include <cch/support/Error.hpp>
 
+#include <boost/asio/awaitable.hpp>
+
+#include <atomic>
 #include <filesystem>
 #include <memory>
 #include <stop_token>
@@ -63,6 +67,12 @@ struct ActionSinkRecorder {
         /// retained at this seam so cancellation and supersession remain
         /// observable without routing through the synchronous action value.
         AsyncSessionReplacementSink replace_session_async{nullptr};
+        /// Number of asynchronous replacement results that completed at the
+        /// seam (success or error). Tests waiting for a replacement to reach
+        /// the engine pump until this counter advances, then drain: the
+        /// engine's installation continuation is queued on the same loop by
+        /// the time the count is observed.
+        std::atomic<std::size_t> replacement_completions{0};
     };
 
     std::shared_ptr<State> state{std::make_shared<State>()};
@@ -76,6 +86,7 @@ struct ActionSinkRecorder {
         state->boot_creation_failure};
     TestSessionFactorySink& replace_session{state->replace_session};
     AsyncSessionReplacementSink& replace_session_async{state->replace_session_async};
+    std::atomic<std::size_t>& replacement_completions{state->replacement_completions};
 
     /// One move-only sink carrying every recorded action (issue #461). The
     /// generation stamped on each action is recorded in `generations`.
@@ -175,10 +186,18 @@ struct ActionSinkRecorder {
                     .no_skills = request.session_facts.no_skills,
             });
             if (!shared->replace_session_async) {
+                shared->replacement_completions.fetch_add(1, std::memory_order_release);
                 return support::AsyncResult<CreateAgentSessionResult>{std::unexpected(
                         support::make_error(support::ErrorCode::Unknown, "no asynchronous session creator installed"))};
             }
-            return shared->replace_session_async(action_generation, std::move(request), stop_token);
+            auto inner = shared->replace_session_async(action_generation, std::move(request), stop_token);
+            return support::detail::make_async_result(
+                    [shared, inner = std::move(inner)]() mutable
+                        -> boost::asio::awaitable<support::Expected<CreateAgentSessionResult>> {
+                        auto outcome = co_await support::detail::await_async_result(std::move(inner));
+                        shared->replacement_completions.fetch_add(1, std::memory_order_release);
+                        co_return outcome;
+                    });
         };
     }
 };

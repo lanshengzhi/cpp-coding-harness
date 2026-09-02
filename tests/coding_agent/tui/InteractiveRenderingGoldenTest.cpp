@@ -220,7 +220,7 @@ struct PipelineSession {
     resume.session_facts.no_prompt_templates = true;
     auto created = fixture->runtime.run(coding_agent::create_agent_session_async(std::move(resume),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.models = tests::make_scripted_fake_models()}));
+            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;

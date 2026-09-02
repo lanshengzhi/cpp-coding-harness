@@ -48,6 +48,7 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <atomic>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -95,7 +96,7 @@ struct Fixture {
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.models = models},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr},
                 stop_token);
     };
 }
@@ -130,7 +131,36 @@ void boot(
             CHECK(exception == nullptr);
             running.run_result.emplace(std::move(result));
         });
+    // The deferred boot's session creation is asynchronous: wait until the
+    // replacement result has crossed the seam, then drain so the engine's
+    // installation continuation has run before the test drives input.
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return actions->replacement_completions.load(std::memory_order_acquire) >= 1;
+    }));
     drain_ready(running.io);
+}
+
+/// Wait until the `completions`-th asynchronous replacement result has
+/// crossed the seam and the engine has installed the outcome before the
+/// test drives more input or asserts the screen (a `/new` replacement is
+/// still in flight until then; input driven mid-transition is dropped).
+void wait_replacement(
+    Running& running,
+    const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions,
+    std::size_t completions) {
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return actions->replacement_completions.load(std::memory_order_acquire) >= completions;
+    }));
+    drain_ready(running.io);
+}
+
+/// Pump until the screen shows `text`: a replacement install or an error
+/// notice can render one loop turn after a plain drain observed a quiet
+/// queue.
+void wait_for_screen(Running& running, const std::string& text) {
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return visible_screen(running.terminal).find(text) != std::string::npos;
+    }));
 }
 
 } // namespace
@@ -153,14 +183,14 @@ TEST_CASE(
 
     // The in-session `/new` flow is the same closed alternative.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(actions->replace_sessions.size() == 2);
     CHECK(actions->replace_sessions[1].workspace == fixture.workspace.path());
     CHECK(actions->generations == std::vector<std::size_t>{0, 0});
 
     // The replacement bound a fresh in-memory session and the run is still
     // responsive (the pi `✓ New session started` chat line).
-    CHECK(visible_screen(running.terminal).find("✓ New session started") != std::string::npos);
+    wait_for_screen(running, "✓ New session started");
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
@@ -181,10 +211,13 @@ TEST_CASE(
 
     // Two rapid in-session replacements: each advances the generation, and
     // every admitted action is still delivered exactly once (lossless seam).
+    // Each replacement is awaited before the next is driven: input driven
+    // mid-transition is dropped while the asynchronous creation is in
+    // flight.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 3);
     REQUIRE(actions->replace_sessions.size() == 3);
     // Boot@0, first replacement@0 (admitted before the retirement), second
     // replacement@1 (admitted after the first replacement retired gen 0).
@@ -193,13 +226,13 @@ TEST_CASE(
     // A post-replacement action carries the newest generation (the retired
     // generation never leaks into later deliveries).
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 4);
     REQUIRE(actions->generations.size() == 4);
     CHECK(actions->generations.back() == 2);
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
-    REQUIRE(running.run_result);
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
 }
 
@@ -214,10 +247,10 @@ TEST_CASE(
 
     // Admit a replacement, then close while the run is live (Close race).
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
+    wait_replacement(running, actions, 2);
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
-    REQUIRE(running.run_result);
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
 
     // Close retired the generation: every action was delivered exactly once
@@ -257,7 +290,7 @@ TEST_CASE(
         }
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.models = models},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .models = models, .user_shell = nullptr},
                 stop_token);
     };
     boot(fixture, running, actions);
@@ -265,14 +298,13 @@ TEST_CASE(
     // `/new` (the in-session replacement after the boot session) is
     // rejected by the host.
     REQUIRE(running.terminal.inject_input("/new\r"));
-    drain_ready(running.io);
-    CHECK(visible_screen(running.terminal).find("host rejected the replacement") !=
-          std::string::npos);
+    wait_replacement(running, actions, 2);
+    wait_for_screen(running, "host rejected the replacement");
 
     // The TUI survives the rejection and remains interactive.
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
-    REQUIRE(running.run_result);
+    REQUIRE(tests::pump_until(running.io, [&] { return running.run_result.has_value(); }));
     CHECK(*running.run_result);
 }
 
