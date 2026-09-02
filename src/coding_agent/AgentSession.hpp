@@ -629,6 +629,11 @@ private:
         runtime::AssemblyOverrides overrides,
         std::stop_token stop_token = {});
 
+/// Convenience overload for callers without CLI-owned facts or assembly
+/// overrides; forwards to the one asynchronous door above.
+[[nodiscard]] support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
+        runtime::AgentSessionCreationRequest request);
+
 /// Private test-support wrapper around SessionFactory's Models assembly seam
 /// (the deterministic provider surface the deleted fake-provider CLI flag
 /// used to drive).

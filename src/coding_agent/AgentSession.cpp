@@ -660,6 +660,12 @@ support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(runtim
             std::move(request), std::move(session_facts), std::move(overrides), stop_token);
 }
 
+support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(
+    runtime::AgentSessionCreationRequest request) {
+    return create_agent_session_async(
+            std::move(request), std::nullopt, runtime::AssemblyOverrides{});
+}
+
 support::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models) {

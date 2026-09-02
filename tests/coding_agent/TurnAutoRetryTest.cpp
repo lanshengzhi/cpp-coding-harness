@@ -206,7 +206,7 @@ struct RetrySessionUnderTest {
 };
 
 [[nodiscard]] RetrySessionUnderTest make_retry_session(
-    const TestPaths& paths,
+    TestPaths& paths,
     std::deque<ai::AssistantMessage> responses,
     std::string settings_json = {},
     std::vector<agent::Tool> custom_tools = {}) {
