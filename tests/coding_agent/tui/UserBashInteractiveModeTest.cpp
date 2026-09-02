@@ -16,6 +16,8 @@
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 #include "support/Redactor.hpp"
@@ -334,6 +336,7 @@ TEST_CASE(
     "focused User Bash commits included and excluded results through the private composition",
     "[coding_agent][tui][issue85]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -355,9 +358,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -435,6 +443,7 @@ TEST_CASE(
     "only non-empty focused editor prefixes enter the private User Shell path",
     "[coding_agent][tui][issue85]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -444,9 +453,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
@@ -484,6 +498,7 @@ TEST_CASE(
     "User Bash sanitizes and bounds retained output and spills the complete sanitized stream",
     "[coding_agent][tui][issue85][issue86][issue96][issue97][issue99]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
     tests::EnvVarGuard tmpdir{"TMPDIR", spill_dir.string()};
@@ -510,9 +525,14 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     std::size_t lifecycle_events = 0;
     auto subscription = created->session->subscribe(
@@ -607,6 +627,7 @@ TEST_CASE(
     "User Shell infrastructure failure creates no Bash message and leaves the Session usable",
     "[coding_agent][tui][issue85][issue98]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -625,9 +646,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
@@ -669,6 +695,7 @@ TEST_CASE(
     "User Shell progress callback failure creates no Bash message and leaves the Session usable",
     "[coding_agent][runtime][issue85][issue96]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -684,9 +711,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     boost::asio::io_context io;
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
@@ -739,6 +771,7 @@ TEST_CASE(
     "private User Bash cancellation commits one cancelled terminal outcome without events",
     "[coding_agent][runtime][issue85]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -753,9 +786,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     std::size_t lifecycle_events = 0;
     auto subscription = created->session->subscribe(
@@ -805,6 +843,7 @@ TEST_CASE(
     "User Bash output spill failure preserves the bounded truncated result and a safe diagnostic",
     "[coding_agent][runtime][issue86][issue97]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     tests::EnvVarGuard tmpdir{
         "TMPDIR",
         (workspace.path() / "missing" / "deeper").string()};
@@ -823,9 +862,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     boost::asio::io_context io;
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
@@ -870,6 +914,7 @@ TEST_CASE(
     "User Bash overlaps an active Agent run through the Native TUI",
     "[coding_agent][tui][issue87]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -891,9 +936,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -980,6 +1030,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<AbortAwareGatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -1001,9 +1052,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1099,6 +1155,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88][issue93][issue94]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1113,9 +1170,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
@@ -1197,6 +1259,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -1218,9 +1281,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
@@ -1279,6 +1347,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<ToolCallThenAbortChatProvider>();
     auto tool = make_gated_close_tool();
     auto* tool_pointer = tool.state.get();
@@ -1296,9 +1365,14 @@ TEST_CASE(
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     options.custom_tools.push_back(std::move(tool.tool));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1360,6 +1434,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
     auto client = std::make_shared<ToolCallThenAbortChatProvider>();
     auto tool = make_gated_close_tool();
@@ -1378,9 +1453,14 @@ TEST_CASE(
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     options.custom_tools.push_back(std::move(tool.tool));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1437,6 +1517,7 @@ TEST_CASE(
     "committed User Bash blocks preview the output tail and expand through the effective action",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1462,9 +1543,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     // The expanded header (17 assembled-action hint lines) plus the status,
     // editor borders, and footer reserve 22 fixed rows; 54 rows keep the
@@ -1531,6 +1617,7 @@ TEST_CASE(
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     const auto session_file = workspace.path() / "bash-resume.jsonl";
     auto store = harness::session::SessionStore::create_new(
         session_file,
@@ -1579,8 +1666,13 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::make_shared<RecordingChatProvider>());
-    auto resumed = coding_agent::create_agent_session(std::move(options));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto resumed = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, coding_agent::runtime::AssemblyOverrides{.models = std::move(models)}));
     REQUIRE(resumed);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1630,6 +1722,7 @@ TEST_CASE(
     "live User Bash blocks stream through one status block with a loader and effective hints",
     "[coding_agent][tui][issue89][issue99]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1651,9 +1744,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1716,6 +1814,7 @@ TEST_CASE(
     "User Bash blocks style model-context inclusion through theme tokens",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1736,9 +1835,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1784,6 +1888,7 @@ TEST_CASE(
     "the editor enters Bash mode on trimmed ! input and recalls the original submission verbatim",
     "[coding_agent][tui][issue89][issue94][issue98]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -1799,9 +1904,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1866,6 +1976,7 @@ TEST_CASE(
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
     config.write("keybindings.json", R"({"app.interrupt":"f5","app.tools.expand":"f7"})");
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -1892,9 +2003,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -1933,6 +2049,7 @@ TEST_CASE(
     "the collapsed User Bash block renders at most 20 visual lines on a narrow terminal",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1953,9 +2070,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 40, .rows = 60});
     boost::asio::io_context io;
@@ -2001,6 +2123,7 @@ TEST_CASE(
     "focused User Bash dispatch trims, parses prefixes, and falls through like the pi baseline",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -2028,9 +2151,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -2095,6 +2223,7 @@ TEST_CASE(
     "Skill and Prompt Template expansions beginning with ! stay ordinary Agent Prompt text",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     workspace.write(
         ".pi/skills/bang-skill/SKILL.md",
         "---\n"
@@ -2118,9 +2247,14 @@ TEST_CASE(
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     options.project_trust_override = true;
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
@@ -2163,6 +2297,7 @@ TEST_CASE(
     "User Bash input prefixes render in the header hints without a pseudo-command or hotkey action",
     "[coding_agent][tui][issue89][issue419]") {
     tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
 
@@ -2170,9 +2305,14 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    auto created = coding_agent::create_agent_session(
-        std::move(options), std::move(shell));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{.models = std::move(models), .user_shell = std::move(shell)}));
     REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
