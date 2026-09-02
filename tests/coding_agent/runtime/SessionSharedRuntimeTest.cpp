@@ -5,7 +5,9 @@
 // closing a Session does not release the shared runtime the replacement
 // Session needs (ADR 0029/0030, ADR 0040).
 
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/RuntimeFixture.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -16,9 +18,11 @@
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <boost/asio/awaitable.hpp>
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -30,6 +34,7 @@ struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::RuntimeFixture runtime;
 
     Fixture() { agent_dir_guard.set(agent_dir.path().string()); }
 
@@ -68,18 +73,28 @@ struct Fixture {
     /// production interactive CLI host sets on the boot and every in-session
     /// replacement request).
     [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest request(
-            const std::filesystem::path& path, const std::shared_ptr<coding_agent::ModelRuntime>& runtime) const {
+            const std::filesystem::path& path, const std::shared_ptr<coding_agent::ModelRuntime>& model_runtime) const {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.workspace = workspace.path();
         request.session_target =
             coding_agent::ExplicitResumeSessionTarget{path};
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
-        request.execution_runtime_target = tests::detail::fixture_runtime_target();
-        request.model_runtime = runtime;
+        request.execution_runtime_target = runtime.make_target();
+        request.model_runtime = model_runtime;
         return request;
     }
 };
+
+/// The Session must outlive `runtime_fixture.run`; the one-shot factory
+/// captures its reference while the prompt settles on the fixture loop.
+[[nodiscard]] support::ExpectedVoid run_prompt(
+        tests::RuntimeFixture& runtime_fixture, coding_agent::AgentSession& session, std::string text) {
+    return runtime_fixture.run(support::detail::make_async_result(
+            [&session, text = std::move(text)]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await session.prompt(std::move(text));
+            }));
+}
 
 } // namespace
 
@@ -99,31 +114,33 @@ TEST_CASE(
     first_reply.model = "fake-model";
     scripted.control->responses.push_back(std::move(first_reply));
 
-    // Session A shares the host runtime through the production single-argument
-    // create path, exactly what the interactive CLI host calls.
-    auto created_a = coding_agent::create_agent_session(
-        fixture.request(path, runtime));
+    // Session A shares the host runtime through the asynchronous production
+    // Session Assembly door, exactly what the interactive CLI host calls.
+    auto created_a = fixture.runtime.run(
+            coding_agent::create_agent_session_async(fixture.request(path, runtime), std::nullopt, {}));
     REQUIRE(created_a);
-    CHECK(created_a->session->model() == "fake-model");
-    REQUIRE(created_a->session->prompt_blocking("first on shared runtime").has_value());
+    auto& session_a = fixture.runtime.adopt_session(std::move(created_a->session));
+    CHECK(session_a.model() == "fake-model");
+    REQUIRE(run_prompt(fixture.runtime, session_a, "first on shared runtime").has_value());
     REQUIRE(scripted.control->calls.size() == 1);
 
     // Closing Session A must not release the host-shared Models runtime
     // (criterion 4): the replacement Session still needs it. The Session
     // never owns a host-injected runtime.
-    created_a->session->close();
-    CHECK(created_a->session->model_runtime() == runtime);
+    session_a.close();
+    CHECK(session_a.model_runtime() == runtime);
 
     // Session B (the replacement) reuses the same runtime instead of
     // reconstructing one (criterion 3).
-    auto created_b = coding_agent::create_agent_session(
-        fixture.request(path, runtime));
+    auto created_b = fixture.runtime.run(
+            coding_agent::create_agent_session_async(fixture.request(path, runtime), std::nullopt, {}));
     REQUIRE(created_b);
-    REQUIRE(created_b->session->prompt_blocking("second on shared runtime").has_value());
+    auto& session_b = fixture.runtime.adopt_session(std::move(created_b->session));
+    REQUIRE(run_prompt(fixture.runtime, session_b, "second on shared runtime").has_value());
     REQUIRE(scripted.control->calls.size() == 2);
-    CHECK(created_b->session->model_runtime() == runtime);
+    CHECK(session_b.model_runtime() == runtime);
 
-    created_b->session->close();
+    session_b.close();
 }
 
 TEST_CASE(
@@ -139,11 +156,15 @@ TEST_CASE(
         coding_agent::ExplicitResumeSessionTarget{path};
     owned_request.session_facts.no_skills = true;
     owned_request.session_facts.no_prompt_templates = true;
-    owned_request.execution_runtime_target = tests::detail::fixture_runtime_target();
-    auto created_owned = coding_agent::create_agent_session_for_testing(
-            std::move(owned_request), tests::make_scripted_fake_models());
+    owned_request.execution_runtime_target = fixture.runtime.make_target();
+    auto created_owned = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(owned_request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .models = tests::make_scripted_fake_models(),
+            }));
     REQUIRE(created_owned);
-    REQUIRE(created_owned->session->model_runtime() != nullptr);
-    created_owned->session->close();
-    CHECK(created_owned->session->model_runtime() == nullptr);
+    auto& owned_session = fixture.runtime.adopt_session(std::move(created_owned->session));
+    REQUIRE(owned_session.model_runtime() != nullptr);
+    owned_session.close();
+    CHECK(owned_session.model_runtime() == nullptr);
 }
