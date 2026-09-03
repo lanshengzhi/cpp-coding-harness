@@ -68,7 +68,7 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 4.5. Unstructured cross-Owner JSON facts use `cch::support::JsonValue`. Raw Glaze generic values and `boost::json` never appear in Owner Interfaces (ADR 0007; ADR 0039).
 
-4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. A coroutine input used after suspension is an owning value in the coroutine frame or has a declaration-level lifetime contract per §7.5.
+4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. Coroutines that may suspend (`co_await`) take inputs by value to prevent cross-suspension parameter dangling, unless an explicit declaration-level lifetime contract per §7.5 guarantees the caller outlives the entire coroutine execution.
 
 4.7. Fallible or easy-to-ignore return values are `[[nodiscard]]`, including awaitables.
 
@@ -110,7 +110,7 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 7.2. Implementations are `final`; every overridden virtual is marked `override`.
 
-7.3. Value types follow the rule of zero. Owning types declare, in this order: move constructor/assignment (usually `noexcept`), destructor, deleted copy constructor/assignment.
+7.3. Value types follow the rule of zero. Single-argument constructors and conversion operators are `explicit` unless intentionally converting. Move constructor and move assignment are `noexcept`. Fallible object construction uses private constructors and public static factory functions returning `Expected<T>` / `std::expected<T, E>`; never use two-stage initialization (`init()`). Owning types declare, in this order: move constructor/assignment (`noexcept`), destructor, deleted copy constructor/assignment.
 
 7.4. `std::unique_ptr` is the default owner (capabilities, factory results). `std::shared_ptr` is reserved for deliberately shared live state, such as the concrete coding-agent Models Runtime lifetime captured by the AI-owned `ModelStream`; it is not an injection or virtual-for-fake convention (ADR 0040).
 
@@ -132,7 +132,7 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 ## 9. Modern C++ usage
 
-9.1. Use: `std::expected`, `std::move_only_function`, `std::string_view` for read-only text, `constexpr` / `inline constexpr` for constants, `if constexpr`, structured bindings where they read better, `std::format` for new string formatting (do not churn existing `+` concatenation just to convert it).
+9.1. Use: `std::expected`, `std::move_only_function`, `std::string_view` for read-only text, `std::span` for contiguous sequence views, `constexpr` / `inline constexpr` for constants, `if constexpr`, structured bindings where they read better, `std::format` for new string formatting (do not churn existing `+` concatenation just to convert it).
 
 9.2. Prefix and suffix checks are `starts_with` / `ends_with` — never `rfind(x, 0) == 0` or `compare(0, n, x) == 0`. Erasing all occurrences of a value is `std::erase` / `std::erase_if`, never the erase-remove idiom.
 
@@ -140,7 +140,7 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 9.4. Template parameters are declared with `typename` (`template <typename T>`, `template <typename... Ts>`) — never `class`.
 
-9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Not yet: modules, `<=>`, `std::print`, deducing this, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). Introduce any of those only with an ADR.
+9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Basic range algorithms (`std::ranges::sort`, `std::ranges::find`) are preferred over iterator pairs; avoid complex `std::views` pipelines and never bind views to temporary ranges. Not yet: modules, `<=>`, `std::print`, deducing this, multi-stage view pipelines, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). Introduce any of those only with an ADR.
 
 9.6. Casts are `static_cast` / `reinterpret_cast`; no C-style casts.
 
@@ -162,7 +162,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 
-10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, the `streamSimple` request surface (`Model` argument + `ProviderStreamOptions`), message, and Session Entry contracts remain credential-free (ADR 0019); the legacy `StreamChatRequest` aggregate is removed (ADR 0034). The legacy `coding_agent::AuthEntry` remains confined to the pre-#345 loader; added or modified request paths use the new carriers.
+10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, the `streamSimple` request surface (`Model` argument + `ProviderStreamOptions`), message, and Session Entry contracts remain credential-free (ADR 0019). Added or modified request paths use the approved credential carriers.
 
 ## 11. Tests
 
@@ -184,7 +184,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 ## 12. CMake
 
-12.1. The authoritative Owner libraries are `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library. The only direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai, cch_tui}`. `cch_ai` and `cch_tui` have no Owner dependencies. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets (ADR 0039).
+12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` (authoritative Owner libraries: `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library). The only direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai, cch_tui}`. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets (ADR 0039).
 
 12.2. Use the central CMake constructors for every production target. Each declaration names exactly one role (`owner`, `implementation`, `support`, `composition`, or classified `external`), one Owner where applicable, its explicit source set, unconditional direct dependencies, and defaults. Every production source compiles once; the production graph is acyclic. Do not bypass the constructors with ad hoc target declarations.
 
