@@ -8,7 +8,7 @@
       "description": "Supported GCC 16.x Debug build with pinned vcpkg dependencies",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "toolchainFile": "${sourceDir}/cmake/vcpkg-toolchain.cmake",
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "g++",
         "CCH_TOOLCHAIN_ROLE": "build",

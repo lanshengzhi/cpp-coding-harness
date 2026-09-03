@@ -14,7 +14,7 @@ Dependencies use the pinned vcpkg manifest; system packages are unsupported. Thr
 
 - **Focused Validation** — during implementation: `cmake --build --preset vcpkg --target <owning-shard>` to narrow the build, followed by `ctest --preset vcpkg -LE architecture -R '<name>'` (or `-L '<label>'`) for the smallest CTest selection that can fail. Architecture-sensitive changes additionally run `ctest --preset vcpkg -L architecture`.
 - **Full Validation** — once before delivery: incremental `cmake --build --preset vcpkg` followed by the complete unfiltered `ctest --preset vcpkg` (see [README.md](README.md)).
-- **Fresh Validation** — environment level: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`; reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request.
+- **Fresh Validation** — environment level: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`; reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request.
 
 Do not run Fresh Validation for ordinary code edits.
 

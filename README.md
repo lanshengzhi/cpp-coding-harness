@@ -12,7 +12,6 @@ The bootstrap script checks the host tools, creates or reuses `.deps/vcpkg`, pin
 
 ```bash
 scripts/bootstrap.sh
-export VCPKG_ROOT="$PWD/.deps/vcpkg"
 cmake --preset vcpkg-release
 cmake --build --preset vcpkg-release
 ctest --preset vcpkg-release
@@ -22,7 +21,6 @@ Debug Fresh Validation (environment level: pinned vcpkg, `--fresh` configure, fu
 
 ```bash
 scripts/bootstrap.sh
-export VCPKG_ROOT="$PWD/.deps/vcpkg"
 cmake --preset vcpkg --fresh
 cmake --build --preset vcpkg
 ctest --preset vcpkg
@@ -46,7 +44,6 @@ The Pike Runtime is `build/release/pike`. Run the unfiltered CTest preset for fi
 Day-to-day development uses the default `vcpkg` preset (Debug, `build/` tree). With an already bootstrapped checkout at the exact `vcpkg.json` baseline:
 
 ```bash
-export VCPKG_ROOT=/path/to/vcpkg   # needed for the configure step
 cmake --preset vcpkg               # once per checkout; no --fresh for incremental work
 cmake --build --preset vcpkg       # incremental build
 ctest --preset vcpkg               # Full Validation: the complete unfiltered offline suite

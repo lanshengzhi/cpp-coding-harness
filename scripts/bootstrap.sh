@@ -20,11 +20,11 @@ Options:
 
 After bootstrap, configure, build, and test with CMake directly:
 
-  export VCPKG_ROOT=<vcpkg root>
   cmake --preset vcpkg --fresh     # Fresh Validation configure
   cmake --build --preset vcpkg
   ctest --preset vcpkg
 
+(export VCPKG_ROOT=<vcpkg root> is only required when using a custom checkout outside .deps/vcpkg)
 Use the vcpkg-release preset for the Release configuration.
 EOF
 }
@@ -261,7 +261,6 @@ echo "Building/updating vcpkg for baseline $baseline"
 cat <<EOF
 Bootstrap complete. Configure, build, and test with CMake directly:
 
-  export VCPKG_ROOT="$vcpkg_root"
   cmake --preset vcpkg --fresh
   cmake --build --preset vcpkg
   ctest --preset vcpkg

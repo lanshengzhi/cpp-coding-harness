@@ -136,10 +136,11 @@ function(cch_validate_vcpkg_shape toolchain_file manifest_mode manifest_install 
     endif()
 
     cmake_path(CONVERT "${toolchain_file}" TO_CMAKE_PATH_LIST normalized_toolchain NORMALIZE)
-    if(NOT normalized_toolchain MATCHES "/scripts/buildsystems/vcpkg\\.cmake$")
+    if(NOT normalized_toolchain MATCHES "/scripts/buildsystems/vcpkg\\.cmake$" AND
+       NOT normalized_toolchain MATCHES "/cmake/vcpkg-toolchain\\.cmake$")
         message(FATAL_ERROR
             "Unsupported dependency toolchain '${toolchain_file}'. Use the pinned vcpkg toolchain "
-            "at <VCPKG_ROOT>/scripts/buildsystems/vcpkg.cmake.")
+            "at <VCPKG_ROOT>/scripts/buildsystems/vcpkg.cmake or cmake/vcpkg-toolchain.cmake.")
     endif()
 
     if(NOT manifest_mode)
@@ -195,9 +196,20 @@ endfunction()
 
 function(cch_vcpkg_root_from_toolchain toolchain_file output_variable)
     file(REAL_PATH "${toolchain_file}" real_toolchain)
-    cmake_path(GET real_toolchain PARENT_PATH buildsystems_dir)
-    cmake_path(GET buildsystems_dir PARENT_PATH scripts_dir)
-    cmake_path(GET scripts_dir PARENT_PATH vcpkg_root)
+    cmake_path(CONVERT "${real_toolchain}" TO_CMAKE_PATH_LIST normalized_toolchain NORMALIZE)
+    if(normalized_toolchain MATCHES "/cmake/vcpkg-toolchain\\.cmake$")
+        if(DEFINED ENV{VCPKG_ROOT} AND NOT "$ENV{VCPKG_ROOT}" STREQUAL "")
+            set(vcpkg_root "$ENV{VCPKG_ROOT}")
+        else()
+            cmake_path(GET real_toolchain PARENT_PATH cmake_dir)
+            cmake_path(GET cmake_dir PARENT_PATH repo_root)
+            set(vcpkg_root "${repo_root}/.deps/vcpkg")
+        endif()
+    else()
+        cmake_path(GET real_toolchain PARENT_PATH buildsystems_dir)
+        cmake_path(GET buildsystems_dir PARENT_PATH scripts_dir)
+        cmake_path(GET scripts_dir PARENT_PATH vcpkg_root)
+    endif()
     set(${output_variable} "${vcpkg_root}" PARENT_SCOPE)
 endfunction()
 
