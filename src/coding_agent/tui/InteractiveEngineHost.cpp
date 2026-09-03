@@ -63,16 +63,9 @@ void InteractiveEngine::show_help_command() {
 }
 
 void InteractiveEngine::open_hotkeys() {
-    if (active_overlay_ != nullptr || !keybindings_) return;
-    const auto weak = weak_from_this();
-    auto overlay = make_hotkeys_overlay(keybindings_->get(), [weak] {
-        if (const auto self = weak.lock()) self->post_close_overlay();
-    });
-    if (!overlay) {
-        append_command_error(overlay.error());
-        return;
-    }
-    show_overlay(std::move(*overlay));
+    if (view_ == nullptr || !keybindings_) return;
+    view_->append_frontend_message(format_hotkeys_text(*keybindings_->get()));
+    tui_.invalidate();
 }
 
 void InteractiveEngine::handle_copy_last_message() {

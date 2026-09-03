@@ -1,4 +1,5 @@
 #include "coding_agent/tui/KeybindingsManager.hpp"
+#include "coding_agent/tui/SlashCommandEffects.hpp"
 
 #include "support/TempWorkspace.hpp"
 
@@ -367,4 +368,37 @@ TEST_CASE(
     CHECK(interrupt->keys == "escape");
     CHECK(coding_agent::tui::key_hint(
               *manager->registry, "app.interrupt", "interrupt") == "escape interrupt");
+}
+
+TEST_CASE("/hotkeys chat block follows pi sections over the effective registry", "[coding_agent][keybindings]") {
+    // Default registry with no application actions assembled: pi sections
+    // render with effective keys, app rows render Unbound.
+    coding_agent::tui::KeybindingsManagerRequest request;
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->registry);
+    CHECK(text.find("Keyboard Shortcuts") != std::string::npos);
+    CHECK(text.find("Navigation") != std::string::npos);
+    CHECK(text.find("Editing") != std::string::npos);
+    CHECK(text.find("Move cursor / browse history") != std::string::npos);
+    CHECK(text.find("enter  Send message") != std::string::npos);
+    CHECK(text.find("/  Slash commands") != std::string::npos);
+    CHECK(text.find("Unbound  Exit (when editor is empty)") != std::string::npos);
+
+    // A user override shows up verbatim on its pi row, and assembled queue
+    // actions render with pi's default keys.
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.exit":"f6"})");
+    constexpr std::array<std::string_view, 3> kAssembled{"app.exit", "app.message.followUp", "app.message.dequeue"};
+    auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
+    REQUIRE(definitions);
+    coding_agent::tui::KeybindingsManagerRequest remapped;
+    remapped.agent_config_directory = config.path();
+    remapped.application_definitions = std::move(*definitions);
+    const auto remapped_manager = coding_agent::tui::load_keybindings_manager(std::move(remapped));
+    REQUIRE(remapped_manager);
+    const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
+    CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
+    CHECK(remapped_text.find("alt+enter  Queue follow-up message") != std::string::npos);
+    CHECK(remapped_text.find("alt+up  Restore queued messages") != std::string::npos);
 }

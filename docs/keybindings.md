@@ -116,7 +116,9 @@ production CLI does not advertise an unassembled clipboard action. `app.session.
 (pi ships `defaultKeys: []`); the session selector, tree selector, and
 scoped-models selector bind their scoped action sets (`app.session.*`
 filter/rename/delete, `app.tree.*`, `app.models.*`) inside those components, and
-`/hotkeys` plus the header hints render the assembled subset only.
+the header hints render the assembled subset only. `/hotkeys` renders pi's
+hardcoded Navigation/Editing/Other sections as an inline chat block over the
+effective registry, with unassembled or unbound actions marked `Unbound`.
 
 Ordinary `tui.input.submit` starts a prompt while idle and admits steering input
 while a run is active. Alt+Enter acts like ordinary submit while idle. The

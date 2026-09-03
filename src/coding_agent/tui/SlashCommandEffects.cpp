@@ -1,86 +1,45 @@
 #include "SlashCommandEffects.hpp"
 
 #include "coding_agent/AgentSession.hpp"
-#include "coding_agent/tui/KeybindingsManager.hpp"
 
-#include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/tui/Overlay.hpp>
 
-#include <exception>
 #include <format>
-#include <optional>
+#include <span>
 #include <string>
-#include <utility>
+#include <string_view>
 
 namespace cch::coding_agent::tui {
 namespace {
 
-using ActionSink = std::move_only_function<void()>;
+// pi `handleHotkeysCommand` rows that combine several actions on one table
+// line; the formatter joins their effective keys with `/`.
+constexpr std::string_view kCursorMoveIds[] = {
+        "tui.editor.cursorUp", "tui.editor.cursorDown", "tui.editor.cursorLeft", "tui.editor.cursorRight"};
+constexpr std::string_view kWordMoveIds[] = {"tui.editor.cursorWordLeft", "tui.editor.cursorWordRight"};
+constexpr std::string_view kPageIds[] = {"tui.editor.pageUp", "tui.editor.pageDown"};
+constexpr std::string_view kModelCycleIds[] = {"app.model.cycleForward", "app.model.cycleBackward"};
 
-/// The `/hotkeys` overlay content wrapper: renders the help view and cancels
-/// through the host sink on `tui.select.cancel`.
-class DismissibleView final
-    : public cch::tui::Component,
-      public cch::tui::InputHandler,
-      public cch::tui::Focusable {
-public:
-    DismissibleView(
-        std::unique_ptr<cch::tui::Component> content,
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-        ActionSink on_cancel)
-        : content_(std::move(content)),
-          keybindings_(std::move(keybindings)),
-          on_cancel_(std::move(on_cancel)) {}
-    DismissibleView(DismissibleView&&) = delete;
-    DismissibleView& operator=(DismissibleView&&) = delete;
-    ~DismissibleView() override = default;
+// pi `formatKeys` empty case plus the pike `key_hint` convention: an absent
+// or unbound action renders as `Unbound` rather than an empty span.
+[[nodiscard]] std::string display_keys(const cch::tui::KeybindingRegistry& registry, std::string_view id) {
+    const auto text = registry.key_text(id);
+    return text.empty() ? "Unbound" : text;
+}
 
-    DismissibleView(const DismissibleView&) = delete;
-    DismissibleView& operator=(const DismissibleView&) = delete;
-
-    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
-        if (callback_error_) return std::unexpected(*callback_error_);
-        return content_->render(width);
+// One combined row: the effective keys of each action joined with `/`, or
+// `Unbound` when none of the actions is bound.
+[[nodiscard]] std::string display_keys_many(
+        const cch::tui::KeybindingRegistry& registry, std::span<const std::string_view> ids) {
+    std::string text;
+    for (const auto id : ids) {
+        const auto keys = registry.key_text(id);
+        if (keys.empty()) continue;
+        if (!text.empty()) text.push_back('/');
+        text += keys;
     }
-    void invalidate() override { content_->invalidate(); }
-    void handle_input(const cch::tui::InputEventVariant& input) override {
-        const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-        if (key == nullptr || key->type == cch::tui::KeyEventType::Release ||
-            !keybindings_->matches(*key, "tui.select.cancel") || !on_cancel_) {
-            return;
-        }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            on_cancel_();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception& error) {
-            callback_error_ = support::make_error(
-                support::ErrorCode::Unknown,
-                "Hotkey help cancellation failed",
-                error.what());
-        } catch (...) {
-            callback_error_ = support::make_error(
-                support::ErrorCode::Unknown,
-                "Hotkey help cancellation failed");
-        }
-#endif
-    }
-    [[nodiscard]] bool accepts_key_releases() const override { return false; }
-    void set_focused(bool focused) override { focused_ = focused; }
-    [[nodiscard]] bool focused() const override { return focused_; }
-    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
-        return std::nullopt;
-    }
-
-private:
-    std::unique_ptr<cch::tui::Component> content_;
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
-    ActionSink on_cancel_;
-    std::optional<support::Error> callback_error_;
-    bool focused_{false};
-};
+    return text.empty() ? "Unbound" : text;
+}
 
 } // namespace
 
@@ -116,23 +75,49 @@ std::string format_session_info(const coding_agent::AgentSession& session) {
     return info;
 }
 
-support::Expected<std::unique_ptr<cch::tui::Overlay>> make_hotkeys_overlay(
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-    std::move_only_function<void()> on_cancel) {
-    cch::tui::OverlayOptions options;
-    options.position = cch::tui::OverlayPosition::TopLeft;
-    options.size_constraints.max_width = 90;
-    options.size_constraints.max_height = 26;
-    options.z_index = 100;
-    auto overlay = std::make_unique<cch::tui::Overlay>(std::move(options));
-    auto content = std::make_unique<DismissibleView>(
-        make_hotkey_help_view(keybindings),
-        std::move(keybindings),
-        std::move(on_cancel));
-    if (auto attached = overlay->add_child(std::move(content)); !attached) {
-        return std::unexpected(attached.error());
-    }
-    return overlay;
+std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry) {
+    // pi `handleHotkeysCommand` sections and row meanings; keys are the
+    // effective registry values so user overrides show up verbatim.
+    std::string text = "Keyboard Shortcuts\n";
+    text += "\nNavigation\n";
+    text += std::format("{}  Move cursor / browse history\n", display_keys_many(registry, kCursorMoveIds));
+    text += std::format("{}  Move by word\n", display_keys_many(registry, kWordMoveIds));
+    text += std::format("{}  Start of line\n", display_keys(registry, "tui.editor.cursorLineStart"));
+    text += std::format("{}  End of line\n", display_keys(registry, "tui.editor.cursorLineEnd"));
+    text += std::format("{}  Jump forward to character\n", display_keys(registry, "tui.editor.jumpForward"));
+    text += std::format("{}  Jump backward to character\n", display_keys(registry, "tui.editor.jumpBackward"));
+    text += std::format("{}  Scroll by page\n", display_keys_many(registry, kPageIds));
+    text += "\nEditing\n";
+    text += std::format("{}  Send message\n", display_keys(registry, "tui.input.submit"));
+    text += std::format("{}  New line\n", display_keys(registry, "tui.input.newLine"));
+    text += std::format("{}  Delete word backwards\n", display_keys(registry, "tui.editor.deleteWordBackward"));
+    text += std::format("{}  Delete word forwards\n", display_keys(registry, "tui.editor.deleteWordForward"));
+    text += std::format("{}  Delete to start of line\n", display_keys(registry, "tui.editor.deleteToLineStart"));
+    text += std::format("{}  Delete to end of line\n", display_keys(registry, "tui.editor.deleteToLineEnd"));
+    text += std::format("{}  Paste the most-recently-deleted text\n", display_keys(registry, "tui.editor.yank"));
+    text += std::format(
+            "{}  Cycle through the deleted text after pasting\n", display_keys(registry, "tui.editor.yankPop"));
+    text += std::format("{}  Undo\n", display_keys(registry, "tui.editor.undo"));
+    text += "\nOther\n";
+    text += std::format("{}  Path completion / accept autocomplete\n", display_keys(registry, "tui.input.tab"));
+    text += std::format("{}  Cancel autocomplete / abort streaming\n", display_keys(registry, "app.interrupt"));
+    text += std::format("{}  Clear editor (first) / exit (second)\n", display_keys(registry, "app.clear"));
+    text += std::format("{}  Exit (when editor is empty)\n", display_keys(registry, "app.exit"));
+    text += std::format("{}  Suspend to background\n", display_keys(registry, "app.suspend"));
+    text += std::format("{}  Cycle thinking level\n", display_keys(registry, "app.thinking.cycle"));
+    text += std::format("{}  Cycle models\n", display_keys_many(registry, kModelCycleIds));
+    text += std::format("{}  Open model selector\n", display_keys(registry, "app.model.select"));
+    text += std::format("{}  Toggle tool output expansion\n", display_keys(registry, "app.tools.expand"));
+    text += std::format("{}  Toggle thinking block visibility\n", display_keys(registry, "app.thinking.toggle"));
+    text += std::format("{}  Edit message in external editor\n", display_keys(registry, "app.editor.external"));
+    text += std::format("{}  Copy last assistant message\n", display_keys(registry, "app.message.copy"));
+    text += std::format("{}  Queue follow-up message\n", display_keys(registry, "app.message.followUp"));
+    text += std::format("{}  Restore queued messages\n", display_keys(registry, "app.message.dequeue"));
+    text += std::format("{}  Paste image or text from clipboard\n", display_keys(registry, "app.clipboard.pasteImage"));
+    text += "/  Slash commands\n";
+    text += "!  Run bash command\n";
+    text += "!!  Run bash command (excluded from context)\n";
+    return text;
 }
 
 } // namespace cch::coding_agent::tui

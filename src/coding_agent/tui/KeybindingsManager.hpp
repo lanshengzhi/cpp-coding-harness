@@ -51,8 +51,9 @@ app_keybinding_definitions(
 [[nodiscard]] support::Expected<KeybindingsManagerResult> load_keybindings_manager(
     KeybindingsManagerRequest request);
 
-// ── /hotkeys presentation (pi interactive-mode.ts `handleHotkeysCommand`
-//    subset; renders the assembled subset only) ─────────────────────────────
+// ── Registry help entries (one per assembled registry entry; the
+//    `/hotkeys` chat block in SlashCommandEffects renders pi's hardcoded
+//    sections instead) ────────────────────────────────────────────────────
 
 struct HotkeyHelpEntry {
     std::string id{};

@@ -46,8 +46,8 @@ struct ApplicationTemplate {
 /// The app layer adopts pi's full 42-action `AppKeybindings` table
 /// (pi:packages/coding-agent/src/core/keybindings.ts at `83114817`, ADR 0036
 /// G2). Descriptions and default keys are pi-verbatim; the category column is
-/// the C++ `/hotkeys` presentation grouping (pi's `handleHotkeysCommand`
-/// renders hardcoded sections instead).
+/// the registry help-view grouping (the `/hotkeys` chat block in
+/// SlashCommandEffects renders pi's hardcoded sections instead).
 [[nodiscard]] const std::vector<ApplicationTemplate>& application_templates() {
     static const std::vector<ApplicationTemplate> kTemplates{
         make_application_template("app.interrupt", {"escape"}, "Cancel or abort", "Application"),

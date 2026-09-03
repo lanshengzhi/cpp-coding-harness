@@ -2,17 +2,13 @@
 
 // Synchronous slash-command presentation effects for the Native TUI (pi
 // `handleSessionCommand`/`handleHotkeysCommand`/`/help` subsets): the
-// session-info chat block, the help text, and the hotkeys overlay factory.
+// session-info chat block, the hotkeys chat block, and the help text.
 // Extraction #506 from the pre-split interactive monolith; the engine
 // owns session/view mutation and applies these values.
 //
 // Repository-private `cch_coding_agent` implementation header: not part of
 // an Owner Interface, not installed, never exported.
 
-#include <cch/support/Error.hpp>
-
-#include <functional>
-#include <memory>
 #include <string>
 #include <string_view>
 
@@ -22,7 +18,6 @@ class AgentSession;
 
 namespace cch::tui {
 class KeybindingRegistry;
-class Overlay;
 } // namespace cch::tui
 
 namespace cch::coding_agent::tui {
@@ -42,13 +37,10 @@ inline constexpr std::string_view kHelpCommandText =
     "/help /commands /name /model /models /scoped-models /thinking\n"
     "/login /logout /resume /fork /tree /reload /compact /trust";
 
-/// Build the `/hotkeys` overlay (pi `handleHotkeysCommand` subset): the help
-/// view over the assembled registry inside a dismissible overlay that
-/// invokes `on_cancel` on `tui.select.cancel`. The content failure surfaces
-/// as an error for the host's diagnostic channel.
-[[nodiscard]] support::Expected<std::unique_ptr<cch::tui::Overlay>>
-make_hotkeys_overlay(
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-    std::move_only_function<void()> on_cancel);
+/// pi `handleHotkeysCommand`: the Keyboard Shortcuts chat block over the
+/// effective registry. Sections and row meanings follow pi's hardcoded
+/// Navigation/Editing/Other tables (plus the `/`, `!`, `!!` rows);
+/// unassembled or unbound actions render as `Unbound` like `key_hint`.
+[[nodiscard]] std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry);
 
 } // namespace cch::coding_agent::tui

@@ -1490,12 +1490,12 @@ TEST_CASE(
         if (index > 0) CHECK(inserted_paths[index] != inserted_paths[index - 1]);
     }
 
+    // `/hotkeys` renders inline like pi: the editor keeps focus, no dismiss step.
+    // The block is taller than the viewport, so assert its visible tail.
     REQUIRE(terminal.inject_input("/hotkeys\r"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("app.clipboard.pasteImage") != std::string::npos);
-    REQUIRE(terminal.inject_input("\x1b"));
-    REQUIRE(terminal.flush_input());
-    drain_ready(io);
+    CHECK(visible_screen(terminal).find("Paste image or text from clipboard") != std::string::npos);
+    CHECK(visible_screen(terminal).find("Run bash command (excluded from context)") != std::string::npos);
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
     REQUIRE(run_result);
@@ -3285,15 +3285,13 @@ TEST_CASE(
     CHECK(screen.find("Session name set: hello") != std::string::npos);
     CHECK(created->session->message_count() == 0);
 
-    // `/hotkeys` opens the assembled-subset overlay without history change.
+    // `/hotkeys` renders the pi-shaped chat block inline without history change.
     REQUIRE(terminal.inject_input("/hotkeys\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(screen.find("Hotkeys") != std::string::npos);
+    CHECK(screen.find("/  Slash commands") != std::string::npos);
+    CHECK(screen.find("Run bash command (excluded from context)") != std::string::npos);
     CHECK(created->session->message_count() == 0);
-    REQUIRE(terminal.inject_input("\x1b"));
-    REQUIRE(terminal.flush_input());
-    drain_ready(io);
 
     // Builtins execute in place: help renders its command summary, malformed
     // arguments are rejected, clear invokes the session action seam, and an
@@ -3673,9 +3671,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI settings and hotkeys commands open only supported overlays",
-    "[coding_agent][tui][overlays][issue60]") {
+TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders inline",
+        "[coding_agent][tui][overlays][issue60]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3734,24 +3731,21 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("/hotkeys\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(screen.find("Hotkeys") != std::string::npos);
-    CHECK(screen.find("f6") != std::string::npos);
-    CHECK(screen.find("app.exit") != std::string::npos);
-    // The assembled queue actions appear in help with pi's default keys.
-    CHECK(screen.find("app.message.followUp") != std::string::npos);
+    CHECK(screen.find("Run bash command (excluded from context)") != std::string::npos);
+    // The user override shows up verbatim on its pi row.
+    CHECK(screen.find("f6  Exit (when editor is empty)") != std::string::npos);
+    // The assembled queue actions appear with pi's default keys.
+    CHECK(screen.find("Queue follow-up message") != std::string::npos);
     CHECK(screen.find("alt+enter") != std::string::npos);
-    CHECK(screen.find("app.message.dequeue") != std::string::npos);
+    CHECK(screen.find("Restore queued messages") != std::string::npos);
     CHECK(screen.find("alt+up") != std::string::npos);
-    CHECK(screen.find("app.session.new") == std::string::npos);
     // app.suspend and app.editor.external assembled with P15's editor chrome.
-    CHECK(screen.find("app.suspend") != std::string::npos);
-    CHECK(screen.find("app.editor.external") != std::string::npos);
-    CHECK(screen.find("app.clipboard.pasteImage") == std::string::npos);
+    CHECK(screen.find("Suspend to background") != std::string::npos);
+    CHECK(screen.find("Edit message in external editor") != std::string::npos);
+    // The unassembled clipboard action renders Unbound on its pi row.
+    CHECK(screen.find("Unbound  Paste image or text from clipboard") != std::string::npos);
     CHECK(created->session->message_count() == 0);
 
-    REQUIRE(terminal.inject_input("\x1b"));
-    REQUIRE(terminal.flush_input());
-    drain_ready(io);
     REQUIRE(terminal.inject_input("\x1b[17~"));
     drain_ready(io);
     REQUIRE(run_result);

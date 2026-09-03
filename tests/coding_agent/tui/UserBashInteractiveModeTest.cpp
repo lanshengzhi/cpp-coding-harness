@@ -2374,17 +2374,14 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
 
-    // Hotkey help registers no User Bash action.
+    // Hotkey help registers no User Bash action: only pi's literal
+    // `!`/`!!` rows mention bash.
     REQUIRE(terminal.inject_input("/hotkeys\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(screen.find("Hotkeys") != std::string::npos);
-    CHECK(screen.find("bash") == std::string::npos);
-    CHECK(screen.find("Bash") == std::string::npos);
-
-    REQUIRE(terminal.inject_input("\x1b"));
-    REQUIRE(terminal.flush_input());
-    drain_ready(io);
+    CHECK(screen.find("/  Slash commands") != std::string::npos);
+    CHECK(screen.find("Run bash command") != std::string::npos);
+    CHECK(screen.find("User Bash") == std::string::npos);
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
     REQUIRE(run_result);
