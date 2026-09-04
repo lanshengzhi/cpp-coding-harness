@@ -14,12 +14,12 @@
 namespace {
 
 void key(cch::tui::Input& input, std::string name, bool ctrl = false, bool shift = false, bool alt = false) {
-    input.handle_input(cch::tui::KeyEvent{
-        .key = std::move(name),
-        .ctrl = ctrl,
-        .shift = shift,
-        .alt = alt,
-    });
+    static_cast<void>(input.handle_input(cch::tui::KeyEvent{
+            .key = std::move(name),
+            .ctrl = ctrl,
+            .shift = shift,
+            .alt = alt,
+    }));
 }
 
 void type(cch::tui::Input& input, std::string text) {
@@ -215,7 +215,7 @@ TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][inp
     cch::tui::Input input;
     type(input, "ab");
     key(input, "left");
-    input.handle_input(cch::tui::PasteEvent{.text = "X\r\nY\tZ\r"});
+    static_cast<void>(input.handle_input(cch::tui::PasteEvent{.text = "X\r\nY\tZ\r"}));
     CHECK(input.value() == "aXY    Zb");
 
     // Undo restores the pre-paste state in one step.
@@ -225,7 +225,7 @@ TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][inp
     // Control characters are dropped from pastes; the rest of the sequence
     // stays literal (decoded-event hygiene, matching Editor::paste). The undo
     // also restored the cursor to its pre-paste position.
-    input.handle_input(cch::tui::PasteEvent{.text = "\x1b[31mred\x1b[0m"});
+    static_cast<void>(input.handle_input(cch::tui::PasteEvent{.text = "\x1b[31mred\x1b[0m"}));
     CHECK(input.value() == "a[31mred[0mb");
 }
 
@@ -432,6 +432,6 @@ TEST_CASE("Input outcome-based admission proves boundary no-ops and side-effect 
     CHECK(input.value() == "hello");
 
     // 4. Unhandled side-effect freedom: unrecognized non-printable keys are unhandled and modify no state.
-    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "f12"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "insert"}) == cch::tui::InputAdmissionOutcome::Unhandled);
     CHECK(input.value() == "hello");
 }

@@ -1318,7 +1318,7 @@ cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::t
     }
 
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) {
+    if (!cch::tui::carries_press_behavior(key)) {
         return cch::tui::InputAdmissionOutcome::Unhandled;
     }
     const auto matches = [&](std::string_view action_id) {

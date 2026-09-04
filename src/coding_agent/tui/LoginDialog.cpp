@@ -288,8 +288,7 @@ void LoginDialogComponent::invalidate() {
 
 cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release)
-        return cch::tui::InputAdmissionOutcome::Unhandled;
+    if (!cch::tui::carries_press_behavior(key)) return cch::tui::InputAdmissionOutcome::Unhandled;
     if (keybindings_->matches(*key, "tui.select.cancel")) {
         cancel();
         return cch::tui::InputAdmissionOutcome::Consumed;

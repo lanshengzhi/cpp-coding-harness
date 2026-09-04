@@ -76,7 +76,7 @@ UserMessageSelectorComponent::UserMessageSelectorComponent(
 
 cch::tui::InputAdmissionOutcome UserMessageSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) {
+    if (!cch::tui::carries_press_behavior(key)) {
         return cch::tui::InputAdmissionOutcome::Unhandled;
     }
     if (keybindings_->matches(*key, "tui.select.up")) {

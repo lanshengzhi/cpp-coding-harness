@@ -377,7 +377,7 @@ InputAdmissionOutcome SettingsList::handle_input(const InputEventVariant& input)
         return outcome;
     }
     const auto* key = std::get_if<KeyEvent>(&input);
-    if (key == nullptr || key->type == KeyEventType::Release) return InputAdmissionOutcome::Unhandled;
+    if (!carries_press_behavior(key)) return InputAdmissionOutcome::Unhandled;
     const auto& displayed = impl->displayed_indices();
     const auto action = impl->keybindings->first_match(*key, kSettingsListActions);
     if (action == "tui.select.up") {

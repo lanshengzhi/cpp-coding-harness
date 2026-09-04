@@ -98,7 +98,7 @@ struct DialogFixture {
 
 void type(cch::tui::InputHandler& handler, std::string text) {
     for (const char ch : text) {
-        handler.handle_input(tui::KeyEvent{.key = std::string(1, ch)});
+        static_cast<void>(handler.handle_input(tui::KeyEvent{.key = std::string(1, ch)}));
     }
 }
 
@@ -189,7 +189,7 @@ TEST_CASE(
     }
 
     type(dialog, "sk-dummy");
-    dialog.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(dialog.handle_input(tui::KeyEvent{.key = "enter"}));
     drain_ready(io);
 
     REQUIRE(prompt_result.has_value());
@@ -221,7 +221,7 @@ TEST_CASE(
     drain_ready(io);
     CHECK(screen_of(dialog).find("Paste the authorization code") != std::string::npos);
 
-    dialog.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(dialog.handle_input(tui::KeyEvent{.key = "escape"}));
     drain_ready(io);
 
     REQUIRE(prompt_result.has_value());
@@ -279,7 +279,7 @@ TEST_CASE(
         });
     drain_ready(io);
     type(dialog, "first-value");
-    dialog.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(dialog.handle_input(tui::KeyEvent{.key = "enter"}));
     drain_ready(io);
     REQUIRE(first_result.has_value());
     REQUIRE(first_result->has_value());
@@ -295,7 +295,7 @@ TEST_CASE(
         });
     drain_ready(io);
     type(dialog, "second-value");
-    dialog.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(dialog.handle_input(tui::KeyEvent{.key = "enter"}));
     drain_ready(io);
     REQUIRE(second_result.has_value());
     REQUIRE(second_result->has_value());

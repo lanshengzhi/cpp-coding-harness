@@ -59,7 +59,7 @@ class InputHandler {
 public:
     virtual ~InputHandler() = default;
 
-    virtual InputAdmissionOutcome handle_input(const InputEventVariant& input) = 0;
+    [[nodiscard]] virtual InputAdmissionOutcome handle_input(const InputEventVariant& input) = 0;
 };
 
 /// An optional Component capability for receiving TUI focus.

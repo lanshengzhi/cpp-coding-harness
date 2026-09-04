@@ -219,7 +219,7 @@ TEST_CASE("ModelSelector initially selects the current model inside a scoped lis
     REQUIRE(rendered);
     CHECK(join_lines(rendered->lines).find("→ beta-1 [beta]") != std::string::npos);
 
-    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
     CHECK(selected->provider == "beta");
     CHECK(selected->id == "beta-1");
@@ -246,8 +246,8 @@ TEST_CASE(
         [&io] { (void)io; });
 
     // Type a search query: provider-prefixed text ranks before bare ids.
-    selector->handle_input(tui::KeyEvent{.key = "b"});
-    selector->handle_input(tui::KeyEvent{.key = "e"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "b"}));
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "e"}));
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
@@ -255,7 +255,7 @@ TEST_CASE(
         CHECK(screen.find("beta-1 [beta]") != std::string::npos);
         CHECK(screen.find("No matching models") == std::string::npos);
     }
-    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
     CHECK(selected->provider == "beta");
     CHECK(selected->id == "beta-1");
@@ -271,8 +271,8 @@ TEST_CASE(
         [](ai::Model) -> support::ExpectedVoid { return {}; },
         [] {},
         [&io] { (void)io; });
-    empty_selector->handle_input(tui::KeyEvent{.key = "z"});
-    empty_selector->handle_input(tui::KeyEvent{.key = "z"});
+    static_cast<void>(empty_selector->handle_input(tui::KeyEvent{.key = "z"}));
+    static_cast<void>(empty_selector->handle_input(tui::KeyEvent{.key = "z"}));
     {
         const auto rendered = empty_selector->render(70);
         REQUIRE(rendered);
@@ -301,23 +301,23 @@ TEST_CASE(
         [&io] { (void)io; });
 
     // Down from the top, then wrap up to the last item.
-    selector->handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "down"}));
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
         CHECK(join_lines(rendered->lines).find("→ alpha-2") != std::string::npos);
     }
-    selector->handle_input(tui::KeyEvent{.key = "up"});
-    selector->handle_input(tui::KeyEvent{.key = "up"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "up"}));
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
         CHECK(join_lines(rendered->lines).find("→ beta-1") != std::string::npos);
     }
 
-    selector->handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
-    selector->handle_input(tui::KeyEvent{.key = "c", .ctrl = true});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "c", .ctrl = true}));
     CHECK(cancellations == 2);
 }
 
@@ -355,7 +355,7 @@ TEST_CASE(
     }
 
     // Tab switches to the all scope.
-    selector->handle_input(tui::KeyEvent{.key = "tab"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "tab"}));
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
@@ -363,7 +363,7 @@ TEST_CASE(
         CHECK(screen.find("beta-1 [beta]") != std::string::npos);
     }
     // Tab again returns to the scoped scope.
-    selector->handle_input(tui::KeyEvent{.key = "tab"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "tab"}));
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
@@ -456,7 +456,7 @@ TEST_CASE("ModelSelector delegates search editing to the SelectList and reports 
 
     // Typing flows into the SelectList search: the cursor follows the typed
     // text on the same translated row.
-    selector->handle_input(tui::KeyEvent{.key = "a"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "a"}));
     const auto narrowed = selector->render(120);
     REQUIRE(narrowed);
     const auto after = selector->cursor_location();

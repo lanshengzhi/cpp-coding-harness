@@ -283,7 +283,7 @@ InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
         return InputAdmissionOutcome::Consumed;
     }
     const auto* event = std::get_if<KeyEvent>(&input);
-    if (event == nullptr || event->type == KeyEventType::Release) {
+    if (!carries_press_behavior(event)) {
         return InputAdmissionOutcome::Unhandled;
     }
     const auto action = impl_->options.keybindings->first_match(*event, kInputActions);

@@ -109,7 +109,8 @@ TEST_CASE("Editor yanks multiline and pasted content without losing marker seman
     CHECK(editor.text() == "\n");
 
     editor.set_text({});
-    editor.handle_input(cch::tui::PasteEvent{.text = std::string(1001, 'x'), .original_bytes = 1001, .lines = 1});
+    static_cast<void>(editor.handle_input(
+            cch::tui::PasteEvent{.text = std::string(1001, 'x'), .original_bytes = 1001, .lines = 1}));
     key(editor, "home");
     key(editor, "k", true);
     key(editor, "y", true);
@@ -125,11 +126,11 @@ TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[
             submitted.push_back(std::move(text));
             return {};
         });
-    editor.handle_input(cch::tui::PasteEvent{
-        .text = std::string(1001, 'x'),
-        .original_bytes = 1001,
-        .lines = 1,
-    });
+    static_cast<void>(editor.handle_input(cch::tui::PasteEvent{
+            .text = std::string(1001, 'x'),
+            .original_bytes = 1001,
+            .lines = 1,
+    }));
 
     CHECK(editor.text() == "[paste #1 1001 chars]");
     CHECK(editor.expanded_text() == std::string(1001, 'x'));
@@ -1599,3 +1600,69 @@ TEST_CASE("Editor presentation repaint notifications fire for menu navigation, c
     key(editor, "escape");
     CHECK(repaint_requests == 4);
 }
+
+TEST_CASE("Editor does not request a duplicate repaint when a mutation closes the menu",
+        "[tui][editor][autocomplete][presentation]") {
+    std::size_t repaint_requests = 0;
+    std::size_t change_notifications = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = slash_suggestions();
+    cch::tui::Editor editor(
+            cch::tui::EditorOptions{.render_request = [&repaint_requests]() -> cch::support::ExpectedVoid {
+                ++repaint_requests;
+                return {};
+            }},
+            [&change_notifications](std::string) -> cch::support::ExpectedVoid {
+                ++change_notifications;
+                return {};
+            },
+            {});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    REQUIRE(menu_rendered(editor));
+    const auto repaint_after_open = repaint_requests;
+
+    // shift+enter (tui.input.newLine) cancels the menu and inserts a newline;
+    // the change notification already schedules the frame.
+    key(editor, "enter", false, true);
+    CHECK(editor.text() == "/\n");
+    CHECK(change_notifications == 2);
+    CHECK(repaint_requests == repaint_after_open);
+    CHECK_FALSE(menu_rendered(editor));
+}
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][editor][autocomplete][issue538]") {
+    std::size_t render_requests = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+            .items =
+                    {
+                            {.value = "help", .label = "help", .description = {}},
+                            {.value = "history", .label = "history", .description = {}},
+                    },
+            .prefix = "/",
+    };
+    cch::tui::Editor editor(cch::tui::EditorOptions{
+            .render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                ++render_requests;
+                throw std::runtime_error("render request failed");
+            },
+    });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    CHECK(render_requests == 1);
+
+    // Presentation-only navigation: the throw is caught, diagnosed as a
+    // bounded callback error, and the sink is deactivated.
+    key(editor, "down");
+    CHECK(render_requests == 2);
+    CHECK_FALSE(editor.render(80).has_value());
+    key(editor, "up");
+    CHECK(render_requests == 2);
+}
+#endif

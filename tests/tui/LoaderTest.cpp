@@ -177,8 +177,8 @@ TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once
     const auto token = cancelled.cancellation_token();
     std::optional<cch::tui::CancellableLoaderState> callback_state;
     std::stop_callback callback(token, [&]() { callback_state = cancelled.state(); });
-    cancelled.handle_input(cch::tui::KeyEvent{.key = "escape"});
-    cancelled.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    static_cast<void>(cancelled.handle_input(cch::tui::KeyEvent{.key = "escape"}));
+    static_cast<void>(cancelled.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(token.stop_requested());
     REQUIRE(callback_state);
     CHECK(*callback_state == cch::tui::CancellableLoaderState::Cancelled);
@@ -201,9 +201,9 @@ TEST_CASE("CancellableLoader dispatches cancellation from its effective registry
         },
         .keybindings = keybindings->registry,
     });
-    loader.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    static_cast<void>(loader.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(loader.state() == cch::tui::CancellableLoaderState::Active);
-    loader.handle_input(cch::tui::KeyEvent{.key = "f2"});
+    static_cast<void>(loader.handle_input(cch::tui::KeyEvent{.key = "f2"}));
     CHECK(loader.state() == cch::tui::CancellableLoaderState::Cancelled);
 }
 

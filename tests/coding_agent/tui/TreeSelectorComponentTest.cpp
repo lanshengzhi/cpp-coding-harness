@@ -237,41 +237,41 @@ TEST_CASE(
     CHECK(text.find("[model: alpha-1]") == std::string::npos);
 
     // Ctrl+a shows everything.
-    component.handle_input(tui::KeyEvent{.key = "a", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "a", .ctrl = true}));
     text = render_text(component);
     CHECK(text.find("[thinking: high]") != std::string::npos);
     CHECK(text.find("[model: alpha-1]") != std::string::npos);
     CHECK(text.find("[all]") != std::string::npos);
 
     // Ctrl+u keeps user messages only.
-    component.handle_input(tui::KeyEvent{.key = "u", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "u", .ctrl = true}));
     text = render_text(component);
     CHECK(text.find("user: first question") != std::string::npos);
     CHECK(text.find("assistant:") == std::string::npos);
     CHECK(text.find("[user]") != std::string::npos);
 
     // Ctrl+l keeps labeled entries only (the mid-chain label).
-    component.handle_input(tui::KeyEvent{.key = "l", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "l", .ctrl = true}));
     text = render_text(component);
     CHECK(text.find("[important]") != std::string::npos);
     CHECK(text.find("user: first question") == std::string::npos);
     CHECK(text.find("[labeled]") != std::string::npos);
 
     // Ctrl+d returns to the default view.
-    component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true}));
     text = render_text(component);
     CHECK(text.find("[labeled]") == std::string::npos);
 
     // Search narrows to matching rows (search-while-typing).
-    component.handle_input(tui::KeyEvent{.key = "s"});
-    component.handle_input(tui::KeyEvent{.key = "e"});
-    component.handle_input(tui::KeyEvent{.key = "c"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "s"}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "e"}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "c"}));
     text = render_text(component);
     CHECK(text.find("second question") != std::string::npos);
     CHECK(text.find("first question") == std::string::npos);
 
     // Escape with an active search clears it instead of cancelling.
-    component.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     text = render_text(component);
     CHECK(text.find("first question") != std::string::npos);
 }
@@ -297,16 +297,16 @@ TEST_CASE(
 
     // The leaf is selected; move up to the branch point a0, then fold it
     // (ctrl+left): its descendants disappear.
-    component.handle_input(tui::KeyEvent{.key = "up"});
-    component.handle_input(tui::KeyEvent{.key = "up"});
-    component.handle_input(tui::KeyEvent{.key = "up"});
-    component.handle_input(tui::KeyEvent{.key = "left", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "left", .ctrl = true}));
     auto text = render_text(component);
     CHECK(text.find("second answer") == std::string::npos);
     CHECK(text.find("second question") == std::string::npos);
 
     // Unfold (ctrl+right) restores the children.
-    component.handle_input(tui::KeyEvent{.key = "right", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "right", .ctrl = true}));
     text = render_text(component);
     CHECK(text.find("second answer") != std::string::npos);
 }
@@ -336,8 +336,8 @@ TEST_CASE(
 
     // Move up to u1 (already labeled "important") and press shift+l: the
     // label input opens pre-filled.
-    component.handle_input(tui::KeyEvent{.key = "up"});
-    component.handle_input(tui::KeyEvent{.key = "l", .shift = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "l", .shift = true}));
     auto text = render_text(component);
     CHECK(text.find("Label (empty to remove):") != std::string::npos);
     CHECK(text.find("important") != std::string::npos);
@@ -345,9 +345,9 @@ TEST_CASE(
     // Clear the pre-fill, type a new label, and save with Enter.
     component.label_input().set_value("");
     for (const char letter : std::string{"reviewed"}) {
-        component.handle_input(tui::KeyEvent{.key = std::string(1, letter)});
+        static_cast<void>(component.handle_input(tui::KeyEvent{.key = std::string(1, letter)}));
     }
-    component.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(calls.labels.size() == 2);
     CHECK(calls.labels[0] == "u1");
     CHECK(calls.labels[1] == "reviewed");
@@ -356,8 +356,8 @@ TEST_CASE(
     CHECK(text.find("[reviewed] user: second question") != std::string::npos);
 
     // Escape cancels the label editor without a change.
-    component.handle_input(tui::KeyEvent{.key = "l", .shift = true});
-    component.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "l", .shift = true}));
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(calls.labels.size() == 2);
 }
 
@@ -382,7 +382,7 @@ TEST_CASE(
         [] {});
 
     // The leaf (assistant a1) copies its text.
-    component.handle_input(tui::KeyEvent{.key = "x", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "x", .ctrl = true}));
     REQUIRE(calls.copies.size() == 1);
     REQUIRE(calls.copies.back().has_value());
     CHECK(*calls.copies.back() == "second answer");
@@ -407,11 +407,11 @@ TEST_CASE(
         [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
         [&](std::optional<std::string> text) { calls.copies.push_back(std::move(text)); },
         [] {});
-    component2.handle_input(tui::KeyEvent{.key = "a", .ctrl = true});
+    static_cast<void>(component2.handle_input(tui::KeyEvent{.key = "a", .ctrl = true}));
     // The initial selection walked up to the visible root; move down to the
     // model-change entry and copy it: a settings entry reports nullopt.
-    component2.handle_input(tui::KeyEvent{.key = "down"});
-    component2.handle_input(tui::KeyEvent{.key = "x", .ctrl = true});
+    static_cast<void>(component2.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(component2.handle_input(tui::KeyEvent{.key = "x", .ctrl = true}));
     REQUIRE(calls.copies.size() == 2);
     CHECK_FALSE(calls.copies.back().has_value());
 }
@@ -437,19 +437,19 @@ TEST_CASE(
         [] {});
 
     // Enter selects the current leaf.
-    component.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(calls.selects.size() == 1);
     CHECK(calls.selects[0] == "a1");
 
     // Escape cancels (no active search).
-    component.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(calls.cancels == 1);
 
     // Shift+t toggles the label timestamp footer hint.
-    component.handle_input(tui::KeyEvent{.key = "t", .shift = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "t", .shift = true}));
     const auto text = render_text(component);
     CHECK(text.find("[+label time]") != std::string::npos);
-    component.handle_input(tui::KeyEvent{.key = "t", .shift = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "t", .shift = true}));
     CHECK(render_text(component).find("[+label time]") == std::string::npos);
 }
 

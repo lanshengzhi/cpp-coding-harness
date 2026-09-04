@@ -20,9 +20,6 @@ namespace cch::tui::detail {
 /// rejected, mirroring pi's control-character check.
 [[nodiscard]] inline bool is_printable(const KeyEvent& event) {
     if (event.ctrl || event.alt || event.key.empty()) return false;
-    if (event.key.starts_with('f') && event.key.size() >= 2 && event.key[1] >= '0' && event.key[1] <= '9') {
-        return false;
-    }
     return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
         event.key != "backspace" && event.key != "delete" && event.key != "insert" &&
         event.key != "clear" && event.key != "home" && event.key != "end" &&

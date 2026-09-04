@@ -98,13 +98,13 @@ TEST_CASE("SelectList filters navigates wraps selects and cancels with semantic 
         });
 
     list.set_filter("al");
-    list.handle_input(cch::tui::KeyEvent{.key = "up"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "up"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "alpine");
     CHECK(changed == "alpine");
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     CHECK(selected == "alpine");
-    list.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
 }
 
@@ -116,15 +116,15 @@ TEST_CASE(
                     .enable_raw_jk_navigation = true,
             });
 
-    list.handle_input(cch::tui::KeyEvent{.key = "k"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "k"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "item0");
-    list.handle_input(cch::tui::KeyEvent{.key = "j"});
-    list.handle_input(cch::tui::KeyEvent{.key = "j"});
-    list.handle_input(cch::tui::KeyEvent{.key = "j"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "j"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "j"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "j"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "item2");
-    list.handle_input(cch::tui::KeyEvent{.key = "k"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "k"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "item1");
 
@@ -134,7 +134,7 @@ TEST_CASE(
                     .enable_raw_jk_navigation = true,
                     .enable_search = true,
             });
-    searchable.handle_input(cch::tui::KeyEvent{.key = "j"});
+    static_cast<void>(searchable.handle_input(cch::tui::KeyEvent{.key = "j"}));
     CHECK(searchable.search_query() == "j");
 }
 
@@ -185,9 +185,9 @@ TEST_CASE("SelectList dispatches configured keys from its effective registry", "
             },
             .keybindings = keybindings->registry,
         });
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     CHECK(selections == 0);
-    list.handle_input(cch::tui::KeyEvent{.key = "f2"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "f2"}));
     CHECK(selections == 1);
 }
 
@@ -206,11 +206,11 @@ TEST_CASE("SelectList resolves a key shared by two actions in dispatch order", "
                     },
                     .keybindings = std::move(registry),
             });
-    list.handle_input(cch::tui::KeyEvent{.key = "f9"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "f9"}));
     CHECK(selections == 0);
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "item2"); // up wraps to the tail
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     CHECK(selections == 1);
 }
 
@@ -242,7 +242,7 @@ namespace {
 
 void type_into(cch::tui::SelectList& list, std::string_view text) {
     for (const auto& character : text) {
-        list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)});
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)}));
     }
 }
 
@@ -293,14 +293,14 @@ TEST_CASE("SelectList search mode typing re-ranks and clamps the selection to th
     type_into(list, "x");
     CHECK(list.search_query() == "alpix");
     CHECK_FALSE(list.selected_item());
-    list.handle_input(cch::tui::KeyEvent{.key = "down"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
     CHECK_FALSE(list.selected_item());
     const auto rendered = list.render(60);
     REQUIRE(rendered);
     CHECK(rendered->lines[1].find("No matching commands") != std::string::npos);
 
     // Backspace restores the previous ranking (selection back on the match).
-    list.handle_input(cch::tui::KeyEvent{.key = "backspace"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "alpine");
     CHECK(changed.back() == "alpine");
@@ -308,7 +308,7 @@ TEST_CASE("SelectList search mode typing re-ranks and clamps the selection to th
     // Clearing the query restores all items in original order; the selection
     // deterministically lands on the first item (top rule).
     for (int index = 0; index < 4; ++index) {
-        list.handle_input(cch::tui::KeyEvent{.key = "backspace"});
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
     }
     CHECK(list.search_query().empty());
     REQUIRE(list.selected_item());
@@ -393,30 +393,30 @@ TEST_CASE("SelectList search mode confirm selects the filtered item and cancel e
 
     // Confirm fires on_select with the currently filtered top match.
     type_into(list, "ga");
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     CHECK(selected == "gamma");
     CHECK(list.search_query() == "ga");
 
     // Escape and Ctrl+C both fire on_cancel without clearing the query.
-    list.handle_input(cch::tui::KeyEvent{.key = "escape"});
-    list.handle_input(cch::tui::KeyEvent{.key = "c", .ctrl = true});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "c", .ctrl = true}));
     CHECK(cancellations == 2);
     CHECK(list.search_query() == "ga");
 
     // Confirm on an empty filter (no matches) is a no-op; cancel still fires.
     type_into(list, "zz");
     CHECK_FALSE(list.selected_item());
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     CHECK(selected == "gamma");
-    list.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 3);
 
     // Clearing back to a matching query restores confirm-on-filtered-item.
-    list.handle_input(cch::tui::KeyEvent{.key = "backspace"});
-    list.handle_input(cch::tui::KeyEvent{.key = "backspace"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "gamma");
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     CHECK(selected == "gamma");
 }
 
@@ -559,8 +559,8 @@ TEST_CASE("SelectList set_items re-filters with the current query and preserves 
     CHECK(list.search_query() == "ga");
 
     // Clearing the query after set_items shows the new items in order.
-    list.handle_input(cch::tui::KeyEvent{.key = "backspace"});
-    list.handle_input(cch::tui::KeyEvent{.key = "backspace"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "delta");
 
@@ -761,7 +761,7 @@ TEST_CASE(
     const auto focused_list = [](cch::tui::SelectListOptions options) {
         cch::tui::SelectList list({{.value = "alpha", .label = "Alpha"}}, std::move(options));
         for (const auto& character : std::string("tool")) {
-            list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)});
+            static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)}));
         }
         list.set_focused(true);
         return list;

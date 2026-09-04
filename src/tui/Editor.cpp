@@ -305,24 +305,37 @@ struct Editor::Impl {
 
     void request_render(std::unique_lock<std::mutex>& lock) {
         if (!render_request_sink || !*render_request_sink) return;
-        outside_impl_lock(lock, [sink = render_request_sink] {
+        bool sink_threw = false;
+        outside_impl_lock(lock, [sink = render_request_sink, &sink_threw] {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
 #endif
                 if (*sink) static_cast<void>((*sink)());
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
+                sink_threw = true;
             }
 #endif
         });
+        if (sink_threw) {
+            // A throwing render-request sink is a bounded callback diagnostic
+            // (ADR 0017); the observer is deactivated after failure.
+            callback_error = support::make_error(support::ErrorCode::Unknown,
+                    "Editor render request sink failed",
+                    "the render request callback threw an exception");
+            *render_request_sink = nullptr;
+        }
     }
 
-    void cancel_autocomplete(std::unique_lock<std::mutex>& lock) {
+    void cancel_autocomplete(std::unique_lock<std::mutex>& lock, bool mutation_schedules_frame = false) {
         const bool was_open = autocomplete_menu.open;
         const auto request_view = completion_view();
         handle_completion_interaction(
                 detail::EditorCompletionInteraction{detail::EditorCompletionCancel{}}, request_view, lock);
-        if (was_open) {
+        // A text mutation in the same handling already schedules the frame
+        // through the change notification; only presentation-only cancels
+        // request a render.
+        if (was_open && !mutation_schedules_frame) {
             request_render(lock);
         }
     }
@@ -661,7 +674,7 @@ struct Editor::Impl {
     void undo_once(std::unique_lock<std::mutex>& lock) {
         exit_history_browsing();
         buffer.undo();
-        cancel_autocomplete(lock);
+        cancel_autocomplete(lock, true);
         notify_change();
     }
 
@@ -761,7 +774,7 @@ struct Editor::Impl {
         exit_history_browsing();
         add_to_history(result);
         buffer.set_text("");
-        cancel_autocomplete(lock);
+        cancel_autocomplete(lock, true);
         scroll_offset = 0;
         notify_change();
         if (!on_submit) return;
@@ -787,7 +800,7 @@ struct Editor::Impl {
         exit_history_browsing();
         buffer.insert_paste(std::move(text));
         notify_change();
-        cancel_autocomplete(lock);
+        cancel_autocomplete(lock, true);
     }
 
     [[nodiscard]] std::vector<VisualLine> visual_lines(std::size_t width) const {
@@ -962,7 +975,7 @@ void Editor::set_text(std::string text) {
     if (text == impl.buffer.text()) return;
     impl.buffer.push_undo();
     impl.buffer.set_text(std::move(text));
-    impl.cancel_autocomplete(lock);
+    impl.cancel_autocomplete(lock, true);
     impl.notify_change();
 }
 
@@ -970,7 +983,7 @@ void Editor::insert_text_at_cursor(std::string text) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::unique_lock lock(impl.impl_mutex);
-    impl.cancel_autocomplete(lock);
+    impl.cancel_autocomplete(lock, !text.empty());
     impl.insert_text(std::move(text), true, lock, false);
 }
 
@@ -1128,7 +1141,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         return InputAdmissionOutcome::Consumed;
     }
     const auto* event = std::get_if<KeyEvent>(&input);
-    if (event == nullptr || event->type == KeyEventType::Release) {
+    if (!carries_press_behavior(event)) {
         return InputAdmissionOutcome::Unhandled;
     }
     const auto matches = [&impl, event](std::string_view action_id) {
@@ -1146,7 +1159,6 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
             return InputAdmissionOutcome::Consumed;
         }
         impl.jump_direction.reset();
-        return InputAdmissionOutcome::Consumed;
     }
 
     // The open completion menu's table dispatches ahead of the main table
@@ -1172,6 +1184,13 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
             impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Confirm, lock);
             return InputAdmissionOutcome::Consumed;
         }
+    }
+
+    // Cancellation claims its key only while the menu is open. With the menu
+    // closed the event stays unhandled so an interrupt/cancellation overlap
+    // keeps its application-first precedence (#594).
+    if (matches("tui.select.cancel")) {
+        return InputAdmissionOutcome::Unhandled;
     }
 
     // Main dispatch in kEditorActions order. The raw shift+backspace /
@@ -1282,7 +1301,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.newLine") {
-        impl.cancel_autocomplete(lock);
+        impl.cancel_autocomplete(lock, true);
         impl.insert_text("\n", true, lock);
         return InputAdmissionOutcome::Consumed;
     }

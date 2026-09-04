@@ -175,15 +175,15 @@ TEST_CASE(
         [] {});
 
     // Ctrl+s cycles Threaded -> Recent -> Fuzzy.
-    component.handle_input(tui::KeyEvent{.key = "s", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
     CHECK(render_text(component).find("Sort: Recent") != std::string::npos);
-    component.handle_input(tui::KeyEvent{.key = "s", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
     CHECK(render_text(component).find("Sort: Fuzzy") != std::string::npos);
-    component.handle_input(tui::KeyEvent{.key = "s", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
     CHECK(render_text(component).find("Sort: Threaded") != std::string::npos);
 
     // Ctrl+n filters to named sessions only.
-    component.handle_input(tui::KeyEvent{.key = "n", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "n", .ctrl = true}));
     const auto named = render_text(component);
     CHECK(named.find("Name: Named") != std::string::npos);
     // The row displays the session name when one exists (pi).
@@ -214,15 +214,15 @@ TEST_CASE(
         [] {});
 
     // Ctrl+p toggles the path display on.
-    component.handle_input(tui::KeyEvent{.key = "p", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "p", .ctrl = true}));
     const auto with_path = render_text(component);
     CHECK(with_path.find("path (on)") != std::string::npos);
     CHECK(with_path.find("/tmp/a.jsonl") != std::string::npos);
 
     // Ctrl+d enters the confirmation; Escape cancels it without deleting.
-    component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true}));
     CHECK(render_text(component).find("Delete session?") != std::string::npos);
-    component.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(render_text(component).find("Delete session?") == std::string::npos);
 }
 
@@ -254,12 +254,12 @@ TEST_CASE(
         [] {});
 
     // Ctrl+r enters rename mode; the value is pre-filled, trimmed on confirm.
-    component.handle_input(tui::KeyEvent{.key = "r", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "r", .ctrl = true}));
     CHECK(render_text(component).find("Rename Session") != std::string::npos);
-    component.rename_input().handle_input(tui::KeyEvent{.key = "n"});
-    component.rename_input().handle_input(tui::KeyEvent{.key = "e"});
-    component.rename_input().handle_input(tui::KeyEvent{.key = "w"});
-    component.rename_input().handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(component.rename_input().handle_input(tui::KeyEvent{.key = "n"}));
+    static_cast<void>(component.rename_input().handle_input(tui::KeyEvent{.key = "e"}));
+    static_cast<void>(component.rename_input().handle_input(tui::KeyEvent{.key = "w"}));
+    static_cast<void>(component.rename_input().handle_input(tui::KeyEvent{.key = "enter"}));
     CHECK(renamed_path == "/tmp/a.jsonl");
     CHECK(renamed_value == "new");
     // The list refreshed with the name.
@@ -301,7 +301,7 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
     // Typing hands the view over to the SelectList: the query line and the
     // filtered flat rows come from it, the non-matching session disappears.
     for (const char character : std::string("parser")) {
-        component.handle_input(tui::KeyEvent{.key = std::string(1, character)});
+        static_cast<void>(component.handle_input(tui::KeyEvent{.key = std::string(1, character)}));
     }
     text = render_text(component);
     CHECK(text.find("> parser") != std::string::npos);
@@ -320,18 +320,18 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
     CHECK(cursor->column == 8);
 
     // Enter resumes the filtered result through the select sink.
-    component.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "enter"}));
     CHECK(selected_path == "/tmp/a.jsonl");
 
     // Delete confirmation in the search view targets the filtered result.
-    component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true}));
     CHECK(render_text(component).find("Delete session?") != std::string::npos);
-    component.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(render_text(component).find("Delete session?") == std::string::npos);
 
     // Clearing the query hands the view back to the tree rows.
     for (std::size_t index = 0; index < 6; ++index) {
-        component.handle_input(tui::KeyEvent{.key = "backspace"});
+        static_cast<void>(component.handle_input(tui::KeyEvent{.key = "backspace"}));
     }
     text = render_text(component);
     CHECK(text.find("fix the parser bug") != std::string::npos);
@@ -341,7 +341,7 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
     // A query with no matches shows the domain empty-state row in place of
     // the SelectList's generic no-match text.
     for (const char character : std::string("zzz")) {
-        component.handle_input(tui::KeyEvent{.key = std::string(1, character)});
+        static_cast<void>(component.handle_input(tui::KeyEvent{.key = std::string(1, character)}));
     }
     text = render_text(component);
     CHECK(text.find("> zzz") != std::string::npos);
@@ -349,7 +349,7 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
 
     // Clearing that query returns to the component's own tree view again.
     for (std::size_t index = 0; index < 3; ++index) {
-        component.handle_input(tui::KeyEvent{.key = "backspace"});
+        static_cast<void>(component.handle_input(tui::KeyEvent{.key = "backspace"}));
     }
     text = render_text(component);
     CHECK(text.find("fix the parser bug") != std::string::npos);
@@ -358,8 +358,8 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
 
     // Escape from the search view cancels like the tree view (pi).
     for (const char character : std::string("pa")) {
-        component.handle_input(tui::KeyEvent{.key = std::string(1, character)});
+        static_cast<void>(component.handle_input(tui::KeyEvent{.key = std::string(1, character)}));
     }
-    component.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
 }

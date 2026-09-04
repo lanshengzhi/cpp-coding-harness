@@ -608,7 +608,7 @@ InputAdmissionOutcome SelectList::handle_input(const InputEventVariant& input) {
         return outcome;
     }
     const auto* key = std::get_if<KeyEvent>(&input);
-    if (key == nullptr || key->type == KeyEventType::Release) return InputAdmissionOutcome::Unhandled;
+    if (!carries_press_behavior(key)) return InputAdmissionOutcome::Unhandled;
     const auto count = impl->filtered_indices.size();
     const auto action = impl->keybindings->first_match(*key, kSelectListActions);
     const bool plain = !key->ctrl && !key->alt && !key->shift;

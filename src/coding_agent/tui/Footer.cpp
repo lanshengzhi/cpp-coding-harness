@@ -30,8 +30,7 @@ std::string format_tokens(std::size_t count) {
 std::string format_cwd_for_footer(
     const std::filesystem::path& cwd,
     const std::optional<std::filesystem::path>& home) {
-    if (cwd.empty()) return {};
-    if (!home || home->empty()) return cwd.string();
+    if (!home) return cwd.string();
     const auto resolved_cwd = std::filesystem::absolute(cwd);
     const auto resolved_home = std::filesystem::absolute(*home);
     std::error_code relative_error;

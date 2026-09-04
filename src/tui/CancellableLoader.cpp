@@ -152,7 +152,7 @@ void CancellableLoader::invalidate() {
 
 InputAdmissionOutcome CancellableLoader::handle_input(const InputEventVariant& input) {
     const auto* key = std::get_if<KeyEvent>(&input);
-    if (key == nullptr || key->type == KeyEventType::Release) return InputAdmissionOutcome::Unhandled;
+    if (!carries_press_behavior(key)) return InputAdmissionOutcome::Unhandled;
     if (impl_->keybindings->matches(*key, "tui.select.cancel")) {
         (void)cancel();
         return InputAdmissionOutcome::Consumed;

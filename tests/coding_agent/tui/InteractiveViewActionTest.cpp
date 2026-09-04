@@ -31,7 +31,8 @@ using namespace cch;
 
 namespace {
 
-[[nodiscard]] std::shared_ptr<const tui::KeybindingRegistry> test_keybindings() {
+[[nodiscard]] std::shared_ptr<const tui::KeybindingRegistry> test_keybindings(
+        std::vector<tui::KeybindingOverride> extra_overrides = {}) {
     // The toolkit's editor/select bindings plus the assembled application
     // actions the main screen dispatches (the same catalog the state
     // assembles). Session actions are unbound by default, so they receive
@@ -70,15 +71,17 @@ namespace {
         tui::KeybindingOverride{"app.session.new", {"f3"}},
         tui::KeybindingOverride{"app.session.tree", {"f4"}},
     };
+    for (auto& override : extra_overrides) {
+        request.overrides.push_back(std::move(override));
+    }
     auto resolved = tui::resolve_keybindings(std::move(request));
     REQUIRE(resolved);
     return resolved->registry;
 }
 
-[[nodiscard]] std::shared_ptr<coding_agent::tui::SharedKeybindings>
-test_keybinding_slot() {
-    return std::make_shared<coding_agent::tui::SharedKeybindings>(
-        test_keybindings());
+[[nodiscard]] std::shared_ptr<coding_agent::tui::SharedKeybindings> test_keybinding_slot(
+        std::vector<tui::KeybindingOverride> extra_overrides = {}) {
+    return std::make_shared<coding_agent::tui::SharedKeybindings>(test_keybindings(std::move(extra_overrides)));
 }
 
 [[nodiscard]] coding_agent::tui::LiveTheme test_theme() {
@@ -140,9 +143,10 @@ struct ViewFixture {
     coding_agent::tui::LiveTheme theme;
     std::unique_ptr<coding_agent::tui::InteractiveView> view;
 
-    explicit ViewFixture(
-            bool user_bash_available = false, std::unique_ptr<cch::tui::AutocompleteProvider> provider = nullptr)
-        : keybindings(test_keybinding_slot()), theme(test_theme()) {
+    explicit ViewFixture(bool user_bash_available = false,
+            std::unique_ptr<cch::tui::AutocompleteProvider> provider = nullptr,
+            std::vector<tui::KeybindingOverride> extra_overrides = {})
+        : keybindings(test_keybinding_slot(std::move(extra_overrides))), theme(test_theme()) {
         coding_agent::tui::InteractiveViewOptions options;
         options.keybindings = keybindings;
         options.on_invalidate = [this] { ++invalidations; };
@@ -156,6 +160,8 @@ struct ViewFixture {
                 return support::ExpectedVoid{};
             };
         options.footer_data_source = [] {
+            // The footer resolves the cwd against $HOME; an empty cwd throws
+            // in std::filesystem::absolute when HOME is set.
             coding_agent::tui::FooterData data;
             data.cwd = "/tmp";
             return data;
@@ -171,9 +177,7 @@ struct ViewFixture {
 
     /// Type one character through the editor so the submission payload
     /// carries a real sampled text and revision.
-    void type(std::string character) {
-        view->handle_input(key(std::move(character)));
-    }
+    void type(std::string character) { static_cast<void>(view->handle_input(key(std::move(character)))); }
 
     [[nodiscard]] const coding_agent::tui::ViewAction& last_action() const {
         REQUIRE_FALSE(actions.empty());
@@ -189,73 +193,73 @@ TEST_CASE(
     ViewFixture fixture;
     auto& view = *fixture.view;
 
-    view.handle_input(key("d", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("d", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 1);
     CHECK(std::holds_alternative<coding_agent::tui::ExitAction>(fixture.actions[0]));
 
-    view.handle_input(key("escape"));
+    static_cast<void>(view.handle_input(key("escape")));
     REQUIRE(fixture.actions.size() == 2);
     CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[1]));
 
-    view.handle_input(key("v", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("v", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 3);
     CHECK(std::holds_alternative<coding_agent::tui::ClipboardPasteAction>(fixture.actions[2]));
 
-    view.handle_input(key("up", /*ctrl=*/false, /*shift=*/false, /*alt=*/true));
+    static_cast<void>(view.handle_input(key("up", /*ctrl=*/false, /*shift=*/false, /*alt=*/true)));
     REQUIRE(fixture.actions.size() == 4);
     CHECK(std::holds_alternative<coding_agent::tui::DequeueAction>(fixture.actions[3]));
 
-    view.handle_input(key("z", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("z", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 5);
     CHECK(std::holds_alternative<coding_agent::tui::SuspendAction>(fixture.actions[4]));
 
-    view.handle_input(key("g", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("g", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 6);
     CHECK(std::holds_alternative<coding_agent::tui::ExternalEditorAction>(fixture.actions[5]));
 
-    view.handle_input(key("t", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("t", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 7);
     CHECK(std::holds_alternative<coding_agent::tui::ToggleThinkingAction>(fixture.actions[6]));
 
-    view.handle_input(key("tab", /*ctrl=*/false, /*shift=*/true));
+    static_cast<void>(view.handle_input(key("tab", /*ctrl=*/false, /*shift=*/true)));
     REQUIRE(fixture.actions.size() == 8);
     CHECK(std::holds_alternative<coding_agent::tui::CycleThinkingAction>(fixture.actions[7]));
 
-    view.handle_input(key("p", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("p", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 9);
     const auto& forward =
         std::get<coding_agent::tui::CycleModelAction>(fixture.actions[8]);
     CHECK(forward.direction == coding_agent::tui::ModelCycleDirection::Forward);
 
-    view.handle_input(key("p", /*ctrl=*/true, /*shift=*/true));
+    static_cast<void>(view.handle_input(key("p", /*ctrl=*/true, /*shift=*/true)));
     REQUIRE(fixture.actions.size() == 10);
     const auto& backward =
         std::get<coding_agent::tui::CycleModelAction>(fixture.actions[9]);
     CHECK(backward.direction == coding_agent::tui::ModelCycleDirection::Backward);
 
-    view.handle_input(key("l", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("l", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 11);
     CHECK(std::holds_alternative<coding_agent::tui::SelectModelAction>(fixture.actions[10]));
 
-    view.handle_input(key("x", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("x", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 12);
     CHECK(std::holds_alternative<coding_agent::tui::CopyLastMessageAction>(fixture.actions[11]));
 
     // Session actions are unbound by default and reachable through the
     // explicit overrides in the fixture registry.
-    view.handle_input(key("f1"));
+    static_cast<void>(view.handle_input(key("f1")));
     REQUIRE(fixture.actions.size() == 13);
     CHECK(std::holds_alternative<coding_agent::tui::ResumeSessionAction>(fixture.actions[12]));
 
-    view.handle_input(key("f2"));
+    static_cast<void>(view.handle_input(key("f2")));
     REQUIRE(fixture.actions.size() == 14);
     CHECK(std::holds_alternative<coding_agent::tui::ForkSessionAction>(fixture.actions[13]));
 
-    view.handle_input(key("f3"));
+    static_cast<void>(view.handle_input(key("f3")));
     REQUIRE(fixture.actions.size() == 15);
     CHECK(std::holds_alternative<coding_agent::tui::NewSessionAction>(fixture.actions[14]));
 
-    view.handle_input(key("f4"));
+    static_cast<void>(view.handle_input(key("f4")));
     REQUIRE(fixture.actions.size() == 16);
     CHECK(std::holds_alternative<coding_agent::tui::OpenTreeSelectorAction>(fixture.actions[15]));
 }
@@ -270,7 +274,7 @@ TEST_CASE(
     for (const auto& character : std::vector<std::string>{"h", "i"}) {
         fixture.type(character);
     }
-    view.handle_input(key("enter"));
+    static_cast<void>(view.handle_input(key("enter")));
     REQUIRE(fixture.actions.size() == 1);
     const auto& submit =
         std::get<coding_agent::tui::SubmitAction>(fixture.actions[0]);
@@ -280,7 +284,7 @@ TEST_CASE(
 
     // Follow-up (Alt+Enter) trims and queues with the FollowUp submission.
     fixture.type("!");
-    view.handle_input(key("enter", /*ctrl=*/false, /*shift=*/false, /*alt=*/true));
+    static_cast<void>(view.handle_input(key("enter", /*ctrl=*/false, /*shift=*/false, /*alt=*/true)));
     REQUIRE(fixture.actions.size() == 2);
     const auto& follow_up =
         std::get<coding_agent::tui::SubmitAction>(fixture.actions[1]);
@@ -299,7 +303,7 @@ TEST_CASE(
          std::vector<std::string>{"!", "l", "s"}) {
         fixture.type(character);
     }
-    view.handle_input(key("escape"));
+    static_cast<void>(view.handle_input(key("escape")));
     REQUIRE(fixture.actions.size() == 1);
     const auto& interrupt =
         std::get<coding_agent::tui::InterruptAction>(fixture.actions[0]);
@@ -314,10 +318,10 @@ TEST_CASE(
     ViewFixture fixture;
     auto& view = *fixture.view;
 
-    view.handle_input(key("p", /*ctrl=*/true)); // cycle forward
-    view.handle_input(key("l", /*ctrl=*/true)); // model selector
-    view.handle_input(key("escape"));           // interrupt
-    view.handle_input(key("d", /*ctrl=*/true)); // exit
+    static_cast<void>(view.handle_input(key("p", /*ctrl=*/true))); // cycle forward
+    static_cast<void>(view.handle_input(key("l", /*ctrl=*/true))); // model selector
+    static_cast<void>(view.handle_input(key("escape")));           // interrupt
+    static_cast<void>(view.handle_input(key("d", /*ctrl=*/true))); // exit
     REQUIRE(fixture.actions.size() == 4);
     CHECK(std::holds_alternative<coding_agent::tui::CycleModelAction>(fixture.actions[0]));
     CHECK(std::holds_alternative<coding_agent::tui::SelectModelAction>(fixture.actions[1]));
@@ -334,13 +338,13 @@ TEST_CASE(
     // Type text, then clear it with `app.clear` (ctrl+c): a toolkit-only
     // editor mutation with no ViewAction.
     fixture.type("h");
-    view.handle_input(key("c", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("c", /*ctrl=*/true)));
     REQUIRE(fixture.actions.empty());
     CHECK(view.editor_text().empty());
 
     // `app.tools.expand` (ctrl+o) also stays toolkit-only (its invalidation
     // flows through the separate coalescible render request).
-    view.handle_input(key("o", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("o", /*ctrl=*/true)));
     REQUIRE(fixture.actions.empty());
     CHECK(fixture.invalidations > 0);
 }
@@ -353,11 +357,11 @@ TEST_CASE(
 
     // A toolkit-only render path (tools expand) invalidates without emitting
     // an action; an application action does not invalidate by itself.
-    view.handle_input(key("o", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("o", /*ctrl=*/true)));
     CHECK(fixture.actions.empty());
     CHECK(fixture.invalidations == 1);
 
-    view.handle_input(key("p", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("p", /*ctrl=*/true)));
     CHECK(fixture.actions.size() == 1);
     CHECK(fixture.invalidations == 1);
 
@@ -377,7 +381,7 @@ TEST_CASE(
     fixture.sink_error = support::make_error(
         support::ErrorCode::Unknown,
         "fake admission failure");
-    view.handle_input(key("d", /*ctrl=*/true));
+    static_cast<void>(view.handle_input(key("d", /*ctrl=*/true)));
     // The action never reached the recorder; the failure is retained.
     CHECK(fixture.actions.empty());
 
@@ -421,4 +425,45 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
     CHECK(second_escape_outcome == cch::tui::InputAdmissionOutcome::Consumed);
     REQUIRE(fixture.actions.size() == 1);
     CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[0]));
+}
+
+TEST_CASE("an interrupt key overlapping cancellation and insertion keeps application-first precedence",
+        "[coding_agent][tui][view_actions][autocomplete]") {
+    // f6 means interrupt + selector cancellation, and it is also a printable
+    // key the editor would insert. With the menu closed, Interrupt Admission
+    // must win; only an open menu lets the editor consume it as cancellation.
+    ViewFixture fixture{false,
+            std::make_unique<SimpleSlashProvider>(),
+            {
+                    tui::KeybindingOverride{"app.interrupt", {"f6"}},
+                    tui::KeybindingOverride{"tui.select.cancel", {"f6"}},
+            }};
+    auto& view = *fixture.view;
+
+    const auto closed_outcome = view.handle_input(key("f6"));
+    CHECK(closed_outcome == cch::tui::InputAdmissionOutcome::Consumed);
+    REQUIRE(fixture.actions.size() == 1);
+    REQUIRE(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[0]));
+    // The editor never inserted the printable key ahead of Interrupt Admission.
+    CHECK(std::get<coding_agent::tui::InterruptAction>(fixture.actions[0]).request.pending_bash_text.empty());
+
+    // With the menu open the same key cancels autocomplete and emits nothing.
+    fixture.type("/");
+    const auto rendered_with_menu = view.render(80);
+    REQUIRE(rendered_with_menu);
+    bool has_menu_row = false;
+    for (const auto& line : rendered_with_menu->lines) {
+        if (line.starts_with("> /help")) has_menu_row = true;
+    }
+    REQUIRE(has_menu_row);
+
+    const auto open_outcome = view.handle_input(key("f6"));
+    CHECK(open_outcome == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(fixture.actions.size() == 1);
+
+    // The next f6 with the menu closed enters Interrupt Admission exactly once.
+    const auto second_outcome = view.handle_input(key("f6"));
+    CHECK(second_outcome == cch::tui::InputAdmissionOutcome::Consumed);
+    REQUIRE(fixture.actions.size() == 2);
+    CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[1]));
 }
