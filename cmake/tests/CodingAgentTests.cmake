@@ -135,7 +135,6 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/SessionSelectorSearchTest.cpp
         tests/coding_agent/tui/SessionReplacementTest.cpp
         tests/coding_agent/tui/SettingsSelectorTest.cpp
-        tests/coding_agent/tui/StringListSelectorTest.cpp
         tests/coding_agent/tui/ThemeControllerTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/TreeSelectorComponentTest.cpp

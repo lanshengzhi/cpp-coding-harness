@@ -91,7 +91,6 @@ cch_parity_declare_target(
         src/coding_agent/tui/SettingsFlowController.cpp
         src/coding_agent/tui/SettingsSelector.cpp
         src/coding_agent/tui/StatusIndicator.cpp
-        src/coding_agent/tui/StringListSelector.cpp
         src/coding_agent/tui/SuspendController.cpp
         src/coding_agent/tui/Theme.cpp
         src/coding_agent/tui/ThemeController.cpp
