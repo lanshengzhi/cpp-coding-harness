@@ -20,6 +20,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -380,4 +381,50 @@ TEST_CASE(
         REQUIRE(rendered);
         check_all_lines_bounded(*rendered, 6);
     }
+}
+
+TEST_CASE("ModelSelector delegates search editing to the SelectList and reports its cursor on the search row",
+        "[coding_agent][tui][model-selector][issue589]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            nullptr,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [](ai::Model) {},
+            [] {},
+            [&io] { (void)io; });
+
+    // Focus + render: the SelectList reports its cursor in its own line
+    // coordinates (row 0 for the search row); the component must translate
+    // that by the chrome rows it emits above the SelectList so the cursor
+    // lands on the rendered search line rather than the top of the modal.
+    selector->set_focused(true);
+    const auto rendered = selector->render(120);
+    REQUIRE(rendered);
+    const auto cursor = selector->cursor_location();
+    REQUIRE(cursor.has_value());
+    const auto screen = join_lines(rendered->lines);
+    const auto search_line = screen.find("> ");
+    REQUIRE(search_line != std::string::npos);
+    const auto search_row = static_cast<std::size_t>(
+            std::count(screen.begin(), screen.begin() + static_cast<std::ptrdiff_t>(search_line), '\n'));
+    CHECK(cursor->row == search_row);
+    CHECK(cursor->column == 2);
+
+    // Typing flows into the SelectList search: the cursor follows the typed
+    // text on the same translated row.
+    selector->handle_input(tui::KeyEvent{.key = "a"});
+    const auto narrowed = selector->render(120);
+    REQUIRE(narrowed);
+    const auto after = selector->cursor_location();
+    REQUIRE(after.has_value());
+    CHECK(after->row == cursor->row);
+    CHECK(after->column == 3);
 }
