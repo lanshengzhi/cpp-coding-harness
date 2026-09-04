@@ -377,3 +377,20 @@ TEST_CASE(
         check_all_lines_bounded(*rendered, width);
     }
 }
+
+TEST_CASE("ScopedModelsSelector reports the search cursor on the real search row",
+        "[coding_agent][tui][scoped-models][issue588]") {
+    auto theme = test_theme();
+    Recorder recorder;
+    auto selector = make_selector(theme, recorder);
+
+    selector.set_focused(true);
+    REQUIRE(selector.render(90));
+    const auto cursor = selector.cursor_location();
+    REQUIRE(cursor.has_value());
+    // The component renders border, title and session-only lines above the
+    // SelectList, whose search input is its own row 0: the reported row must
+    // land on the actual search line instead of floating at row 0.
+    CHECK(cursor->row == 3);
+    CHECK(cursor->column == 2);
+}
