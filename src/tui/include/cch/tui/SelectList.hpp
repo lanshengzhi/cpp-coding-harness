@@ -28,6 +28,14 @@ struct SelectItem {
     bool operator==(const SelectItem&) const = default;
 };
 
+/// The item's searchable text for fuzzy ranking: with `search_text` set the
+/// item is searched on that text alone; otherwise its non-empty label,
+/// description and value are joined by single spaces (in that order) so every
+/// visible part of the row is matchable. SelectList's default fuzzy ranking
+/// and selectors replicating that ranking through a `search_filter_hook`
+/// share this derivation.
+[[nodiscard]] std::string select_item_search_text(const SelectItem& item);
+
 using SelectItemSink = std::move_only_function<support::ExpectedVoid(const SelectItem&)>;
 using SelectCancelSink = std::move_only_function<support::ExpectedVoid()>;
 using SelectPrimaryTruncateHook = std::move_only_function<std::string(

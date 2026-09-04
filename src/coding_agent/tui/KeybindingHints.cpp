@@ -75,6 +75,14 @@ std::string raw_key_hint(
     return styled_hint_line(theme, format_key_text(key), description);
 }
 
+std::string generic_select_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
+    const auto key_label = [&keybindings](std::string_view action) {
+        const auto text = keybindings.key_text(action);
+        return text.empty() ? std::string{"Unbound"} : format_key_text(text);
+    };
+    return "↑↓ navigate  " + key_label("tui.select.confirm") + " select  " + key_label("tui.select.cancel") + " cancel";
+}
+
 KeybindingHints::KeybindingHints(
     const LiveTheme& theme,
     std::shared_ptr<const SharedKeybindings> keybindings,

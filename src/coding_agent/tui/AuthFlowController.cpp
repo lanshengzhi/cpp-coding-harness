@@ -44,17 +44,6 @@ namespace {
         model.api == agent::detail::kDefaultModel.api;
 }
 
-/// The hint row of the retired generic string-list selector, rebuilt as
-/// plain chrome text for the shared SelectList with the registry's live key
-/// labels (SelectList chrome rows carry no per-key styling).
-[[nodiscard]] std::string generic_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
-    const auto key_label = [&keybindings](std::string_view action) {
-        const auto text = keybindings.key_text(action);
-        return text.empty() ? std::string{"Unbound"} : format_key_text(text);
-    };
-    return "↑↓ navigate  " + key_label("tui.select.confirm") + " select  " + key_label("tui.select.cancel") + " cancel";
-}
-
 } // namespace
 
 AuthFlowController::AuthFlowController(
@@ -303,7 +292,7 @@ void AuthFlowController::show_login_auth_type_selector(
                     },
                     .keybindings = keybindings_->get(),
                     .title = title,
-                    .hint = generic_list_hint(*keybindings_->get()),
+                    .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = theme.foreground_hook(ThemeToken::Border),
             });
     presenter_->replace_prompt_slot(std::move(selector));
@@ -576,7 +565,7 @@ boost::asio::awaitable<support::Expected<std::string>> AuthFlowController::show_
                     },
                     .keybindings = keybindings_->get(),
                     .title = select.message,
-                    .hint = generic_list_hint(*keybindings_->get()),
+                    .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = theme.foreground_hook(ThemeToken::Border),
             });
     presenter_->replace_prompt_slot(std::move(selector));

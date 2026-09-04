@@ -91,9 +91,6 @@ public:
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
 
 private:
-    const LiveTheme& theme_; // must outlive this component.
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
-    AuthSelectorMode mode_;
     std::vector<AuthSelectorProvider> providers_;
     AuthProviderSelectSink on_select_;
     AuthProviderCancelSink on_cancel_;

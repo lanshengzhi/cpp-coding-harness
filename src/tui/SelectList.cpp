@@ -80,24 +80,6 @@ constexpr std::array<std::string_view, 6> kSelectListActions = {
     return item.label.empty() ? std::string_view(item.value) : std::string_view(item.label);
 }
 
-/// The item's searchable text for the default fuzzy ranking (#586). An item
-/// with `search_text` set is searched on that text alone; otherwise its
-/// non-empty label, description and value are joined by single spaces (in
-/// that order) so every visible part of the row is matchable.
-[[nodiscard]] std::string item_searchable_text(const SelectItem& item) {
-    if (item.search_text) return *item.search_text;
-    std::string text;
-    const auto append = [&text](std::string_view part) {
-        if (part.empty()) return;
-        if (!text.empty()) text.push_back(' ');
-        text.append(part);
-    };
-    append(item.label);
-    if (item.description) append(*item.description);
-    append(item.value);
-    return text;
-}
-
 /// Split chrome text (title/hint) into its rendered rows: every source line
 /// separated by '\n' becomes one row (empty lines preserved), dropping a
 /// trailing carriage return from each line so CRLF input renders cleanly.
@@ -119,6 +101,20 @@ constexpr std::array<std::string_view, 6> kSelectListActions = {
 }
 
 } // namespace
+
+std::string select_item_search_text(const SelectItem& item) {
+    if (item.search_text) return *item.search_text;
+    std::string text;
+    const auto append = [&text](std::string_view part) {
+        if (part.empty()) return;
+        if (!text.empty()) text.push_back(' ');
+        text.append(part);
+    };
+    append(item.label);
+    if (item.description) append(*item.description);
+    append(item.value);
+    return text;
+}
 
 struct SelectList::Impl {
     std::vector<SelectItem> items;
@@ -279,7 +275,7 @@ struct SelectList::Impl {
         std::vector<std::size_t> indices(items.size());
         std::iota(indices.begin(), indices.end(), 0);
         filtered_indices = fuzzy_filter(
-                std::move(indices), query, [&](std::size_t index) { return item_searchable_text(items[index]); });
+                std::move(indices), query, [&](std::size_t index) { return select_item_search_text(items[index]); });
     }
 
     /// Selection policy after a ranking change from typed input: the
