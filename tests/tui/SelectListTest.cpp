@@ -829,3 +829,20 @@ TEST_CASE("SelectList no-match row text is overridable and defaults to the toolk
     REQUIRE(default_search->lines.size() >= 2);
     CHECK(default_search->lines[1] == "  No matching commands");
 }
+
+TEST_CASE("select_item_search_text prefers search_text and joins the visible parts", "[tui][select-list]") {
+    // search_text overrides the label/description/value join entirely.
+    CHECK(cch::tui::select_item_search_text(cch::tui::SelectItem{
+                  .value = "value", .label = "Label", .description = "Details", .search_text = "hidden search text"}) ==
+            "hidden search text");
+    // Non-empty label, description and value join in that order.
+    CHECK(cch::tui::select_item_search_text(cch::tui::SelectItem{
+                  .value = "value", .label = "Label", .description = "Details"}) == "Label Details value");
+    // Empty components are skipped without leaving extra separators.
+    CHECK(cch::tui::select_item_search_text(
+                  cch::tui::SelectItem{.value = "value", .label = "", .description = "Details"}) == "Details value");
+    CHECK(cch::tui::select_item_search_text(
+                  cch::tui::SelectItem{.value = "", .label = "Label", .description = std::nullopt}) == "Label");
+    CHECK(cch::tui::select_item_search_text(
+                  cch::tui::SelectItem{.value = "", .label = "", .description = std::nullopt}) == "");
+}

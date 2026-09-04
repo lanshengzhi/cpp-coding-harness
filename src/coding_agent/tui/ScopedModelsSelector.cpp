@@ -59,22 +59,6 @@ constexpr std::array<std::string_view, 5> kScopedModelsSelectorActions = {
     return keys;
 }
 
-/// The item's searchable text, mirroring the SelectList's default join of the
-/// visible parts for items without an explicit `search_text`.
-[[nodiscard]] std::string item_search_text(const cch::tui::SelectItem& item) {
-    if (item.search_text) return *item.search_text;
-    std::string text;
-    const auto append = [&text](std::string_view part) {
-        if (part.empty()) return;
-        if (!text.empty()) text.push_back(' ');
-        text.append(part);
-    };
-    append(item.label);
-    if (item.description) append(*item.description);
-    append(item.value);
-    return text;
-}
-
 /// One `SelectItem` per scoped-model row in pi `getSortedIds` order: enabled
 /// ids first (in order), then the rest. The label carries the visible row
 /// (id, `[provider]`/`[unavailable]`, and the ✓/✗ status marker except in the
@@ -176,9 +160,10 @@ ScopedModelsSelectorComponent::ScopedModelsSelectorComponent(const LiveTheme& th
                                   std::vector<std::size_t> indices(items.size());
                                   std::iota(indices.begin(), indices.end(), 0);
                                   if (!query.empty()) {
-                                      indices = cch::tui::fuzzy_filter(std::move(indices),
-                                              query,
-                                              [&items](std::size_t index) { return item_search_text(items[index]); });
+                                      indices = cch::tui::fuzzy_filter(
+                                              std::move(indices), query, [&items](std::size_t index) {
+                                                  return cch::tui::select_item_search_text(items[index]);
+                                              });
                                   }
                                   filtered_ids_.clear();
                                   filtered_ids_.reserve(indices.size());

@@ -134,17 +134,6 @@ template <typename T, typename Coroutine>
 #endif
 }
 
-/// The hint row of the retired generic string-list selector, rebuilt as
-/// plain chrome text for the shared SelectList with the registry's live key
-/// labels (SelectList chrome rows carry no per-key styling).
-[[nodiscard]] std::string generic_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
-    const auto key_label = [&keybindings](std::string_view action) {
-        const auto text = keybindings.key_text(action);
-        return text.empty() ? std::string{"Unbound"} : coding_agent::tui::format_key_text(text);
-    };
-    return "↑↓ navigate  " + key_label("tui.select.confirm") + " select  " + key_label("tui.select.cancel") + " cancel";
-}
-
 } // namespace
 
 /// pi `startup-ui.ts` host lifecycle shared by the picker and the
@@ -311,7 +300,7 @@ boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
                                 },
                                 .keybindings = keybindings,
                                 .title = std::move(title),
-                                .hint = generic_list_hint(*keybindings),
+                                .hint = coding_agent::tui::generic_select_list_hint(*keybindings),
                                 .border_hook = live_theme.foreground_hook(cch::coding_agent::tui::ThemeToken::Border),
                         });
             });

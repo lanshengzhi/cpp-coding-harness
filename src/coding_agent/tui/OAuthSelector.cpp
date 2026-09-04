@@ -107,12 +107,11 @@ OAuthSelectorComponent::OAuthSelectorComponent(const LiveTheme& theme,
         AuthProviderSelectSink on_select,
         AuthProviderCancelSink on_cancel,
         std::string initial_search)
-    : theme_(theme), keybindings_(std::move(keybindings)), mode_(mode), providers_(std::move(providers)),
-      on_select_(std::move(on_select)), on_cancel_(std::move(on_cancel)),
-      select_list_(build_items(theme_, providers_),
+    : providers_(std::move(providers)), on_select_(std::move(on_select)), on_cancel_(std::move(on_cancel)),
+      select_list_(build_items(theme, providers_),
               cch::tui::SelectListOptions{
                       .max_visible = kMaxVisible,
-                      .theme = theme_.select_list_theme(),
+                      .theme = theme.select_list_theme(),
                       .on_select = [this](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
                           std::size_t index = 0;
                           const auto parsed =
@@ -127,23 +126,23 @@ OAuthSelectorComponent::OAuthSelectorComponent(const LiveTheme& theme,
                           if (on_cancel_) on_cancel_();
                           return {};
                       },
-                      .keybindings = keybindings_,
+                      .keybindings = std::move(keybindings),
                       .enable_search = true,
                       .initial_search = initial_search.empty() ? std::nullopt
                                                                : std::optional<std::string>{std::move(initial_search)},
-                      .title = theme_.foreground(ThemeToken::Accent,
+                      .title = theme.foreground(ThemeToken::Accent,
                               "\x1b[1m" +
-                                      std::string{mode_ == AuthSelectorMode::Login ? "Select provider to configure:"
-                                                                                   : "Select provider to logout:"} +
+                                      std::string{mode == AuthSelectorMode::Login ? "Select provider to configure:"
+                                                                                  : "Select provider to logout:"} +
                                       "\x1b[22m"),
-                      .border_hook = theme_.foreground_hook(ThemeToken::Border),
+                      .border_hook = theme.foreground_hook(ThemeToken::Border),
                       // The SelectList's generic no-match row ("No matching
                       // commands") carries the mode-specific message: the
                       // selector's pi wording depends only on the mode and
                       // whether any provider exists, both fixed at
                       // construction.
                       .no_match_text = providers_.empty()
-                                               ? (mode_ == AuthSelectorMode::Login
+                                               ? (mode == AuthSelectorMode::Login
                                                                  ? "  No providers available"
                                                                  : "  No providers logged in. Use /login first.")
                                                : "  No matching providers",
