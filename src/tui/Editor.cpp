@@ -1,7 +1,7 @@
 #include <cch/tui/Editor.hpp>
 
+#include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Utils.hpp>
-
 #include "tui/EditorCompletionSession.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "tui/TextBuffer.hpp"
@@ -301,10 +301,30 @@ struct Editor::Impl {
         update_completion_effect(std::move(*result), request_view, lock);
     }
 
+    std::shared_ptr<EditorRenderRequestSink> render_request_sink;
+
+    void request_render(std::unique_lock<std::mutex>& lock) {
+        if (!render_request_sink || !*render_request_sink) return;
+        outside_impl_lock(lock, [sink = render_request_sink] {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+            try {
+#endif
+                if (*sink) static_cast<void>((*sink)());
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+            } catch (...) {
+            }
+#endif
+        });
+    }
+
     void cancel_autocomplete(std::unique_lock<std::mutex>& lock) {
+        const bool was_open = autocomplete_menu.open;
         const auto request_view = completion_view();
         handle_completion_interaction(
                 detail::EditorCompletionInteraction{detail::EditorCompletionCancel{}}, request_view, lock);
+        if (was_open) {
+            request_render(lock);
+        }
     }
 
     /// Whether the text before the cursor ends in a token starting with one
@@ -463,6 +483,7 @@ struct Editor::Impl {
     }
 
     void handle_tab_completion(std::unique_lock<std::mutex>& lock) {
+        const bool was_open = autocomplete_menu.open;
         const auto text_before_cursor = line_prefix_before_cursor();
         if (in_slash_command_context(text_before_cursor) &&
             detail::trim_start_ascii(text_before_cursor).find(' ') == std::string_view::npos) {
@@ -470,15 +491,25 @@ struct Editor::Impl {
         } else {
             request_autocomplete(true, true, lock);
         }
+        if (!was_open && autocomplete_menu.open) {
+            request_render(lock);
+        }
     }
 
     void handle_completion_menu_action(detail::EditorCompletionMenuAction action, std::unique_lock<std::mutex>& lock) {
         if (!autocomplete_menu.open) return;
+        const auto previous_selected = autocomplete_menu.selected_index;
         const auto request_view = completion_view();
         handle_completion_interaction(
                 detail::EditorCompletionInteraction{detail::EditorCompletionMenuInteraction{.action = action}},
                 request_view,
                 lock);
+        if (action == detail::EditorCompletionMenuAction::MoveUp ||
+                action == detail::EditorCompletionMenuAction::MoveDown) {
+            if (previous_selected != autocomplete_menu.selected_index) {
+                request_render(lock);
+            }
+        }
     }
 
     void apply_completion_result(const AutocompleteApplyResult& result, std::string_view prefix) {
@@ -853,6 +884,7 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
     impl_->options = std::move(options);
     impl_->on_change = std::move(on_change);
     impl_->on_submit = std::move(on_submit);
+    impl_->render_request_sink = std::make_shared<EditorRenderRequestSink>(std::move(impl_->options.render_request));
     const auto weak_impl = std::weak_ptr<Impl>{impl_};
     impl_->completion_session = std::make_unique<detail::EditorCompletionSession>(
             std::move(impl_->options.autocomplete_debounce_timer),
@@ -860,7 +892,10 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
                 if (const auto impl = weak_impl.lock()) impl->on_completion_wake(impl);
                 return {};
             },
-            std::move(impl_->options.autocomplete_render_request));
+            [sink = impl_->render_request_sink]() -> support::ExpectedVoid {
+                if (*sink) return (*sink)();
+                return {};
+            });
 }
 
 Editor::Editor(Editor&& other) noexcept : impl_(std::move(other.impl_)) {
@@ -873,6 +908,7 @@ void Editor::release_autocomplete_cycles() noexcept {
     auto operation = owner->serialized_operation(std::move(owner));
     auto& impl = operation.impl;
     std::unique_lock lock(impl.impl_mutex);
+    if (impl.render_request_sink) *impl.render_request_sink = nullptr;
     impl.outside_impl_lock(lock, [session = impl.completion_session.get()] { session->close(); });
 }
 
@@ -963,7 +999,11 @@ void Editor::set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> pro
                 setup = session->set_provider(std::move(provider));
             });
     impl.set_autocomplete_trigger_characters(setup.trigger_characters);
+    const bool was_open = impl.autocomplete_menu.open;
     impl.autocomplete_menu = std::move(setup.menu);
+    if (was_open || impl.autocomplete_menu.open) {
+        impl.request_render(lock);
+    }
 }
 
 void Editor::set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings) {
@@ -974,27 +1014,6 @@ void Editor::set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindin
         impl.options.keybindings = std::move(keybindings);
     }
     invalidate();
-}
-
-bool Editor::autocomplete_open() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    std::lock_guard lock(impl.impl_mutex);
-    return impl.autocomplete_menu.open;
-}
-
-std::vector<AutocompleteItem> Editor::autocomplete_items() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    std::lock_guard lock(impl.impl_mutex);
-    return impl.autocomplete_menu.items;
-}
-
-std::size_t Editor::autocomplete_selected_index() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    std::lock_guard lock(impl.impl_mutex);
-    return impl.autocomplete_menu.selected_index;
 }
 
 support::Expected<RenderResult> Editor::render(std::size_t width) {
@@ -1063,6 +1082,36 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
         auto styled_border = detail::apply_text_style(impl.theme.border, std::move(bottom_border), "Editor border");
         if (!styled_border) return std::unexpected(styled_border.error());
         result.push_back(std::move(*styled_border));
+    }
+    if (impl.autocomplete_menu.open && !impl.autocomplete_menu.items.empty()) {
+        constexpr std::size_t kMaxAutocompleteRows = 5;
+        const auto text_lines_count = result.size();
+        const auto remainder_height =
+                impl.available_height > text_lines_count ? impl.available_height - text_lines_count : 0;
+        const auto autocomplete_capacity = std::min(kMaxAutocompleteRows, remainder_height);
+        if (autocomplete_capacity > 0) {
+            const auto selected = impl.autocomplete_menu.selected_index;
+            const auto first_autocomplete = selected < autocomplete_capacity || autocomplete_capacity == 0
+                                                    ? 0
+                                                    : selected - autocomplete_capacity + 1;
+            const auto autocomplete_count = std::min(autocomplete_capacity,
+                    impl.autocomplete_menu.items.size() -
+                            std::min(first_autocomplete, impl.autocomplete_menu.items.size()));
+            for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
+                const auto index = first_autocomplete + offset;
+                std::string text = index == selected ? "> /" : "  /";
+                text += impl.autocomplete_menu.items[index].label;
+                if (!impl.autocomplete_menu.items[index].description.empty()) {
+                    text += " — " + impl.autocomplete_menu.items[index].description;
+                }
+                TruncatedText item{std::move(text)};
+                if (auto rendered = item.render(width); !rendered) {
+                    return std::unexpected(rendered.error());
+                } else if (!rendered->lines.empty()) {
+                    result.push_back(std::move(rendered->lines.front()));
+                }
+            }
+        }
     }
     return RenderResult{.lines = std::move(result)};
 }
@@ -1310,7 +1359,7 @@ void Editor::set_available_height(std::size_t rows) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     std::lock_guard lock(impl.impl_mutex);
-    impl.available_height = std::max<std::size_t>(1, rows);
+    impl.available_height = rows;
 }
 
 } // namespace cch::tui

@@ -25,41 +25,42 @@ using interactive_view_detail::queued_editor_text;
 } // namespace
 
 InteractiveView::InteractiveView(InteractiveViewOptions options)
-    : keybindings_(std::move(options.keybindings)),
-      on_invalidate_(std::move(options.on_invalidate)),
-      action_sink_(std::move(options.action_sink)),
-      footer_data_source_(std::move(options.footer_data_source)),
+    : keybindings_(std::move(options.keybindings)), on_invalidate_(std::move(options.on_invalidate)),
+      action_sink_(std::move(options.action_sink)), footer_data_source_(std::move(options.footer_data_source)),
       user_bash_available_(options.user_bash_available),
       header_(*options.theme, keybindings_, options.user_bash_available, options.clipboard_paste_available),
-      resources_(*options.theme),
-      chat_(*options.theme, keybindings_),
-      footer_(*options.theme),
-      theme_(options.theme),
+      resources_(*options.theme), chat_(*options.theme, keybindings_), footer_(*options.theme), theme_(options.theme),
       editor_(
-          cch::tui::EditorOptions{
-              .keybindings = keybindings_->get(),
-              .autocomplete_debounce_timer = std::move(options.autocomplete_debounce_timer),
-              .autocomplete_render_request = std::move(options.autocomplete_render_request),
-          },
-          [this](std::string text) -> support::ExpectedVoid {
-              // Editor submission clears before invoking its submit sink;
-              // keep that notification on the sampled text's revision.
-              if (!text.empty()) ++editor_revision_;
-              invoke_invalidate();
-              return {};
-          },
-          [this](std::string text) -> support::ExpectedVoid {
-              emit_action(
-                  SubmitAction{
-                      .request = EditorSubmissionRequest{
-                          .text = std::move(text),
-                          .editor_revision = editor_revision_,
+              cch::tui::EditorOptions{
+                      .keybindings = keybindings_->get(),
+                      .autocomplete_debounce_timer = std::move(options.autocomplete_debounce_timer),
+                      .render_request =
+                              [this, upstream = std::move(options.render_request)]() mutable -> support::ExpectedVoid {
+                          invoke_invalidate();
+                          if (upstream) return upstream();
+                          return {};
                       },
-                      .submission = InputSubmission::Ordinary,
-                  },
-                  "Native TUI submit action failed");
-              return {};
-          }) {
+              },
+              [this](std::string text) -> support::ExpectedVoid {
+                  // Editor submission clears before invoking its submit sink;
+                  // keep that notification on the sampled text's revision.
+                  if (!text.empty()) ++editor_revision_;
+                  invoke_invalidate();
+                  return {};
+              },
+              [this](std::string text) -> support::ExpectedVoid {
+                  emit_action(
+                          SubmitAction{
+                                  .request =
+                                          EditorSubmissionRequest{
+                                                  .text = std::move(text),
+                                                  .editor_revision = editor_revision_,
+                                          },
+                                  .submission = InputSubmission::Ordinary,
+                          },
+                          "Native TUI submit action failed");
+                  return {};
+              }) {
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
@@ -441,7 +442,6 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         status_lines.size() + footer_lines.size();
 
     std::vector<std::string> editor_lines;
-    std::vector<std::string> autocomplete_lines;
     if (editor_replacement_) {
         // pi's editorContainer swap: the login dialog/selector renders in
         // the editor slot with no autocomplete rows.
@@ -451,9 +451,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             editor_lines = std::move(replaced->lines);
         }
     } else {
-        editor_.set_available_height(available_rows_ > fixed_rows
-            ? available_rows_ - fixed_rows
-            : 1);
+        editor_.set_available_height(available_rows_ > fixed_rows ? available_rows_ - fixed_rows : 0);
         // The editor enters Bash mode as soon as the trimmed input begins
         // with `!` (where User Bash dispatch is available). The border color
         // follows the same transition: bash mode uses the bashMode token,
@@ -474,34 +472,6 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             return std::unexpected(editor.error());
         } else {
             editor_lines = std::move(editor->lines);
-        }
-
-        const auto autocomplete = editor_.autocomplete_items();
-        const auto selected = editor_.autocomplete_selected_index();
-        constexpr std::size_t kMaxAutocompleteRows = 5;
-        const auto autocomplete_capacity = available_rows_ > fixed_rows + editor_lines.size()
-            ? std::min(kMaxAutocompleteRows, available_rows_ - fixed_rows - editor_lines.size())
-            : 0;
-        const auto first_autocomplete = selected < autocomplete_capacity || autocomplete_capacity == 0
-            ? 0
-            : selected - autocomplete_capacity + 1;
-        const auto autocomplete_count = std::min(
-            autocomplete_capacity,
-            autocomplete.size() - std::min(first_autocomplete, autocomplete.size()));
-        autocomplete_lines.reserve(autocomplete_count);
-        for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
-            const auto index = first_autocomplete + offset;
-            std::string text = index == selected ? "> /" : "  /";
-            text += autocomplete[index].label;
-            if (!autocomplete[index].description.empty()) {
-                text += " — " + autocomplete[index].description;
-            }
-            cch::tui::TruncatedText item{std::move(text)};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                autocomplete_lines.push_back(std::move(rendered->lines.front()));
-            }
         }
     }
     // The full conversation passes through to the terminal's native
@@ -541,14 +511,9 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         std::make_move_iterator(status_lines.begin()),
         std::make_move_iterator(status_lines.end()));
     editor_row_offset_ = transcript_result.lines.size();
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(editor_lines.begin()),
-        std::make_move_iterator(editor_lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(autocomplete_lines.begin()),
-        std::make_move_iterator(autocomplete_lines.end()));
+    transcript_result.lines.insert(transcript_result.lines.end(),
+            std::make_move_iterator(editor_lines.begin()),
+            std::make_move_iterator(editor_lines.end()));
     transcript_result.lines.insert(
         transcript_result.lines.end(),
         std::make_move_iterator(footer_lines.begin()),
@@ -691,14 +656,7 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
     }
-    const auto autocomplete_was_open = editor_.autocomplete_open();
-    const auto previous_selection = editor_.autocomplete_selected_index();
-    const auto outcome = editor_.handle_input(input);
-    if (autocomplete_was_open != editor_.autocomplete_open() ||
-        previous_selection != editor_.autocomplete_selected_index()) {
-        invoke_invalidate();
-    }
-    return outcome;
+    return editor_.handle_input(input);
 }
 
 void InteractiveView::set_focused(bool focused) {
