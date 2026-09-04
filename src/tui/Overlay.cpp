@@ -157,29 +157,23 @@ void Overlay::invalidate() {
     for (const auto& child : impl_->children_) child->invalidate();
 }
 
-void Overlay::handle_input(const InputEventVariant& input) {
-    // Forward to focused child that handles input
+InputAdmissionOutcome Overlay::handle_input(const InputEventVariant& input) {
     // Non-capturing overlays skip input handling (handled by Tui dispatch)
-    if (impl_->options.non_capturing) return;
+    if (impl_->options.non_capturing) return InputAdmissionOutcome::Unhandled;
+
+    const auto* key = std::get_if<KeyEvent>(&input);
+    const bool is_release = key != nullptr && key->type == KeyEventType::Release;
 
     if (impl_->focused_child_ != nullptr) {
         auto* input_handler = dynamic_cast<InputHandler*>(impl_->focused_child_);
         if (input_handler != nullptr) {
-            if (const auto* key = std::get_if<KeyEvent>(&input);
-                key != nullptr && key->type == KeyEventType::Release && !input_handler->accepts_key_releases()) {
-                return;
-            }
-            input_handler->handle_input(input);
+            const auto outcome = input_handler->handle_input(input);
+            if (is_release) return outcome;
+            return InputAdmissionOutcome::Consumed;
         }
     }
-}
-
-bool Overlay::accepts_key_releases() const {
-    if (impl_->focused_child_ != nullptr) {
-        auto* input_handler = dynamic_cast<InputHandler*>(impl_->focused_child_);
-        if (input_handler != nullptr) return input_handler->accepts_key_releases();
-    }
-    return false;
+    if (is_release) return InputAdmissionOutcome::Unhandled;
+    return InputAdmissionOutcome::Consumed;
 }
 
 void Overlay::set_focused(bool focused) {

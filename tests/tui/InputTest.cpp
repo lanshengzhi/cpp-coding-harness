@@ -412,3 +412,26 @@ TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][i
     REQUIRE(terminal.inject_input("\x1b[200~pa\x1b[201~"));
     CHECK(input_ptr->value() == "hellopa");
 }
+
+TEST_CASE("Input outcome-based admission proves boundary no-ops and side-effect freedom", "[tui][input]") {
+    cch::tui::Input input;
+
+    // 1. Recognized boundary no-op: cursorLeft at start of input is consumed.
+    input.set_value("");
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "left"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.value().empty());
+
+    // 2. Recognized boundary no-op: undo on empty undo stack is consumed.
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "-", .ctrl = true}) ==
+            cch::tui::InputAdmissionOutcome::Consumed);
+
+    // 3. Unhandled side-effect freedom: key releases are unhandled and modify no state.
+    input.set_value("hello");
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "a", .type = cch::tui::KeyEventType::Release}) ==
+            cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(input.value() == "hello");
+
+    // 4. Unhandled side-effect freedom: unrecognized non-printable keys are unhandled and modify no state.
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "f12"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(input.value() == "hello");
+}

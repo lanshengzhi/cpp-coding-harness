@@ -74,10 +74,10 @@ UserMessageSelectorComponent::UserMessageSelectorComponent(
     selected_index_ = initial_index;
 }
 
-void UserMessageSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+cch::tui::InputAdmissionOutcome UserMessageSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr) {
-        return;
+    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
     }
     if (keybindings_->matches(*key, "tui.select.up")) {
         if (!messages_.empty()) {
@@ -86,7 +86,7 @@ void UserMessageSelectorComponent::handle_input(const cch::tui::InputEventVarian
                 : selected_index_ - 1;
         }
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.down")) {
         if (!messages_.empty()) {
@@ -95,20 +95,21 @@ void UserMessageSelectorComponent::handle_input(const cch::tui::InputEventVarian
                 : selected_index_ + 1;
         }
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.confirm")) {
         if (!messages_.empty() && on_select_) {
             on_select_(messages_[selected_index_].entry_id);
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.cancel")) {
         if (on_cancel_) {
             on_cancel_();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 support::Expected<cch::tui::RenderResult> UserMessageSelectorComponent::render(

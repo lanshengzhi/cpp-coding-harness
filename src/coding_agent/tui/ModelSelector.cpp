@@ -392,23 +392,27 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
     return result;
 }
 
-void ModelSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+cch::tui::InputAdmissionOutcome ModelSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) return;
+    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
+    }
 
     if (key != nullptr && keybindings_->matches(*key, "tui.input.tab")) {
         // pi: the scope toggle only exists when scoped models are present,
         // and it pre-empts SelectList so the scope marker re-accents and the
         // item set rebuilds on the next render.
         std::lock_guard lock(mutex_);
-        if (scoped_model_items_.empty()) return;
-        set_scope(!scope_scoped_);
-        return;
+        if (!scoped_model_items_.empty()) {
+            set_scope(!scope_scoped_);
+        }
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Everything else — navigation, confirm/cancel, and search editing —
     // belongs to the SelectList.
-    select_list_.handle_input(input);
+    static_cast<void>(select_list_.handle_input(input));
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 void ModelSelectorComponent::set_focused(bool focused) {

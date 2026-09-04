@@ -46,13 +46,20 @@ public:
     virtual void invalidate() = 0;
 };
 
+/// Outcome of offering a decoded terminal input event to an input handler.
+enum class InputAdmissionOutcome {
+    /// The handler did not claim the event; propagation continues.
+    Unhandled,
+    /// The handler claimed the event; propagation stops.
+    Consumed,
+};
+
 /// An optional Component capability for receiving decoded terminal input.
 class InputHandler {
 public:
     virtual ~InputHandler() = default;
 
-    virtual void handle_input(const InputEventVariant& input) = 0;
-    [[nodiscard]] virtual bool accepts_key_releases() const = 0;
+    virtual InputAdmissionOutcome handle_input(const InputEventVariant& input) = 0;
 };
 
 /// An optional Component capability for receiving TUI focus.

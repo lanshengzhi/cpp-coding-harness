@@ -888,3 +888,24 @@ TEST_CASE("select_item_search_text prefers search_text and joins the visible par
     CHECK(cch::tui::select_item_search_text(
                   cch::tui::SelectItem{.value = "", .label = "", .description = std::nullopt}) == "");
 }
+
+TEST_CASE("SelectList outcome-based admission proves selector forwarding and boundary ownership",
+        "[tui][select-list][input]") {
+    // 1. Boundary no-op on empty list: navigation returns Consumed
+    cch::tui::SelectList empty_list({}, cch::tui::SelectListOptions{});
+    CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "up"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "down"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "pageUp"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "pageDown"}) == cch::tui::InputAdmissionOutcome::Consumed);
+
+    // 2. Unhandled side-effect freedom without search: unrecognized key returns Unhandled
+    CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "x"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "up", .type = cch::tui::KeyEventType::Release}) ==
+            cch::tui::InputAdmissionOutcome::Unhandled);
+
+    // 3. Selector forwarding with search: typing forwards to embedded input and returns Consumed
+    cch::tui::SelectList search_list(
+            {{.value = "alpha", .label = "Alpha"}}, cch::tui::SelectListOptions{.enable_search = true});
+    CHECK(search_list.handle_input(cch::tui::KeyEvent{.key = "a"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(search_list.search_query() == "a");
+}

@@ -76,15 +76,12 @@ public:
         ++invalidations;
     }
 
-    void handle_input(const cch::tui::InputEventVariant& event) override {
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& event) override {
         const auto* key = std::get_if<cch::tui::KeyEvent>(&event);
-        if (key == nullptr || key->key != "q") return;
+        if (key == nullptr || key->key != "q") return cch::tui::InputAdmissionOutcome::Unhandled;
         ++inputs;
         if (tui != nullptr) stop_succeeded = tui->stop().has_value();
-    }
-
-    [[nodiscard]] bool accepts_key_releases() const override {
-        return false;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     void set_focused(bool focused) override {

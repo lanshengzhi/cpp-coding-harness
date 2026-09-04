@@ -277,87 +277,89 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
 
 void Input::invalidate() {}
 
-void Input::handle_input(const InputEventVariant& input) {
+InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
     if (const auto* paste = std::get_if<PasteEvent>(&input)) {
         impl_->handle_paste(paste->text);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     const auto* event = std::get_if<KeyEvent>(&input);
-    if (event == nullptr || event->type == KeyEventType::Release) return;
+    if (event == nullptr || event->type == KeyEventType::Release) {
+        return InputAdmissionOutcome::Unhandled;
+    }
     const auto action = impl_->options.keybindings->first_match(*event, kInputActions);
     if (action == "tui.select.cancel") {
         impl_->fire_escape();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.undo") {
         impl_->buffer.undo();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.submit") {
         impl_->fire_submit();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteCharBackward") {
         impl_->buffer.backspace();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteCharForward") {
         impl_->buffer.forward_delete();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordBackward") {
         impl_->buffer.delete_word_backward();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordForward") {
         impl_->buffer.delete_word_forward();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteToLineStart") {
         impl_->buffer.kill_to_line_start();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteToLineEnd") {
         impl_->buffer.kill_to_line_end();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.yank") {
         impl_->buffer.yank();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.yankPop") {
         impl_->buffer.yank_pop();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLeft") {
         impl_->buffer.move_left();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorRight") {
         impl_->buffer.move_right();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLineStart") {
         impl_->buffer.move_to_line_start();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLineEnd") {
         impl_->buffer.move_to_line_end();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordLeft") {
         impl_->buffer.move_word_backward();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordRight") {
         impl_->buffer.move_word_forward();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
-    if (detail::is_printable(*event)) impl_->buffer.insert_character(detail::printable_text(*event));
-}
-
-bool Input::accepts_key_releases() const {
-    return false;
+    if (detail::is_printable(*event)) {
+        impl_->buffer.insert_character(detail::printable_text(*event));
+        return InputAdmissionOutcome::Consumed;
+    }
+    return InputAdmissionOutcome::Unhandled;
 }
 
 void Input::set_focused(bool focused) {

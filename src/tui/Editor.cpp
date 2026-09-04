@@ -1069,17 +1069,19 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
 
 void Editor::invalidate() {}
 
-void Editor::handle_input(const InputEventVariant& input) {
+InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     auto operation = this->impl_->serialized_operation(this->impl_);
     auto& impl = operation.impl;
     std::unique_lock lock(impl.impl_mutex);
     impl.wake_autocomplete(lock);
     if (const auto* paste = std::get_if<PasteEvent>(&input)) {
         impl.paste(paste->text, lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     const auto* event = std::get_if<KeyEvent>(&input);
-    if (event == nullptr || event->type == KeyEventType::Release) return;
+    if (event == nullptr || event->type == KeyEventType::Release) {
+        return InputAdmissionOutcome::Unhandled;
+    }
     const auto matches = [&impl, event](std::string_view action_id) {
         return impl.options.keybindings->matches(*event, action_id);
     };
@@ -1087,14 +1089,15 @@ void Editor::handle_input(const InputEventVariant& input) {
     if (impl.jump_direction) {
         if (matches("tui.editor.jumpForward") || matches("tui.editor.jumpBackward")) {
             impl.jump_direction.reset();
-            return;
+            return InputAdmissionOutcome::Consumed;
         }
         if (detail::is_printable(*event)) {
             impl.jump_to(detail::printable_text(*event), *impl.jump_direction);
             impl.jump_direction.reset();
-            return;
+            return InputAdmissionOutcome::Consumed;
         }
         impl.jump_direction.reset();
+        return InputAdmissionOutcome::Consumed;
     }
 
     // The open completion menu's table dispatches ahead of the main table
@@ -1103,22 +1106,22 @@ void Editor::handle_input(const InputEventVariant& input) {
         if (const auto menu_action = impl.options.keybindings->first_match(*event, kCompletionMenuActions)) {
             if (*menu_action == "tui.select.cancel") {
                 impl.cancel_autocomplete(lock);
-                return;
+                return InputAdmissionOutcome::Consumed;
             }
             if (*menu_action == "tui.select.up") {
                 impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveUp, lock);
-                return;
+                return InputAdmissionOutcome::Consumed;
             }
             if (*menu_action == "tui.select.down") {
                 impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::MoveDown, lock);
-                return;
+                return InputAdmissionOutcome::Consumed;
             }
             if (*menu_action == "tui.input.tab") {
                 impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Accept, lock);
-                return;
+                return InputAdmissionOutcome::Consumed;
             }
             impl.handle_completion_menu_action(detail::EditorCompletionMenuAction::Confirm, lock);
-            return;
+            return InputAdmissionOutcome::Consumed;
         }
     }
 
@@ -1128,72 +1131,72 @@ void Editor::handle_input(const InputEventVariant& input) {
     const auto action = impl.options.keybindings->first_match(*event, kEditorActions);
     if (action == "tui.input.tab") {
         impl.handle_tab_completion(lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.undo") {
         impl.undo_once(lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.jumpForward" || action == "tui.editor.jumpBackward") {
         impl.jump_direction =
                 action == "tui.editor.jumpForward" ? Impl::JumpDirection::Forward : Impl::JumpDirection::Backward;
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteCharBackward" || matches_key(*event, "shift+backspace")) {
         impl.erase_at_cursor(true, lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteCharForward" || matches_key(*event, "shift+delete")) {
         impl.erase_at_cursor(false, lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordBackward") {
         impl.delete_word(false);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordForward") {
         impl.delete_word(true);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteToLineStart") {
         impl.kill_to_line(false);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteToLineEnd") {
         impl.kill_to_line(true);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.yank") {
         impl.yank();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.yankPop") {
         impl.yank_pop();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLineStart") {
         impl.move_to_line_start();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLineEnd") {
         impl.move_to_line_end();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLeft") {
         impl.move_left(lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorRight") {
         impl.move_right(lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordLeft") {
         impl.move_word(false);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordRight") {
         impl.move_word(true);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorUp") {
         const auto cur = impl.buffer.cursor();
@@ -1205,7 +1208,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         } else {
             impl.move_vertical(-1, lock);
         }
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorDown") {
         if (impl.history_index.has_value() && impl.on_last_visual_line()) {
@@ -1215,37 +1218,34 @@ void Editor::handle_input(const InputEventVariant& input) {
         } else {
             impl.move_vertical(1, lock);
         }
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageUp") {
         for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
             impl.move_vertical(-1, lock);
         }
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageDown") {
         for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
             impl.move_vertical(1, lock);
         }
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.newLine") {
         impl.cancel_autocomplete(lock);
         impl.insert_text("\n", true, lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.submit") {
         impl.submit(lock);
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
-    if (detail::is_printable(*event)) impl.insert_character(detail::printable_text(*event), lock);
-}
-
-bool Editor::accepts_key_releases() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    std::lock_guard lock(impl.impl_mutex);
-    return false;
+    if (detail::is_printable(*event)) {
+        impl.insert_character(detail::printable_text(*event), lock);
+        return InputAdmissionOutcome::Consumed;
+    }
+    return InputAdmissionOutcome::Unhandled;
 }
 
 void Editor::set_focused(bool focused) {
