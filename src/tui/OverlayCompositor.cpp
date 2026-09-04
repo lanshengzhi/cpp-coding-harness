@@ -281,7 +281,8 @@ support::ExpectedVoid OverlayCompositor::composite(
     return {};
 }
 
-bool OverlayCompositor::dispatch_input(const InputEventVariant& event, TerminalDimensions viewport) const {
+InputAdmissionOutcome OverlayCompositor::dispatch_input(
+        const InputEventVariant& event, TerminalDimensions viewport) const {
     // Try overlays first (in reverse z-order, topmost first)
     auto visible = sorted_visible(viewport);
     for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
@@ -290,15 +291,13 @@ bool OverlayCompositor::dispatch_input(const InputEventVariant& event, TerminalD
         if (overlay->options().non_capturing) continue;
 
         if (auto* input_handler = dynamic_cast<InputHandler*>(overlay)) {
-            if (const auto* key = std::get_if<KeyEvent>(&event);
-                key != nullptr && key->type == KeyEventType::Release && !input_handler->accepts_key_releases()) {
-                continue;
+            const auto outcome = input_handler->handle_input(event);
+            if (outcome == InputAdmissionOutcome::Consumed) {
+                return InputAdmissionOutcome::Consumed;
             }
-            input_handler->handle_input(event);
-            return true;
         }
     }
-    return false;
+    return InputAdmissionOutcome::Unhandled;
 }
 
 Overlay* OverlayCompositor::topmost_focusable(TerminalDimensions viewport) const {

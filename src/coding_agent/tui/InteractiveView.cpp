@@ -562,17 +562,17 @@ void InteractiveView::invalidate() {
     if (editor_replacement_) editor_replacement_->invalidate();
 }
 
-void InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
+cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
     std::lock_guard lock(mutex_);
     if (editor_replacement_) {
         // pi routes every key to the focused dialog/selector; app-level
         // bindings resume when the editor is restored. pi's TUI
         // re-renders after each input event, so the view invalidates.
         if (auto* handler = dynamic_cast<cch::tui::InputHandler*>(editor_replacement_.get())) {
-            handler->handle_input(input);
+            static_cast<void>(handler->handle_input(input));
             invoke_invalidate();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
     if (key != nullptr && key->type != cch::tui::KeyEventType::Release) {
@@ -582,13 +582,14 @@ void InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
         const auto& keys = keybindings_->registry();
         if (keys.matches(*key, "app.exit") && editor_.expanded_text().empty()) {
             emit_action(ExitAction{}, "Native TUI exit action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
-        const auto editor_cancels_interrupt =
-            editor_.autocomplete_open() &&
-            keys.matches(*key, "tui.select.cancel");
-        if (keys.matches(*key, "app.interrupt") &&
-            !editor_cancels_interrupt) {
+        if (keys.matches(*key, "app.interrupt")) {
+            if (keys.matches(*key, "tui.select.cancel")) {
+                if (editor_.handle_input(input) == cch::tui::InputAdmissionOutcome::Consumed) {
+                    return cch::tui::InputAdmissionOutcome::Consumed;
+                }
+            }
             // Autocomplete cancellation stays in the view. Interrupt
             // precedence is pi's onEscape chain and owns every later
             // decision; it receives Bash mode as it existed at key-press
@@ -602,43 +603,43 @@ void InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
                     },
                 },
                 "Native TUI interrupt action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.message.followUp")) {
             invoke_follow_up();
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.clipboard.pasteImage")) {
             emit_action(ClipboardPasteAction{}, "Native TUI clipboard action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.message.dequeue")) {
             emit_action(DequeueAction{}, "Native TUI dequeue action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.clear")) {
             // Toolkit-only editor state: no application action is emitted.
             editor_.set_text({});
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.suspend")) {
             emit_action(SuspendAction{}, "Native TUI suspend action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.editor.external")) {
             emit_action(ExternalEditorAction{}, "Native TUI external editor action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.tools.expand")) {
             chat_.toggle_tool_output();
             header_.set_expanded(chat_.tools_expanded());
             resources_.set_expanded(chat_.tools_expanded());
             invoke_invalidate();
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.thinking.toggle")) {
             emit_action(ToggleThinkingAction{}, "Native TUI thinking toggle action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         // pi's main-editor `app.model.*` / `app.thinking.cycle` bindings:
         // the cycle actions and the model selector post to the executor
@@ -647,21 +648,21 @@ void InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
             emit_action(
                 CycleModelAction{ModelCycleDirection::Forward},
                 "Native TUI model cycle action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.model.cycleBackward")) {
             emit_action(
                 CycleModelAction{ModelCycleDirection::Backward},
                 "Native TUI model cycle action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.model.select")) {
             emit_action(SelectModelAction{}, "Native TUI model selector action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.thinking.cycle")) {
             emit_action(CycleThinkingAction{}, "Native TUI thinking cycle action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         // pi `app.session.*`: recognized-but-unbound actions (defaultKeys
         // []) — a user-assigned keybinding triggers the flow; the
@@ -669,38 +670,35 @@ void InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
         // SessionSelectorComponent itself.
         if (keys.matches(*key, "app.session.resume")) {
             emit_action(ResumeSessionAction{}, "Native TUI session resume action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.session.fork")) {
             emit_action(ForkSessionAction{}, "Native TUI session fork action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.session.new")) {
             emit_action(NewSessionAction{}, "Native TUI new-session action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.session.tree")) {
             emit_action(OpenTreeSelectorAction{}, "Native TUI tree selector action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         // pi's main-editor `app.message.copy` binding (P14: the tree
         // selector matches the same action through the shared registry).
         if (keys.matches(*key, "app.message.copy")) {
             emit_action(CopyLastMessageAction{}, "Native TUI copy action failed");
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
     }
     const auto autocomplete_was_open = editor_.autocomplete_open();
     const auto previous_selection = editor_.autocomplete_selected_index();
-    editor_.handle_input(input);
+    const auto outcome = editor_.handle_input(input);
     if (autocomplete_was_open != editor_.autocomplete_open() ||
         previous_selection != editor_.autocomplete_selected_index()) {
         invoke_invalidate();
     }
-}
-
-bool InteractiveView::accepts_key_releases() const {
-    return false;
+    return outcome;
 }
 
 void InteractiveView::set_focused(bool focused) {

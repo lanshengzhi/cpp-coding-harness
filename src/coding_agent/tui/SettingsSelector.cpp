@@ -225,15 +225,15 @@ public:
         content_->invalidate();
     }
 
-    void handle_input(const cch::tui::InputEventVariant& input) override {
-        if (select_list_pointer_ != nullptr) {
-            select_list_pointer_->handle_input(input);
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
+        const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+        if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+            return cch::tui::InputAdmissionOutcome::Unhandled;
         }
-    }
-
-    [[nodiscard]] bool accepts_key_releases() const override {
-        return select_list_pointer_ != nullptr &&
-            select_list_pointer_->accepts_key_releases();
+        if (select_list_pointer_ != nullptr) {
+            static_cast<void>(select_list_pointer_->handle_input(input));
+        }
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     void set_focused(bool focused) override {
@@ -425,13 +425,13 @@ void SettingsSelectorComponent::invalidate() {
     impl_->list_.invalidate();
 }
 
-void SettingsSelectorComponent::handle_input(
-    const cch::tui::InputEventVariant& input) {
-    impl_->list_.handle_input(input);
-}
-
-bool SettingsSelectorComponent::accepts_key_releases() const {
-    return impl_->list_.accepts_key_releases();
+cch::tui::InputAdmissionOutcome SettingsSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+    const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
+    }
+    static_cast<void>(impl_->list_.handle_input(input));
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 void SettingsSelectorComponent::set_focused(bool focused) {

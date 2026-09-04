@@ -381,13 +381,15 @@ support::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(
 
 void ScopedModelsSelectorComponent::invalidate() { select_list_.invalidate(); }
 
-void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
-    // Paste events belong to the embedded search input; releases are dropped
-    // by the SelectList.
+cch::tui::InputAdmissionOutcome ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+    // Paste events belong to the embedded search input; releases are dropped.
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) {
-        select_list_.handle_input(input);
-        return;
+    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
+    }
+    if (key == nullptr) {
+        static_cast<void>(select_list_.handle_input(input));
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // The table preserves pi's order: navigation and toggle live inside the
@@ -395,29 +397,29 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
     // wraps around); reorder sits between them as before.
     const auto action = keybindings_->first_match(*key, kScopedModelsSelectorActions);
     if (action == "tui.select.up" || action == "tui.select.down" || action == "tui.select.confirm") {
-        select_list_.handle_input(input);
-        return;
+        static_cast<void>(select_list_.handle_input(input));
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Reorder enabled models (pi `app.models.reorderUp`/`reorderDown`).
     const bool reorder_up = action == "app.models.reorderUp";
     const bool reorder_down = action == "app.models.reorderDown";
     if (reorder_up || reorder_down) {
-        if (!enabled_ids_) return;
+        if (!enabled_ids_) return cch::tui::InputAdmissionOutcome::Consumed;
         const auto selected = select_list_.selected_item();
-        if (!selected) return;
+        if (!selected) return cch::tui::InputAdmissionOutcome::Consumed;
         const auto found = std::find(enabled_ids_->begin(), enabled_ids_->end(), selected->value);
-        if (found == enabled_ids_->end()) return;
+        if (found == enabled_ids_->end()) return cch::tui::InputAdmissionOutcome::Consumed;
         const auto current_index = static_cast<std::ptrdiff_t>(found - enabled_ids_->begin());
         const auto new_index = current_index + (reorder_up ? -1 : 1);
         if (new_index < 0 || new_index >= static_cast<std::ptrdiff_t>(enabled_ids_->size())) {
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
         move(selected->value, reorder_up ? -1 : 1);
         dirty_ = true;
         sync_items();
         notify_change();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Enable all (filtered when a search is active, otherwise all).
@@ -430,7 +432,7 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
         dirty_ = true;
         sync_items();
         notify_change();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Clear all (filtered when a search is active, otherwise all).
@@ -443,22 +445,22 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
         dirty_ = true;
         sync_items();
         notify_change();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Toggle the provider of the current item (pi `app.models.toggleProvider`).
     if (keybindings_->matches(*key, "app.models.toggleProvider")) {
         const auto selected = select_list_.selected_item();
-        if (!selected) return;
+        if (!selected) return cch::tui::InputAdmissionOutcome::Consumed;
         const auto found = std::find_if(models_by_id_.begin(), models_by_id_.end(), [&](const auto& entry) {
             return entry.first == selected->value;
         });
-        if (found == models_by_id_.end()) return;
+        if (found == models_by_id_.end()) return cch::tui::InputAdmissionOutcome::Consumed;
         toggle_provider(found->second.provider);
         dirty_ = true;
         sync_items();
         notify_change();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Save/persist to settings (pi `app.models.save`).
@@ -469,7 +471,7 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
                 : std::nullopt);
         }
         dirty_ = false;
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Ctrl+C clears the search, or cancels when it is empty (pi). Intercepted
@@ -480,13 +482,14 @@ void ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVaria
         } else if (on_cancel_) {
             on_cancel_();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Escape cancels (pi); the SelectList dispatches its cancel action. All
     // remaining keys (search editing, printable characters) also go to the
     // embedded search input through the SelectList.
-    select_list_.handle_input(input);
+    static_cast<void>(select_list_.handle_input(input));
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 void ScopedModelsSelectorComponent::set_focused(bool focused) { select_list_.set_focused(focused); }

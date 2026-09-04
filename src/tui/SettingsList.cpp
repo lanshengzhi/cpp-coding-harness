@@ -362,40 +362,42 @@ void SettingsList::invalidate() {
     if (impl_->submenu) impl_->submenu->invalidate();
 }
 
-void SettingsList::handle_input(const InputEventVariant& input) {
+InputAdmissionOutcome SettingsList::handle_input(const InputEventVariant& input) {
     auto impl = impl_;
     if (impl->submenu) {
-        if (auto* handler = dynamic_cast<InputHandler*>(impl->submenu.get())) handler->handle_input(input);
-        return;
+        if (auto* handler = dynamic_cast<InputHandler*>(impl->submenu.get())) {
+            static_cast<void>(handler->handle_input(input));
+        }
+        return InputAdmissionOutcome::Consumed;
     }
     if (std::holds_alternative<PasteEvent>(input)) {
-        if (!impl->search_enabled || !impl->search_input) return;
-        impl->search_input->handle_input(input);
+        if (!impl->search_enabled || !impl->search_input) return InputAdmissionOutcome::Unhandled;
+        const auto outcome = impl->search_input->handle_input(input);
         impl->apply_filter();
-        return;
+        return outcome;
     }
     const auto* key = std::get_if<KeyEvent>(&input);
-    if (key == nullptr || key->type == KeyEventType::Release) return;
+    if (key == nullptr || key->type == KeyEventType::Release) return InputAdmissionOutcome::Unhandled;
     const auto& displayed = impl->displayed_indices();
     const auto action = impl->keybindings->first_match(*key, kSettingsListActions);
     if (action == "tui.select.up") {
-        if (displayed.empty()) return;
+        if (displayed.empty()) return InputAdmissionOutcome::Consumed;
         impl->selected_index = impl->selected_index == 0 ? displayed.size() - 1 : impl->selected_index - 1;
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.down") {
-        if (displayed.empty()) return;
+        if (displayed.empty()) return InputAdmissionOutcome::Consumed;
         impl->selected_index = impl->selected_index + 1 == displayed.size() ? 0 : impl->selected_index + 1;
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     const auto search_empty = !impl->search_input || impl->search_input->value().empty();
     if (action == "tui.select.confirm" || (matches_key(*key, "space") && (!impl->search_enabled || search_empty))) {
         impl->activate_item();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.cancel") {
         auto sink = impl->on_cancel;
-        if (!sink || !*sink) return;
+        if (!sink || !*sink) return InputAdmissionOutcome::Consumed;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
@@ -407,17 +409,14 @@ void SettingsList::handle_input(const InputEventVariant& input) {
             impl->report_callback_failure("TUI SettingsList cancel callback failed");
         }
 #endif
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
-    if (!impl->search_enabled || !impl->search_input) return;
+    if (!impl->search_enabled || !impl->search_input) return InputAdmissionOutcome::Unhandled;
     // Remaining keys are the shared Input component's editing behaviors; the
     // filter re-runs on the component's current value (pi settings-list.ts).
-    impl->search_input->handle_input(input);
+    const auto outcome = impl->search_input->handle_input(input);
     impl->apply_filter();
-}
-
-bool SettingsList::accepts_key_releases() const {
-    return false;
+    return outcome;
 }
 
 void SettingsList::set_focused(bool focused) {

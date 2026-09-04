@@ -93,12 +93,9 @@ public:
 
     void invalidate() override {}
 
-    void handle_input(const tui::InputEventVariant& input) override {
+    tui::InputAdmissionOutcome handle_input(const tui::InputEventVariant& input) override {
         received.push_back(input);
-    }
-
-    [[nodiscard]] bool accepts_key_releases() const override {
-        return false;
+        return tui::InputAdmissionOutcome::Consumed;
     }
 
     void set_focused(bool) override {}

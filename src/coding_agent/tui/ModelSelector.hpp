@@ -80,8 +80,7 @@ public:
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
-    void handle_input(const cch::tui::InputEventVariant& input) override;
-    [[nodiscard]] bool accepts_key_releases() const override { return false; }
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     /// The search input's cursor translated into this component's own line

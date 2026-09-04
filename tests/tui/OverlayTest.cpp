@@ -32,12 +32,13 @@ public:
         ++invalidation_count;
     }
 
-    void handle_input(const cch::tui::InputEventVariant& input) override {
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
+        const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+        if (key != nullptr && key->type == cch::tui::KeyEventType::Release && !accept_key_releases) {
+            return cch::tui::InputAdmissionOutcome::Unhandled;
+        }
         received_input.push_back(input);
-    }
-
-    [[nodiscard]] bool accepts_key_releases() const override {
-        return accept_key_releases;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     void set_focused(bool focused) override {

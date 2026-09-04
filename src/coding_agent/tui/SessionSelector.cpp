@@ -671,28 +671,31 @@ std::optional<cch::tui::CursorPosition> SessionSelectorComponent::cursor_locatio
     };
 }
 
-void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+cch::tui::InputAdmissionOutcome SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
+    }
 
     if (mode_rename_) {
-        if (key == nullptr) return;
+        if (key == nullptr) return cch::tui::InputAdmissionOutcome::Consumed;
         if (keybindings_->matches(*key, "tui.select.cancel")) {
             exit_rename_mode();
-            return;
+            return cch::tui::InputAdmissionOutcome::Consumed;
         }
-        rename_input_.handle_input(input);
-        return;
+        static_cast<void>(rename_input_.handle_input(input));
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Delete confirmation intercepts all keys (pi).
     if (confirming_delete_path_) {
-        if (key == nullptr) return;
+        if (key == nullptr) return cch::tui::InputAdmissionOutcome::Consumed;
         if (keybindings_->matches(*key, "tui.select.confirm")) {
             confirm_delete();
         } else if (keybindings_->matches(*key, "tui.select.cancel")) {
             cancel_delete();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     if (key == nullptr) {
@@ -700,7 +703,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
         // the SelectList owns the search Input in both the tree and search
         // views, so the paste flows there from either.
         forward_to_select_list(input);
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Domain actions stay component-level pre-dispatch in both views (pi
@@ -708,7 +711,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
     if (keybindings_->matches(*key, "tui.input.tab")) {
         set_scope(!scope_all_);
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "app.session.toggleSort")) {
         set_sort_mode(
@@ -718,32 +721,31 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
                     ? SessionSortMode::Relevance
                     : SessionSortMode::Threaded);
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "app.session.toggleNamedFilter")) {
         set_name_filter(
             name_filter_ == SessionNameFilter::All
                 ? SessionNameFilter::Named
                 : SessionNameFilter::All);
-        if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "app.session.togglePath")) {
         show_path_ = !show_path_;
         select_list_.set_items(build_select_items());
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "app.session.delete")) {
         start_delete_confirmation();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "app.session.rename")) {
         const auto* selected = selected_session();
         if (selected != nullptr) {
             enter_rename_mode(*selected);
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "app.session.deleteNoninvasive")) {
         // "Delete session when the query is empty": while a query is active
@@ -753,14 +755,14 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
         } else {
             start_delete_confirmation();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     if (search_active()) {
         // Search view: navigation, confirm/cancel and search editing belong
         // to the SelectList (its sinks re-enter this component).
         forward_to_select_list(input);
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     // Tree view: navigation and selection keys stay component-level.
@@ -769,7 +771,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
             selected_index_ = selected_index_ == 0 ? 0 : selected_index_ - 1;
         }
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.down")) {
         if (!filtered_sessions_.empty()) {
@@ -777,14 +779,14 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
                 filtered_sessions_.size() - 1, selected_index_ + 1);
         }
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.pageUp")) {
         selected_index_ = selected_index_ > kMaxVisibleSessions
             ? selected_index_ - kMaxVisibleSessions
             : 0;
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.pageDown")) {
         if (!filtered_sessions_.empty()) {
@@ -793,24 +795,25 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
                 selected_index_ + kMaxVisibleSessions);
         }
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.confirm")) {
         const auto* selected = selected_session();
         if (selected != nullptr && on_select_) {
             on_select_(selected->path.string());
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (keybindings_->matches(*key, "tui.select.cancel")) {
         if (on_cancel_) {
             on_cancel_();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     // Remaining keys edit the search query through the SelectList's Input
     // (typing the first character hands the view over to the search list).
     forward_to_select_list(input);
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 /// Forward one event to the embedded SelectList and reconcile the
@@ -820,7 +823,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
 /// selection back on the top row (SelectList's own clear-query policy).
 void SessionSelectorComponent::forward_to_select_list(const cch::tui::InputEventVariant& input) {
     const bool was_search = search_active();
-    select_list_.handle_input(input);
+    static_cast<void>(select_list_.handle_input(input));
     if (was_search && !search_active()) {
         filter_sessions();
         selected_index_ = 0;
