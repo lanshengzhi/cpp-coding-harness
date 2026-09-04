@@ -151,7 +151,7 @@ TEST_CASE(
 
     // First toggle on the all-enabled state starts an explicit list with
     // only the selected id (pi `toggle`).
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(recorder.changed);
     REQUIRE(recorder.last_change.has_value());
     REQUIRE(recorder.last_change->size() == 1);
@@ -168,13 +168,13 @@ TEST_CASE(
     }
 
     // Toggle again removes it from the explicit list.
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(recorder.last_change.has_value());
     CHECK(recorder.last_change->empty());
 
     // Saving fires onPersist with the explicit list and clears the dirty
     // marker (pi `app.models.save`).
-    selector.handle_input(tui::KeyEvent{.key = "s", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
     REQUIRE(recorder.persisted);
     REQUIRE(recorder.last_persist.has_value());
     CHECK(recorder.last_persist->empty());
@@ -194,7 +194,7 @@ TEST_CASE(
     auto selector = make_selector(theme, recorder, std::vector<std::string>{"alpha/alpha-1"});
 
     // Search narrows the list to alpha-2.
-    selector.handle_input(tui::KeyEvent{.key = "2"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "2"}));
     {
         const auto rendered = selector.render(90);
         REQUIRE(rendered);
@@ -203,26 +203,26 @@ TEST_CASE(
         CHECK(screen.find("alpha-1 [alpha]") == std::string::npos);
     }
     // Ctrl+A enables the filtered item only.
-    selector.handle_input(tui::KeyEvent{.key = "a", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "a", .ctrl = true}));
     REQUIRE(recorder.last_change.has_value());
     REQUIRE(recorder.last_change->size() == 2);
     CHECK((*recorder.last_change)[0] == "alpha/alpha-1");
     CHECK((*recorder.last_change)[1] == "alpha/alpha-2");
 
     // Ctrl+X clears the filtered item only.
-    selector.handle_input(tui::KeyEvent{.key = "x", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "x", .ctrl = true}));
     REQUIRE(recorder.last_change.has_value());
     REQUIRE(recorder.last_change->size() == 1);
     CHECK((*recorder.last_change)[0] == "alpha/alpha-1");
 
     // Ctrl+A with no search enables everything and normalizes back to the
     // null (all-enabled) state (pi `enableAll`).
-    selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true});  // clear search
-    selector.handle_input(tui::KeyEvent{.key = "a", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true})); // clear search
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "a", .ctrl = true}));
     CHECK(recorder.last_change == std::nullopt);
 
     // Ctrl+X with no search clears everything to an explicit empty list.
-    selector.handle_input(tui::KeyEvent{.key = "x", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "x", .ctrl = true}));
     REQUIRE(recorder.last_change.has_value());
     CHECK(recorder.last_change->empty());
 }
@@ -236,8 +236,8 @@ TEST_CASE(
 
     // Select alpha-2 (index 1) and toggle its provider: alpha is not fully
     // enabled, so Ctrl+P enables both alpha models.
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "p", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "p", .ctrl = true}));
     REQUIRE(recorder.last_change.has_value());
     REQUIRE(recorder.last_change->size() == 2);
     CHECK((*recorder.last_change)[0] == "alpha/alpha-1");
@@ -246,13 +246,13 @@ TEST_CASE(
     // Move to beta-1 and toggle its provider: beta is fully disabled, so
     // Ctrl+P enables it too — and normalizes back to the null (all-enabled)
     // state because every model is now enabled (pi `enableAll`).
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "p", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "p", .ctrl = true}));
     CHECK(recorder.last_change == std::nullopt);
 
     // Ctrl+P again on beta (still selected; all beta models enabled) clears
     // the whole provider back to the explicit alpha list.
-    selector.handle_input(tui::KeyEvent{.key = "p", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "p", .ctrl = true}));
     REQUIRE(recorder.last_change.has_value());
     REQUIRE(recorder.last_change->size() == 2);
     CHECK((*recorder.last_change)[0] == "alpha/alpha-1");
@@ -261,14 +261,14 @@ TEST_CASE(
     // The selection stays on the now-disabled beta-1 (pi: reordering a
     // disabled item is a no-op); move up to alpha-2, then Alt+Up reorders it
     // ahead of alpha-1.
-    selector.handle_input(tui::KeyEvent{.key = "up"});
-    selector.handle_input(tui::KeyEvent{.key = "up", .alt = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "up", .alt = true}));
     REQUIRE(recorder.last_change.has_value());
     CHECK((*recorder.last_change)[0] == "alpha/alpha-2");
     CHECK((*recorder.last_change)[1] == "alpha/alpha-1");
 
     // Reordering at the top is a no-op.
-    selector.handle_input(tui::KeyEvent{.key = "up", .alt = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "up", .alt = true}));
     REQUIRE(recorder.last_change.has_value());
     CHECK((*recorder.last_change)[0] == "alpha/alpha-2");
 }
@@ -291,7 +291,7 @@ TEST_CASE("ScopedModelsSelector preserves dispatch order for shared selection ac
             [] {});
 
     // The earlier up action wins over confirm when both claim f9.
-    selector.handle_input(tui::KeyEvent{.key = "f9"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "f9"}));
     CHECK_FALSE(changed);
     const auto rendered = selector.render(90);
     REQUIRE(rendered);
@@ -316,8 +316,8 @@ TEST_CASE("ScopedModelsSelector preserves reorder-up precedence for shared reord
             [](std::optional<std::vector<std::string>>) {},
             [] {});
 
-    selector.handle_input(tui::KeyEvent{.key = "j"});
-    selector.handle_input(tui::KeyEvent{.key = "f9"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "j"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "f9"}));
     REQUIRE(changed.has_value());
     REQUIRE(changed->size() == 2);
     CHECK((*changed)[0] == "alpha/alpha-2");
@@ -331,12 +331,12 @@ TEST_CASE(
     Recorder recorder;
     auto selector = make_selector(theme, recorder);
 
-    selector.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(recorder.cancellations == 1);
 
     // Ctrl+C with a search clears the search instead of cancelling.
-    selector.handle_input(tui::KeyEvent{.key = "b"});
-    selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "b"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true}));
     CHECK(recorder.cancellations == 1);
     {
         const auto rendered = selector.render(90);
@@ -345,7 +345,7 @@ TEST_CASE(
         CHECK(screen.find("beta-1 [beta]") != std::string::npos);
     }
     // Ctrl+C with an empty search cancels.
-    selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true}));
     CHECK(recorder.cancellations == 2);
 }
 

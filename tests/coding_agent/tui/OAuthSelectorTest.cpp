@@ -88,7 +88,7 @@ namespace {
 
 void type(cch::tui::InputHandler& handler, std::string text) {
     for (const char ch : text) {
-        handler.handle_input(tui::KeyEvent{.key = std::string(1, ch)});
+        static_cast<void>(handler.handle_input(tui::KeyEvent{.key = std::string(1, ch)}));
     }
 }
 
@@ -215,15 +215,15 @@ TEST_CASE(
 
     // Both boundaries clamp: up at the first row stays there, and down at
     // the last row does not wrap back to the first.
-    selector.handle_input(tui::KeyEvent{.key = "up"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "up"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
     CHECK(selected->first == "openai-codex");
     CHECK(selected->second == AuthSelectorType::OAuth);
 
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
     CHECK(selected->first == "deepseek");
     CHECK(selected->second == AuthSelectorType::ApiKey);
@@ -245,8 +245,8 @@ TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id", "
             [&selected](std::string id, AuthSelectorType type) { selected = std::make_pair(std::move(id), type); },
             [] {});
 
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
     CHECK(selected->first == "kimi-coding");
     CHECK(selected->second == AuthSelectorType::ApiKey);
@@ -269,7 +269,7 @@ TEST_CASE(
     CHECK(screen.find("Select provider to logout:") != std::string::npos);
     CHECK(screen.find("No providers logged in. Use /login first.") != std::string::npos);
 
-    selector.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
 }
 
@@ -307,7 +307,7 @@ TEST_CASE(
     // pi's maxVisible is 8: navigating to the last row windows the list and
     // appends the muted scroll info.
     for (std::size_t index = 0; index < 9; ++index) {
-        selector.handle_input(tui::KeyEvent{.key = "down"});
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     const auto screen = screen_of(selector);
     CHECK(screen.find("→ Provider 9") != std::string::npos);

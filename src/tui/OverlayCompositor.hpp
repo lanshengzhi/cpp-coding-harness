@@ -66,9 +66,10 @@ public:
 
     // --- Input ---
 
-    /// Dispatch to the topmost visible capturing InputHandler overlay
-    /// (reverse z-order). Returns true when an overlay consumed the event.
-    bool dispatch_input(const InputEventVariant& event, TerminalDimensions viewport) const;
+    /// Dispatch to visible capturing InputHandler overlays (reverse z-order).
+    /// Returns Consumed when an overlay consumed the event, Unhandled otherwise.
+    [[nodiscard]] InputAdmissionOutcome dispatch_input(
+            const InputEventVariant& event, TerminalDimensions viewport) const;
 
     // --- Focus history ---
 

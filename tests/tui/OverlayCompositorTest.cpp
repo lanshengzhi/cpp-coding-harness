@@ -48,14 +48,14 @@ public:
 
     void invalidate() override {}
 
-    void handle_input(const tui::InputEventVariant& input) override {
+    tui::InputAdmissionOutcome handle_input(const tui::InputEventVariant& input) override {
+        const auto* key = std::get_if<tui::KeyEvent>(&input);
+        if (key != nullptr && key->type == tui::KeyEventType::Release && !accept_key_releases) {
+            return tui::InputAdmissionOutcome::Unhandled;
+        }
         received_input.push_back(input);
+        return tui::InputAdmissionOutcome::Consumed;
     }
-
-    [[nodiscard]] bool accepts_key_releases() const override {
-        return accept_key_releases;
-    }
-
     void set_focused(bool focused) override {
         focused_ = focused;
     }
@@ -292,20 +292,17 @@ TEST_CASE("OverlayCompositor routes input to the topmost capturing overlay", "[t
     auto* high_ptr = high.get();
     REQUIRE(compositor.add_overlay(std::move(high)));
 
-    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "q"}, dimensions));
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "q"}, dimensions) == tui::InputAdmissionOutcome::Consumed);
     CHECK(high_child_ptr->received_input.size() == 1);
     CHECK(low_child_ptr->received_input.empty());
 
     // Hiding the top overlay routes input to the next visible one.
     high_ptr->set_visible(false);
-    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "w"}, dimensions));
-    CHECK(low_child_ptr->received_input.size() == 1);
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "w"}, dimensions) == tui::InputAdmissionOutcome::Consumed);
 
     // Key releases are skipped when the focused child declines them.
-    CHECK_FALSE(compositor.dispatch_input(
-        tui::KeyEvent{.key = "w", .type = tui::KeyEventType::Release},
-        dimensions));
-    CHECK(low_child_ptr->received_input.size() == 1);
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "w", .type = tui::KeyEventType::Release}, dimensions) ==
+            tui::InputAdmissionOutcome::Unhandled);
 
     // A non-capturing overlay never consumes input.
     REQUIRE(compositor.remove(low_ptr));
@@ -315,8 +312,59 @@ TEST_CASE("OverlayCompositor routes input to the topmost capturing overlay", "[t
     REQUIRE(passive->add_child(std::make_unique<FocusableInputComponent>()));
     REQUIRE(compositor.add_overlay(std::move(passive)));
     high_ptr->set_visible(true);
-    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "e"}, dimensions));
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "e"}, dimensions) == tui::InputAdmissionOutcome::Consumed);
     CHECK(high_child_ptr->received_input.size() == 2);
+}
+TEST_CASE("OverlayCompositor outcome-based input admission proves first-consumed, fallthrough, capture, and release "
+          "fallthrough",
+        "[tui][overlay][input]") {
+    tui::detail::OverlayCompositor compositor;
+    const tui::TerminalDimensions dimensions{.columns = 80, .rows = 24};
+
+    auto lower = std::make_unique<tui::Overlay>(absolute_options(0, 0, 1));
+    auto lower_child = std::make_unique<FocusableInputComponent>();
+    lower_child->accept_key_releases = true;
+    auto* lower_child_ptr = lower_child.get();
+    REQUIRE(lower->add_child(std::move(lower_child)));
+    REQUIRE(lower->focus_first());
+    REQUIRE(compositor.add_overlay(std::move(lower)));
+
+    auto upper = std::make_unique<tui::Overlay>(absolute_options(0, 0, 2));
+    auto upper_child = std::make_unique<FocusableInputComponent>();
+    upper_child->accept_key_releases = false;
+    auto* upper_child_ptr = upper_child.get();
+    REQUIRE(upper->add_child(std::move(upper_child)));
+    REQUIRE(upper->focus_first());
+    auto* upper_ptr = upper.get();
+    REQUIRE(compositor.add_overlay(std::move(upper)));
+
+    // 1. First-consumed termination: upper overlay consumes press; lower receives nothing.
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "a"}, dimensions) == tui::InputAdmissionOutcome::Consumed);
+    CHECK(upper_child_ptr->received_input.size() == 1);
+    CHECK(lower_child_ptr->received_input.empty());
+
+    // 2. Release fallthrough: upper overlay's child declines release (returns Unhandled).
+    // The release falls through upper overlay to lower overlay which accepts releases (returns Consumed).
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "a", .type = tui::KeyEventType::Release}, dimensions) ==
+            tui::InputAdmissionOutcome::Consumed);
+    CHECK(upper_child_ptr->received_input.size() == 1); // upper child did not receive release
+    CHECK(lower_child_ptr->received_input.size() == 1); // lower child claimed the release
+
+    // 3. All-unhandled fallthrough: when all overlays decline, outcome is Unhandled.
+    lower_child_ptr->accept_key_releases = false;
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "b", .type = tui::KeyEventType::Release}, dimensions) ==
+            tui::InputAdmissionOutcome::Unhandled);
+
+    // 4. Overlay capture / exclusive-parent upgrade: capturing overlay without a focused child still returns Consumed
+    // for press events.
+    upper_ptr->set_visible(false);
+    auto empty_overlay = std::make_unique<tui::Overlay>(absolute_options(0, 0, 3));
+    auto* empty_overlay_ptr = empty_overlay.get();
+    REQUIRE(compositor.add_overlay(std::move(empty_overlay)));
+    CHECK(compositor.dispatch_input(tui::KeyEvent{.key = "c"}, dimensions) == tui::InputAdmissionOutcome::Consumed);
+    CHECK(lower_child_ptr->received_input.size() == 1); // lower did not receive 'c'
+
+    REQUIRE(compositor.remove(empty_overlay_ptr));
 }
 
 TEST_CASE("OverlayCompositor tracks overlay focus history and restoration targets", "[tui][overlay]") {

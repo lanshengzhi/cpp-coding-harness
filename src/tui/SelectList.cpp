@@ -599,37 +599,37 @@ void SelectList::invalidate() {
     if (impl_->search_input) impl_->search_input->invalidate();
 }
 
-void SelectList::handle_input(const InputEventVariant& input) {
+InputAdmissionOutcome SelectList::handle_input(const InputEventVariant& input) {
     auto impl = impl_;
     if (impl->search_enabled && impl->search_input && std::holds_alternative<PasteEvent>(input)) {
         const auto prior_value = impl->search_input->value();
-        impl->search_input->handle_input(input);
+        const auto outcome = impl->search_input->handle_input(input);
         if (impl->search_input->value() != prior_value) impl->apply_query_change(true);
-        return;
+        return outcome;
     }
     const auto* key = std::get_if<KeyEvent>(&input);
-    if (key == nullptr || key->type == KeyEventType::Release) return;
+    if (!carries_press_behavior(key)) return InputAdmissionOutcome::Unhandled;
     const auto count = impl->filtered_indices.size();
     const auto action = impl->keybindings->first_match(*key, kSelectListActions);
     const bool plain = !key->ctrl && !key->alt && !key->shift;
     const bool raw_up = impl->raw_jk_navigation_enabled && plain && key->key == "k";
     const bool raw_down = impl->raw_jk_navigation_enabled && plain && key->key == "j";
     if (action == "tui.select.up" || raw_up) {
-        if (count == 0) return;
+        if (count == 0) return InputAdmissionOutcome::Consumed;
         impl->selected_index =
                 impl->selected_index == 0 ? (impl->wrap_navigation ? count - 1 : 0) : impl->selected_index - 1;
         impl->notify_selection_change();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.down" || raw_down) {
-        if (count == 0) return;
+        if (count == 0) return InputAdmissionOutcome::Consumed;
         impl->selected_index =
                 impl->selected_index + 1 == count ? (impl->wrap_navigation ? 0 : count - 1) : impl->selected_index + 1;
         impl->notify_selection_change();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.pageUp" || action == "tui.select.pageDown") {
-        if (count == 0) return;
+        if (count == 0) return InputAdmissionOutcome::Consumed;
         const auto page = impl->max_visible;
         if (action == "tui.select.pageUp") {
             impl->selected_index = impl->selected_index > page ? impl->selected_index - page : 0;
@@ -637,12 +637,12 @@ void SelectList::handle_input(const InputEventVariant& input) {
             impl->selected_index = std::min(impl->selected_index + page, count - 1);
         }
         impl->notify_selection_change();
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.confirm") {
         const auto* item = impl->selected();
         auto sink = impl->on_select;
-        if (item == nullptr || !sink || !*sink) return;
+        if (item == nullptr || !sink || !*sink) return InputAdmissionOutcome::Consumed;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
@@ -654,11 +654,11 @@ void SelectList::handle_input(const InputEventVariant& input) {
             impl->report_callback_failure("TUI SelectList select callback failed");
         }
 #endif
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.cancel") {
         auto sink = impl->on_cancel;
-        if (!sink || !*sink) return;
+        if (!sink || !*sink) return InputAdmissionOutcome::Consumed;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
@@ -670,19 +670,16 @@ void SelectList::handle_input(const InputEventVariant& input) {
             impl->report_callback_failure("TUI SelectList cancel callback failed");
         }
 #endif
-        return;
+        return InputAdmissionOutcome::Consumed;
     }
-    if (!impl->search_enabled || !impl->search_input) return;
+    if (!impl->search_enabled || !impl->search_input) return InputAdmissionOutcome::Unhandled;
     // Remaining keys (editing, cursor movement, undo, printable characters)
     // are the embedded Input component's behaviors; re-rank only when the
     // edit actually changed the query (pi select-list search flow).
     const auto prior_value = impl->search_input->value();
-    impl->search_input->handle_input(input);
+    const auto outcome = impl->search_input->handle_input(input);
     if (impl->search_input->value() != prior_value) impl->apply_query_change(true);
-}
-
-bool SelectList::accepts_key_releases() const {
-    return false;
+    return outcome;
 }
 
 void SelectList::set_focused(bool focused) {

@@ -50,8 +50,7 @@ public:
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
-    void handle_input(const cch::tui::InputEventVariant& input) override;
-    [[nodiscard]] bool accepts_key_releases() const override { return false; }
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override;
     void set_focused(bool focused) override { focused_ = focused; }
     [[nodiscard]] bool focused() const override { return focused_; }
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {

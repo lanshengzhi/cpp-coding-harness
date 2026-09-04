@@ -140,8 +140,7 @@ public:
     void invalidate() override;
 
     // InputHandler (forwards to focused child)
-    void handle_input(const InputEventVariant& input) override;
-    [[nodiscard]] bool accepts_key_releases() const override;
+    InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
 
     // Focusable
     void set_focused(bool focused) override;

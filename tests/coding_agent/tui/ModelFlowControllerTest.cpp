@@ -328,7 +328,7 @@ TEST_CASE(
     // explicit list with only the highlighted id enabled. The change sink
     // hops to the executor and narrows the session scope (pi
     // `updateSessionModels`) without touching settings.
-    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
     fixture.drain();
     CHECK(fixture.session->scoped_models().size() == 1);
     CHECK(fixture.session->scoped_models().front().model.id == "alpha-1");
@@ -341,7 +341,7 @@ TEST_CASE(
 
     // Toggling the only enabled model off empties the explicit list, which
     // resolves to no session scope (pi: none enabled = no filter).
-    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
     fixture.drain();
     CHECK(fixture.session->scoped_models().empty());
     CHECK(fixture.flows->model_completion()->size() == 2);
@@ -364,9 +364,9 @@ TEST_CASE(
 
     // Narrow to alpha-1, then save (pi `app.models.save` → `onPersist`):
     // the explicit list lands in the global `enabledModels` field.
-    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
     fixture.drain();
-    selector->handle_input(tui::KeyEvent{.key = "s", .ctrl = true});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
     fixture.drain();
     CHECK(fixture.read_settings().find("alpha/alpha-1") != std::string::npos);
     REQUIRE_FALSE(fixture.presenter.statuses.empty());
@@ -375,10 +375,10 @@ TEST_CASE(
     // Enable-all normalizes back to the null (all-enabled) state, which the
     // change sink applies as no session scope; saving then removes the
     // settings field (pi writes `undefined`).
-    selector->handle_input(tui::KeyEvent{.key = "a", .ctrl = true});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "a", .ctrl = true}));
     fixture.drain();
     CHECK(fixture.session->scoped_models().empty());
-    selector->handle_input(tui::KeyEvent{.key = "s", .ctrl = true});
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
     fixture.drain();
     CHECK(fixture.read_settings().find("enabledModels") == std::string::npos);
     CHECK(fixture.presenter.statuses.back() == "Model selection saved to settings");

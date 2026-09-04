@@ -1284,10 +1284,13 @@ void TreeSelectorComponent::hide_label_input() {
     if (on_invalidate_) on_invalidate_();
 }
 
-void TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     if (label_state_.active) {
         const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-        if (key != nullptr && key->type != cch::tui::KeyEventType::Release) {
+        if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+            return cch::tui::InputAdmissionOutcome::Unhandled;
+        }
+        if (key != nullptr) {
             if (keybindings_->matches(*key, "tui.select.confirm")) {
                 auto value = label_input_.value();
                 const auto first = value.find_first_not_of(" \t\r\n");
@@ -1302,21 +1305,21 @@ void TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& inpu
                 if (on_label_change_) {
                     on_label_change_(entry_id, std::move(label));
                 }
-                return;
+                return cch::tui::InputAdmissionOutcome::Consumed;
             }
             if (keybindings_->matches(*key, "tui.select.cancel")) {
                 hide_label_input();
-                return;
+                return cch::tui::InputAdmissionOutcome::Consumed;
             }
         }
-        label_input_.handle_input(input);
+        static_cast<void>(label_input_.handle_input(input));
         if (on_invalidate_) on_invalidate_();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) {
-        return;
+    if (!cch::tui::carries_press_behavior(key)) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
     }
     const auto matches = [&](std::string_view action_id) {
         return keybindings_->matches(*key, action_id);
@@ -1363,10 +1366,10 @@ void TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& inpu
         if (selected && on_select_) {
             on_select_(*selected);
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     } else if (matches("app.message.copy")) {
         copy_selected();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     } else if (matches("tui.select.cancel")) {
         if (!search_query_.empty()) {
             search_query_.clear();
@@ -1375,7 +1378,7 @@ void TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& inpu
         } else if (on_cancel_) {
             on_cancel_();
         }
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     } else if (matches("app.tree.filter.default")) {
         filter_mode_ = TreeFilterMode::Default;
         folded_nodes_.clear();
@@ -1431,6 +1434,7 @@ void TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& inpu
         apply_filter();
     }
     if (on_invalidate_) on_invalidate_();
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 void TreeSelectorComponent::set_focused(bool focused) {

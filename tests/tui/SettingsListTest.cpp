@@ -41,10 +41,10 @@ TEST_CASE(
             .keybindings = keybindings->registry,
         });
 
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->current_value == "dark");
-    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->current_value == "light");
     REQUIRE(updates.size() == 2);
@@ -84,10 +84,10 @@ TEST_CASE("SettingsList resolves a key shared by two actions in dispatch order",
                     },
                     .keybindings = std::move(registry),
             });
-    list.handle_input(cch::tui::KeyEvent{.key = "f9"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "f9"}));
     CHECK(updates.empty());
     CHECK(cancels == 0);
-    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
     CHECK(cancels == 0);
     REQUIRE(updates.size() == 1);
     CHECK(updates[0] == "theme=dark");
@@ -127,7 +127,7 @@ TEST_CASE("SettingsList search preserves baseline token and alphanumeric matchin
         },
         cch::tui::SettingsListOptions{.enable_search = true});
     for (const auto& key : std::string("active/tool")) {
-        token_search.handle_input(cch::tui::KeyEvent{.key = std::string(1, key)});
+        static_cast<void>(token_search.handle_input(cch::tui::KeyEvent{.key = std::string(1, key)}));
     }
     REQUIRE(token_search.selected_item());
     CHECK(token_search.selected_item()->id == "tools");
@@ -139,7 +139,7 @@ TEST_CASE("SettingsList search preserves baseline token and alphanumeric matchin
         },
         cch::tui::SettingsListOptions{.enable_search = true});
     for (const auto& key : std::string("gpt4")) {
-        alphanumeric_search.handle_input(cch::tui::KeyEvent{.key = std::string(1, key)});
+        static_cast<void>(alphanumeric_search.handle_input(cch::tui::KeyEvent{.key = std::string(1, key)}));
     }
     REQUIRE(alphanumeric_search.selected_item());
     CHECK(alphanumeric_search.selected_item()->id == "model");
@@ -150,7 +150,7 @@ TEST_CASE("SettingsList search preserves baseline token and alphanumeric matchin
             {.id = "accented", .label = "Éclair", .current_value = "on"},
         },
         cch::tui::SettingsListOptions{.enable_search = true});
-    unicode_search.handle_input(cch::tui::KeyEvent{.key = "é"});
+    static_cast<void>(unicode_search.handle_input(cch::tui::KeyEvent{.key = "é"}));
     REQUIRE(unicode_search.selected_item());
     CHECK(unicode_search.selected_item()->id == "accented");
 }
@@ -194,11 +194,11 @@ TEST_CASE(
             },
         });
 
-    list.handle_input(cch::tui::KeyEvent{.key = "down"});
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
     REQUIRE(list.submenu_open());
-    list.handle_input(cch::tui::KeyEvent{.key = "down"});
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
 
     CHECK_FALSE(list.submenu_open());
     REQUIRE(list.selected_item());
@@ -237,12 +237,12 @@ TEST_CASE("SettingsList renders and dispatches hints from one effective registry
     CHECK(std::any_of(rendered->lines.begin(), rendered->lines.end(), [](const auto& line) {
         return line.find("f2/space to change · f3 to cancel") != std::string::npos;
     }));
-    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
-    list.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(changes == 0);
     CHECK(cancellations == 0);
-    list.handle_input(cch::tui::KeyEvent{.key = "f2"});
-    list.handle_input(cch::tui::KeyEvent{.key = "f3"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "f2"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "f3"}));
     CHECK(changes == 1);
     CHECK(cancellations == 1);
 }
@@ -267,14 +267,14 @@ TEST_CASE("SettingsList space confirms only while the search is empty", "[tui][s
         });
 
     // Space with an empty search activates the item (pi settings-list.ts).
-    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->current_value == "on");
     CHECK(updates.size() == 1);
 
     // Space with a non-empty search inserts a space into the query instead.
-    list.handle_input(cch::tui::KeyEvent{.key = "t"});
-    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "t"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
     CHECK(list.search_query() == "t ");
     CHECK(updates.size() == 1);
 }
@@ -287,7 +287,7 @@ TEST_CASE("SettingsList search editing flows through the Input component", "[tui
         },
         cch::tui::SettingsListOptions{.enable_search = true});
     const auto key = [&list](std::string identifier, bool ctrl = false) {
-        list.handle_input(cch::tui::KeyEvent{.key = std::move(identifier), .ctrl = ctrl});
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::move(identifier), .ctrl = ctrl}));
     };
     const auto type = [&key](std::string_view text) {
         for (const auto& character : text) key(std::string(1, character));
@@ -322,12 +322,12 @@ TEST_CASE("SettingsList paste flows through the Input component's cleaning", "[t
 
     // CRLF is dropped and spaces are preserved by the Input component's paste
     // cleaning; the query updates and the filter re-runs on it.
-    list.handle_input(cch::tui::PasteEvent{.text = "al\r\nph"});
+    static_cast<void>(list.handle_input(cch::tui::PasteEvent{.text = "al\r\nph"}));
     CHECK(list.search_query() == "alph");
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->id == "alpha");
 
-    list.handle_input(cch::tui::PasteEvent{.text = "a b"});
+    static_cast<void>(list.handle_input(cch::tui::PasteEvent{.text = "a b"}));
     CHECK(list.search_query() == "alpha b");
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->id == "alpha");
@@ -340,7 +340,7 @@ TEST_CASE("SettingsList search line renders and locates the cursor through Input
         },
         cch::tui::SettingsListOptions{.enable_search = true});
     for (const auto& character : std::string("tool")) {
-        list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)});
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)}));
     }
     list.set_focused(true);
     const auto rendered = list.render(50);
@@ -361,6 +361,6 @@ TEST_CASE("SettingsList cancellation invokes the callback once per semantic key"
     cch::tui::SettingsList list({}, cch::tui::SettingsListOptions{
         .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { ++cancellations; return {}; },
     });
-    list.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
 }

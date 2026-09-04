@@ -182,7 +182,7 @@ struct InteractiveViewOptions {
     bool user_bash_available{false};
     std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider;
     std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer;
-    cch::tui::EditorRenderRequestSink autocomplete_render_request;
+    cch::tui::EditorRenderRequestSink render_request;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
 };
@@ -283,8 +283,7 @@ public:
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
-    void handle_input(const cch::tui::InputEventVariant& input) override;
-    [[nodiscard]] bool accepts_key_releases() const override;
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;

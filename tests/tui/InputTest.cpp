@@ -14,12 +14,12 @@
 namespace {
 
 void key(cch::tui::Input& input, std::string name, bool ctrl = false, bool shift = false, bool alt = false) {
-    input.handle_input(cch::tui::KeyEvent{
-        .key = std::move(name),
-        .ctrl = ctrl,
-        .shift = shift,
-        .alt = alt,
-    });
+    static_cast<void>(input.handle_input(cch::tui::KeyEvent{
+            .key = std::move(name),
+            .ctrl = ctrl,
+            .shift = shift,
+            .alt = alt,
+    }));
 }
 
 void type(cch::tui::Input& input, std::string text) {
@@ -215,7 +215,7 @@ TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][inp
     cch::tui::Input input;
     type(input, "ab");
     key(input, "left");
-    input.handle_input(cch::tui::PasteEvent{.text = "X\r\nY\tZ\r"});
+    static_cast<void>(input.handle_input(cch::tui::PasteEvent{.text = "X\r\nY\tZ\r"}));
     CHECK(input.value() == "aXY    Zb");
 
     // Undo restores the pre-paste state in one step.
@@ -225,7 +225,7 @@ TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][inp
     // Control characters are dropped from pastes; the rest of the sequence
     // stays literal (decoded-event hygiene, matching Editor::paste). The undo
     // also restored the cursor to its pre-paste position.
-    input.handle_input(cch::tui::PasteEvent{.text = "\x1b[31mred\x1b[0m"});
+    static_cast<void>(input.handle_input(cch::tui::PasteEvent{.text = "\x1b[31mred\x1b[0m"}));
     CHECK(input.value() == "a[31mred[0mb");
 }
 
@@ -411,4 +411,27 @@ TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][i
     // Bracketed paste through the decoded pipeline frames one clean insert.
     REQUIRE(terminal.inject_input("\x1b[200~pa\x1b[201~"));
     CHECK(input_ptr->value() == "hellopa");
+}
+
+TEST_CASE("Input outcome-based admission proves boundary no-ops and side-effect freedom", "[tui][input]") {
+    cch::tui::Input input;
+
+    // 1. Recognized boundary no-op: cursorLeft at start of input is consumed.
+    input.set_value("");
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "left"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.value().empty());
+
+    // 2. Recognized boundary no-op: undo on empty undo stack is consumed.
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "-", .ctrl = true}) ==
+            cch::tui::InputAdmissionOutcome::Consumed);
+
+    // 3. Unhandled side-effect freedom: key releases are unhandled and modify no state.
+    input.set_value("hello");
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "a", .type = cch::tui::KeyEventType::Release}) ==
+            cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(input.value() == "hello");
+
+    // 4. Unhandled side-effect freedom: unrecognized non-printable keys are unhandled and modify no state.
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "insert"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(input.value() == "hello");
 }

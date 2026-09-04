@@ -156,8 +156,7 @@ public:
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
-    void handle_input(const InputEventVariant& input) override;
-    [[nodiscard]] bool accepts_key_releases() const override;
+    InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     /// The search input's cursor in this component's own line coordinates:

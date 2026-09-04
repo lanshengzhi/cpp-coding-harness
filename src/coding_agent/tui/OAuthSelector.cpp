@@ -157,8 +157,13 @@ support::Expected<cch::tui::RenderResult> OAuthSelectorComponent::render(std::si
 
 void OAuthSelectorComponent::invalidate() { select_list_.invalidate(); }
 
-void OAuthSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
-    select_list_.handle_input(input);
+cch::tui::InputAdmissionOutcome OAuthSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
+    const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
+    }
+    static_cast<void>(select_list_.handle_input(input));
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 void OAuthSelectorComponent::set_focused(bool focused) { select_list_.set_focused(focused); }

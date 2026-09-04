@@ -43,4 +43,11 @@ using InputEventVariant = std::variant<KeyEvent, PasteEvent>;
 [[nodiscard]] std::string key_id(const KeyEvent& event);
 [[nodiscard]] bool matches_key(const KeyEvent& event, std::string_view identifier);
 
+/// Whether the event carries key press behavior (press or repeat). Paste
+/// events (no key payload) and key releases do not; a handler that does not
+/// intentionally claim a release returns it unhandled (ADR 0050).
+[[nodiscard]] inline bool carries_press_behavior(const KeyEvent* key) {
+    return key != nullptr && key->type != KeyEventType::Release;
+}
+
 } // namespace cch::tui

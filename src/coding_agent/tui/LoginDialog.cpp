@@ -286,12 +286,12 @@ void LoginDialogComponent::invalidate() {
     input_.invalidate();
 }
 
-void LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input) {
+cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) return;
+    if (!cch::tui::carries_press_behavior(key)) return cch::tui::InputAdmissionOutcome::Unhandled;
     if (keybindings_->matches(*key, "tui.select.cancel")) {
         cancel();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
     std::shared_ptr<PromptSlot> slot;
@@ -302,7 +302,7 @@ void LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input
         if (input_visible_) {
             // The Input's sinks only record into members here; they run
             // synchronously under this lock and never re-enter the dialog.
-            input_.handle_input(input);
+            static_cast<void>(input_.handle_input(input));
         }
         if (pending_escape_) {
             pending_escape_ = false;
@@ -325,12 +325,13 @@ void LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input
     }
     if (escape) {
         cancel();
-        return;
+        return cch::tui::InputAdmissionOutcome::Consumed;
     }
     if (slot) {
         slot->resolve(std::move(submitted));
         if (on_invalidate_) on_invalidate_();
     }
+    return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
 void LoginDialogComponent::set_focused(bool focused) {

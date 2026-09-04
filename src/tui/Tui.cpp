@@ -690,7 +690,7 @@ void Tui::handle_input(std::string input) {
 
 void Tui::dispatch_input(const InputEventVariant& event) {
     // Try overlays first (in reverse z-order, topmost first)
-    if (compositor_->dispatch_input(event, previous_dimensions_)) return;
+    if (compositor_->dispatch_input(event, previous_dimensions_) == InputAdmissionOutcome::Consumed) return;
 
     // Fallback to focused base component
     auto* input_handler = dynamic_cast<InputHandler*>(focused_);
@@ -700,11 +700,7 @@ void Tui::dispatch_input(const InputEventVariant& event) {
         input_handler = dynamic_cast<InputHandler*>(focused_);
         if (input_handler == nullptr) return;
     }
-    if (const auto* key = std::get_if<KeyEvent>(&event);
-        key != nullptr && key->type == KeyEventType::Release && !input_handler->accepts_key_releases()) {
-        return;
-    }
-    input_handler->handle_input(event);
+    static_cast<void>(input_handler->handle_input(event));
 }
 
 void Tui::handle_resize(TerminalDimensions) {

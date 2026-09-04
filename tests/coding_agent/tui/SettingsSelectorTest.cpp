@@ -113,19 +113,19 @@ TEST_CASE(
     // other descriptions render as their rows are selected.
     CHECK(screen.find("Register skills as /skill:name commands") !=
         std::string::npos);
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Horizontal padding for user messages, assistant messages, and thinking") !=
         std::string::npos);
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Hide thinking blocks in assistant responses") !=
         std::string::npos);
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Fallback behavior when no extension") !=
         std::string::npos);
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Reasoning depth for thinking-capable models") !=
         std::string::npos);
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Color theme for the interface") !=
         std::string::npos);
     // Resolved current values.
@@ -164,30 +164,30 @@ TEST_CASE(
         std::move(callbacks));
 
     // Confirm on the first item (skill-commands) cycles true → false.
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(skill_change.has_value());
     CHECK(*skill_change == false);
 
     // Down to output-padding; confirm cycles 1 → 0.
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(pad_change.has_value());
     CHECK(*pad_change == 0);
 
     // Down to hide-thinking; confirm cycles false → true.
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(hide_change.has_value());
     CHECK(*hide_change == true);
 
     // Down to default-project-trust; confirm cycles Ask → Always trust.
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(trust_change.has_value());
     CHECK(*trust_change == coding_agent::DefaultProjectTrust::Always);
 
     // Cancel fires the cancel sink.
-    selector.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
 }
 
@@ -210,9 +210,9 @@ TEST_CASE(
 
     // Navigate to the thinking item (index 4) and open the submenu.
     for (int step = 0; step < 4; ++step) {
-        selector.handle_input(tui::KeyEvent{.key = "down"});
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
 
     const auto screen = render_screen(selector);
     CHECK(screen.find("No reasoning") != std::string::npos);
@@ -221,7 +221,7 @@ TEST_CASE(
     CHECK(screen.find("Extra-high reasoning (~32k tokens)") != std::string::npos);
 
     // The current level is pre-selected; confirming selects it.
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(level_change.has_value());
     CHECK(*level_change == "low");
 }
@@ -248,9 +248,9 @@ TEST_CASE(
 
     // Navigate to the theme item (last, index 5) and confirm.
     for (int step = 0; step < 5; ++step) {
-        selector.handle_input(tui::KeyEvent{.key = "down"});
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
 
     // The single-mode submenu lists every available theme sorted with the
     // `(current)` marker on the active theme and pi's SelectSubmenu chrome
@@ -265,13 +265,13 @@ TEST_CASE(
     CHECK(screen.find("Automatic") == std::string::npos);
 
     // Moving the selection previews in memory.
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     REQUIRE(previewed.size() == 1);
     CHECK(previewed[0] == "light");
 
     // Confirming commits through the change sink (pi onThemeChange); the
     // settings-list change fires with the selected theme.
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(committed.size() == 1);
     CHECK(committed[0] == "light");
 }
@@ -297,17 +297,17 @@ TEST_CASE(
         std::move(callbacks));
 
     for (int step = 0; step < 5; ++step) {
-        selector.handle_input(tui::KeyEvent{.key = "down"});
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     previewed.clear();
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     REQUIRE(previewed.size() == 1);
     CHECK(previewed[0] == "dark");
 
     // Esc cancels: the original setting is re-previewed and nothing commits
     // (cancel-does-not-revert).
-    selector.handle_input(tui::KeyEvent{.key = "escape"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "escape"}));
     REQUIRE(previewed.size() == 2);
     CHECK(previewed[1] == "light");
     CHECK(committed.empty());
@@ -325,11 +325,11 @@ TEST_CASE(
 
     // Typing filters by label (pi settings-list.ts search). The Theme item
     // renders always now, so a "th" query matches it too.
-    selector.handle_input(tui::KeyEvent{.key = "t"});
-    selector.handle_input(tui::KeyEvent{.key = "h"});
-    selector.handle_input(tui::KeyEvent{.key = "i"});
-    selector.handle_input(tui::KeyEvent{.key = "n"});
-    selector.handle_input(tui::KeyEvent{.key = "k"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "t"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "h"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "i"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "n"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "k"}));
     const auto screen = render_screen(selector);
     CHECK(screen.find("Thinking level") != std::string::npos);
     CHECK(screen.find("Hide thinking") != std::string::npos);
@@ -355,9 +355,9 @@ TEST_CASE(
     // unconditionally); the submenu opens with the builtin themes.
     CHECK(screen.find("Theme") != std::string::npos);
     for (int step = 0; step < 5; ++step) {
-        selector.handle_input(tui::KeyEvent{.key = "down"});
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     const auto submenu = render_screen(selector);
     CHECK(submenu.find("dark") != std::string::npos);
     CHECK(submenu.find("light") != std::string::npos);

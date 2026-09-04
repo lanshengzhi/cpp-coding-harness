@@ -46,9 +46,10 @@ struct EditorOptions {
     /// One-shot timer for autocomplete debounce; without one, debounced
     /// requests run immediately (deterministic tests inject a manual timer).
     std::unique_ptr<AutocompleteDebounceTimer> autocomplete_debounce_timer{};
-    /// Fired when an asynchronous autocomplete result lands so the host can
-    /// schedule a repaint.
-    EditorRenderRequestSink autocomplete_render_request{};
+    /// Fired when presentation-only changes (menu open/close, selection move,
+    /// provider replacement, or accepted asynchronous results) land so the
+    /// host can schedule a repaint.
+    EditorRenderRequestSink render_request{};
 };
 
 struct EditorTheme {
@@ -93,14 +94,10 @@ public:
     /// shape over the immutable registry, ADR 0035): subsequent input matches
     /// the new registry. Confined to the app layer's `/reload` re-catalog.
     void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
-    [[nodiscard]] bool autocomplete_open() const;
-    [[nodiscard]] std::vector<AutocompleteItem> autocomplete_items() const;
-    [[nodiscard]] std::size_t autocomplete_selected_index() const;
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
-    void handle_input(const InputEventVariant& input) override;
-    [[nodiscard]] bool accepts_key_releases() const override;
+    InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;

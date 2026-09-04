@@ -18,18 +18,26 @@
 namespace {
 
 void key(cch::tui::Editor& editor, std::string name, bool ctrl = false, bool shift = false, bool alt = false) {
-    editor.handle_input(cch::tui::KeyEvent{
-        .key = std::move(name),
-        .ctrl = ctrl,
-        .shift = shift,
-        .alt = alt,
-    });
+    static_cast<void>(editor.handle_input(cch::tui::KeyEvent{
+            .key = std::move(name),
+            .ctrl = ctrl,
+            .shift = shift,
+            .alt = alt,
+    }));
 }
 
 void type(cch::tui::Editor& editor, std::string text) {
     key(editor, std::move(text));
 }
 
+bool menu_rendered(cch::tui::Editor& editor, std::size_t width = 80) {
+    const auto rendered = editor.render(width);
+    if (!rendered) return false;
+    for (const auto& line : rendered->lines) {
+        if (line.starts_with("> /") || line.starts_with("  /")) return true;
+    }
+    return false;
+}
 } // namespace
 
 TEST_CASE(
@@ -101,7 +109,8 @@ TEST_CASE("Editor yanks multiline and pasted content without losing marker seman
     CHECK(editor.text() == "\n");
 
     editor.set_text({});
-    editor.handle_input(cch::tui::PasteEvent{.text = std::string(1001, 'x'), .original_bytes = 1001, .lines = 1});
+    static_cast<void>(editor.handle_input(
+            cch::tui::PasteEvent{.text = std::string(1001, 'x'), .original_bytes = 1001, .lines = 1}));
     key(editor, "home");
     key(editor, "k", true);
     key(editor, "y", true);
@@ -117,11 +126,11 @@ TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[
             submitted.push_back(std::move(text));
             return {};
         });
-    editor.handle_input(cch::tui::PasteEvent{
-        .text = std::string(1001, 'x'),
-        .original_bytes = 1001,
-        .lines = 1,
-    });
+    static_cast<void>(editor.handle_input(cch::tui::PasteEvent{
+            .text = std::string(1001, 'x'),
+            .original_bytes = 1001,
+            .lines = 1,
+    }));
 
     CHECK(editor.text() == "[paste #1 1001 chars]");
     CHECK(editor.expanded_text() == std::string(1001, 'x'));
@@ -194,22 +203,22 @@ TEST_CASE(
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "/");
-    REQUIRE(editor.autocomplete_open());
-    CHECK(editor.autocomplete_selected_index() == 0);
+    REQUIRE(menu_rendered(editor));
+    CHECK(editor.render(80)->lines[1].starts_with("> /help"));
     key(editor, "down");
-    CHECK(editor.autocomplete_selected_index() == 1);
+    CHECK(editor.render(80)->lines[2].starts_with("> /history"));
     key(editor, "up");
-    CHECK(editor.autocomplete_selected_index() == 0);
+    CHECK(editor.render(80)->lines[1].starts_with("> /help"));
     key(editor, "tab");
     CHECK(provider_ptr->apply_calls == 1);
     CHECK(editor.text() == "/help ");
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 
     editor.set_text("/he");
     type(editor, "l");
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     key(editor, "escape");
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
     CHECK(editor.text() == "/hel");
 
     provider_ptr->response = cch::tui::AutocompleteSuggestions{
@@ -219,11 +228,11 @@ TEST_CASE(
     };
     editor.set_text("@s");
     key(editor, "tab");
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     CHECK(provider_ptr->requests.back().force);
     CHECK(provider_ptr->requests.back().cursor_column == 2);
     key(editor, "escape");
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
     CHECK(editor.text() == "@s");
 }
 
@@ -281,12 +290,12 @@ TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit
     // completion applies before submission. A main-phase submit would fire
     // with the raw "/" and leave apply_calls at zero.
     type(editor, "/");
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     key(editor, "enter");
     CHECK(provider_ptr->apply_calls == 1);
     REQUIRE(submitted.size() == 1);
     CHECK(submitted[0] == "/help"); // submit trims (pi onSubmit)
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 
     // Menu closed: the same key is plain submission with no completion.
     editor.set_text("plain");
@@ -326,10 +335,10 @@ TEST_CASE("Editor resolves a menu key shared by cancel and confirm in dispatch o
     cch::tui::Editor editor({.keybindings = std::move(registry)});
     editor.set_autocomplete_provider(std::move(provider));
     type(editor, "/");
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     key(editor, "f9");
     CHECK(provider_ptr->apply_calls == 0);
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
     CHECK(editor.text() == "/");
 }
 
@@ -361,10 +370,10 @@ TEST_CASE("Editor raw shift guards fire at their chain positions", "[tui][editor
     cch::tui::Editor claiming({.keybindings = std::move(menu_first)});
     claiming.set_autocomplete_provider(std::move(provider));
     type(claiming, "/");
-    REQUIRE(claiming.autocomplete_open());
+    REQUIRE(menu_rendered(claiming));
     key(claiming, "backspace", false, true);
     CHECK(provider_ptr->apply_calls == 0);
-    CHECK_FALSE(claiming.autocomplete_open());
+    CHECK_FALSE(menu_rendered(claiming));
     CHECK(claiming.text() == "/");
 }
 
@@ -994,7 +1003,7 @@ TEST_CASE("Editor debounces attachment autocomplete until the injected timer fir
 
     timer_ptr->fire();
     REQUIRE(provider_ptr->requests.size() == 1);
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
 
     // A new keystroke cancels the pending debounce and re-schedules. The
     // request path always cancels the previous debounce first (pi
@@ -1004,7 +1013,7 @@ TEST_CASE("Editor debounces attachment autocomplete until the injected timer fir
     CHECK(timer_ptr->start_count == 2);
     timer_ptr->fire();
     REQUIRE(provider_ptr->requests.size() == 2);
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
 }
 
 TEST_CASE("Editor samples current text and cursor when a debounce callback fires",
@@ -1057,15 +1066,16 @@ TEST_CASE("Editor accepts only the first delivery from one completion request",
     REQUIRE(provider_ptr->held_sinks.size() == 1);
     (void)provider_ptr->held_sinks[0](slash_suggestions());
     REQUIRE(editor.render(80));
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
 
     (void)provider_ptr->held_sinks[0](cch::tui::AutocompleteSuggestions{
             .items = {{.value = "history", .label = "history", .description = {}}},
             .prefix = "/",
     });
-    REQUIRE(editor.render(80));
-    REQUIRE(editor.autocomplete_items().size() == 1);
-    CHECK(editor.autocomplete_items()[0].value == "help");
+    const auto screen = editor.render(80);
+    REQUIRE(screen);
+    REQUIRE(menu_rendered(editor));
+    CHECK(screen->lines[1].starts_with("> /help"));
 }
 
 TEST_CASE("Editor drops held completion callbacks after provider replacement and destruction",
@@ -1073,11 +1083,11 @@ TEST_CASE("Editor drops held completion callbacks after provider replacement and
     const auto holder = std::make_shared<EscapingSinkHolder>();
     std::size_t render_requests = 0;
     {
-        cch::tui::Editor editor(cch::tui::EditorOptions{.autocomplete_render_request =
-                                                                [&render_requests]() -> cch::support::ExpectedVoid {
-            ++render_requests;
-            return {};
-        }},
+        cch::tui::Editor editor(
+                cch::tui::EditorOptions{.render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                    ++render_requests;
+                    return {};
+                }},
                 {},
                 {});
         editor.set_autocomplete_provider(std::make_unique<EscapingAutocompleteProvider>(holder));
@@ -1086,7 +1096,7 @@ TEST_CASE("Editor drops held completion callbacks after provider replacement and
 
         editor.set_autocomplete_provider(nullptr);
         (void)(*holder->sink)(slash_suggestions());
-        CHECK_FALSE(editor.autocomplete_open());
+        CHECK_FALSE(menu_rendered(editor));
     }
 
     (void)(*holder->sink)(slash_suggestions());
@@ -1114,7 +1124,7 @@ TEST_CASE("Editor teardown from a synchronous render notification is safe",
         "[tui][editor][autocomplete][issue473][issue538]") {
     const auto owner = std::make_shared<std::unique_ptr<cch::tui::Editor>>();
     *owner = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{
-            .autocomplete_render_request = [owner]() -> cch::support::ExpectedVoid {
+            .render_request = [owner]() -> cch::support::ExpectedVoid {
                 owner->reset();
                 return {};
             },
@@ -1129,7 +1139,7 @@ TEST_CASE("Editor deactivates a failed autocomplete render notification", "[tui]
     std::size_t render_requests = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     cch::tui::Editor editor(cch::tui::EditorOptions{
-            .autocomplete_render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+            .render_request = [&render_requests]() -> cch::support::ExpectedVoid {
                 ++render_requests;
                 return std::unexpected(
                         cch::support::make_error(cch::support::ErrorCode::Unknown, "render request failed"));
@@ -1148,7 +1158,7 @@ TEST_CASE("Editor deactivates a throwing autocomplete render notification", "[tu
     std::size_t render_requests = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     cch::tui::Editor editor(cch::tui::EditorOptions{
-            .autocomplete_render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+            .render_request = [&render_requests]() -> cch::support::ExpectedVoid {
                 ++render_requests;
                 throw std::runtime_error("render request failed");
             },
@@ -1181,7 +1191,7 @@ TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][ed
     CHECK(timer_ptr->last_delay == std::chrono::milliseconds{20});
     timer_ptr->fire();
     REQUIRE(provider_ptr->requests.size() == 1);
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
 }
 
 TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][editor][autocomplete][issue383]") {
@@ -1198,14 +1208,13 @@ TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][ed
 
     // The stale response for A is dropped at delivery time.
     (void)provider_ptr->held_sinks[0](slash_suggestions());
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 
     // The current response for B opens the menu at the next input boundary.
     (void)provider_ptr->held_sinks[1](slash_suggestions());
-    CHECK_FALSE(editor.autocomplete_open());
     type(editor, "e");
-    REQUIRE(editor.autocomplete_open());
-    CHECK(editor.autocomplete_items().size() == 1);
+    REQUIRE(menu_rendered(editor));
+    CHECK(editor.render(80)->lines[1].starts_with("> /"));
 }
 
 TEST_CASE("Editor aborts an in-flight autocomplete request when superseded", "[tui][editor][autocomplete][issue383]") {
@@ -1227,7 +1236,7 @@ TEST_CASE("Editor aborts an in-flight autocomplete request when superseded", "[t
 
     // The aborted request's late response is rejected.
     (void)provider_ptr->held_sinks[0](slash_suggestions());
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 }
 
 TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the menu", "[tui][editor][autocomplete][issue383]") {
@@ -1241,19 +1250,19 @@ TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the
     REQUIRE(provider_ptr->requests.size() == 1);
     (void)provider_ptr->held_sinks[0](slash_suggestions());  // A resolves
     type(editor, "x");  // drain opens the menu; typing re-requests (held)
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     REQUIRE(provider_ptr->requests.size() == 2);
 
     key(editor, "escape");  // cancel the open menu and the in-flight request
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
     CHECK(provider_ptr->requests[1].stop_token.stop_requested());
 
     // The late result of the cancelled request must not reopen the menu (pi
     // aborted-signal check).
     (void)provider_ptr->held_sinks[1](slash_suggestions());
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
     type(editor, "y");
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 }
 
 TEST_CASE("Editor drops autocomplete results that no longer match the buffer snapshot", "[tui][editor][autocomplete][issue383]") {
@@ -1275,7 +1284,7 @@ TEST_CASE("Editor drops autocomplete results that no longer match the buffer sna
     });
     key(editor, "left");
     key(editor, "right");
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 }
 
 TEST_CASE("Editor applies a unique forced completion without opening the menu", "[tui][editor][autocomplete][issue383]") {
@@ -1291,7 +1300,7 @@ TEST_CASE("Editor applies a unique forced completion without opening the menu", 
     type(editor, "ab");
     key(editor, "tab");  // force: exactly one item applies immediately
     CHECK(editor.text() == "absrc/");
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
     CHECK(provider_ptr->requests.back().force);
 }
 
@@ -1305,7 +1314,7 @@ TEST_CASE("Editor gates forced file completion behind the provider", "[tui][edit
     type(editor, "ab");
     key(editor, "tab");
     CHECK(provider_ptr->requests.empty());
-    CHECK_FALSE(editor.autocomplete_open());
+    CHECK_FALSE(menu_rendered(editor));
 }
 
 TEST_CASE("Editor select.confirm applies and falls through to submit for slash commands", "[tui][editor][autocomplete][issue383]") {
@@ -1323,7 +1332,7 @@ TEST_CASE("Editor select.confirm applies and falls through to submit for slash c
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "/");
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     key(editor, "enter");  // slash confirm applies then submits
     CHECK(editor.text().empty());
     REQUIRE(submitted.size() == 1);
@@ -1348,7 +1357,7 @@ TEST_CASE("Editor select.confirm applies without submitting outside slash comman
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "@");
-    REQUIRE(editor.autocomplete_open());
+    REQUIRE(menu_rendered(editor));
     key(editor, "enter");
     CHECK(editor.text() == "@src/");
     CHECK(submitted.empty());
@@ -1431,3 +1440,229 @@ TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "
         CHECK(cch::tui::visible_width(line) <= 8);
     }
 }
+
+TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row cap, visibility, formatting, cursor "
+          "stability",
+        "[tui][editor][autocomplete][presentation]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+            .items =
+                    {
+                            {.value = "apple", .label = "apple", .description = "sweet fruit"},
+                            {.value = "banana", .label = "banana", .description = "yellow fruit"},
+                            {.value = "cherry", .label = "cherry", .description = "red fruit"},
+                            {.value = "date", .label = "date", .description = "palm fruit"},
+                            {.value = "elderberry", .label = "elderberry", .description = "dark berry"},
+                            {.value = "fig", .label = "fig", .description = "ficus fruit"},
+                            {.value = "grape",
+                                    .label = "grape",
+                                    .description =
+                                            "vine fruit with a very very long description that needs truncation"},
+                            {.value = "honeydew", .label = "honeydew", .description = ""},
+                    },
+            .prefix = "/",
+    };
+    cch::tui::Editor editor;
+    editor.set_focused(true);
+    editor.set_autocomplete_provider(std::move(provider));
+    editor.set_text("/");
+    type(editor, "a");
+
+    // Check cursor stability
+    editor.set_available_height(1);
+    auto text_only_screen = editor.render(40);
+    REQUIRE(text_only_screen);
+    const auto cursor_before = editor.cursor_location();
+    REQUIRE(cursor_before.has_value());
+
+    // With available height = 10 (text is 1 line -> 9 remainder):
+    // 5-row cap applies: exactly 5 menu rows rendered!
+    editor.set_available_height(10);
+    auto screen = editor.render(40);
+    REQUIRE(screen);
+    // 1 text line + 5 menu lines = 6 lines
+    REQUIRE(screen->lines.size() == 6);
+    CHECK(screen->lines[0].starts_with("/a"));
+    CHECK(screen->lines[1] == "> /apple — sweet fruit                  ");
+    CHECK(screen->lines[2] == "  /banana — yellow fruit                ");
+    CHECK(screen->lines[3] == "  /cherry — red fruit                   ");
+    CHECK(screen->lines[4] == "  /date — palm fruit                    ");
+    CHECK(screen->lines[5] == "  /elderberry — dark berry              ");
+
+    // Cursor location relative to editor block is unchanged
+    const auto cursor_after = editor.cursor_location();
+    REQUIRE(cursor_after.has_value());
+    CHECK(cursor_after->row == cursor_before->row);
+    CHECK(cursor_after->column == cursor_before->column);
+
+    // Selected-item visibility scrolling:
+    // Move down 5 times to select item 5 ("fig")
+    for (int i = 0; i < 5; ++i)
+        key(editor, "down");
+    screen = editor.render(40);
+    REQUIRE(screen);
+    REQUIRE(screen->lines.size() == 6);
+    // Window scrolled: index 1 ("banana") to 5 ("fig")
+    CHECK(screen->lines[1] == "  /banana — yellow fruit                ");
+    CHECK(screen->lines[5] == "> /fig — ficus fruit                    ");
+
+    // Move down to item 7 ("honeydew", empty description)
+    key(editor, "down"); // item 6 ("grape")
+    key(editor, "down"); // item 7 ("honeydew")
+    screen = editor.render(40);
+    REQUIRE(screen);
+    REQUIRE(screen->lines.size() == 6);
+    CHECK(screen->lines[5] == "> /honeydew                             ");
+
+    // Truncation on narrow width:
+    key(editor, "up"); // item 6 ("grape" with very long description)
+    screen = editor.render(25);
+    REQUIRE(screen);
+    REQUIRE(screen->lines.size() == 6);
+    // Line width is strictly bounded to 25 columns
+    CHECK(cch::tui::visible_width(screen->lines[5]) <= 25);
+    CHECK(screen->lines[5].starts_with("> /grape — vine fruit "));
+
+    // Text priority & zero-remainder height allocation:
+    // Text takes 1 line; if available_height is 1 -> remainder is 0 -> 0 menu rows!
+    editor.set_available_height(1);
+    screen = editor.render(40);
+    REQUIRE(screen);
+    REQUIRE(screen->lines.size() == 1);
+    CHECK(screen->lines[0].starts_with("/a"));
+
+    // Available height is 0 -> 0 menu rows, never underflows
+    editor.set_available_height(0);
+    screen = editor.render(40);
+    REQUIRE(screen);
+    REQUIRE(screen->lines.size() == 1);
+
+    // Cancellation outcome:
+    CHECK(editor.handle_input(cch::tui::KeyEvent{.key = "escape"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    // Menu is now closed:
+    editor.set_available_height(10);
+    screen = editor.render(40);
+    REQUIRE(screen);
+    REQUIRE(screen->lines.size() == 1);
+
+    // Second cancellation when menu is closed returns Unhandled and leaves text unchanged:
+    CHECK(editor.handle_input(cch::tui::KeyEvent{.key = "escape"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(editor.text() == "/a");
+}
+
+TEST_CASE("Editor presentation repaint notifications fire for menu navigation, cancel, and async delivery",
+        "[tui][editor][autocomplete][presentation]") {
+    std::size_t repaint_requests = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor(cch::tui::EditorOptions{
+            .render_request = [&repaint_requests]() -> cch::support::ExpectedVoid {
+                ++repaint_requests;
+                return {};
+            },
+    });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    REQUIRE(provider_ptr->held_sinks.size() == 1);
+    CHECK(repaint_requests == 0);
+
+    // Accepted async delivery requests repaint:
+    const cch::tui::AutocompleteSuggestions two_suggestions{
+            .items =
+                    {
+                            {.value = "help", .label = "help", .description = {}},
+                            {.value = "history", .label = "history", .description = {}},
+                    },
+            .prefix = "/",
+    };
+    (void)provider_ptr->held_sinks[0](two_suggestions);
+    CHECK(repaint_requests == 1);
+    // Menu navigation (MoveDown) requests repaint without mutating text:
+    const auto text_before = editor.text();
+    key(editor, "down");
+    CHECK(editor.text() == text_before);
+    CHECK(repaint_requests == 2);
+
+    // Menu navigation (MoveUp) requests repaint without mutating text:
+    key(editor, "up");
+    CHECK(editor.text() == text_before);
+    CHECK(repaint_requests == 3);
+
+    // Menu cancellation requests repaint without mutating text:
+    key(editor, "escape");
+    CHECK(editor.text() == text_before);
+    CHECK(repaint_requests == 4);
+
+    // Additional key with menu closed does NOT trigger presentation repaint:
+    key(editor, "escape");
+    CHECK(repaint_requests == 4);
+}
+
+TEST_CASE("Editor does not request a duplicate repaint when a mutation closes the menu",
+        "[tui][editor][autocomplete][presentation]") {
+    std::size_t repaint_requests = 0;
+    std::size_t change_notifications = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = slash_suggestions();
+    cch::tui::Editor editor(
+            cch::tui::EditorOptions{.render_request = [&repaint_requests]() -> cch::support::ExpectedVoid {
+                ++repaint_requests;
+                return {};
+            }},
+            [&change_notifications](std::string) -> cch::support::ExpectedVoid {
+                ++change_notifications;
+                return {};
+            },
+            {});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    REQUIRE(menu_rendered(editor));
+    const auto repaint_after_open = repaint_requests;
+
+    // shift+enter (tui.input.newLine) cancels the menu and inserts a newline;
+    // the change notification already schedules the frame.
+    key(editor, "enter", false, true);
+    CHECK(editor.text() == "/\n");
+    CHECK(change_notifications == 2);
+    CHECK(repaint_requests == repaint_after_open);
+    CHECK_FALSE(menu_rendered(editor));
+}
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][editor][autocomplete][issue538]") {
+    std::size_t render_requests = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+            .items =
+                    {
+                            {.value = "help", .label = "help", .description = {}},
+                            {.value = "history", .label = "history", .description = {}},
+                    },
+            .prefix = "/",
+    };
+    cch::tui::Editor editor(cch::tui::EditorOptions{
+            .render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                ++render_requests;
+                throw std::runtime_error("render request failed");
+            },
+    });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    CHECK(render_requests == 1);
+
+    // Presentation-only navigation: the throw is caught, diagnosed as a
+    // bounded callback error, and the sink is deactivated.
+    key(editor, "down");
+    CHECK(render_requests == 2);
+    CHECK_FALSE(editor.render(80).has_value());
+    key(editor, "up");
+    CHECK(render_requests == 2);
+}
+#endif
