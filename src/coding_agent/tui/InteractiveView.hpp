@@ -182,7 +182,7 @@ struct InteractiveViewOptions {
     bool user_bash_available{false};
     std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider;
     std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer;
-    cch::tui::EditorRenderRequestSink autocomplete_render_request;
+    cch::tui::EditorRenderRequestSink render_request;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
 };

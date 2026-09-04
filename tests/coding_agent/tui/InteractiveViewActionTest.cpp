@@ -102,6 +102,35 @@ test_keybinding_slot() {
         .type = tui::KeyEventType::Press,
     }};
 }
+class SimpleSlashProvider final : public cch::tui::AutocompleteProvider {
+public:
+    void get_suggestions(const cch::tui::AutocompleteRequest&, cch::tui::AutocompleteResultSink sink) override {
+        (void)sink(cch::tui::AutocompleteSuggestions{
+                .items = {{.value = "help", .label = "help", .description = "show help"}},
+                .prefix = "/",
+        });
+    }
+    cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem& item,
+            std::string_view prefix) override {
+        auto result_lines = lines;
+        auto& line = result_lines[cursor_line];
+        const auto before = line.substr(0, cursor_column - prefix.size());
+        const auto after = line.substr(cursor_column);
+        line = before + "/" + item.value + " " + after;
+        return {
+                .lines = std::move(result_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = before.size() + item.value.size() + 2,
+        };
+    }
+    bool should_trigger_file_completion(const std::vector<std::string>&, std::size_t, std::size_t) const override {
+        return false;
+    }
+    std::vector<std::string> trigger_characters() const override { return {}; }
+};
 
 struct ViewFixture {
     std::vector<coding_agent::tui::ViewAction> actions;
@@ -111,9 +140,9 @@ struct ViewFixture {
     coding_agent::tui::LiveTheme theme;
     std::unique_ptr<coding_agent::tui::InteractiveView> view;
 
-    explicit ViewFixture(bool user_bash_available = false)
-        : keybindings(test_keybinding_slot()),
-          theme(test_theme()) {
+    explicit ViewFixture(
+            bool user_bash_available = false, std::unique_ptr<cch::tui::AutocompleteProvider> provider = nullptr)
+        : keybindings(test_keybinding_slot()), theme(test_theme()) {
         coding_agent::tui::InteractiveViewOptions options;
         options.keybindings = keybindings;
         options.on_invalidate = [this] { ++invalidations; };
@@ -127,11 +156,14 @@ struct ViewFixture {
                 return support::ExpectedVoid{};
             };
         options.footer_data_source = [] {
-            return coding_agent::tui::FooterData{};
+            coding_agent::tui::FooterData data;
+            data.cwd = "/tmp";
+            return data;
         };
         options.hide_thinking_block = false;
         options.output_pad = 0;
         options.user_bash_available = user_bash_available;
+        options.autocomplete_provider = std::move(provider);
         options.theme = &theme;
         view = std::make_unique<coding_agent::tui::InteractiveView>(
             std::move(options));
@@ -354,4 +386,39 @@ TEST_CASE(
     CHECK(rendered.error().message.find("Native TUI exit action failed") !=
           std::string::npos);
     CHECK(rendered.error().detail == "fake admission failure");
+}
+
+TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt Admission",
+        "[coding_agent][tui][view_actions][autocomplete]") {
+    ViewFixture fixture{false, std::make_unique<SimpleSlashProvider>()};
+    auto& view = *fixture.view;
+
+    // Type "/" to trigger autocomplete
+    fixture.type("/");
+    const auto rendered_with_menu = view.render(80);
+    REQUIRE(rendered_with_menu);
+    bool has_menu_row = false;
+    for (const auto& line : rendered_with_menu->lines) {
+        if (line.starts_with("> /help")) has_menu_row = true;
+    }
+    REQUIRE(has_menu_row);
+
+    // Escape with autocomplete open: cancels autocomplete and consumes the event.
+    // No InterruptAction is emitted!
+    const auto first_escape_outcome = view.handle_input(key("escape"));
+    CHECK(first_escape_outcome == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(fixture.actions.empty());
+
+    // Rendered output confirms menu is gone:
+    const auto rendered_closed = view.render(80);
+    REQUIRE(rendered_closed);
+    for (const auto& line : rendered_closed->lines) {
+        CHECK_FALSE(line.starts_with("> /help"));
+    }
+
+    // Following escape with menu closed enters Interrupt Admission exactly once.
+    const auto second_escape_outcome = view.handle_input(key("escape"));
+    CHECK(second_escape_outcome == cch::tui::InputAdmissionOutcome::Consumed);
+    REQUIRE(fixture.actions.size() == 1);
+    CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[0]));
 }

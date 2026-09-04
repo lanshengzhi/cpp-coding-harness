@@ -443,7 +443,7 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(
     options.autocomplete_provider = build_autocomplete_provider();
     options.autocomplete_debounce_timer =
         std::make_unique<AsioAutocompleteDebounceTimer>(executor_);
-    options.autocomplete_render_request = [weak]() -> support::ExpectedVoid {
+    options.render_request = [weak]() -> support::ExpectedVoid {
         if (const auto self = weak.lock()) self->post_invalidate();
         return {};
     };
