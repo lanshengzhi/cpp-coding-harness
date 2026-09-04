@@ -16,29 +16,21 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 ## 2. Mechanical style
 
-Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or modified lines by `scripts/format-check.sh` (see §14). Untouched lines stay outside that gate.
+2.1. Formatting on added or modified lines conforms to `.clang-format` (1TBS braces, 4-space indent, 120-column limit, `*`/`&` binding to the type), enforced by `scripts/format-check.sh` (see §14). Reviewers skip findings that duplicate its patch; untouched lines stay outside that gate.
 
-2.1. Braces are 1TBS: opening brace on the same line for namespaces, types, functions, and control flow.
+2.2. Write `const` west of the type: `const std::string&`. East-const (`std::string const`) does not appear in this codebase.
 
-2.2. Indent with 4 spaces. Wrapped parameter or argument lists either continue at 8 spaces or break one parameter per line.
+2.3. No trailing return types on named functions. Lambdas declare `-> T` when the deduced return type would not be obvious.
 
-2.3. Write `const` west of the type: `const std::string&`. East-const (`std::string const`) does not appear in this codebase.
+2.4. Every header uses `#pragma once`; no include guards.
 
-2.4. `*` and `&` bind to the type: `const std::string& name`, `AsyncAgentTool* find(...)`.
+2.5. Include order, one blank line between groups: (1) corresponding header, (2) project headers, (3) third-party (`boost/`, `glaze/`), (4) standard library.
 
-2.5. The line-length limit is 120 columns on added or modified lines. Break signatures one parameter per line when wrapping.
+2.6. Include spelling: Owner Interface headers use their one canonical `<cch/...>` angle include. Private headers use the owning target's declared private root and quoted canonical spelling; the corresponding header is quoted by basename. Never use relative climbs, basenames outside the corresponding source/header pair, absolute paths, or macro-generated project includes. Legacy relative includes predate this rule—see §15.
 
-2.6. No trailing return types on named functions. Lambdas declare `-> T` when the deduced return type would not be obvious.
+2.7. Close every namespace with a comment: `} // namespace cch::agent`.
 
-2.7. Every header uses `#pragma once`; no include guards.
-
-2.8. Include order, one blank line between groups: (1) corresponding header, (2) project headers, (3) third-party (`boost/`, `glaze/`), (4) standard library.
-
-2.9. Include spelling: Owner Interface headers use their one canonical `<cch/...>` angle include. Private headers use the owning target's declared private root and quoted canonical spelling; the corresponding header is quoted by basename. Never use relative climbs, basenames outside the corresponding source/header pair, absolute paths, or macro-generated project includes. Legacy relative includes predate this rule—see §15.
-
-2.10. Close every namespace with a comment: `} // namespace cch::agent`.
-
-2.11. No `using namespace` in `include/` or `src/`. Test files may put `using namespace cch;` at the top.
+2.8. No `using namespace` in `include/` or `src/`. Test files may put `using namespace cch;` at the top.
 
 ## 3. Naming
 
@@ -68,7 +60,7 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 4.5. Unstructured cross-Owner JSON facts use `cch::support::JsonValue`. Raw Glaze generic values and `boost::json` never appear in Owner Interfaces (ADR 0007; ADR 0039).
 
-4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. Coroutines that may suspend (`co_await`) take inputs by value to prevent cross-suspension parameter dangling, unless an explicit declaration-level lifetime contract per §7.5 guarantees the caller outlives the entire coroutine execution.
+4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. Coroutines that may suspend (`co_await`) MUST take owned values (`std::string`, `std::vector`), NEVER non-owning views (`std::string_view`, `std::span`), to prevent cross-suspension parameter dangling, unless an explicit declaration-level lifetime contract per §7.5 guarantees the caller outlives the entire coroutine execution.
 
 4.7. Fallible or easy-to-ignore return values are `[[nodiscard]]`, including awaitables.
 
@@ -94,7 +86,7 @@ Rules 2.1–2.5 are the canonical `.clang-format` contract, enforced on added or
 
 6.1. Fallible asynchronous Owner operations return `[[nodiscard]] cch::support::AsyncResult<T, E>` (default `E = cch::support::Error`). Ready values complete inline without support allocation or suspension; pending operations own their post-initiation inputs. Boost.Asio awaitables, executors, schedulers, and cancellation types stay private to implementations. Bounded in-memory value work remains synchronous; do not create an asynchronous facade for it (ADR 0040).
 
-6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (`docs/agents/architecture.md` §Connection strength; ADR 0040). A stored callback's copyability says nothing about referent lifetime.
+6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (`docs/agents/architecture.md` §Connection strength; ADR 0040). A stored callback's copyability says nothing about referent lifetime. Asynchronous callbacks, stored operations, and coroutine lambdas MUST use explicit value capture or init-capture (`[x = std::move(x)]`); never implicit capture (`[&]`, `[=]`), and never capture `this` or local references across asynchronous boundaries without a documented lifetime guarantee per §7.5.
 
 6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends; catch, diagnose, and deactivate a throwing observer without vetoing progress or persistence (ADR 0017; ADR 0040).
 

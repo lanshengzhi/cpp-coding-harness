@@ -7,9 +7,9 @@ Language: Cpp
 Standard: Latest
 BasedOnStyle: LLVM
 
-# 2.2: 4-space indent, no tabs; wrapped parameter and argument lists continue
+# 2.1: 4-space indent, no tabs; wrapped parameter and argument lists continue
 # at 8 spaces (DontAlign + ContinuationIndentWidth) or break one parameter per
-# line (BinPack* false). 2.5: hard 120-column limit on formatted lines.
+# line (BinPack* false). Hard 120-column limit on formatted lines.
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -19,7 +19,7 @@ ContinuationIndentWidth: 8
 BinPackParameters: false
 BinPackArguments: false
 
-# 2.1: 1TBS braces. 2.4: * and & bind to the type. Access modifiers stay at
+# 2.1: 1TBS braces. * and & bind to the type. Access modifiers stay at
 # column 0.
 BreakBeforeBraces: Attach
 PointerAlignment: Left
@@ -29,7 +29,7 @@ AccessModifierOffset: -4
 # The codebase permits braceless single-statement if bodies on one line.
 AllowShortIfStatementsOnASingleLine: WithoutElse
 
-# 2.8 include order remains a review rule: clang-format must not reorder
+# 2.5 include order remains a review rule: clang-format must not reorder
 # includes, because group order (corresponding header first) is semantic.
 SortIncludes: Never
 IncludeBlocks: Preserve
