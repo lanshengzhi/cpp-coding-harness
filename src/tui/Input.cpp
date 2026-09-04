@@ -249,6 +249,18 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
     std::string body;
     if (after.empty()) {
         body = before + "\x1b[7m \x1b[27m";
+        // Optional placeholder: dimmed text after the empty-value cursor,
+        // truncated to the columns left after the prompt and the cursor cell
+        // (ESC[22m restores normal intensity without resetting caller styles).
+        if (impl_->value().empty() && impl_->options.placeholder && !impl_->options.placeholder->empty() &&
+                width >= 3) {
+            const auto available = width - 3;
+            if (available > 0) {
+                auto placeholder = truncate_text(*impl_->options.placeholder, available, "");
+                if (!placeholder) return std::unexpected(placeholder.error());
+                body += "\x1b[2m" + *placeholder + "\x1b[22m";
+            }
+        }
     } else {
         const auto graphemes = detail::split_graphemes(after);
         const auto& at_cursor = graphemes.front();
