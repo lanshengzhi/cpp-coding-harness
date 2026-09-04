@@ -57,6 +57,7 @@ ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
                       .keybindings = keybindings_,
                       .enable_search = true,
                       .initial_search = initial_search_input,
+                      .no_match_text = "  No matching models",
               }) {
     if (current_model != nullptr) current_model_ = *current_model;
     for (auto& scoped : scoped_models) {
@@ -331,25 +332,10 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
     // emitted above it fix the cursor offset for this render pass.
     cursor_row_offset_ = result.lines.size();
     {
-        const auto select_begin = result.lines.size();
         auto rendered = select_list_.render(width);
         if (!rendered) return std::unexpected(rendered.error());
         for (auto& line : rendered->lines)
             result.lines.push_back(std::move(line));
-
-        // SelectList's built-in empty state reads "No matching commands";
-        // this selector's pi wording is "No matching models". The emitted
-        // row is substituted in place (same no-match theme styling), keeping
-        // the message exactly where the list body would be.
-        if (!select_list_.selected_item()) {
-            for (auto index = select_begin; index < result.lines.size(); ++index) {
-                if (result.lines[index].find("No matching commands") == std::string::npos) continue;
-                auto message = cch::tui::truncate_text(
-                        theme_.foreground(ThemeToken::Muted, "  No matching models"), width, "");
-                if (!message) return std::unexpected(message.error());
-                result.lines[index] = std::move(*message);
-            }
-        }
     }
 
     // pi `updateList` tail: diagnostics/status rows under the list, rendered

@@ -187,6 +187,9 @@ ScopedModelsSelectorComponent::ScopedModelsSelectorComponent(const LiveTheme& th
                                   }
                                   return indices;
                               },
+                      // The SelectList's generic no-match row carries the
+                      // selector's pi wording.
+                      .no_match_text = "  No matching models",
               }) {}
 
 bool ScopedModelsSelectorComponent::is_enabled(std::string_view id) const {
@@ -366,12 +369,6 @@ support::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(
 
     auto rendered_list = select_list_.render(width);
     if (!rendered_list) return std::unexpected(rendered_list.error());
-    // The SelectList's generic no-match row ("No matching commands") becomes
-    // the selector's own message; it is the last line of the body-only
-    // output (search line first, then the no-match row).
-    if (!select_list_.selected_item() && !rendered_list->lines.empty()) {
-        rendered_list->lines.back() = theme_.foreground(ThemeToken::Muted, "  No matching models");
-    }
     for (auto& line : rendered_list->lines)
         result.lines.push_back(std::move(line));
 

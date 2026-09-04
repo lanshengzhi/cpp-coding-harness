@@ -144,6 +144,7 @@ struct SelectList::Impl {
     std::optional<std::string> title;
     std::optional<std::string> hint;
     TextStyleHook border_hook;
+    std::optional<std::string> no_match_text;
     /// Row of the search line in the last successful render output; unset
     /// until the search line has actually been emitted (and reset by any
     /// later render attempt, successful or not).
@@ -432,6 +433,7 @@ SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
     impl_->hint = std::move(options.hint);
     impl_->border_hook = std::move(options.border_hook);
     impl_->search_filter_hook = std::move(options.search_filter_hook);
+    impl_->no_match_text = std::move(options.no_match_text);
     if (impl_->search_enabled) {
         // The embedded input shares SelectList's effective registry so its
         // editing actions (incl. cancel-as-first-action) resolve identically.
@@ -559,7 +561,7 @@ support::Expected<RenderResult> SelectList::render(std::size_t width) {
     }
 
     if (impl->filtered_indices.empty()) {
-        auto message = truncate_text("  No matching commands", width, "");
+        auto message = truncate_text(impl->no_match_text.value_or("  No matching commands"), width, "");
         if (!message) return std::unexpected(message.error());
         auto styled = detail::apply_text_style(impl->theme.no_match, std::move(*message), "SelectList no match");
         if (!styled) return std::unexpected(styled.error());

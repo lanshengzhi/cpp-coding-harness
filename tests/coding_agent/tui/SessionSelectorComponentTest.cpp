@@ -265,3 +265,101 @@ TEST_CASE(
     // The list refreshed with the name.
     CHECK(render_text(component).find("new") != std::string::npos);
 }
+
+TEST_CASE("session selector search delegates the query and filtered rows to the SelectList",
+        "[coding_agent][tui][session-selector][issue590]") {
+    auto theme = test_theme();
+    auto keybindings = test_keybindings();
+    auto loader = [] {
+        auto sessions = std::vector<coding_agent::session_discovery::SessionInfo>{};
+        sessions.push_back(make_session("a", std::nullopt, "fix the parser bug"));
+        sessions.push_back(make_session("b", std::nullopt, "refactor the loader"));
+        sessions[0].all_messages_text = "fix the parser bug";
+        sessions[1].all_messages_text = "refactor the loader";
+        return sessions;
+    };
+    std::string selected_path;
+    std::size_t cancellations = 0;
+    coding_agent::tui::SessionSelectorComponent component(
+            theme,
+            keybindings,
+            loader,
+            [&] { return std::vector<coding_agent::session_discovery::SessionInfo>{}; },
+            std::optional<std::filesystem::path>{},
+            [&](std::string path) { selected_path = std::move(path); },
+            [&cancellations] { ++cancellations; },
+            [] {},
+            [](std::string, std::string) { return support::ExpectedVoid{}; },
+            [] {});
+
+    // Empty query: the component's own tree rows render, with the search
+    // line (owned by the SelectList) above them.
+    auto text = render_text(component);
+    CHECK(text.find("fix the parser bug") != std::string::npos);
+    CHECK(text.find("refactor the loader") != std::string::npos);
+
+    // Typing hands the view over to the SelectList: the query line and the
+    // filtered flat rows come from it, the non-matching session disappears.
+    for (const char character : std::string("parser")) {
+        component.handle_input(tui::KeyEvent{.key = std::string(1, character)});
+    }
+    text = render_text(component);
+    CHECK(text.find("> parser") != std::string::npos);
+    CHECK(text.find("fix the parser bug") != std::string::npos);
+    CHECK(text.find("refactor the loader") == std::string::npos);
+
+    // The search cursor reports the SelectList search row plus the
+    // component-owned rows above it (blank, border, blank, title, hints,
+    // blank), recorded at render rather than assumed.
+    component.set_focused(true);
+    const auto rendered = component.render(100);
+    REQUIRE(rendered);
+    const auto cursor = component.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 7);
+    CHECK(cursor->column == 8);
+
+    // Enter resumes the filtered result through the select sink.
+    component.handle_input(tui::KeyEvent{.key = "enter"});
+    CHECK(selected_path == "/tmp/a.jsonl");
+
+    // Delete confirmation in the search view targets the filtered result.
+    component.handle_input(tui::KeyEvent{.key = "d", .ctrl = true});
+    CHECK(render_text(component).find("Delete session?") != std::string::npos);
+    component.handle_input(tui::KeyEvent{.key = "escape"});
+    CHECK(render_text(component).find("Delete session?") == std::string::npos);
+
+    // Clearing the query hands the view back to the tree rows.
+    for (std::size_t index = 0; index < 6; ++index) {
+        component.handle_input(tui::KeyEvent{.key = "backspace"});
+    }
+    text = render_text(component);
+    CHECK(text.find("fix the parser bug") != std::string::npos);
+    CHECK(text.find("refactor the loader") != std::string::npos);
+    CHECK(text.find("> parser") == std::string::npos);
+
+    // A query with no matches shows the domain empty-state row in place of
+    // the SelectList's generic no-match text.
+    for (const char character : std::string("zzz")) {
+        component.handle_input(tui::KeyEvent{.key = std::string(1, character)});
+    }
+    text = render_text(component);
+    CHECK(text.find("> zzz") != std::string::npos);
+    CHECK(text.find("No sessions in current folder. Press Tab to view all.") != std::string::npos);
+
+    // Clearing that query returns to the component's own tree view again.
+    for (std::size_t index = 0; index < 3; ++index) {
+        component.handle_input(tui::KeyEvent{.key = "backspace"});
+    }
+    text = render_text(component);
+    CHECK(text.find("fix the parser bug") != std::string::npos);
+    CHECK(text.find("refactor the loader") != std::string::npos);
+    CHECK(text.find("> parser") == std::string::npos);
+
+    // Escape from the search view cancels like the tree view (pi).
+    for (const char character : std::string("pa")) {
+        component.handle_input(tui::KeyEvent{.key = std::string(1, character)});
+    }
+    component.handle_input(tui::KeyEvent{.key = "escape"});
+    CHECK(cancellations == 1);
+}

@@ -791,3 +791,41 @@ TEST_CASE(
     CHECK(bordered_cursor->row == 2);
     CHECK(bordered_cursor->column == 6);
 }
+
+TEST_CASE("SelectList no-match row text is overridable and defaults to the toolkit wording",
+        "[tui][select-list][issue590]") {
+    // Custom wording replaces the no-match row for empty and unmatched
+    // lists (search disabled and enabled); the default stays byte-identical
+    // so existing consumers are unaffected.
+    cch::tui::SelectList custom({}, cch::tui::SelectListOptions{.no_match_text = "  No matching models"});
+    const auto empty_render = custom.render(40);
+    REQUIRE(empty_render);
+    REQUIRE_FALSE(empty_render->lines.empty());
+    CHECK(empty_render->lines[0] == "  No matching models");
+
+    cch::tui::SelectList custom_search({{.value = "alpha", .label = "Alpha"}},
+            cch::tui::SelectListOptions{
+                    .enable_search = true,
+                    .no_match_text = "  No matching sessions",
+            });
+    type_into(custom_search, "zz");
+    CHECK_FALSE(custom_search.selected_item());
+    const auto search_render = custom_search.render(40);
+    REQUIRE(search_render);
+    REQUIRE(search_render->lines.size() >= 2);
+    CHECK(search_render->lines[1] == "  No matching sessions");
+
+    // Absent the option, the toolkit wording renders in both modes.
+    cch::tui::SelectList legacy({}, cch::tui::SelectListOptions{});
+    const auto default_render = legacy.render(40);
+    REQUIRE(default_render);
+    CHECK(default_render->lines[0] == "  No matching commands");
+
+    cch::tui::SelectList legacy_search(
+            {{.value = "alpha", .label = "Alpha"}}, cch::tui::SelectListOptions{.enable_search = true});
+    type_into(legacy_search, "zz");
+    const auto default_search = legacy_search.render(40);
+    REQUIRE(default_search);
+    REQUIRE(default_search->lines.size() >= 2);
+    CHECK(default_search->lines[1] == "  No matching commands");
+}
