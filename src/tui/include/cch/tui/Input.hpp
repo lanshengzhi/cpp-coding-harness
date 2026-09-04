@@ -25,6 +25,10 @@ struct InputOptions {
     /// Keybinding registry for action matching; defaults to the built-in
     /// `tui.*` table when null.
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    /// Optional prompt text rendered dimmed after the cursor while the value
+    /// is empty (and truncated to the remaining line width). Never rendered
+    /// once the value is non-empty or when no placeholder is supplied.
+    std::optional<std::string> placeholder{std::nullopt};
 };
 
 /// Single-line text input with horizontal scrolling (pi `components/input.ts`).
