@@ -295,6 +295,38 @@ TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[
     }
 }
 
+TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[tui][input][issue586]") {
+    cch::tui::Input input({.placeholder = "Type here"});
+
+    // Empty value: dimmed placeholder text after the highlighted cursor cell,
+    // padded to the component width.
+    auto rendered = input.render(20);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m\x1b[2mType here\x1b[22m        ");
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 20);
+
+    // A non-empty value hides the placeholder entirely.
+    type(input, "a");
+    rendered = input.render(20);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "> a\x1b[7m \x1b[27m                ");
+
+    // The placeholder truncates to the columns left after prompt and cursor
+    // (truncate_text closes the run with an SGR reset when it cuts).
+    cch::tui::Input narrow({.placeholder = "Type here"});
+    rendered = narrow.render(7);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m\x1b[2mType\x1b[0m\x1b[22m");
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 7);
+
+    // No placeholder keeps the historical empty-value rendering.
+    cch::tui::Input plain;
+    rendered = plain.render(20);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m                 ");
+}
+
 TEST_CASE("Input cursor location follows the focus lifecycle and windowing", "[tui][input][issue380]") {
     cch::tui::Input input;
     type(input, "hi");

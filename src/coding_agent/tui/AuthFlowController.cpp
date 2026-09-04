@@ -5,17 +5,19 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/LoginPresentation.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/PromptSlot.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
-#include "coding_agent/tui/StringListSelector.hpp"
+#include "coding_agent/tui/Theme.hpp"
 
 #include "support/AsyncResultBridge.hpp"
 
 #include <cch/ai/Auth.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/tui/SelectList.hpp>
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -241,53 +243,60 @@ void AuthFlowController::show_login_auth_type_selector(
     // (ADR 0040 callback lifetime).
     const auto selector_generation = action_generation();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<StringListSelector>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        title,
-        options,
-        [weak, provider_options, subscription_label, selector_generation](std::string selected) {
-            if (const auto self = weak.lock()) {
-                self->hooks_.post_on_executor(
-                    [self,
-                     provider_options,
-                     subscription_label,
-                     selector_generation,
-                     selected = std::move(selected)]() mutable {
-                        if (self->closed_ ||
-                            self->action_generation() != selector_generation) {
-                            return;
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(options.size());
+    for (const auto& option : options) {
+        items.push_back(cch::tui::SelectItem{.value = option, .label = option});
+    }
+    const auto& theme = hooks_.live_theme();
+    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+            cch::tui::SelectListOptions{
+                    .theme = theme.select_list_theme(),
+                    .on_select = [weak, provider_options, subscription_label, selector_generation](
+                                         const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->hooks_.post_on_executor([self,
+                                                                  provider_options,
+                                                                  subscription_label,
+                                                                  selector_generation,
+                                                                  selected = item.value]() mutable {
+                                if (self->closed_ || self->action_generation() != selector_generation) {
+                                    return;
+                                }
+                                self->presenter_->restore_prompt_slot();
+                                const auto type = selected == subscription_label ? AuthSelectorType::OAuth
+                                                                                 : AuthSelectorType::ApiKey;
+                                if (provider_options) {
+                                    const auto found = std::find_if(provider_options->begin(),
+                                            provider_options->end(),
+                                            [type](const auto& option) { return option.auth_type == type; });
+                                    if (found == provider_options->end()) return;
+                                    const auto option = *found;
+                                    self->spawn(
+                                            [self, option]() -> boost::asio::awaitable<void> {
+                                                co_await self->start_provider_login(option);
+                                            },
+                                            "Native TUI login flow failed");
+                                    return;
+                                }
+                                self->show_login_provider_selector(type, "");
+                            });
                         }
-                        self->presenter_->restore_prompt_slot();
-                        const auto type = selected == subscription_label
-                            ? AuthSelectorType::OAuth
-                            : AuthSelectorType::ApiKey;
-                        if (provider_options) {
-                            const auto found = std::find_if(
-                                provider_options->begin(),
-                                provider_options->end(),
-                                [type](const auto& option) {
-                                    return option.auth_type == type;
-                                });
-                            if (found == provider_options->end()) return;
-                            const auto option = *found;
-                            self->spawn(
-                                [self, option]() -> boost::asio::awaitable<void> {
-                                    co_await self->start_provider_login(option);
-                                },
-                                "Native TUI login flow failed");
-                            return;
+                        return {};
+                    },
+                    .on_cancel = [weak]() -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->hooks_.post_on_executor([self] { self->presenter_->restore_prompt_slot(); });
                         }
-                        self->show_login_provider_selector(type, "");
-                    });
-            }
-        },
-        [weak] {
-            if (const auto self = weak.lock()) {
-                self->hooks_.post_on_executor(
-                    [self] { self->presenter_->restore_prompt_slot(); });
-            }
-        });
+                        return {};
+                    },
+                    .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
+                    .title = title,
+                    .hint = generic_select_list_hint(*keybindings_->get()),
+                    .border_hook = theme.foreground_hook(ThemeToken::Border),
+            });
     presenter_->replace_prompt_slot(std::move(selector));
 }
 
@@ -518,46 +527,51 @@ boost::asio::awaitable<support::Expected<std::string>> AuthFlowController::show_
     const auto executor = co_await boost::asio::this_coro::executor;
     auto slot = std::make_shared<PromptSlot>(executor);
     track_prompt_slot(slot);
-    std::vector<std::string> labels;
-    labels.reserve(select.options.size());
-    for (const auto& option : select.options) labels.push_back(option.label);
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(select.options.size());
+    for (const auto& option : select.options) {
+        items.push_back(cch::tui::SelectItem{.value = option.label, .label = option.label});
+    }
+    const auto& theme = hooks_.live_theme();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<StringListSelector>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        select.message,
-        std::move(labels),
-        [weak, slot, dialog, options = select.options](std::string label) {
-            if (const auto self = weak.lock()) {
-                self->hooks_.post_on_executor(
-                    [self,
-                     slot,
-                     dialog,
-                     label = std::move(label),
-                     options = std::move(options)]() mutable {
-                        // pi restoreDialog, then resolve the option id.
-                        self->presenter_->replace_prompt_slot(dialog);
-                        const auto found = std::find_if(
-                            options.begin(),
-                            options.end(),
-                            [&](const auto& option) { return option.label == label; });
-                        if (found != options.end()) {
-                            slot->resolve(found->id);
-                        } else {
-                            slot->resolve(std::unexpected(prompt_cancelled_error()));
+    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+            cch::tui::SelectListOptions{
+                    .theme = theme.select_list_theme(),
+                    .on_select = [weak, slot, dialog, options = select.options](
+                                         const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->hooks_.post_on_executor(
+                                    [self, slot, dialog, label = item.value, options = std::move(options)]() mutable {
+                                        // pi restoreDialog, then resolve the option id.
+                                        self->presenter_->replace_prompt_slot(dialog);
+                                        const auto found = std::find_if(options.begin(),
+                                                options.end(),
+                                                [&](const auto& option) { return option.label == label; });
+                                        if (found != options.end()) {
+                                            slot->resolve(found->id);
+                                        } else {
+                                            slot->resolve(std::unexpected(prompt_cancelled_error()));
+                                        }
+                                    });
                         }
-                    });
-            }
-        },
-        [weak, slot, dialog] {
-            if (const auto self = weak.lock()) {
-                self->hooks_.post_on_executor(
-                    [self, slot, dialog] {
-                        self->presenter_->replace_prompt_slot(dialog);
-                        slot->resolve(std::unexpected(prompt_cancelled_error()));
-                    });
-            }
-        });
+                        return {};
+                    },
+                    .on_cancel = [weak, slot, dialog]() -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->hooks_.post_on_executor([self, slot, dialog] {
+                                self->presenter_->replace_prompt_slot(dialog);
+                                slot->resolve(std::unexpected(prompt_cancelled_error()));
+                            });
+                        }
+                        return {};
+                    },
+                    .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
+                    .title = select.message,
+                    .hint = generic_select_list_hint(*keybindings_->get()),
+                    .border_hook = theme.foreground_hook(ThemeToken::Border),
+            });
     presenter_->replace_prompt_slot(std::move(selector));
 
     // pi's per-prompt race: an aborted per-prompt token rejects without

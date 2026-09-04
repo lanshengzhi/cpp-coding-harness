@@ -224,6 +224,8 @@ void Input::set_value(std::string value) {
     impl_->buffer.set_cursor(detail::BufferCursor{.line = 0, .column = std::min(prior_col, max_col)});
 }
 
+void Input::move_cursor_to_end() { impl_->buffer.move_to_line_end(); }
+
 support::Expected<RenderResult> Input::render(std::size_t width) {
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {
@@ -249,6 +251,18 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
     std::string body;
     if (after.empty()) {
         body = before + "\x1b[7m \x1b[27m";
+        // Optional placeholder: dimmed text after the empty-value cursor,
+        // truncated to the columns left after the prompt and the cursor cell
+        // (ESC[22m restores normal intensity without resetting caller styles).
+        if (impl_->value().empty() && impl_->options.placeholder && !impl_->options.placeholder->empty() &&
+                width >= 3) {
+            const auto available = width - 3;
+            if (available > 0) {
+                auto placeholder = truncate_text(*impl_->options.placeholder, available, "");
+                if (!placeholder) return std::unexpected(placeholder.error());
+                body += "\x1b[2m" + *placeholder + "\x1b[22m";
+            }
+        }
     } else {
         const auto graphemes = detail::split_graphemes(after);
         const auto& at_cursor = graphemes.front();

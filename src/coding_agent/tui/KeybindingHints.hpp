@@ -34,6 +34,11 @@ class LiveTheme;
     std::string_view key,
     std::string_view description);
 
+/// The hint row of the retired generic string-list selector, rebuilt as
+/// plain chrome text for the shared SelectList with the registry's live key
+/// labels (SelectList chrome rows carry no per-key styling).
+[[nodiscard]] std::string generic_select_list_hint(const cch::tui::KeybindingRegistry& keybindings);
+
 /// The startup header: pi's built-in header with keybinding hints only (no
 /// logo, G2). Renders the compact instruction line plus the `Press <key> to
 /// show full startup help and loaded resources.` notice by default and the

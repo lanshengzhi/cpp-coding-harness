@@ -5,7 +5,6 @@
 #include "ModelSearch.hpp"
 #include "Theme.hpp"
 
-#include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -17,39 +16,49 @@
 
 #include <algorithm>
 #include <exception>
-#include <iterator>
 #include <utility>
 
 namespace cch::coding_agent::tui {
 namespace {
 
+/// The list window height mirrors the pre-migration selector (pi shows ten
+/// rows); the SelectList centers the window on the selection and renders the
+/// `  (n/m)` scroll indicator when clipped.
 constexpr std::size_t kMaxVisible = 10;
-
-[[nodiscard]] std::string provider_badge(const LiveTheme& theme, std::string_view provider) {
-    return theme.foreground(ThemeToken::Muted, "[" + std::string{provider} + "]");
-}
 
 } // namespace
 
-ModelSelectorComponent::ModelSelectorComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-    const ai::Model* current_model,
-    std::shared_ptr<cch::coding_agent::ModelRuntime> runtime,
-    boost::asio::any_io_executor executor,
-    std::vector<cch::coding_agent::ScopedModel> scoped_models,
-    ModelSelectorSelectSink on_select,
-    ModelSelectorCancelSink on_cancel,
-    ModelSelectorInvalidateSink on_invalidate,
-    std::optional<std::string> initial_search_input)
-    : theme_(theme),
-      keybindings_(std::move(keybindings)),
-      runtime_(std::move(runtime)),
-      executor_(std::move(executor)),
-      on_select_(std::move(on_select)),
-      on_cancel_(std::move(on_cancel)),
-      on_invalidate_(std::move(on_invalidate)),
-      search_input_(cch::tui::InputOptions{.keybindings = keybindings_}) {
+ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
+        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        const ai::Model* current_model,
+        std::shared_ptr<cch::coding_agent::ModelRuntime> runtime,
+        boost::asio::any_io_executor executor,
+        std::vector<cch::coding_agent::ScopedModel> scoped_models,
+        ModelSelectorSelectSink on_select,
+        ModelSelectorCancelSink on_cancel,
+        ModelSelectorInvalidateSink on_invalidate,
+        std::optional<std::string> initial_search_input)
+    : theme_(theme), keybindings_(std::move(keybindings)), runtime_(std::move(runtime)), executor_(std::move(executor)),
+      on_select_(std::move(on_select)), on_cancel_(std::move(on_cancel)), on_invalidate_(std::move(on_invalidate)),
+      // The list/search presentation lives in the shared SelectList; sinks
+      // only re-enter this component (the SelectList outlives neither).
+      select_list_(std::vector<cch::tui::SelectItem>{},
+              cch::tui::SelectListOptions{
+                      .max_visible = kMaxVisible,
+                      .theme = theme_.select_list_theme(),
+                      .on_select = [this](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                          confirm_selection(item);
+                          return {};
+                      },
+                      .on_cancel = [this]() -> support::ExpectedVoid {
+                          cancel_selection();
+                          return {};
+                      },
+                      .keybindings = keybindings_,
+                      .enable_search = true,
+                      .initial_search = initial_search_input,
+                      .no_match_text = "  No matching models",
+              }) {
     if (current_model != nullptr) current_model_ = *current_model;
     for (auto& scoped : scoped_models) {
         scoped_model_items_.push_back(ModelItem{
@@ -60,15 +69,24 @@ ModelSelectorComponent::ModelSelectorComponent(
     }
     // pi: the initial scope is "scoped" only when scoped models exist.
     scope_scoped_ = !scoped_model_items_.empty();
-    if (initial_search_input) {
-        search_input_.set_value(*initial_search_input);
-    }
 
     // Render the current snapshot immediately; the background refresh starts
     // on the first render (shared_from_this is unavailable inside the
-    // constructor, and the host may never render before destroying).
+    // constructor, and the host may never render before destroying). Items
+    // are pushed eagerly so navigation and search before the first render
+    // act on the real model list; later rebuilds (refresh result, scope
+    // toggle) land at render time through the revision gate below.
     load_models_from_snapshot();
-    filter_models(search_input_.value());
+    select_list_.set_items(build_select_items());
+    if (!initial_search_input || initial_search_input->empty()) {
+        for (std::size_t index = 0; index < active_models_.size(); ++index) {
+            if (is_current(active_models_[index].model)) {
+                select_list_.set_selected_index(index);
+                break;
+            }
+        }
+    }
+    applied_items_revision_ = items_revision_;
 }
 
 ModelSelectorComponent::~ModelSelectorComponent() {
@@ -77,6 +95,7 @@ ModelSelectorComponent::~ModelSelectorComponent() {
 }
 
 void ModelSelectorComponent::load_models_from_snapshot() {
+    // Callers hold the mutex (the constructor runs before publication).
     const auto snapshot = runtime_ ? runtime_->get_available_snapshot() : std::vector<ai::Model>{};
     std::vector<ModelItem> all;
     all.reserve(snapshot.size());
@@ -106,15 +125,7 @@ void ModelSelectorComponent::load_models_from_snapshot() {
         }
     }
     active_models_ = scope_scoped_ ? scoped_model_items_ : all_models_;
-    const auto current_index = std::find_if(
-        active_models_.begin(),
-        active_models_.end(),
-        [this](const ModelItem& item) { return is_current(item.model); });
-    if (current_index != active_models_.end()) {
-        selected_index_ = static_cast<std::size_t>(current_index - active_models_.begin());
-    } else {
-        selected_index_ = std::min(selected_index_, active_models_.empty() ? 0 : active_models_.size() - 1);
-    }
+    ++items_revision_;
 }
 
 void ModelSelectorComponent::start_refresh() {
@@ -153,8 +164,10 @@ void ModelSelectorComponent::start_refresh() {
                                 self->refresh_status_success_ = true;
                             }
                         }
+                        // Re-sort/re-resolve against the fresh snapshot; the bumped
+                        // revision pushes the rebuilt rows into the SelectList at the
+                        // next render, re-applying the live query.
                         self->load_models_from_snapshot();
-                        self->filter_models(self->search_query_);
                     }
                     if (on_invalidate) {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
@@ -180,36 +193,59 @@ void ModelSelectorComponent::set_scope(bool scoped) {
     if (scope_scoped_ == scoped) return;
     scope_scoped_ = scoped;
     active_models_ = scoped ? scoped_model_items_ : all_models_;
-    const auto current_index = std::find_if(
-        active_models_.begin(),
-        active_models_.end(),
-        [this](const ModelItem& item) { return is_current(item.model); });
-    selected_index_ = current_index != active_models_.end()
-        ? static_cast<std::size_t>(current_index - active_models_.begin())
-        : 0;
-    filter_models(search_input_.value());
+    ++items_revision_;
 }
 
-void ModelSelectorComponent::filter_models(std::string query) {
-    search_query_ = query;
-    // pi `filterModels`: fuzzy over the active scope; the query moves the
-    // selection to the top row, clearing it clamps back to the list length.
-    if (query.empty()) {
-        filtered_models_ = active_models_;
-        selected_index_ = std::min(selected_index_, filtered_models_.empty() ? 0 : filtered_models_.size() - 1);
-    } else {
-        filtered_models_ = cch::tui::fuzzy_filter(
-            active_models_,
-            query,
-            [](const ModelItem& item) {
-                return get_model_selector_search_text(ModelSearchItem{
-                    .id = item.id,
-                    .provider = item.provider,
-                    .name = item.model.name.empty() ? std::nullopt : std::optional<std::string>{item.model.name},
-                });
-            });
-        selected_index_ = 0;
+std::vector<cch::tui::SelectItem> ModelSelectorComponent::build_select_items() const {
+    // Callers hold the mutex (or run in the ctor).
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(active_models_.size());
+    for (const auto& item : active_models_) {
+        const bool current = is_current(item.model);
+        // The row text mirrors the pre-migration hand-rolled rows exactly
+        // (`id [provider]`, with the current marker appended), including the
+        // muted provider badge and success marker styling: SelectList renders
+        // styled rows with the same byte footprint the TUI pads to a full
+        // line width, so the composed screen stays cell-identical to the
+        // legacy presentation.
+        std::string label = item.id + " " + theme_.foreground(ThemeToken::Muted, "[" + item.provider + "]");
+        if (current) label += theme_.foreground(ThemeToken::Success, " ✓");
+        items.push_back(cch::tui::SelectItem{
+                .value = item.provider + "/" + item.id,
+                .label = std::move(label),
+                .search_text = get_model_selector_search_text(ModelSearchItem{
+                        .id = item.id,
+                        .provider = item.provider,
+                        .name = item.model.name.empty() ? std::nullopt : std::optional<std::string>{item.model.name},
+                }),
+        });
     }
+    return items;
+}
+
+void ModelSelectorComponent::confirm_selection(const cch::tui::SelectItem& item) {
+    ai::Model model;
+    bool found = false;
+    {
+        std::lock_guard lock(mutex_);
+        close();
+        for (const auto& candidate : active_models_) {
+            if (candidate.provider + "/" + candidate.id == item.value) {
+                model = candidate.model;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (found && on_select_) on_select_(std::move(model));
+}
+
+void ModelSelectorComponent::cancel_selection() {
+    {
+        std::lock_guard lock(mutex_);
+        close();
+    }
+    if (on_cancel_) on_cancel_();
 }
 
 bool ModelSelectorComponent::is_current(const ai::Model& model) const {
@@ -235,90 +271,6 @@ std::string ModelSelectorComponent::scope_hint_text() const {
         theme_.foreground(ThemeToken::Muted, " (all/scoped)");
 }
 
-support::ExpectedVoid ModelSelectorComponent::update_list(std::vector<std::string>& out_lines, std::size_t width) const {
-    // pi `updateList`: the visible slice centers the selection. Every emitted
-    // line is bounded to the render width (the SessionSelector pattern): the
-    // render path asserts each line's visible width <= the bound, so a single
-    // untruncated line would abort the TUI. ANSI styling is preserved because
-    // truncate_text operates over terminal tokens; a truncation failure is
-    // propagated rather than falling back to the (potentially over-wide) line.
-    std::vector<std::string> lines;
-    const auto emit = [&lines, width](std::string line) -> support::ExpectedVoid {
-        auto truncated = cch::tui::truncate_text(line, width, "");
-        if (!truncated) return std::unexpected(truncated.error());
-        lines.push_back(std::move(*truncated));
-        return {};
-    };
-
-    const std::size_t count = filtered_models_.size();
-    const std::size_t start = count <= kMaxVisible
-        ? 0
-        : std::min(selected_index_ > kMaxVisible / 2 ? selected_index_ - kMaxVisible / 2 : 0, count - kMaxVisible);
-    const std::size_t end = std::min(start + kMaxVisible, count);
-
-    for (std::size_t index = start; index < end; ++index) {
-        const auto& item = filtered_models_[index];
-        const bool selected = index == selected_index_;
-        const bool current = is_current(item.model);
-        std::string line;
-        if (selected) {
-            line = theme_.foreground(ThemeToken::Accent, "→ ") +
-                theme_.foreground(ThemeToken::Accent, item.id) + " " +
-                provider_badge(theme_, item.provider);
-        } else {
-            line = "  " + item.id + " " + provider_badge(theme_, item.provider);
-        }
-        if (current) {
-            line += theme_.foreground(ThemeToken::Success, " ✓");
-        }
-        if (auto pushed = emit(std::move(line)); !pushed) return std::unexpected(pushed.error());
-    }
-
-    if (start > 0 || end < count) {
-        if (auto pushed = emit(theme_.foreground(
-                ThemeToken::Muted,
-                "  (" + std::to_string(selected_index_ + 1) + "/" + std::to_string(count) + ")"));
-            !pushed) return std::unexpected(pushed.error());
-    }
-
-    if (error_message_) {
-        // pi: the error renders in the error color, split over lines.
-        std::size_t begin = 0;
-        while (begin < error_message_->size()) {
-            const auto newline = error_message_->find('\n', begin);
-            const auto line_end = newline == std::string::npos ? error_message_->size() : newline;
-            if (auto pushed = emit(theme_.foreground(
-                    ThemeToken::Error,
-                    error_message_->substr(begin, line_end - begin)));
-                !pushed) return std::unexpected(pushed.error());
-            if (newline == std::string::npos) break;
-            begin = newline + 1;
-        }
-    } else if (count == 0) {
-        if (auto pushed = emit(theme_.foreground(ThemeToken::Muted, "  No matching models"));
-            !pushed) return std::unexpected(pushed.error());
-    } else {
-        const auto& selected = filtered_models_[selected_index_];
-        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
-        if (auto pushed = emit(theme_.foreground(
-                ThemeToken::Muted,
-                "  Model Name: " + selected.model.name));
-            !pushed) return std::unexpected(pushed.error());
-    }
-    if (!refresh_status_message_.empty()) {
-        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
-        if (auto pushed = emit(theme_.foreground(
-                refresh_status_success_ ? ThemeToken::Success : ThemeToken::Muted,
-                "  " + refresh_status_message_));
-            !pushed) return std::unexpected(pushed.error());
-    }
-    out_lines.insert(
-        out_lines.end(),
-        std::make_move_iterator(lines.begin()),
-        std::make_move_iterator(lines.end()));
-    return {};
-}
-
 support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::size_t width) {
     bool start_refresh_now = false;
     {
@@ -339,6 +291,25 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
         for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
         return {};
     };
+    // Bounded emission for the component-owned rows under the list (mirrors
+    // the pre-migration `updateList` tail). ANSI styling is preserved because
+    // truncate_text operates over terminal tokens; a truncation failure is
+    // propagated rather than falling back to the (potentially over-wide) line.
+    const auto emit = [&result, width](std::string line) -> support::ExpectedVoid {
+        auto truncated = cch::tui::truncate_text(std::move(line), width, "");
+        if (!truncated) return std::unexpected(truncated.error());
+        result.lines.push_back(std::move(*truncated));
+        return {};
+    };
+
+    // The pending item set (refresh result or scope toggle) lands in the
+    // SelectList before drawing: the rebuild re-ranks against the live query
+    // and restores the selection by `provider/id`, so a refresh or scope
+    // switch never drops the user's place.
+    if (applied_items_revision_ != items_revision_) {
+        select_list_.set_items(build_select_items());
+        applied_items_revision_ = items_revision_;
+    }
 
     DynamicBorder top_border(theme_.foreground_hook(ThemeToken::Border));
     if (auto appended = append(top_border); !appended) return std::unexpected(appended.error());
@@ -363,12 +334,55 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
         cch::tui::Text spacer("", 1, 0);
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
     }
-    if (auto appended = append(search_input_); !appended) return std::unexpected(appended.error());
+
+    // The SelectList renders its search row first (no chrome framing here),
+    // directly followed by the item rows or the empty-state row. The rows
+    // emitted above it fix the cursor offset for this render pass.
+    cursor_row_offset_ = result.lines.size();
     {
-        cch::tui::Text spacer("", 1, 0);
-        if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
+        auto rendered = select_list_.render(width);
+        if (!rendered) return std::unexpected(rendered.error());
+        for (auto& line : rendered->lines)
+            result.lines.push_back(std::move(line));
     }
-    if (auto updated = update_list(result.lines, width); !updated) return std::unexpected(updated.error());
+
+    // pi `updateList` tail: diagnostics/status rows under the list, rendered
+    // by this component because their presence changes as the background
+    // refresh settles (SelectList title/hint are fixed at construction).
+    const auto selection = select_list_.selected_item();
+    if (error_message_) {
+        // pi: the error renders in the error color, split over lines.
+        std::size_t begin = 0;
+        while (begin < error_message_->size()) {
+            const auto newline = error_message_->find('\n', begin);
+            const auto line_end = newline == std::string::npos ? error_message_->size() : newline;
+            if (auto pushed =
+                            emit(theme_.foreground(ThemeToken::Error, error_message_->substr(begin, line_end - begin)));
+                    !pushed)
+                return std::unexpected(pushed.error());
+            if (newline == std::string::npos) break;
+            begin = newline + 1;
+        }
+    } else if (selection) {
+        // The selected model's name line renders below the list (pi).
+        std::string name;
+        for (const auto& item : active_models_) {
+            if (item.provider + "/" + item.id == selection->value) {
+                name = item.model.name;
+                break;
+            }
+        }
+        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
+        if (auto pushed = emit(theme_.foreground(ThemeToken::Muted, "  Model Name: " + name)); !pushed)
+            return std::unexpected(pushed.error());
+    }
+    if (!refresh_status_message_.empty()) {
+        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
+        if (auto pushed = emit(theme_.foreground(
+                    refresh_status_success_ ? ThemeToken::Success : ThemeToken::Muted, "  " + refresh_status_message_));
+                !pushed)
+            return std::unexpected(pushed.error());
+    }
     {
         cch::tui::Text spacer("", 1, 0);
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
@@ -380,53 +394,26 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
 
 void ModelSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) return;
+    if (key != nullptr && key->type == cch::tui::KeyEventType::Release) return;
 
-    if (keybindings_->matches(*key, "tui.input.tab")) {
-        // pi: the scope toggle only exists when scoped models are present.
+    if (key != nullptr && keybindings_->matches(*key, "tui.input.tab")) {
+        // pi: the scope toggle only exists when scoped models are present,
+        // and it pre-empts SelectList so the scope marker re-accents and the
+        // item set rebuilds on the next render.
         std::lock_guard lock(mutex_);
         if (scoped_model_items_.empty()) return;
         set_scope(!scope_scoped_);
         return;
     }
-    if (keybindings_->matches(*key, "tui.select.up")) {
-        std::lock_guard lock(mutex_);
-        if (filtered_models_.empty()) return;
-        selected_index_ = selected_index_ == 0 ? filtered_models_.size() - 1 : selected_index_ - 1;
-        return;
-    }
-    if (keybindings_->matches(*key, "tui.select.down")) {
-        std::lock_guard lock(mutex_);
-        if (filtered_models_.empty()) return;
-        selected_index_ = selected_index_ == filtered_models_.size() - 1 ? 0 : selected_index_ + 1;
-        return;
-    }
-    if (keybindings_->matches(*key, "tui.select.confirm")) {
-        ai::Model selected;
-        {
-            std::lock_guard lock(mutex_);
-            if (selected_index_ >= filtered_models_.size()) return;
-            selected = filtered_models_[selected_index_].model;
-            close();
-        }
-        if (on_select_) on_select_(std::move(selected));
-        return;
-    }
-    if (keybindings_->matches(*key, "tui.select.cancel")) {
-        close();
-        if (on_cancel_) on_cancel_();
-        return;
-    }
 
-    // Everything else goes to the search input (pi: pass-through + refilter).
-    search_input_.handle_input(input);
-    std::lock_guard lock(mutex_);
-    filter_models(search_input_.value());
+    // Everything else — navigation, confirm/cancel, and search editing —
+    // belongs to the SelectList.
+    select_list_.handle_input(input);
 }
 
 void ModelSelectorComponent::set_focused(bool focused) {
     focused_ = focused;
-    search_input_.set_focused(focused);
+    select_list_.set_focused(focused);
 }
 
 bool ModelSelectorComponent::focused() const {
@@ -434,7 +421,12 @@ bool ModelSelectorComponent::focused() const {
 }
 
 std::optional<cch::tui::CursorPosition> ModelSelectorComponent::cursor_location() const {
-    return search_input_.cursor_location();
+    const auto cursor = select_list_.cursor_location();
+    if (!cursor) return std::nullopt;
+    return cch::tui::CursorPosition{
+            .column = cursor->column,
+            .row = cursor->row + cursor_row_offset_,
+    };
 }
 
 } // namespace cch::coding_agent::tui

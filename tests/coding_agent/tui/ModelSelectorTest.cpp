@@ -20,6 +20,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -186,6 +187,42 @@ TEST_CASE(
     CHECK(refreshed_screen.find("Model catalogs refreshed.") != std::string::npos);
     CHECK_FALSE(selected.has_value());
     CHECK(cancellations == 0);
+}
+
+TEST_CASE("ModelSelector initially selects the current model inside a scoped list",
+        "[coding_agent][tui][model-selector][issue407]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    const auto first = fixture.runtime->model("alpha", "alpha-1");
+    const auto current = fixture.runtime->model("beta", "beta-1");
+    REQUIRE(first.has_value());
+    REQUIRE(current.has_value());
+    std::optional<ai::Model> selected;
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            &*current,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{
+                    coding_agent::ScopedModel{.model = *first},
+                    coding_agent::ScopedModel{.model = *current},
+            },
+            [&selected](ai::Model model) { selected = std::move(model); },
+            [] {},
+            [&io] { (void)io; });
+
+    const auto rendered = selector->render(70);
+    REQUIRE(rendered);
+    CHECK(join_lines(rendered->lines).find("→ beta-1 [beta]") != std::string::npos);
+
+    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(selected.has_value());
+    CHECK(selected->provider == "beta");
+    CHECK(selected->id == "beta-1");
 }
 
 TEST_CASE(
@@ -380,4 +417,50 @@ TEST_CASE(
         REQUIRE(rendered);
         check_all_lines_bounded(*rendered, 6);
     }
+}
+
+TEST_CASE("ModelSelector delegates search editing to the SelectList and reports its cursor on the search row",
+        "[coding_agent][tui][model-selector][issue589]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            nullptr,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [](ai::Model) {},
+            [] {},
+            [&io] { (void)io; });
+
+    // Focus + render: the SelectList reports its cursor in its own line
+    // coordinates (row 0 for the search row); the component must translate
+    // that by the chrome rows it emits above the SelectList so the cursor
+    // lands on the rendered search line rather than the top of the modal.
+    selector->set_focused(true);
+    const auto rendered = selector->render(120);
+    REQUIRE(rendered);
+    const auto cursor = selector->cursor_location();
+    REQUIRE(cursor.has_value());
+    const auto screen = join_lines(rendered->lines);
+    const auto search_line = screen.find("> ");
+    REQUIRE(search_line != std::string::npos);
+    const auto search_row = static_cast<std::size_t>(
+            std::count(screen.begin(), screen.begin() + static_cast<std::ptrdiff_t>(search_line), '\n'));
+    CHECK(cursor->row == search_row);
+    CHECK(cursor->column == 2);
+
+    // Typing flows into the SelectList search: the cursor follows the typed
+    // text on the same translated row.
+    selector->handle_input(tui::KeyEvent{.key = "a"});
+    const auto narrowed = selector->render(120);
+    REQUIRE(narrowed);
+    const auto after = selector->cursor_location();
+    REQUIRE(after.has_value());
+    CHECK(after->row == cursor->row);
+    CHECK(after->column == 3);
 }

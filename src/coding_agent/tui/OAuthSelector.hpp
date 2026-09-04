@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
-#include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/SelectList.hpp>
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
@@ -58,6 +58,11 @@ using AuthProviderCancelSink = std::move_only_function<void()>;
 /// indicators and — when the list mixes auth types — `[subscription]` /
 /// `[API key]` labels. Selection reports the provider id and auth type;
 /// cancellation reports the cancel sink.
+///
+/// List presentation, the embedded search input, fuzzy ranking and cursor
+/// reporting all delegate to a `cch::tui::SelectList` (chrome-framed with
+/// the mode title and borders); the component only resolves a selected row
+/// back to its `(id, auth type)` pair and keeps the per-mode empty messages.
 class OAuthSelectorComponent final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
@@ -86,19 +91,10 @@ public:
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
 
 private:
-    [[nodiscard]] std::vector<const AuthSelectorProvider*> filtered() const;
-    [[nodiscard]] std::string status_indicator(const AuthSelectorProvider& provider) const;
-    void confirm_selection();
-
-    const LiveTheme& theme_; // must outlive this component.
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
-    AuthSelectorMode mode_;
     std::vector<AuthSelectorProvider> providers_;
     AuthProviderSelectSink on_select_;
     AuthProviderCancelSink on_cancel_;
-    cch::tui::Input search_input_;
-    bool show_type_labels_{false};
-    std::size_t selected_index_{0};
+    cch::tui::SelectList select_list_;
 };
 
 } // namespace cch::coding_agent::tui

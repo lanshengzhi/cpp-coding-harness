@@ -1,14 +1,16 @@
 #include "cli/StartupTui.hpp"
 
 #include "coding_agent/SessionCwd.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
-#include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include "support/ExpectedMacros.hpp"
 
+#include <cch/support/Error.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
+#include <cch/tui/SelectList.hpp>
 #include <cch/tui/Tui.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -271,29 +273,39 @@ boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
     std::string title) {
     // pi `createStartupTui` with the generic selector: the registry reads
     // keybindings.json over the tui builtins alone.
-    return run_startup_host<bool>(
-        terminal,
-        std::move(options),
-        {},
-        [title = std::move(title)](
-            const cch::coding_agent::tui::LiveTheme& live_theme,
-            const std::shared_ptr<const cch::tui::KeybindingRegistry>&
-                keybindings,
-            const std::shared_ptr<StartupSlot<bool>>& slot,
-            std::move_only_function<void()>) mutable
-            -> std::unique_ptr<cch::tui::Component> {
-            // pi `showStartupSelector`: Continue → the fallback cwd, Cancel
-            // → undefined (the boot exits 0).
-            return std::make_unique<coding_agent::tui::StringListSelector>(
-                live_theme,
-                keybindings,
-                std::move(title),
-                std::vector<std::string>{"Continue", "Cancel"},
-                [slot](std::string selected) {
-                    slot->resolve(selected == "Continue");
-                },
-                [slot] { slot->resolve(false); });
-        });
+    return run_startup_host<bool>(terminal,
+            std::move(options),
+            {},
+            [title = std::move(title)](const cch::coding_agent::tui::LiveTheme& live_theme,
+                    const std::shared_ptr<const cch::tui::KeybindingRegistry>& keybindings,
+                    const std::shared_ptr<StartupSlot<bool>>& slot,
+                    std::move_only_function<void()>) mutable -> std::unique_ptr<cch::tui::Component> {
+                // pi `showStartupSelector`: Continue → the fallback cwd, Cancel
+                // → undefined (the boot exits 0). Each option is a SelectItem
+                // with value == label.
+                return std::make_unique<cch::tui::SelectList>(
+                        std::vector<cch::tui::SelectItem>{
+                                {.value = "Continue", .label = "Continue"},
+                                {.value = "Cancel", .label = "Cancel"},
+                        },
+                        cch::tui::SelectListOptions{
+                                .theme = live_theme.select_list_theme(),
+                                .on_select = [slot](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                                    slot->resolve(item.value == "Continue");
+                                    return {};
+                                },
+                                .on_cancel = [slot]() -> support::ExpectedVoid {
+                                    slot->resolve(false);
+                                    return {};
+                                },
+                                .keybindings = keybindings,
+                                .wrap_navigation = false,
+                                .enable_raw_jk_navigation = true,
+                                .title = std::move(title),
+                                .hint = coding_agent::tui::generic_select_list_hint(*keybindings),
+                                .border_hook = live_theme.foreground_hook(cch::coding_agent::tui::ThemeToken::Border),
+                        });
+            });
 }
 
 support::Expected<std::optional<std::filesystem::path>>

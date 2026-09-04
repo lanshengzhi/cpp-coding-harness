@@ -213,18 +213,43 @@ TEST_CASE(
         },
         [] {});
 
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
-    REQUIRE(selected.has_value());
-    CHECK(selected->first == "deepseek");
-    CHECK(selected->second == AuthSelectorType::ApiKey);
-
-    selector.handle_input(tui::KeyEvent{.key = "up"});
+    // Both boundaries clamp: up at the first row stays there, and down at
+    // the last row does not wrap back to the first.
     selector.handle_input(tui::KeyEvent{.key = "up"});
     selector.handle_input(tui::KeyEvent{.key = "enter"});
     REQUIRE(selected.has_value());
     CHECK(selected->first == "openai-codex");
     CHECK(selected->second == AuthSelectorType::OAuth);
+
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(selected.has_value());
+    CHECK(selected->first == "deepseek");
+    CHECK(selected->second == AuthSelectorType::ApiKey);
+}
+
+TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id", "[coding_agent][tui][login][issue406]") {
+    auto theme = test_theme();
+    using coding_agent::tui::AuthSelectorType;
+    std::optional<std::pair<std::string, AuthSelectorType>> selected;
+    std::vector<coding_agent::tui::AuthSelectorProvider> providers;
+    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::OAuth));
+    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::ApiKey));
+
+    coding_agent::tui::OAuthSelectorComponent selector(
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::move(providers),
+            [&selected](std::string id, AuthSelectorType type) { selected = std::make_pair(std::move(id), type); },
+            [] {});
+
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(selected.has_value());
+    CHECK(selected->first == "kimi-coding");
+    CHECK(selected->second == AuthSelectorType::ApiKey);
 }
 
 TEST_CASE(
@@ -288,4 +313,28 @@ TEST_CASE(
     CHECK(screen.find("→ Provider 9") != std::string::npos);
     CHECK(screen.find("Provider 0\n") == std::string::npos);
     CHECK(screen.find("(10/10)") != std::string::npos);
+}
+
+TEST_CASE("OAuthSelector reports the search cursor on the real search row of its chrome",
+        "[coding_agent][tui][login][issue588]") {
+    auto theme = test_theme();
+    using coding_agent::tui::AuthSelectorType;
+    coding_agent::tui::OAuthSelectorComponent selector(
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::vector<coding_agent::tui::AuthSelectorProvider>{
+                    provider("openai-codex", "OpenAI Codex", AuthSelectorType::OAuth)},
+            [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
+            [] {});
+
+    selector.set_focused(true);
+    REQUIRE(selector.render(80));
+    const auto cursor = selector.cursor_location();
+    REQUIRE(cursor.has_value());
+    // The SelectList's chrome places the search input at row 4 (border,
+    // spacer, title, spacer); the old hard-coded `cursor->row += 4` is gone
+    // but the reported row must match.
+    CHECK(cursor->row == 4);
+    CHECK(cursor->column == 2);
 }

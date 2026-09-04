@@ -40,6 +40,17 @@ constexpr std::size_t kMaxVisibleSessions = 10;
     return text;
 }
 
+/// Trim ASCII whitespace and return the trimmed view.
+[[nodiscard]] std::string_view trimmed_view(std::string_view text) {
+    const auto begin = std::find_if_not(
+            text.begin(), text.end(), [](unsigned char character) { return std::isspace(character) != 0; });
+    const auto end = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    }).base();
+    if (begin >= end) return {};
+    return text.substr(static_cast<std::size_t>(begin - text.begin()), static_cast<std::size_t>(end - begin));
+}
+
 /// pi `formatSessionDate`: "now", `<n>m`, `<n>h`, `<n>d`, `<n>w`,
 /// `<n>mo`, or `<n>y` by elapsed time.
 [[nodiscard]] std::string format_session_date(
@@ -67,6 +78,20 @@ constexpr std::size_t kMaxVisibleSessions = 10;
     std::error_code ec;
     auto canonical = std::filesystem::weakly_canonical(path, ec);
     return ec ? path : canonical;
+}
+
+/// pi's session-row tail: the message count and age, with the cwd (all
+/// scope) and the path (path toggle) prepended.
+[[nodiscard]] std::string session_row_tail(
+        const session_discovery::SessionInfo& session, bool show_cwd, bool show_path) {
+    std::string tail = std::to_string(session.message_count) + " " + format_session_date(session.modified);
+    if (show_cwd && !session.cwd.empty()) {
+        tail = shorten_path(session.cwd) + " " + tail;
+    }
+    if (show_path) {
+        tail = shorten_path(session.path) + " " + tail;
+    }
+    return tail;
 }
 
 /// pi `deleteSessionFile`: try the `trash` CLI first, then fall back to
@@ -202,39 +227,56 @@ void sort_tree_nodes(std::vector<SessionTreeNode>& nodes) {
 
 } // namespace
 
-SessionSelectorComponent::SessionSelectorComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-    SessionListLoader current_loader,
-    SessionListLoader all_loader,
-    std::optional<std::filesystem::path> current_session_path,
-    SessionSelectorSelectSink on_select,
-    SessionSelectorCancelSink on_cancel,
-    SessionSelectorExitSink on_exit,
-    SessionSelectorRenameSink on_rename,
-    SessionSelectorInvalidateSink on_invalidate)
-    : theme_(theme),
-      keybindings_(std::move(keybindings)),
-      current_loader_(std::move(current_loader)),
-      all_loader_(std::move(all_loader)),
-      current_session_path_(std::move(current_session_path)),
-      on_select_(std::move(on_select)),
-      on_cancel_(std::move(on_cancel)),
-      on_exit_(std::move(on_exit)),
-      on_rename_(std::move(on_rename)),
-      on_invalidate_(std::move(on_invalidate)),
+SessionSelectorComponent::SessionSelectorComponent(const LiveTheme& theme,
+        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        SessionListLoader current_loader,
+        SessionListLoader all_loader,
+        std::optional<std::filesystem::path> current_session_path,
+        SessionSelectorSelectSink on_select,
+        SessionSelectorCancelSink on_cancel,
+        SessionSelectorExitSink on_exit,
+        SessionSelectorRenameSink on_rename,
+        SessionSelectorInvalidateSink on_invalidate)
+    : theme_(theme), keybindings_(std::move(keybindings)), current_loader_(std::move(current_loader)),
+      all_loader_(std::move(all_loader)), current_session_path_(std::move(current_session_path)),
+      on_select_(std::move(on_select)), on_cancel_(std::move(on_cancel)), on_exit_(std::move(on_exit)),
+      on_rename_(std::move(on_rename)), on_invalidate_(std::move(on_invalidate)),
       // pi `renameInput.onSubmit`: confirm the rename and refresh.
-      search_input_(),
-      rename_input_(
-          cch::tui::InputOptions{},
-          [this](std::string value) -> support::ExpectedVoid {
-              confirm_rename(std::move(value));
-              return {};
-          }) {
+      rename_input_(cch::tui::InputOptions{},
+              [this](std::string value) -> support::ExpectedVoid {
+                  confirm_rename(std::move(value));
+                  return {};
+              }),
+      // List/search presentation lives in the shared SelectList (search
+      // enabled): it owns the query text, the filtered rows and the search
+      // cursor. The session-specific token/regex matching and relevance
+      // ordering ride through the ranking hook; the confirm/cancel sinks
+      // re-enter this component. The item set starts empty and is populated
+      // below (its construction-time ranking never sees uninitialized
+      // state).
+      select_list_(std::vector<cch::tui::SelectItem>{},
+              cch::tui::SelectListOptions{
+                      .max_visible = kMaxVisibleSessions,
+                      .theme = theme_.select_list_theme(),
+                      .on_select = [this](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                          select_session(item);
+                          return {};
+                      },
+                      .on_cancel = [this]() -> support::ExpectedVoid {
+                          if (on_cancel_) on_cancel_();
+                          return {};
+                      },
+                      .keybindings = keybindings_,
+                      .enable_search = true,
+                      .search_filter_hook =
+                              [this](std::string_view query, const std::vector<cch::tui::SelectItem>& items) {
+                                  return rank_sessions(query, items.size());
+                              },
+              }) {
     if (current_loader_) {
         current_sessions_ = current_loader_();
     }
-    filter_sessions(search_input_.value());
+    refresh_presentation();
 }
 
 void SessionSelectorComponent::set_scope(bool all) {
@@ -245,17 +287,27 @@ void SessionSelectorComponent::set_scope(bool all) {
             all_sessions_ = all_loader_();
         }
     }
-    filter_sessions(search_input_.value());
+    refresh_presentation();
 }
 
 void SessionSelectorComponent::set_sort_mode(SessionSortMode mode) {
     sort_mode_ = mode;
-    filter_sessions(search_input_.value());
+    refresh_presentation();
 }
 
 void SessionSelectorComponent::set_name_filter(SessionNameFilter filter) {
     name_filter_ = filter;
-    filter_sessions(search_input_.value());
+    refresh_presentation();
+}
+
+/// Rebuild both presentation sources after any change to the scope, the
+/// scope lists, the sort mode, or the name filter: the tree/flat rows (the
+/// empty-query view) and the SelectList item set (its ranking re-runs
+/// against the current query and component state, preserving the selection
+/// by session path when still present).
+void SessionSelectorComponent::refresh_presentation() {
+    filter_sessions();
+    select_list_.set_items(build_select_items());
 }
 
 void SessionSelectorComponent::build_tree(
@@ -342,25 +394,13 @@ void SessionSelectorComponent::build_tree(
     }
 }
 
-void SessionSelectorComponent::filter_sessions(std::string query) {
+void SessionSelectorComponent::filter_sessions() {
     // The tree nodes reference the member vectors directly (never a local
     // copy); the flat filter path works on a copy so the member storage
     // survives re-filtering.
     auto& sessions = scope_all_ ? all_sessions_ : current_sessions_;
-    const auto trimmed = [&]() {
-        const auto first = std::find_if_not(query.begin(), query.end(), [](unsigned char character) {
-            return std::isspace(character) != 0;
-        });
-        const auto last = std::find_if_not(query.rbegin(), query.rend(), [](unsigned char character) {
-            return std::isspace(character) != 0;
-        }).base();
-        return first >= last
-            ? std::string_view{}
-            : std::string_view{query}.substr(
-                  static_cast<std::size_t>(first - query.begin()),
-                  static_cast<std::size_t>(last - first));
-    }();
-
+    const auto query = select_list_.search_query();
+    const auto trimmed = trimmed_view(query);
     if (sort_mode_ == SessionSortMode::Threaded && trimmed.empty()) {
         if (name_filter_ == SessionNameFilter::Named) {
             // The tree nodes reference the storage, so the named subset must
@@ -409,7 +449,7 @@ void SessionSelectorComponent::refresh_after_mutation() {
     } else if (current_loader_) {
         current_sessions_ = current_loader_();
     }
-    filter_sessions(search_input_.value());
+    refresh_presentation();
     if (on_invalidate_) on_invalidate_();
 }
 
@@ -423,9 +463,101 @@ bool SessionSelectorComponent::is_current_session_path(
     return canonicalize_path(path) == canonicalize_path(*current_session_path_);
 }
 
+const std::vector<session_discovery::SessionInfo>& SessionSelectorComponent::scope_sessions() const {
+    return scope_all_ ? all_sessions_ : current_sessions_;
+}
+
+bool SessionSelectorComponent::search_active() const { return !trimmed_view(select_list_.search_query()).empty(); }
+
+const session_discovery::SessionInfo* SessionSelectorComponent::selected_session() const {
+    if (search_active()) {
+        const auto item = select_list_.selected_item();
+        if (!item) return nullptr;
+        for (const auto& session : scope_sessions()) {
+            if (session.path.string() == item->value) return &session;
+        }
+        return nullptr;
+    }
+    if (filtered_sessions_.empty()) return nullptr;
+    return filtered_sessions_[selected_index_].session;
+}
+
+std::vector<cch::tui::SelectItem> SessionSelectorComponent::build_select_items() const {
+    const auto& sessions = scope_sessions();
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(sessions.size());
+    for (const auto& session : sessions) {
+        const bool has_name = has_session_name(session);
+        auto display_text = has_name ? *session.name : session.first_message;
+        display_text = normalize_message_text(std::move(display_text));
+        // Row styling mirrors the tree rows: named sessions warn, the
+        // current session accents, the pending delete target errors.
+        std::string label;
+        if (is_current_session_path(session.path)) {
+            label = theme_.foreground(ThemeToken::Accent, std::move(display_text));
+        } else if (has_name) {
+            label = theme_.foreground(ThemeToken::Warning, std::move(display_text));
+        } else {
+            label = std::move(display_text);
+        }
+        if (confirming_delete_path_ == session.path.string()) {
+            label = theme_.foreground(ThemeToken::Error, label);
+        }
+        items.push_back(cch::tui::SelectItem{
+                .value = session.path.string(),
+                .label = std::move(label),
+                .description = session_row_tail(session, show_cwd_, show_path_),
+        });
+    }
+    return items;
+}
+
+std::vector<std::size_t> SessionSelectorComponent::rank_sessions(std::string_view query, std::size_t item_count) const {
+    const auto& sessions = scope_sessions();
+    // The hook contract: an empty (or whitespace) query returns every item
+    // index in order. The component draws its own tree/flat view in that
+    // state, so the SelectList body never shows with an empty query.
+    if (trimmed_view(query).empty()) {
+        std::vector<std::size_t> indices;
+        const auto count = std::min(item_count, sessions.size());
+        indices.reserve(count);
+        for (std::size_t index = 0; index < count; ++index) {
+            indices.push_back(index);
+        }
+        return indices;
+    }
+    auto ordered = filter_and_sort_sessions(
+            std::vector<session_discovery::SessionInfo>{sessions}, query, sort_mode_, name_filter_);
+    // filter_and_sort_sessions works on copies, so map each ordered session
+    // back to the item index of its source slot by path.
+    std::vector<std::size_t> indices;
+    indices.reserve(ordered.size());
+    for (const auto& session : ordered) {
+        const auto limit = std::min(item_count, sessions.size());
+        for (std::size_t index = 0; index < limit; ++index) {
+            if (sessions[index].path == session.path) {
+                indices.push_back(index);
+                break;
+            }
+        }
+    }
+    return indices;
+}
+
+void SessionSelectorComponent::select_session(const cch::tui::SelectItem& item) {
+    // The SelectList rows carry the session path as `value`; only sessions
+    // still present in the active scope resolve (mirrors the tree Enter
+    // guard).
+    for (const auto& session : scope_sessions()) {
+        if (session.path.string() == item.value) {
+            if (on_select_) on_select_(session.path.string());
+            return;
+        }
+    }
+}
+
 void SessionSelectorComponent::start_delete_confirmation() {
-    if (filtered_sessions_.empty()) return;
-    const auto* selected = filtered_sessions_[selected_index_].session;
+    const auto* selected = selected_session();
     if (selected == nullptr) return;
     if (is_current_session_path(selected->path)) {
         set_status_message("Cannot delete the currently active session", true);
@@ -433,6 +565,9 @@ void SessionSelectorComponent::start_delete_confirmation() {
         return;
     }
     confirming_delete_path_ = selected->path.string();
+    // Rebuild the item set so the confirming row carries the error styling
+    // in the search view (the tree view checks the flag at render time).
+    select_list_.set_items(build_select_items());
     if (on_invalidate_) on_invalidate_();
 }
 
@@ -459,6 +594,8 @@ void SessionSelectorComponent::confirm_delete() {
 
 void SessionSelectorComponent::cancel_delete() {
     confirming_delete_path_ = std::nullopt;
+    // Drop the error styling from the search-view rows again.
+    select_list_.set_items(build_select_items());
     if (on_invalidate_) on_invalidate_();
 }
 
@@ -505,7 +642,7 @@ void SessionSelectorComponent::set_focused(bool focused) {
     if (mode_rename_) {
         rename_input_.set_focused(focused);
     } else {
-        search_input_.set_focused(focused);
+        select_list_.set_focused(focused);
     }
 }
 
@@ -515,18 +652,30 @@ bool SessionSelectorComponent::focused() const {
 
 std::optional<cch::tui::CursorPosition> SessionSelectorComponent::cursor_location() const {
     if (mode_rename_) {
-        return rename_input_.cursor_location();
+        const auto cursor = rename_input_.cursor_location();
+        if (!cursor || !rename_input_row_) return std::nullopt;
+        return cch::tui::CursorPosition{
+                .column = cursor->column,
+                .row = *rename_input_row_ + cursor->row,
+        };
     }
-    return search_input_.cursor_location();
+    // The search cursor lives in the embedded SelectList (its own search
+    // line coordinate); the rows this component emits above it (border,
+    // header, hint rows, spacer) are added on top. The offset is recorded
+    // when the search line renders — never a magic constant.
+    const auto cursor = select_list_.cursor_location();
+    if (!cursor) return std::nullopt;
+    return cch::tui::CursorPosition{
+            .column = cursor->column,
+            .row = cursor->row + cursor_row_offset_,
+    };
 }
 
 void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr) {
-        return;
-    }
 
     if (mode_rename_) {
+        if (key == nullptr) return;
         if (keybindings_->matches(*key, "tui.select.cancel")) {
             exit_rename_mode();
             return;
@@ -537,6 +686,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
 
     // Delete confirmation intercepts all keys (pi).
     if (confirming_delete_path_) {
+        if (key == nullptr) return;
         if (keybindings_->matches(*key, "tui.select.confirm")) {
             confirm_delete();
         } else if (keybindings_->matches(*key, "tui.select.cancel")) {
@@ -545,6 +695,16 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
         return;
     }
 
+    if (key == nullptr) {
+        // Pasted text (and any other non-key event) edits the search query;
+        // the SelectList owns the search Input in both the tree and search
+        // views, so the paste flows there from either.
+        forward_to_select_list(input);
+        return;
+    }
+
+    // Domain actions stay component-level pre-dispatch in both views (pi
+    // routes them before the list sees the key).
     if (keybindings_->matches(*key, "tui.input.tab")) {
         set_scope(!scope_all_);
         if (on_invalidate_) on_invalidate_();
@@ -570,6 +730,7 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
     }
     if (keybindings_->matches(*key, "app.session.togglePath")) {
         show_path_ = !show_path_;
+        select_list_.set_items(build_select_items());
         if (on_invalidate_) on_invalidate_();
         return;
     }
@@ -578,21 +739,31 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
         return;
     }
     if (keybindings_->matches(*key, "app.session.rename")) {
-        if (!filtered_sessions_.empty()) {
-            enter_rename_mode(*filtered_sessions_[selected_index_].session);
+        const auto* selected = selected_session();
+        if (selected != nullptr) {
+            enter_rename_mode(*selected);
         }
         return;
     }
     if (keybindings_->matches(*key, "app.session.deleteNoninvasive")) {
-        if (!search_input_.value().empty()) {
-            search_input_.handle_input(input);
-            filter_sessions(search_input_.value());
-            if (on_invalidate_) on_invalidate_();
+        // "Delete session when the query is empty": while a query is active
+        // the key edits the search text (pi deleteKey) instead.
+        if (!select_list_.search_query().empty()) {
+            forward_to_select_list(input);
         } else {
             start_delete_confirmation();
         }
         return;
     }
+
+    if (search_active()) {
+        // Search view: navigation, confirm/cancel and search editing belong
+        // to the SelectList (its sinks re-enter this component).
+        forward_to_select_list(input);
+        return;
+    }
+
+    // Tree view: navigation and selection keys stay component-level.
     if (keybindings_->matches(*key, "tui.select.up")) {
         if (!filtered_sessions_.empty()) {
             selected_index_ = selected_index_ == 0 ? 0 : selected_index_ - 1;
@@ -625,11 +796,9 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
         return;
     }
     if (keybindings_->matches(*key, "tui.select.confirm")) {
-        if (!filtered_sessions_.empty()) {
-            const auto* selected = filtered_sessions_[selected_index_].session;
-            if (selected && on_select_) {
-                on_select_(selected->path.string());
-            }
+        const auto* selected = selected_session();
+        if (selected != nullptr && on_select_) {
+            on_select_(selected->path.string());
         }
         return;
     }
@@ -639,9 +808,44 @@ void SessionSelectorComponent::handle_input(const cch::tui::InputEventVariant& i
         }
         return;
     }
-    search_input_.handle_input(input);
-    filter_sessions(search_input_.value());
+    // Remaining keys edit the search query through the SelectList's Input
+    // (typing the first character hands the view over to the search list).
+    forward_to_select_list(input);
+}
+
+/// Forward one event to the embedded SelectList and reconcile the
+/// tree/search seam: clearing an active query hands the view back to this
+/// component's tree/flat rows (rebuilt here so the next render draws the
+/// empty-query state with the current scope/sort/filter), with the
+/// selection back on the top row (SelectList's own clear-query policy).
+void SessionSelectorComponent::forward_to_select_list(const cch::tui::InputEventVariant& input) {
+    const bool was_search = search_active();
+    select_list_.handle_input(input);
+    if (was_search && !search_active()) {
+        filter_sessions();
+        selected_index_ = 0;
+    }
     if (on_invalidate_) on_invalidate_();
+}
+
+std::string SessionSelectorComponent::empty_state_row(std::size_t width) const {
+    // pi's empty messages depend on the named filter and the scope only.
+    std::string message;
+    if (name_filter_ == SessionNameFilter::Named) {
+        const auto toggle_key = format_key_text(keybindings_->key_text("app.session.toggleNamedFilter"), true);
+        if (show_cwd_) {
+            message = "  No named sessions found. Press " + toggle_key + " to show all.";
+        } else {
+            message =
+                    "  No named sessions in current folder. Press " + toggle_key + " to show all, or Tab to view all.";
+        }
+    } else if (show_cwd_) {
+        message = "  No sessions found";
+    } else {
+        message = "  No sessions in current folder. Press Tab to view all.";
+    }
+    return theme_.foreground(
+            ThemeToken::Muted, cch::tui::truncate_text(message, width, "…").value_or(std::move(message)));
 }
 
 support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
@@ -654,6 +858,7 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
         for (std::size_t index = 0; index < count; ++index) rule += "─";
         return theme_.foreground(ThemeToken::Border, rule);
     };
+    rename_input_row_.reset();
 
     // pi buildBaseLayout: spacer + dynamic border + spacer + header + list.
     lines.push_back("");
@@ -742,17 +947,38 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
     lines.push_back("");
 
     // ── Search input ──────────────────────────────────────────────────────
-    auto search_lines = search_input_.render(width);
-    if (!search_lines) return std::unexpected(search_lines.error());
-    lines.insert(
-        lines.end(),
-        std::make_move_iterator(search_lines->lines.begin()),
-        std::make_move_iterator(search_lines->lines.end()));
+    // The search line renders through the embedded SelectList in every state
+    // (it owns the query text); record its row so cursor_location can add
+    // the component-owned rows above it (never a magic constant). While a
+    // search query is active the SelectList also renders the filtered rows
+    // (its own body); otherwise only its search row is kept and this
+    // component draws the tree/flat view (or the rename mode) below.
+    cursor_row_offset_ = lines.size();
+    const auto search_view = !mode_rename_ && search_active();
+    const auto select_begin = lines.size();
+    auto select_rendered = select_list_.render(width);
+    if (!select_rendered) return std::unexpected(select_rendered.error());
+    if (search_view) {
+        for (auto& line : select_rendered->lines) {
+            lines.push_back(std::move(line));
+        }
+        // The SelectList's generic no-match row is swapped for the domain
+        // empty-state message: its wording depends on the name filter and
+        // scope, which change while the list is open (the toolkit row text
+        // is fixed at construction). With search enabled and no chrome the
+        // no-match row is the line directly after the search row.
+        if (!select_list_.selected_item() && lines.size() >= select_begin + 2) {
+            lines[select_begin + 1] = empty_state_row(width);
+        }
+    } else if (!select_rendered->lines.empty()) {
+        lines.push_back(std::move(select_rendered->lines.front()));
+    }
     lines.push_back("");
 
     if (mode_rename_) {
         lines.push_back(theme_.foreground(ThemeToken::Accent, "Rename Session"));
         lines.push_back("");
+        rename_input_row_ = lines.size();
         auto rename_lines = rename_input_.render(width);
         if (!rename_lines) return std::unexpected(rename_lines.error());
         lines.insert(
@@ -769,27 +995,14 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
         return cch::tui::RenderResult{.lines = std::move(lines)};
     }
 
-    // ── Session list ──────────────────────────────────────────────────────
+    if (search_view) {
+        lines.push_back(border());
+        return cch::tui::RenderResult{.lines = std::move(lines)};
+    }
+
+    // ── Session list (empty-query view) ───────────────────────────────────
     if (filtered_sessions_.empty()) {
-        std::string empty_message;
-        if (name_filter_ == SessionNameFilter::Named) {
-            const auto toggle_key = format_key_text(
-                keybindings_->key_text("app.session.toggleNamedFilter"), true);
-            if (show_cwd_) {
-                empty_message = "  No named sessions found. Press " +
-                    toggle_key + " to show all.";
-            } else {
-                empty_message = "  No named sessions in current folder. Press " +
-                    toggle_key + " to show all, or Tab to view all.";
-            }
-        } else if (show_cwd_) {
-            empty_message = "  No sessions found";
-        } else {
-            empty_message = "  No sessions in current folder. Press Tab to view all.";
-        }
-        lines.push_back(theme_.foreground(
-            ThemeToken::Muted,
-            cch::tui::truncate_text(empty_message, width, "…").value_or(empty_message)));
+        lines.push_back(empty_state_row(width));
         lines.push_back("");
         lines.push_back(border());
         return cch::tui::RenderResult{.lines = std::move(lines)};
@@ -832,15 +1045,7 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
         display_text = normalize_message_text(std::move(display_text));
 
         // Right side: message count and age, cwd, path.
-        std::string right_part =
-            std::to_string(session.message_count) + " " +
-            format_session_date(session.modified);
-        if (show_cwd_ && !session.cwd.empty()) {
-            right_part = shorten_path(session.cwd) + " " + right_part;
-        }
-        if (show_path_) {
-            right_part = shorten_path(session.path) + " " + right_part;
-        }
+        const auto right_part = session_row_tail(session, show_cwd_, show_path_);
 
         const auto cursor = is_selected
             ? theme_.foreground(ThemeToken::Accent, "› ")

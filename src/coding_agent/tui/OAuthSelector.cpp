@@ -1,14 +1,12 @@
 #include "OAuthSelector.hpp"
 
-#include "DynamicBorder.hpp"
 #include "Theme.hpp"
-
-#include <cch/tui/Fuzzy.hpp>
-#include <cch/tui/TruncatedText.hpp>
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cctype>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent::tui {
@@ -38,218 +36,139 @@ constexpr std::size_t kMaxVisible = 8;
     return false;
 }
 
-} // namespace
-
-OAuthSelectorComponent::OAuthSelectorComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-    AuthSelectorMode mode,
-    std::vector<AuthSelectorProvider> providers,
-    AuthProviderSelectSink on_select,
-    AuthProviderCancelSink on_cancel,
-    std::string initial_search)
-    : theme_(theme),
-      keybindings_(std::move(keybindings)),
-      mode_(mode),
-      providers_(std::move(providers)),
-      on_select_(std::move(on_select)),
-      on_cancel_(std::move(on_cancel)),
-      search_input_(
-          cch::tui::InputOptions{.keybindings = keybindings_},
-          [this](std::string) -> support::ExpectedVoid {
-              confirm_selection();
-              return {};
-          },
-          {}) {
-    // pi: the auth-type labels render only when the list mixes auth types.
-    std::size_t distinct_types = 0;
-    for (const auto& provider : providers_) {
-        distinct_types |= provider.auth_type == AuthSelectorType::OAuth ? 1U : 2U;
-    }
-    show_type_labels_ = distinct_types == 3U;
-    search_input_.set_value(std::move(initial_search));
-}
-
-std::vector<const AuthSelectorProvider*> OAuthSelectorComponent::filtered() const {
-    std::vector<const AuthSelectorProvider*> all;
-    all.reserve(providers_.size());
-    for (const auto& provider : providers_) all.push_back(&provider);
-    const auto query = search_input_.value();
-    if (query.empty()) return all;
-    return cch::tui::fuzzy_filter(std::move(all), query, [](const AuthSelectorProvider* provider) {
-        return provider->name + " " + provider->id + " " +
-            std::string{auth_selector_type_wire_name(provider->auth_type)} + " " +
-            provider->method_name.value_or("");
-    });
-}
-
-std::string OAuthSelectorComponent::status_indicator(
-    const AuthSelectorProvider& provider) const {
-    // pi `formatStatusIndicator`, branch for branch.
+/// pi `formatStatusIndicator`, branch for branch.
+[[nodiscard]] std::string status_indicator(const LiveTheme& theme, const AuthSelectorProvider& provider) {
     if (!provider.status) {
-        return theme_.foreground(ThemeToken::Muted, " • unconfigured");
+        return theme.foreground(ThemeToken::Muted, " • unconfigured");
     }
     if (provider.status->type != provider.auth_type) {
         const std::string label = provider.status->type == AuthSelectorType::OAuth
             ? "subscription configured"
             : "API key configured";
-        return theme_.foreground(ThemeToken::Muted, " • ") +
-            theme_.foreground(ThemeToken::Warning, label);
+        return theme.foreground(ThemeToken::Muted, " • ") + theme.foreground(ThemeToken::Warning, label);
     }
     if (!provider.status->source || *provider.status->source == "OAuth" ||
         *provider.status->source == "stored credential") {
-        return theme_.foreground(ThemeToken::Success, " ✓ configured");
+        return theme.foreground(ThemeToken::Success, " ✓ configured");
     }
     const auto& source = *provider.status->source;
     if (is_env_source_label(source)) {
-        return theme_.foreground(ThemeToken::Success, " ✓ env: " + source);
+        return theme.foreground(ThemeToken::Success, " ✓ env: " + source);
     }
-    return theme_.foreground(ThemeToken::Success, " ✓ " + source);
+    return theme.foreground(ThemeToken::Success, " ✓ " + source);
 }
 
-void OAuthSelectorComponent::confirm_selection() {
-    const auto filtered_providers = filtered();
-    if (selected_index_ >= filtered_providers.size()) return;
-    const auto* provider = filtered_providers[selected_index_];
-    if (on_select_) on_select_(provider->id, provider->auth_type);
+[[nodiscard]] std::string provider_identity(const AuthSelectorProvider& provider) {
+    return provider.id + "/" + std::string{auth_selector_type_wire_name(provider.auth_type)};
 }
+
+/// One `SelectItem` per provider row, in provider order. The label carries
+/// the full visible row (display name, the optional `[subscription]` /
+/// `[API key]` type label when the list mixes auth types, and the colored
+/// status indicator) so rows render exactly as before; `value` holds the
+/// stable provider-id/auth-type identity used to resolve selection; the
+/// hidden `search_text` keeps the historical name + id + auth type +
+/// method-name search surface.
+[[nodiscard]] std::vector<cch::tui::SelectItem> build_items(
+        const LiveTheme& theme, const std::vector<AuthSelectorProvider>& providers) {
+    // pi: the auth-type labels render only when the list mixes auth types.
+    std::size_t distinct_types = 0;
+    for (const auto& provider : providers) {
+        distinct_types |= provider.auth_type == AuthSelectorType::OAuth ? 1U : 2U;
+    }
+    const bool show_type_labels = distinct_types == 3U;
+
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(providers.size());
+    for (const auto& provider : providers) {
+        std::string label = provider.name;
+        if (show_type_labels) {
+            label += theme.foreground(ThemeToken::Muted,
+                    " [" + std::string{format_auth_selector_provider_type(provider.auth_type)} + "]");
+        }
+        label += status_indicator(theme, provider);
+        std::string search_text = provider.name + " " + provider.id + " " +
+                                  std::string{auth_selector_type_wire_name(provider.auth_type)} + " " +
+                                  provider.method_name.value_or("");
+        items.push_back(cch::tui::SelectItem{
+                .value = provider_identity(provider),
+                .label = std::move(label),
+                .description = std::nullopt,
+                .search_text = std::move(search_text),
+        });
+    }
+    return items;
+}
+
+} // namespace
+
+OAuthSelectorComponent::OAuthSelectorComponent(const LiveTheme& theme,
+        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        AuthSelectorMode mode,
+        std::vector<AuthSelectorProvider> providers,
+        AuthProviderSelectSink on_select,
+        AuthProviderCancelSink on_cancel,
+        std::string initial_search)
+    : providers_(std::move(providers)), on_select_(std::move(on_select)), on_cancel_(std::move(on_cancel)),
+      select_list_(build_items(theme, providers_),
+              cch::tui::SelectListOptions{
+                      .max_visible = kMaxVisible,
+                      .theme = theme.select_list_theme(),
+                      .on_select = [this](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                          const auto provider = std::find_if(
+                                  providers_.begin(), providers_.end(), [&item](const AuthSelectorProvider& candidate) {
+                                      return provider_identity(candidate) == item.value;
+                                  });
+                          if (provider != providers_.end() && on_select_) {
+                              on_select_(provider->id, provider->auth_type);
+                          }
+                          return {};
+                      },
+                      .on_cancel = [this]() -> support::ExpectedVoid {
+                          if (on_cancel_) on_cancel_();
+                          return {};
+                      },
+                      .keybindings = std::move(keybindings),
+                      .wrap_navigation = false,
+                      .enable_search = true,
+                      .initial_search = initial_search.empty() ? std::nullopt
+                                                               : std::optional<std::string>{std::move(initial_search)},
+                      .title = theme.foreground(ThemeToken::Accent,
+                              "\x1b[1m" +
+                                      std::string{mode == AuthSelectorMode::Login ? "Select provider to configure:"
+                                                                                  : "Select provider to logout:"} +
+                                      "\x1b[22m"),
+                      .border_hook = theme.foreground_hook(ThemeToken::Border),
+                      // The SelectList's generic no-match row ("No matching
+                      // commands") carries the mode-specific message: the
+                      // selector's pi wording depends only on the mode and
+                      // whether any provider exists, both fixed at
+                      // construction.
+                      .no_match_text = providers_.empty()
+                                               ? (mode == AuthSelectorMode::Login
+                                                                 ? "  No providers available"
+                                                                 : "  No providers logged in. Use /login first.")
+                                               : "  No matching providers",
+              }) {}
 
 support::Expected<cch::tui::RenderResult> OAuthSelectorComponent::render(std::size_t width) {
-    cch::tui::RenderResult result;
-    const auto append = [&result, width](cch::tui::Component& component) -> support::ExpectedVoid {
-        auto rendered = component.render(width);
-        if (!rendered) return std::unexpected(rendered.error());
-        for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
-        return {};
-    };
-    const auto append_text = [&append](std::string text) -> support::ExpectedVoid {
-        cch::tui::TruncatedText line(std::move(text), 1, 0);
-        return append(line);
-    };
-
-    // pi's composition: border / spacer / bold accent title / spacer / search
-    // input / spacer / list (+ scroll info, empty message) / spacer / border.
-    DynamicBorder top_border(theme_.foreground_hook(ThemeToken::Border));
-    if (auto appended = append(top_border); !appended) return std::unexpected(appended.error());
-    if (auto appended = append_text(""); !appended) return std::unexpected(appended.error());
-    {
-        const std::string title = mode_ == AuthSelectorMode::Login
-            ? "Select provider to configure:"
-            : "Select provider to logout:";
-        if (auto appended = append_text(
-                theme_.foreground(ThemeToken::Accent, "\x1b[1m" + title + "\x1b[22m"));
-            !appended) {
-            return std::unexpected(appended.error());
-        }
-    }
-    if (auto appended = append_text(""); !appended) return std::unexpected(appended.error());
-    if (auto appended = append(search_input_); !appended) return std::unexpected(appended.error());
-    if (auto appended = append_text(""); !appended) return std::unexpected(appended.error());
-
-    const auto filtered_providers = filtered();
-    const std::size_t clamped_index = filtered_providers.empty()
-        ? 0
-        : std::min(selected_index_, filtered_providers.size() - 1);
-    const std::size_t start = filtered_providers.size() <= kMaxVisible
-        ? 0
-        : std::min(
-              clamped_index > kMaxVisible / 2 ? clamped_index - kMaxVisible / 2 : 0,
-              filtered_providers.size() - kMaxVisible);
-    const std::size_t end = std::min(start + kMaxVisible, filtered_providers.size());
-
-    for (std::size_t index = start; index < end; ++index) {
-        const auto& provider = *filtered_providers[index];
-        const bool selected = index == clamped_index;
-        const std::string type_label = show_type_labels_
-            ? theme_.foreground(
-                  ThemeToken::Muted,
-                  " [" + std::string{format_auth_selector_provider_type(provider.auth_type)} + "]")
-            : "";
-        const std::string line = selected
-            ? theme_.foreground(ThemeToken::Accent, "→ ") +
-                theme_.foreground(ThemeToken::Accent, provider.name) + type_label +
-                status_indicator(provider)
-            : "  " + theme_.foreground(ThemeToken::Text, provider.name) + type_label +
-                status_indicator(provider);
-        if (auto appended = append_text(line); !appended) return std::unexpected(appended.error());
-    }
-    if (start > 0 || end < filtered_providers.size()) {
-        if (auto appended = append_text(theme_.foreground(
-                ThemeToken::Muted,
-                "  (" + std::to_string(clamped_index + 1) + "/" +
-                    std::to_string(filtered_providers.size()) + ")"));
-            !appended) {
-            return std::unexpected(appended.error());
-        }
-    }
-    if (filtered_providers.empty()) {
-        const std::string message = providers_.empty()
-            ? (mode_ == AuthSelectorMode::Login
-                   ? "No providers available"
-                   : "No providers logged in. Use /login first.")
-            : "No matching providers";
-        if (auto appended = append_text(theme_.foreground(ThemeToken::Muted, "  " + message));
-            !appended) {
-            return std::unexpected(appended.error());
-        }
-    }
-
-    if (auto appended = append_text(""); !appended) return std::unexpected(appended.error());
-    DynamicBorder bottom_border(theme_.foreground_hook(ThemeToken::Border));
-    if (auto appended = append(bottom_border); !appended) return std::unexpected(appended.error());
-    return result;
+    return select_list_.render(width);
 }
 
-void OAuthSelectorComponent::invalidate() {
-    search_input_.invalidate();
-}
+void OAuthSelectorComponent::invalidate() { select_list_.invalidate(); }
 
 void OAuthSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
-    const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-    if (key == nullptr || key->type == cch::tui::KeyEventType::Release) return;
-
-    if (keybindings_->matches(*key, "tui.select.up")) {
-        selected_index_ = selected_index_ == 0 ? 0 : selected_index_ - 1;
-        return;
-    }
-    if (keybindings_->matches(*key, "tui.select.down")) {
-        const auto count = filtered().size();
-        if (count != 0) selected_index_ = std::min(count - 1, selected_index_ + 1);
-        return;
-    }
-    if (keybindings_->matches(*key, "tui.select.confirm")) {
-        confirm_selection();
-        return;
-    }
-    if (keybindings_->matches(*key, "tui.select.cancel")) {
-        if (on_cancel_) on_cancel_();
-        return;
-    }
-    // pi: everything else types into the search input and re-filters.
-    search_input_.handle_input(input);
-    // pi clamps the selection into the filtered range on every filter change.
-    const auto count = filtered().size();
-    if (count == 0) {
-        selected_index_ = 0;
-    } else if (selected_index_ >= count) {
-        selected_index_ = count - 1;
-    }
+    select_list_.handle_input(input);
 }
 
-void OAuthSelectorComponent::set_focused(bool focused) {
-    search_input_.set_focused(focused);
-}
+void OAuthSelectorComponent::set_focused(bool focused) { select_list_.set_focused(focused); }
 
-bool OAuthSelectorComponent::focused() const {
-    return search_input_.focused();
-}
+bool OAuthSelectorComponent::focused() const { return select_list_.focused(); }
 
 std::optional<cch::tui::CursorPosition> OAuthSelectorComponent::cursor_location() const {
-    auto cursor = search_input_.cursor_location();
-    if (!cursor) return std::nullopt;
-    // Rows before the search input: border, spacer, title, spacer.
-    cursor->row += 4;
-    return cursor;
+    // The SelectList tracks the search row inside its own chrome (border,
+    // spacers, title), so the component adds no offset of its own.
+    return select_list_.cursor_location();
 }
 
 } // namespace cch::coding_agent::tui
