@@ -305,17 +305,17 @@ struct Editor::Impl {
 
     void request_render(std::unique_lock<std::mutex>& lock) {
         if (!render_request_sink || !*render_request_sink) return;
-        bool sink_threw = false;
-        outside_impl_lock(lock, [sink = render_request_sink, &sink_threw] {
+        const bool sink_threw = outside_impl_lock(lock, [sink = render_request_sink] {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             try {
 #endif
                 if (*sink) static_cast<void>((*sink)());
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
             } catch (...) {
-                sink_threw = true;
+                return true;
             }
 #endif
+            return false;
         });
         if (sink_threw) {
             // A throwing render-request sink is a bounded callback diagnostic
