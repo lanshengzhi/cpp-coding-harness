@@ -137,27 +137,20 @@ OAuthSelectorComponent::OAuthSelectorComponent(const LiveTheme& theme,
                                                                                    : "Select provider to logout:"} +
                                       "\x1b[22m"),
                       .border_hook = theme_.foreground_hook(ThemeToken::Border),
+                      // The SelectList's generic no-match row ("No matching
+                      // commands") carries the mode-specific message: the
+                      // selector's pi wording depends only on the mode and
+                      // whether any provider exists, both fixed at
+                      // construction.
+                      .no_match_text = providers_.empty()
+                                               ? (mode_ == AuthSelectorMode::Login
+                                                                 ? "  No providers available"
+                                                                 : "  No providers logged in. Use /login first.")
+                                               : "  No matching providers",
               }) {}
 
 support::Expected<cch::tui::RenderResult> OAuthSelectorComponent::render(std::size_t width) {
-    auto rendered = select_list_.render(width);
-    if (!rendered) return std::unexpected(rendered.error());
-    // The SelectList's generic no-match row ("No matching commands") is
-    // replaced with the mode-specific message whenever nothing matches. In
-    // chrome framing the no-match row is the line directly above the bottom
-    // border rule (the last line).
-    if (!select_list_.selected_item()) {
-        const std::string message = providers_.empty()
-            ? (mode_ == AuthSelectorMode::Login
-                   ? "No providers available"
-                   : "No providers logged in. Use /login first.")
-            : "No matching providers";
-        auto& lines = rendered->lines;
-        if (lines.size() >= 2) {
-            lines[lines.size() - 2] = theme_.foreground(ThemeToken::Muted, "  " + message);
-        }
-    }
-    return rendered;
+    return select_list_.render(width);
 }
 
 void OAuthSelectorComponent::invalidate() { select_list_.invalidate(); }

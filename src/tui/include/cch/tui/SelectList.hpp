@@ -93,6 +93,11 @@ struct SelectListOptions {
     /// Optional full replacement for the default fuzzy ranking (see
     /// `SelectSearchFilterHook`).
     SelectSearchFilterHook search_filter_hook{};
+    /// The row shown in place of the list when the filter matches nothing.
+    /// Absent, the toolkit default `"  No matching commands"` renders (styled
+    /// through `theme.no_match`); selectors with their own empty-state
+    /// wording (pi `noMatchingItems` variants) replace the whole text.
+    std::optional<std::string> no_match_text{std::nullopt};
 };
 
 /// A filterable, width-bounded selection list controlled by semantic keys.
