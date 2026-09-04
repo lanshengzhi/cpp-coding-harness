@@ -6,11 +6,12 @@
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/PromptSlot.hpp"
 #include "coding_agent/tui/ReloadBox.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
-#include "coding_agent/tui/StringListSelector.hpp"
+#include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/TreeSelector.hpp"
 #include "coding_agent/tui/UserMessageSelector.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -20,6 +21,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/tui/SelectList.hpp>
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -47,6 +49,17 @@ namespace {
     return support::make_error(
         support::ErrorCode::Unknown,
         "Session switching is not available in this host");
+}
+
+/// The hint row of the retired generic string-list selector, rebuilt as
+/// plain chrome text for the shared SelectList with the registry's live key
+/// labels (SelectList chrome rows carry no per-key styling).
+[[nodiscard]] std::string generic_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
+    const auto key_label = [&keybindings](std::string_view action) {
+        const auto text = keybindings.key_text(action);
+        return text.empty() ? std::string{"Unbound"} : format_key_text(text);
+    };
+    return "↑↓ navigate  " + key_label("tui.select.confirm") + " select  " + key_label("tui.select.cancel") + " cancel";
 }
 
 } // namespace
@@ -452,17 +465,27 @@ SessionFlowController::prompt_for_missing_session_cwd(
             .fallback_cwd = fallback_cwd,
         });
     const auto title = "Session cwd not found\n" + prompt_text;
-    auto selector = std::make_shared<StringListSelector>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        title,
-        std::vector<std::string>{"Yes", "No"},
-        [slot, fallback_cwd](std::string selected) {
-            slot->resolve(selected == "Yes"
-                ? support::Expected<std::string>{fallback_cwd.string()}
-                : std::unexpected(prompt_cancelled_error()));
-        },
-        [slot] { slot->resolve(std::unexpected(prompt_cancelled_error())); });
+    auto selector = std::make_shared<cch::tui::SelectList>(
+            std::vector<cch::tui::SelectItem>{
+                    {.value = "Yes", .label = "Yes"},
+                    {.value = "No", .label = "No"},
+            },
+            cch::tui::SelectListOptions{
+                    .theme = hooks_.live_theme().select_list_theme(),
+                    .on_select = [slot, fallback_cwd](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                        slot->resolve(item.value == "Yes" ? support::Expected<std::string>{fallback_cwd.string()}
+                                                          : std::unexpected(prompt_cancelled_error()));
+                        return {};
+                    },
+                    .on_cancel = [slot]() -> support::ExpectedVoid {
+                        slot->resolve(std::unexpected(prompt_cancelled_error()));
+                        return {};
+                    },
+                    .keybindings = keybindings_->get(),
+                    .title = title,
+                    .hint = generic_list_hint(*keybindings_->get()),
+                    .border_hook = hooks_.live_theme().foreground_hook(ThemeToken::Border),
+            });
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;

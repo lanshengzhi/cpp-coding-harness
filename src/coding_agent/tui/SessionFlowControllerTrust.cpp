@@ -2,15 +2,17 @@
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/PromptSlot.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
-#include "coding_agent/tui/StringListSelector.hpp"
+#include "coding_agent/tui/Theme.hpp"
 #include "support/AsyncResultBridge.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/tui/SelectList.hpp>
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -60,6 +62,17 @@ namespace {
         });
     }
     return converted;
+}
+
+/// The hint row of the retired generic string-list selector, rebuilt as
+/// plain chrome text for the shared SelectList with the registry's live key
+/// labels (SelectList chrome rows carry no per-key styling).
+[[nodiscard]] std::string generic_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
+    const auto key_label = [&keybindings](std::string_view action) {
+        const auto text = keybindings.key_text(action);
+        return text.empty() ? std::string{"Unbound"} : format_key_text(text);
+    };
+    return "↑↓ navigate  " + key_label("tui.select.confirm") + " select  " + key_label("tui.select.cancel") + " cancel";
 }
 
 } // namespace
@@ -239,32 +252,39 @@ SessionFlowController::show_boot_trust_prompt(
     const auto executor = co_await boost::asio::this_coro::executor;
     auto slot = std::make_shared<PromptSlot>(executor);
     track_prompt_slot(slot);
-    std::vector<std::string> labels;
-    labels.reserve(options.size());
-    for (const auto& option : options) labels.push_back(option.label);
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(options.size());
+    for (const auto& option : options) {
+        items.push_back(cch::tui::SelectItem{.value = option.label, .label = option.label});
+    }
+    const auto& theme = hooks_.live_theme();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<StringListSelector>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        format_project_trust_prompt(workspace),
-        std::move(labels),
-        [weak, slot](std::string label) {
-            if (const auto self = weak.lock()) {
-                self->post(
-                    [self, slot, label = std::move(label)]() mutable {
-                        self->presenter_->restore_prompt_slot();
-                        slot->resolve(std::move(label));
-                    });
-            }
-        },
-        [weak, slot] {
-            if (const auto self = weak.lock()) {
-                self->post([self, slot] {
-                    self->presenter_->restore_prompt_slot();
-                    slot->resolve(std::unexpected(prompt_cancelled_error()));
-                });
-            }
-        });
+    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+            cch::tui::SelectListOptions{
+                    .theme = theme.select_list_theme(),
+                    .on_select = [weak, slot](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->post([self, slot, label = item.value]() mutable {
+                                self->presenter_->restore_prompt_slot();
+                                slot->resolve(std::move(label));
+                            });
+                        }
+                        return {};
+                    },
+                    .on_cancel = [weak, slot]() -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->post([self, slot] {
+                                self->presenter_->restore_prompt_slot();
+                                slot->resolve(std::unexpected(prompt_cancelled_error()));
+                            });
+                        }
+                        return {};
+                    },
+                    .keybindings = keybindings_->get(),
+                    .title = format_project_trust_prompt(workspace),
+                    .hint = generic_list_hint(*keybindings_->get()),
+                    .border_hook = theme.foreground_hook(ThemeToken::Border),
+            });
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;
@@ -291,32 +311,39 @@ boost::asio::awaitable<void> SessionFlowController::run_trust_selector() {
     auto slot = std::make_shared<PromptSlot>(executor);
     track_prompt_slot(slot);
     const auto captured_generation = action_generation();
-    std::vector<std::string> labels;
-    labels.reserve(options.size());
-    for (const auto& option : options) labels.push_back(option.label);
+    std::vector<cch::tui::SelectItem> items;
+    items.reserve(options.size());
+    for (const auto& option : options) {
+        items.push_back(cch::tui::SelectItem{.value = option.label, .label = option.label});
+    }
+    const auto& theme = hooks_.live_theme();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<StringListSelector>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        format_project_trust_prompt(cwd),
-        std::move(labels),
-        [weak, slot](std::string label) {
-            if (const auto self = weak.lock()) {
-                self->post(
-                    [self, slot, label = std::move(label)]() mutable {
-                        self->presenter_->restore_prompt_slot();
-                        slot->resolve(std::move(label));
-                    });
-            }
-        },
-        [weak, slot] {
-            if (const auto self = weak.lock()) {
-                self->post([self, slot] {
-                    self->presenter_->restore_prompt_slot();
-                    slot->resolve(std::unexpected(prompt_cancelled_error()));
-                });
-            }
-        });
+    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+            cch::tui::SelectListOptions{
+                    .theme = theme.select_list_theme(),
+                    .on_select = [weak, slot](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->post([self, slot, label = item.value]() mutable {
+                                self->presenter_->restore_prompt_slot();
+                                slot->resolve(std::move(label));
+                            });
+                        }
+                        return {};
+                    },
+                    .on_cancel = [weak, slot]() -> support::ExpectedVoid {
+                        if (const auto self = weak.lock()) {
+                            self->post([self, slot] {
+                                self->presenter_->restore_prompt_slot();
+                                slot->resolve(std::unexpected(prompt_cancelled_error()));
+                            });
+                        }
+                        return {};
+                    },
+                    .keybindings = keybindings_->get(),
+                    .title = format_project_trust_prompt(cwd),
+                    .hint = generic_list_hint(*keybindings_->get()),
+                    .border_hook = theme.foreground_hook(ThemeToken::Border),
+            });
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;
