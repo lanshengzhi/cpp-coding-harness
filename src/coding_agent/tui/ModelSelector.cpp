@@ -78,6 +78,14 @@ ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
     // toggle) land at render time through the revision gate below.
     load_models_from_snapshot();
     select_list_.set_items(build_select_items());
+    if (!initial_search_input || initial_search_input->empty()) {
+        for (std::size_t index = 0; index < active_models_.size(); ++index) {
+            if (is_current(active_models_[index].model)) {
+                select_list_.set_selected_index(index);
+                break;
+            }
+        }
+    }
     applied_items_revision_ = items_revision_;
 }
 

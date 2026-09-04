@@ -299,6 +299,8 @@ boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
                                     return {};
                                 },
                                 .keybindings = keybindings,
+                                .wrap_navigation = false,
+                                .enable_raw_jk_navigation = true,
                                 .title = std::move(title),
                                 .hint = coding_agent::tui::generic_select_list_hint(*keybindings),
                                 .border_hook = live_theme.foreground_hook(cch::coding_agent::tui::ThemeToken::Border),

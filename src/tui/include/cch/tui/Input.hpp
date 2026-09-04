@@ -57,6 +57,9 @@ public:
     [[nodiscard]] std::string value() const;
     /// Replace the value, clamping the cursor to the new length (pi `setValue`).
     void set_value(std::string value);
+    /// Move the cursor to the end without consulting user keybindings or
+    /// changing the value.
+    void move_cursor_to_end();
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;

@@ -471,6 +471,8 @@ SessionFlowController::prompt_for_missing_session_cwd(
                         return {};
                     },
                     .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
                     .title = title,
                     .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = hooks_.live_theme().foreground_hook(ThemeToken::Border),

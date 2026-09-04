@@ -224,6 +224,8 @@ void Input::set_value(std::string value) {
     impl_->buffer.set_cursor(detail::BufferCursor{.line = 0, .column = std::min(prior_col, max_col)});
 }
 
+void Input::move_cursor_to_end() { impl_->buffer.move_to_line_end(); }
+
 support::Expected<RenderResult> Input::render(std::size_t width) {
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {

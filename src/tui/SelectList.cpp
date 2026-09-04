@@ -129,6 +129,8 @@ struct SelectList::Impl {
     std::shared_ptr<const KeybindingRegistry> keybindings;
     std::optional<support::Error> callback_error;
     bool focused{false};
+    bool wrap_navigation{true};
+    bool raw_jk_navigation_enabled{false};
 
     // #586: embedded search and chrome framing.
     bool search_enabled{false};
@@ -425,6 +427,8 @@ SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
     impl_->on_selection_change = std::make_shared<SelectItemSink>(std::move(options.on_selection_change));
     impl_->keybindings = options.keybindings ? std::move(options.keybindings) : default_tui_keybindings();
     impl_->search_enabled = options.enable_search;
+    impl_->wrap_navigation = options.wrap_navigation;
+    impl_->raw_jk_navigation_enabled = options.enable_raw_jk_navigation && !options.enable_search;
     impl_->title = std::move(options.title);
     impl_->hint = std::move(options.hint);
     impl_->border_hook = std::move(options.border_hook);
@@ -440,9 +444,8 @@ SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
         if (options.initial_search) {
             impl_->search_input->set_value(std::move(*options.initial_search));
             // A prefilled query reads naturally with the cursor at its end so
-            // subsequent typing appends; the registry's cursorLineEnd action
-            // performs the move without widening Input's public API.
-            impl_->search_input->handle_input(KeyEvent{.key = "end"});
+            // subsequent typing appends regardless of user keybindings.
+            impl_->search_input->move_cursor_to_end();
         }
     }
     // Rank the initial items against the starting query (all items in order
@@ -462,9 +465,10 @@ void SelectList::set_filter(std::string filter) {
         // In search mode the legacy filter text becomes the search query;
         // ranking proceeds exactly as for typed input (top-ranked selection,
         // no selection-change notification for this programmatic change). The
-        // cursor lands at the end so continued typing appends.
+        // cursor lands at the end so continued typing appends regardless of
+        // user keybindings.
         impl->search_input->set_value(std::move(filter));
-        impl->search_input->handle_input(KeyEvent{.key = "end"});
+        impl->search_input->move_cursor_to_end();
         impl->recompute_filtered();
         impl->selected_index = 0;
         return;
@@ -607,15 +611,20 @@ void SelectList::handle_input(const InputEventVariant& input) {
     if (key == nullptr || key->type == KeyEventType::Release) return;
     const auto count = impl->filtered_indices.size();
     const auto action = impl->keybindings->first_match(*key, kSelectListActions);
-    if (action == "tui.select.up") {
+    const bool plain = !key->ctrl && !key->alt && !key->shift;
+    const bool raw_up = impl->raw_jk_navigation_enabled && plain && key->key == "k";
+    const bool raw_down = impl->raw_jk_navigation_enabled && plain && key->key == "j";
+    if (action == "tui.select.up" || raw_up) {
         if (count == 0) return;
-        impl->selected_index = impl->selected_index == 0 ? count - 1 : impl->selected_index - 1;
+        impl->selected_index =
+                impl->selected_index == 0 ? (impl->wrap_navigation ? count - 1 : 0) : impl->selected_index - 1;
         impl->notify_selection_change();
         return;
     }
-    if (action == "tui.select.down") {
+    if (action == "tui.select.down" || raw_down) {
         if (count == 0) return;
-        impl->selected_index = impl->selected_index + 1 == count ? 0 : impl->selected_index + 1;
+        impl->selected_index =
+                impl->selected_index + 1 == count ? (impl->wrap_navigation ? 0 : count - 1) : impl->selected_index + 1;
         impl->notify_selection_change();
         return;
     }

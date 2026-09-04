@@ -75,6 +75,13 @@ struct SelectListOptions {
     SelectCancelSink on_cancel{};
     SelectItemSink on_selection_change{};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    /// Whether up/down navigation wraps across the first and last items.
+    /// Disable to clamp at list boundaries.
+    bool wrap_navigation{true};
+    /// Enable raw unmodified `k`/`j` as up/down navigation when search is
+    /// disabled. Ignored with `enable_search` so printable input remains
+    /// available to the search query.
+    bool enable_raw_jk_navigation{false};
 
     // #586 embedded search and chrome framing.
     /// Embed a single-line search input. When true, printable keys flow into

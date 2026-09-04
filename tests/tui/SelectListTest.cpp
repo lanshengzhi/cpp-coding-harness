@@ -108,6 +108,36 @@ TEST_CASE("SelectList filters navigates wraps selects and cancels with semantic 
     CHECK(cancellations == 1);
 }
 
+TEST_CASE(
+        "SelectList can clamp navigation and enable raw j k keys without stealing search input", "[tui][select-list]") {
+    cch::tui::SelectList list(make_items(3),
+            cch::tui::SelectListOptions{
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
+            });
+
+    list.handle_input(cch::tui::KeyEvent{.key = "k"});
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "item0");
+    list.handle_input(cch::tui::KeyEvent{.key = "j"});
+    list.handle_input(cch::tui::KeyEvent{.key = "j"});
+    list.handle_input(cch::tui::KeyEvent{.key = "j"});
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "item2");
+    list.handle_input(cch::tui::KeyEvent{.key = "k"});
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "item1");
+
+    cch::tui::SelectList searchable(make_items(3),
+            cch::tui::SelectListOptions{
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
+                    .enable_search = true,
+            });
+    searchable.handle_input(cch::tui::KeyEvent{.key = "j"});
+    CHECK(searchable.search_query() == "j");
+}
+
 TEST_CASE("SelectList normalizes and aligns descriptions within configured columns", "[tui][select-list][issue52]") {
     cch::tui::SelectList list(
         {
@@ -594,7 +624,10 @@ TEST_CASE("SelectList renders the search placeholder initial query and cursor co
     CHECK(typed_cursor->column == 4);
 }
 
-TEST_CASE("SelectList search mode starts from the initial query when configured", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList programmatic search values place the cursor at the end without a keybinding",
+        "[tui][select-list][issue586]") {
+    auto keybindings =
+            std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{});
     cch::tui::SelectList list(
             {
                     {.value = "alpha", .label = "Alpha"},
@@ -602,19 +635,28 @@ TEST_CASE("SelectList search mode starts from the initial query when configured"
                     {.value = "beta", .label = "Beta"},
             },
             cch::tui::SelectListOptions{
+                    .keybindings = std::move(keybindings),
                     .enable_search = true,
                     .search_placeholder = "Filter items",
                     .initial_search = "alpi",
             });
+    list.set_focused(true);
 
     CHECK(list.search_query() == "alpi");
     REQUIRE(list.selected_item());
     CHECK(list.selected_item()->value == "alpine");
-    const auto rendered = list.render(40);
+    auto rendered = list.render(40);
     REQUIRE(rendered);
     CHECK(rendered->lines[0].starts_with("> alpi"));
-    // A non-empty initial query suppresses the placeholder.
-    CHECK(rendered->lines[0].find("Filter items") == std::string::npos);
+    REQUIRE(list.cursor_location());
+    CHECK(list.cursor_location()->column == 6);
+
+    list.set_filter("beta query");
+    CHECK(list.search_query() == "beta query");
+    rendered = list.render(40);
+    REQUIRE(rendered);
+    REQUIRE(list.cursor_location());
+    CHECK(list.cursor_location()->column == 12);
 }
 
 TEST_CASE("SelectList frames lists with borders titles and hints in a deterministic chrome layout",

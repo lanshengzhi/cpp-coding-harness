@@ -213,25 +213,42 @@ TEST_CASE(
         },
         [] {});
 
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "enter"});
-    REQUIRE(selected.has_value());
-    CHECK(selected->first == "deepseek");
-    CHECK(selected->second == AuthSelectorType::ApiKey);
-
-    // Navigation now wraps around like the delegated SelectList and the
-    // sibling model selectors: one "up" from the bottom row reaches the top.
+    // Both boundaries clamp: up at the first row stays there, and down at
+    // the last row does not wrap back to the first.
     selector.handle_input(tui::KeyEvent{.key = "up"});
     selector.handle_input(tui::KeyEvent{.key = "enter"});
     REQUIRE(selected.has_value());
     CHECK(selected->first == "openai-codex");
     CHECK(selected->second == AuthSelectorType::OAuth);
 
-    // And one more "up" from the top row wraps back to the bottom row.
-    selector.handle_input(tui::KeyEvent{.key = "up"});
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    selector.handle_input(tui::KeyEvent{.key = "down"});
     selector.handle_input(tui::KeyEvent{.key = "enter"});
     REQUIRE(selected.has_value());
     CHECK(selected->first == "deepseek");
+    CHECK(selected->second == AuthSelectorType::ApiKey);
+}
+
+TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id", "[coding_agent][tui][login][issue406]") {
+    auto theme = test_theme();
+    using coding_agent::tui::AuthSelectorType;
+    std::optional<std::pair<std::string, AuthSelectorType>> selected;
+    std::vector<coding_agent::tui::AuthSelectorProvider> providers;
+    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::OAuth));
+    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::ApiKey));
+
+    coding_agent::tui::OAuthSelectorComponent selector(
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::move(providers),
+            [&selected](std::string id, AuthSelectorType type) { selected = std::make_pair(std::move(id), type); },
+            [] {});
+
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(selected.has_value());
+    CHECK(selected->first == "kimi-coding");
     CHECK(selected->second == AuthSelectorType::ApiKey);
 }
 

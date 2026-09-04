@@ -5,7 +5,6 @@
 #include <cch/support/Error.hpp>
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -59,13 +58,17 @@ constexpr std::size_t kMaxVisible = 8;
     return theme.foreground(ThemeToken::Success, " ✓ " + source);
 }
 
+[[nodiscard]] std::string provider_identity(const AuthSelectorProvider& provider) {
+    return provider.id + "/" + std::string{auth_selector_type_wire_name(provider.auth_type)};
+}
+
 /// One `SelectItem` per provider row, in provider order. The label carries
 /// the full visible row (display name, the optional `[subscription]` /
 /// `[API key]` type label when the list mixes auth types, and the colored
 /// status indicator) so rows render exactly as before; `value` holds the
-/// `providers_` index so selection resolves back to the provider; the hidden
-/// `search_text` keeps the historical name + id + auth type + method-name
-/// search surface.
+/// stable provider-id/auth-type identity used to resolve selection; the
+/// hidden `search_text` keeps the historical name + id + auth type +
+/// method-name search surface.
 [[nodiscard]] std::vector<cch::tui::SelectItem> build_items(
         const LiveTheme& theme, const std::vector<AuthSelectorProvider>& providers) {
     // pi: the auth-type labels render only when the list mixes auth types.
@@ -77,8 +80,7 @@ constexpr std::size_t kMaxVisible = 8;
 
     std::vector<cch::tui::SelectItem> items;
     items.reserve(providers.size());
-    for (std::size_t index = 0; index < providers.size(); ++index) {
-        const auto& provider = providers[index];
+    for (const auto& provider : providers) {
         std::string label = provider.name;
         if (show_type_labels) {
             label += theme.foreground(ThemeToken::Muted,
@@ -89,7 +91,7 @@ constexpr std::size_t kMaxVisible = 8;
                                   std::string{auth_selector_type_wire_name(provider.auth_type)} + " " +
                                   provider.method_name.value_or("");
         items.push_back(cch::tui::SelectItem{
-                .value = std::to_string(index),
+                .value = provider_identity(provider),
                 .label = std::move(label),
                 .description = std::nullopt,
                 .search_text = std::move(search_text),
@@ -113,12 +115,12 @@ OAuthSelectorComponent::OAuthSelectorComponent(const LiveTheme& theme,
                       .max_visible = kMaxVisible,
                       .theme = theme.select_list_theme(),
                       .on_select = [this](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
-                          std::size_t index = 0;
-                          const auto parsed =
-                                  std::from_chars(item.value.data(), item.value.data() + item.value.size(), index);
-                          if (parsed.ec == std::errc{} && index < providers_.size() && on_select_) {
-                              const auto& provider = providers_[index];
-                              on_select_(provider.id, provider.auth_type);
+                          const auto provider = std::find_if(
+                                  providers_.begin(), providers_.end(), [&item](const AuthSelectorProvider& candidate) {
+                                      return provider_identity(candidate) == item.value;
+                                  });
+                          if (provider != providers_.end() && on_select_) {
+                              on_select_(provider->id, provider->auth_type);
                           }
                           return {};
                       },
@@ -127,6 +129,7 @@ OAuthSelectorComponent::OAuthSelectorComponent(const LiveTheme& theme,
                           return {};
                       },
                       .keybindings = std::move(keybindings),
+                      .wrap_navigation = false,
                       .enable_search = true,
                       .initial_search = initial_search.empty() ? std::nullopt
                                                                : std::optional<std::string>{std::move(initial_search)},

@@ -189,6 +189,42 @@ TEST_CASE(
     CHECK(cancellations == 0);
 }
 
+TEST_CASE("ModelSelector initially selects the current model inside a scoped list",
+        "[coding_agent][tui][model-selector][issue407]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    const auto first = fixture.runtime->model("alpha", "alpha-1");
+    const auto current = fixture.runtime->model("beta", "beta-1");
+    REQUIRE(first.has_value());
+    REQUIRE(current.has_value());
+    std::optional<ai::Model> selected;
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            &*current,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{
+                    coding_agent::ScopedModel{.model = *first},
+                    coding_agent::ScopedModel{.model = *current},
+            },
+            [&selected](ai::Model model) { selected = std::move(model); },
+            [] {},
+            [&io] { (void)io; });
+
+    const auto rendered = selector->render(70);
+    REQUIRE(rendered);
+    CHECK(join_lines(rendered->lines).find("→ beta-1 [beta]") != std::string::npos);
+
+    selector->handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(selected.has_value());
+    CHECK(selected->provider == "beta");
+    CHECK(selected->id == "beta-1");
+}
+
 TEST_CASE(
     "ModelSelector fuzzy search filters, moves the selection to the top match, and selects on Enter",
     "[coding_agent][tui][model-selector][issue407]") {

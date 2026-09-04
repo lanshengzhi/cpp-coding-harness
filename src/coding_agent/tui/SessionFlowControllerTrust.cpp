@@ -270,6 +270,8 @@ SessionFlowController::show_boot_trust_prompt(
                         return {};
                     },
                     .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
                     .title = format_project_trust_prompt(workspace),
                     .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = theme.foreground_hook(ThemeToken::Border),
@@ -329,6 +331,8 @@ boost::asio::awaitable<void> SessionFlowController::run_trust_selector() {
                         return {};
                     },
                     .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
                     .title = format_project_trust_prompt(cwd),
                     .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = theme.foreground_hook(ThemeToken::Border),

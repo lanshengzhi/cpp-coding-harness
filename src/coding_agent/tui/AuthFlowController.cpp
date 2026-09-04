@@ -291,6 +291,8 @@ void AuthFlowController::show_login_auth_type_selector(
                         return {};
                     },
                     .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
                     .title = title,
                     .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = theme.foreground_hook(ThemeToken::Border),
@@ -564,6 +566,8 @@ boost::asio::awaitable<support::Expected<std::string>> AuthFlowController::show_
                         return {};
                     },
                     .keybindings = keybindings_->get(),
+                    .wrap_navigation = false,
+                    .enable_raw_jk_navigation = true,
                     .title = select.message,
                     .hint = generic_select_list_hint(*keybindings_->get()),
                     .border_hook = theme.foreground_hook(ThemeToken::Border),
