@@ -63,9 +63,8 @@ struct EditorTheme {
 
 /// A reusable multiline Unicode editor controlled through semantic input.
 ///
-/// Public methods serialize internally and may be called from any thread; the
-/// autocomplete result sink and render-request sink may be invoked from any
-/// thread. Caller-provided sinks (change/submit/render-request) must not
+/// Public methods and callbacks run on the serialized execution domain.
+/// Caller-provided sinks (change/submit/render-request) must not
 /// re-enter the editor.
 class Editor final : public Component, public InputHandler, public Focusable, public ViewportAware {
 public:

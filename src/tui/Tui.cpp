@@ -12,7 +12,6 @@
 #include <cstddef>
 #include <format>
 #include <limits>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -94,17 +93,14 @@ Tui::~Tui() {
 }
 
 support::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
-    std::lock_guard lock(mutex_);
     return detail::attach_child(children_, std::move(component), "");
 }
 
 support::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
-    std::lock_guard lock(mutex_);
     return compositor_->add_overlay(std::move(overlay));
 }
 
 support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
-    std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!compositor_->owns(overlay)) {
         return std::unexpected(support::make_error(
@@ -129,7 +125,6 @@ support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
 }
 
 support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
-    std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!compositor_->owns(overlay)) {
         return std::unexpected(support::make_error(
@@ -152,7 +147,6 @@ support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
 }
 
 support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
-    std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!compositor_->owns(overlay)) {
         return std::unexpected(support::make_error(
@@ -166,7 +160,6 @@ support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
 }
 
 support::ExpectedVoid Tui::start() {
-    std::unique_lock lock(mutex_);
     if (started_) {
         return {};
     }
@@ -187,7 +180,6 @@ support::ExpectedVoid Tui::start() {
 
     if (auto result = terminal_.set_cursor_visible(false); !result) {
         started_ = false;
-        lock.unlock();
         if (auto stopped = terminal_.stop(); !stopped) {
             return std::unexpected(startup_rollback_error(result.error(), stopped.error()));
         }
@@ -203,7 +195,6 @@ support::ExpectedVoid Tui::start() {
 }
 
 support::ExpectedVoid Tui::stop() {
-    std::unique_lock lock(mutex_);
     if (!started_) return {};
 
     started_ = false;
@@ -240,9 +231,6 @@ support::ExpectedVoid Tui::stop() {
     first_render_ = true;
     pending_render_ = false;
 
-    // Let an already-delivered Process Terminal callback observe stopped state
-    // before the terminal joins its delivery worker.
-    lock.unlock();
     const auto stop_result = terminal_.stop();
 
     if (!image_result) return std::unexpected(image_result.error());
@@ -253,7 +241,6 @@ support::ExpectedVoid Tui::stop() {
 }
 
 support::ExpectedVoid Tui::clear_screen() {
-    std::lock_guard lock(mutex_);
     if (!started_) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
@@ -275,7 +262,6 @@ support::ExpectedVoid Tui::clear_screen() {
 }
 
 support::ExpectedVoid Tui::render() {
-    std::lock_guard lock(mutex_);
     if (!started_) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
@@ -723,7 +709,6 @@ support::ExpectedVoid Tui::place_images(
 }
 
 support::ExpectedVoid Tui::set_focus(Component* component) {
-    std::lock_guard lock(mutex_);
     if (component != nullptr && !owns(component)) {
         // Check if component is inside an overlay
         auto* overlay = dynamic_cast<Overlay*>(component);
@@ -747,12 +732,10 @@ support::ExpectedVoid Tui::set_focus(Component* component) {
 }
 
 void Tui::set_render_request_sink(TuiRenderRequestSink sink) {
-    std::lock_guard lock(mutex_);
     render_request_sink_ = std::move(sink);
 }
 
 void Tui::invalidate() {
-    std::lock_guard lock(mutex_);
     const bool request_render = started_ && !pending_render_;
     pending_render_ = true;
     for (const auto& child : children_) {
@@ -782,7 +765,6 @@ bool Tui::owns(const Component* component) const {
 }
 
 void Tui::handle_input(std::string input) {
-    std::lock_guard lock(mutex_);
     if (!started_) return;
     if (input.empty()) {
         // ProcessTerminal applies out-of-band responses before delivering the
@@ -813,7 +795,6 @@ void Tui::dispatch_input(const InputEventVariant& event) {
 }
 
 void Tui::handle_resize(TerminalDimensions) {
-    std::lock_guard lock(mutex_);
     if (!started_) return;
     invalidate();
 }
