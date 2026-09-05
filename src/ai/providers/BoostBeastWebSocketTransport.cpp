@@ -93,9 +93,9 @@ struct ParsedWebSocketUrl {
 [[nodiscard]] support::Error transport_error(
     std::string message,
     boost::system::error_code ec) {
-    auto code = ec == boost::asio::error::operation_aborted
-        ? support::ErrorCode::Cancelled
-        : support::ErrorCode::Network;
+    auto code = ec == boost::asio::error::operation_aborted ? support::ErrorCode::Cancelled
+                : ec == boost::beast::error::timeout        ? support::ErrorCode::Timeout
+                                                            : support::ErrorCode::Network;
     auto detail = ec ? ec.message() : std::string{};
     return support::make_error(code, std::move(message), std::move(detail));
 }
@@ -315,7 +315,7 @@ BoostBeastWebSocketTransport::async_connect(
     });
 
     const auto setup_failure = [&](boost::system::error_code ec) -> support::Error {
-        if (connect_timed_out) {
+        if (connect_timed_out || ec == boost::beast::error::timeout) {
             return support::make_error(
                 support::ErrorCode::Timeout,
                 "WebSocket connect timeout after " +
@@ -348,7 +348,6 @@ BoostBeastWebSocketTransport::async_connect(
                 "CA loading failure", ec.message()));
         }
         beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
-        beast::get_lowest_layer(stream).expires_after(request.connect_timeout);
         if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
             co_return std::unexpected(support::make_error(
                 support::ErrorCode::Network,
@@ -366,12 +365,18 @@ BoostBeastWebSocketTransport::async_connect(
         if (setup_ec) {
             co_return std::unexpected(setup_failure(setup_ec));
         }
+        beast::get_lowest_layer(stream).expires_after(request.connect_timeout);
         co_await beast::get_lowest_layer(stream).async_connect(
             results,
             asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
         if (setup_ec) {
             co_return std::unexpected(setup_failure(setup_ec));
         }
+        // The connect timer above covers the remaining TLS and WebSocket
+        // handshake. The TCP stream timeout must not survive into the
+        // established WebSocket, whose receive idle timeout is managed by
+        // BeastWebSocketConnection.
+        beast::get_lowest_layer(stream).expires_never();
         co_await stream.async_handshake(
             ssl::stream_base::client,
             asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
@@ -392,7 +397,6 @@ BoostBeastWebSocketTransport::async_connect(
     }
 
     beast::tcp_stream stream(executor);
-    stream.expires_after(request.connect_timeout);
     boost::system::error_code setup_ec;
     auto results = co_await resolver.async_resolve(
         parsed->host,
@@ -401,12 +405,17 @@ BoostBeastWebSocketTransport::async_connect(
     if (setup_ec) {
         co_return std::unexpected(setup_failure(setup_ec));
     }
+    stream.expires_after(request.connect_timeout);
     co_await stream.async_connect(
         results,
         asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
     if (setup_ec) {
         co_return std::unexpected(setup_failure(setup_ec));
     }
+    // The connect timer above covers the remaining WebSocket handshake. The
+    // TCP stream timeout must not survive into the established WebSocket,
+    // whose receive idle timeout is managed by BeastWebSocketConnection.
+    stream.expires_never();
 
     beast::websocket::stream<beast::tcp_stream> socket(std::move(stream));
     setup_ec = co_await perform_websocket_handshake(
