@@ -270,6 +270,9 @@ public:
     [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
@@ -317,6 +320,9 @@ public:
     [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
@@ -394,6 +400,9 @@ public:
         modes_.cursor_visible = visible;
         return {};
     }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
