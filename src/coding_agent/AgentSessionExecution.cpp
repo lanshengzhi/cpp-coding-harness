@@ -194,6 +194,8 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // Expose the live session facts to the model Bash Tool (pi
     // `resolveSpawnContext`); the Agent's clamped state is authoritative.
     refresh_bash_session_environment();
+    current_snapshot_.store(std::make_shared<const AgentSessionSnapshot>(create_snapshot()), std::memory_order_release);
+    state_version_.store(1, std::memory_order_release);
 }
 
 std::string AgentSession::Impl::rebuild_system_prompt() const {
@@ -656,7 +658,7 @@ void AgentSession::Impl::close() noexcept {
         return;
     }
     lifecycle_ = Lifecycle::Closing;
-
+    update_projection();
     // Admission stopped above before any cancellation request below (issue
     // #467): every entry point's reject_if_closed observes Closing first.
     // Request work-scoped cancellation but retain the active loop, callbacks,

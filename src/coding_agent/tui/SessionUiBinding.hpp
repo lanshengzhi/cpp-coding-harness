@@ -13,6 +13,7 @@
 // an Owner Interface, not installed, never exported.
 
 #include "coding_agent/AgentSession.hpp"
+#include <cch/coding_agent/SessionProjectionSource.hpp>
 #include "coding_agent/tui/Footer.hpp"
 #include "coding_agent/tui/FooterDataProvider.hpp"
 
@@ -64,7 +65,8 @@ struct SessionUiBindingHooks {
 /// `session.on(...)`), and `detach()` releases them for session replacement
 /// and final Close. Executor-confined like the host it serves; the footer
 /// data computation is polled by the view's footer on every render.
-class SessionUiBinding final : public std::enable_shared_from_this<SessionUiBinding> {
+class SessionUiBinding final : public SessionProjectionSource,
+                               public std::enable_shared_from_this<SessionUiBinding> {
 public:
     SessionUiBinding(
         boost::asio::any_io_executor executor,
@@ -104,6 +106,13 @@ public:
     /// thinking level, the subscription marker, and the available-provider
     /// count).
     [[nodiscard]] FooterData compute_footer_data();
+    // ── SessionProjectionSource ──────────────────────────────────────────
+
+    [[nodiscard]] uint64_t state_version() const noexcept override;
+
+    [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> snapshot() const override;
+
+    void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
 
 private:
     void on_event(const agent::AgentLifecycleEvent& event);
@@ -133,6 +142,9 @@ private:
     /// `FooterDataProvider` subset).
     FooterDataProvider footer_data_provider_{std::filesystem::path{}};
     std::vector<std::string> displayed_agent_diagnostics_;
+    mutable std::atomic<uint64_t> state_version_{1};
+    mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> fallback_snapshot_{nullptr};
+    std::move_only_function<void()> dirty_listener_{nullptr};
 };
 
 } // namespace cch::coding_agent::tui

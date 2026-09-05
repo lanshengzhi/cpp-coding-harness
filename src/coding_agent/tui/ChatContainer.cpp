@@ -29,16 +29,10 @@
 namespace cch::coding_agent::tui {
 namespace {
 
-[[nodiscard]] std::string safe_text(std::string text) {
-    return bounded_redacted_presentation(std::move(text));
-}
+[[nodiscard]] std::string safe_text(std::string text) { return bounded_redacted_presentation(std::move(text)); }
 
 [[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(
-    const LiveTheme& theme,
-    std::string text,
-    std::size_t width,
-    ThemeToken token,
-    bool redact = true) {
+        const LiveTheme& theme, std::string text, std::size_t width, ThemeToken token, bool redact = true) {
     if (redact) text = safe_text(std::move(text));
     cch::tui::Text component(theme.foreground(token, std::move(text)), 0, 0);
     auto rendered = component.render(width);
@@ -54,17 +48,38 @@ namespace {
     return "{}";
 }
 
-void append_render_result(
-    cch::tui::RenderResult& destination,
-    cch::tui::RenderResult rendered) {
+void append_render_result(cch::tui::RenderResult& destination, cch::tui::RenderResult rendered) {
     const auto row_offset = destination.lines.size();
-    destination.lines.insert(
-        destination.lines.end(),
-        std::make_move_iterator(rendered.lines.begin()),
-        std::make_move_iterator(rendered.lines.end()));
+    destination.lines.insert(destination.lines.end(),
+            std::make_move_iterator(rendered.lines.begin()),
+            std::make_move_iterator(rendered.lines.end()));
     for (auto& image : rendered.images) {
         image.region.row += row_offset;
         destination.images.push_back(std::move(image));
+    }
+}
+
+struct CommittedLineCache {
+    std::vector<std::string> lines{};
+    std::vector<cch::tui::InlineImageRenderRegion> images{};
+    std::size_t cached_width{0};
+    bool valid{false};
+
+    void invalidate() {
+        valid = false;
+        lines.clear();
+        images.clear();
+        cached_width = 0;
+    }
+};
+
+void append_cached_lines(cch::tui::RenderResult& destination, const CommittedLineCache& cache) {
+    const auto row_offset = destination.lines.size();
+    destination.lines.insert(destination.lines.end(), cache.lines.begin(), cache.lines.end());
+    for (const auto& image : cache.images) {
+        auto copy = image;
+        copy.region.row += row_offset;
+        destination.images.push_back(std::move(copy));
     }
 }
 
@@ -74,37 +89,34 @@ void append_render_result(
 /// and inline result images.
 class BoxedMessageComponent : public cch::tui::Component {
 public:
-    BoxedMessageComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings,
-        std::string label,
-        std::vector<ai::Content> content,
-        bool expanded)
-        : theme_(theme),
-          keybindings_(std::move(keybindings)),
-          label_(std::move(label)),
-          content_(std::move(content)),
+    BoxedMessageComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string label,
+            std::vector<ai::Content> content,
+            bool expanded)
+        : theme_(theme), keybindings_(std::move(keybindings)), label_(std::move(label)), content_(std::move(content)),
           expanded_(expanded) {
         for (const auto& block : content_) {
             const auto* image = std::get_if<ai::ImageContent>(&block);
             if (image == nullptr) continue;
             auto component = std::make_unique<cch::tui::Image>(
-                cch::tui::ImageContent{
-                    .encoded_data = image->data,
-                    .mime_type = image->mime_type,
-                    .filename = std::nullopt,
-                },
-                cch::tui::ImageOptions{
-                    .constraints = {
-                        .max_width = 60,
-                        .max_height = std::nullopt,
+                    cch::tui::ImageContent{
+                            .encoded_data = image->data,
+                            .mime_type = image->mime_type,
+                            .filename = std::nullopt,
                     },
-                    .fallback_style = theme_.foreground_hook(ThemeToken::CustomMessageText),
-                });
+                    cch::tui::ImageOptions{
+                            .constraints =
+                                    {
+                                            .max_width = 60,
+                                            .max_height = std::nullopt,
+                                    },
+                            .fallback_style = theme_.foreground_hook(ThemeToken::CustomMessageText),
+                    });
             image_slots_.push_back(std::make_unique<ImageSlot>(ImageSlot{
-                .component = std::move(component),
-                .data = image->data,
-                .mime_type = image->mime_type,
+                    .component = std::move(component),
+                    .data = image->data,
+                    .mime_type = image->mime_type,
             }));
         }
     }
@@ -117,17 +129,12 @@ public:
     BoxedMessageComponent(const BoxedMessageComponent&) = delete;
     BoxedMessageComponent& operator=(const BoxedMessageComponent&) = delete;
 
-    void set_expanded(bool expanded) {
-        expanded_ = expanded;
-    }
+    void set_expanded(bool expanded) { expanded_ = expanded; }
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
-        cch::tui::Box box(
-            1,
-            1,
-            theme_.background_hook(ThemeToken::CustomMessageBg));
-        const auto label = theme_.foreground_hook(ThemeToken::CustomMessageLabel)(
-            std::format("\x1b[1m[{}]\x1b[22m", label_));
+        cch::tui::Box box(1, 1, theme_.background_hook(ThemeToken::CustomMessageBg));
+        const auto label =
+                theme_.foreground_hook(ThemeToken::CustomMessageLabel)(std::format("\x1b[1m[{}]\x1b[22m", label_));
         auto label_text = std::make_unique<cch::tui::Text>(label, 0, 0);
         (void)box.add_child(std::move(label_text));
         (void)box.add_child(std::make_unique<cch::tui::Spacer>(1));
@@ -135,21 +142,16 @@ public:
         const auto expand_key = keybindings_->registry().key_text("app.tools.expand");
         const auto hint = expand_key.empty() ? "Unbound" : expand_key;
         if (!expanded_) {
-            auto collapsed = std::make_unique<cch::tui::Text>(
-                theme_.foreground(
-                    ThemeToken::CustomMessageText,
-                    std::format("{} ({} to expand)", collapsed_body(), hint)),
-                0,
-                0);
+            auto collapsed =
+                    std::make_unique<cch::tui::Text>(theme_.foreground(ThemeToken::CustomMessageText,
+                                                             std::format("{} ({} to expand)", collapsed_body(), hint)),
+                            0,
+                            0);
             (void)box.add_child(std::move(collapsed));
         } else {
             auto style = theme_.markdown_style();
             style.text = theme_.foreground_hook(ThemeToken::CustomMessageText);
-            auto markdown = std::make_unique<cch::tui::Markdown>(
-                expanded_body(),
-                0,
-                0,
-                std::move(style));
+            auto markdown = std::make_unique<cch::tui::Markdown>(expanded_body(), 0, 0, std::move(style));
             (void)box.add_child(std::move(markdown));
         }
 
@@ -177,9 +179,7 @@ protected:
         return safe_text(std::move(text));
     }
 
-    [[nodiscard]] virtual std::string expanded_body() const {
-        return collapsed_body();
-    }
+    [[nodiscard]] virtual std::string expanded_body() const { return collapsed_body(); }
 
     struct ImageSlot {
         std::unique_ptr<cch::tui::Image> component;
@@ -187,7 +187,7 @@ protected:
         std::string mime_type;
     };
 
-    const LiveTheme& theme_; // must outlive this component.
+    const LiveTheme& theme_;                               // must outlive this component.
     std::shared_ptr<const SharedKeybindings> keybindings_; // must outlive this component.
     std::string label_;
     std::vector<ai::Content> content_;
@@ -200,18 +200,12 @@ protected:
 /// content; images render inline.
 class CustomMessageComponent final : public BoxedMessageComponent {
 public:
-    CustomMessageComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings,
-        std::string custom_type,
-        std::vector<ai::Content> content,
-        bool expanded)
-        : BoxedMessageComponent(
-              theme,
-              keybindings,
-              std::move(custom_type),
-              std::move(content),
-              expanded) {}
+    CustomMessageComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string custom_type,
+            std::vector<ai::Content> content,
+            bool expanded)
+        : BoxedMessageComponent(theme, keybindings, std::move(custom_type), std::move(content), expanded) {}
 };
 
 /// Formats an integer like pi's `toLocaleString()` (en-US thousands
@@ -234,15 +228,13 @@ public:
 /// `**Compacted from N tokens**` + summary.
 class CompactionSummaryComponent final : public BoxedMessageComponent {
 public:
-    CompactionSummaryComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings,
-        std::string summary,
-        std::int64_t tokens_before,
-        bool expanded)
+    CompactionSummaryComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string summary,
+            std::int64_t tokens_before,
+            bool expanded)
         : BoxedMessageComponent(theme, keybindings, "compaction", {}, expanded),
-          summary_(safe_text(std::move(summary))),
-          tokens_before_(tokens_before) {}
+          summary_(safe_text(std::move(summary))), tokens_before_(tokens_before) {}
 
 protected:
     [[nodiscard]] std::string collapsed_body() const override {
@@ -250,10 +242,7 @@ protected:
     }
 
     [[nodiscard]] std::string expanded_body() const override {
-        return std::format(
-            "**Compacted from {} tokens**\n\n{}",
-            locale_grouped_number(tokens_before_),
-            summary_);
+        return std::format("**Compacted from {} tokens**\n\n{}", locale_grouped_number(tokens_before_), summary_);
     }
 
 private:
@@ -266,18 +255,14 @@ private:
 /// summary.
 class BranchSummaryComponent final : public BoxedMessageComponent {
 public:
-    BranchSummaryComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings,
-        std::string summary,
-        bool expanded)
-        : BoxedMessageComponent(theme, keybindings, "branch", {}, expanded),
-          summary_(safe_text(std::move(summary))) {}
+    BranchSummaryComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string summary,
+            bool expanded)
+        : BoxedMessageComponent(theme, keybindings, "branch", {}, expanded), summary_(safe_text(std::move(summary))) {}
 
 protected:
-    [[nodiscard]] std::string collapsed_body() const override {
-        return "Branch summary";
-    }
+    [[nodiscard]] std::string collapsed_body() const override { return "Branch summary"; }
 
     [[nodiscard]] std::string expanded_body() const override {
         return std::format("**Branch Summary**\n\n{}", summary_);
@@ -309,6 +294,8 @@ struct ChatContainer::Impl {
         // Assistant tool components in call order (rendered after the
         // assistant message, pi renderSessionItems).
         std::vector<ToolItem*> tools;
+        bool committed{false};
+        CommittedLineCache cache;
     };
 
     struct FrontendItem {
@@ -335,23 +322,53 @@ struct ChatContainer::Impl {
         std::string text;
     };
 
-    using ItemVariant = std::variant<
-        MessageItem,
-        FrontendItem,
-        TrustWarningItem,
-        DiagnosticItem,
-        StatusItem>;
+    using ItemVariant = std::variant<MessageItem, FrontendItem, TrustWarningItem, DiagnosticItem, StatusItem>;
 
-    Impl(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings)
-        : theme(theme),
-          keybindings(std::move(keybindings)) {}
+    Impl(const LiveTheme& theme, std::shared_ptr<const SharedKeybindings> keybindings)
+        : theme(theme), keybindings(std::move(keybindings)) {}
 
     void clear() {
         items.clear();
         owned_tools.clear();
         active_assistant_item.reset();
+        last_rendered_width = 0;
+        cache_hit_count = 0;
+        cold_render_count = 0;
+    }
+
+    void invalidate_all_caches() {
+        for (auto& item : items) {
+            if (auto* message = std::get_if<MessageItem>(&item)) {
+                message->cache.invalidate();
+            }
+        }
+    }
+
+    void invalidate_and_update_tool_owner(ToolItem* tool) {
+        for (auto& entry : items) {
+            auto* message = std::get_if<MessageItem>(&entry);
+            if (message == nullptr) continue;
+            auto found = std::find(message->tools.begin(), message->tools.end(), tool);
+            if (found != message->tools.end()) {
+                message->cache.invalidate();
+                update_item_commitment(*message);
+            }
+        }
+    }
+
+    void update_item_commitment(MessageItem& item) {
+        if (active_assistant_item.has_value()) {
+            if (&item == &std::get<MessageItem>(items[*active_assistant_item])) {
+                item.committed = false;
+                return;
+            }
+        }
+        const bool all_tools_settled = std::all_of(item.tools.begin(), item.tools.end(), [](const ToolItem* tool) {
+            return tool != nullptr && tool->status != ToolStatus::Pending;
+        });
+        if (all_tools_settled) {
+            item.committed = true;
+        }
     }
 
     void add_message(ai::MessageVariant message) {
@@ -362,15 +379,18 @@ struct ChatContainer::Impl {
             return;
         }
         items.emplace_back(MessageItem{
-            .message = std::move(message),
-            .component = {},
-            .tools = {},
+                .message = std::move(message),
+                .component = {},
+                .tools = {},
+                .committed = false,
+                .cache = {},
         });
         auto& item = std::get<MessageItem>(items.back());
         rebuild_message(item);
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&item.message)) {
             synchronize_tools(item, *assistant);
         }
+        update_item_commitment(item);
     }
 
     void replace_assistant(const ai::AssistantMessage& message) {
@@ -380,6 +400,7 @@ struct ChatContainer::Impl {
         }
         auto& item = std::get<MessageItem>(items[*active_assistant_item]);
         item.message = ai::MessageVariant{message};
+        item.cache.invalidate();
         rebuild_message(item);
         synchronize_tools(item, message);
         settle_provider_tools(message);
@@ -388,32 +409,21 @@ struct ChatContainer::Impl {
     void rebuild_message(MessageItem& item) {
         const auto& message = item.message;
         if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-            item.component = std::make_unique<UserMessageComponent>(
-                theme, user->content, output_pad);
+            item.component = std::make_unique<UserMessageComponent>(theme, user->content, output_pad);
             return;
         }
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
-            auto component = std::make_unique<AssistantMessageComponent>(
-                theme,
-                hide_thinking_block,
-                "Thinking...",
-                output_pad);
+            auto component =
+                    std::make_unique<AssistantMessageComponent>(theme, hide_thinking_block, "Thinking...", output_pad);
             component->update_content(*assistant);
             item.component = std::move(component);
             return;
         }
         if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
             auto component = std::make_unique<BashExecutionComponent>(
-                theme,
-                keybindings,
-                bounded_presentation(bash->command),
-                bash->exclude_from_context);
+                    theme, keybindings, bounded_presentation(bash->command), bash->exclude_from_context);
             component->append_output(bounded_presentation(bash->output));
-            component->set_complete(
-                bash->exit_code,
-                bash->cancelled,
-                bash->truncated,
-                bash->full_output_path);
+            component->set_complete(bash->exit_code, bash->cancelled, bash->truncated, bash->full_output_path);
             component->set_expanded(tools_expanded);
             item.component = std::move(component);
             return;
@@ -421,31 +431,20 @@ struct ChatContainer::Impl {
         if (const auto* custom = std::get_if<ai::CustomMessage>(&message)) {
             if (custom->display) {
                 item.component = std::make_unique<CustomMessageComponent>(
-                    theme,
-                    keybindings,
-                    custom->custom_type,
-                    custom->content,
-                    tools_expanded);
+                        theme, keybindings, custom->custom_type, custom->content, tools_expanded);
             } else {
                 item.component.reset();
             }
             return;
         }
         if (const auto* branch = std::get_if<ai::BranchSummaryMessage>(&message)) {
-            item.component = std::make_unique<BranchSummaryComponent>(
-                theme,
-                keybindings,
-                branch->summary,
-                tools_expanded);
+            item.component =
+                    std::make_unique<BranchSummaryComponent>(theme, keybindings, branch->summary, tools_expanded);
             return;
         }
         if (const auto* compaction = std::get_if<ai::CompactionSummaryMessage>(&message)) {
             item.component = std::make_unique<CompactionSummaryComponent>(
-                theme,
-                keybindings,
-                compaction->summary,
-                compaction->tokens_before,
-                tools_expanded);
+                    theme, keybindings, compaction->summary, compaction->tokens_before, tools_expanded);
             return;
         }
         // System messages are not rendered in pi's chat.
@@ -485,29 +484,41 @@ struct ChatContainer::Impl {
     /// Removes a tool from every other message item so it renders once, in
     /// its owning assistant's order.
     void claim_tool(ToolItem* tool) {
-        for (auto& entry : items) {
-            auto* message = std::get_if<MessageItem>(&entry);
-            if (message == nullptr) continue;
+        for (auto iterator = items.begin(); iterator != items.end();) {
+            auto* message = std::get_if<MessageItem>(&*iterator);
+            if (message == nullptr) {
+                ++iterator;
+                continue;
+            }
             auto found = std::find(message->tools.begin(), message->tools.end(), tool);
             if (found != message->tools.end()) {
                 message->tools.erase(found);
+                message->cache.invalidate();
+                if (std::holds_alternative<ai::ToolResultMessage>(message->message) && message->component == nullptr &&
+                        message->tools.empty()) {
+                    iterator = items.erase(iterator);
+                    continue;
+                }
+                update_item_commitment(*message);
             }
+            ++iterator;
         }
     }
 
     void settle_provider_tools(const ai::AssistantMessage& assistant) {
+        if (assistant.stop_reason == ai::AssistantStopReason::ToolUse ||
+                assistant.stop_reason == ai::AssistantStopReason::Pending) {
+            return;
+        }
         for (const auto& block : assistant.content) {
             const auto* call = std::get_if<ai::ToolCallContent>(&block);
             if (call == nullptr) continue;
             auto& tool = ensure_tool(call->id, call->name, call->raw_arguments);
             if (tool.status != ToolStatus::Pending) continue;
             tool.status = ToolStatus::Failure;
-            tool.result = ai::tool_result_message(
-                call->id,
-                call->name,
-                tool_failure_detail(assistant),
-                true);
+            tool.result = ai::tool_result_message(call->id, call->name, tool_failure_detail(assistant), true);
             tool.component->update_result(tool.result);
+            invalidate_and_update_tool_owner(&tool);
         }
     }
 
@@ -516,13 +527,13 @@ struct ChatContainer::Impl {
         tool.status = result.is_error ? ToolStatus::Failure : ToolStatus::Success;
         tool.result = result;
         tool.component->update_result(result);
+        invalidate_and_update_tool_owner(&tool);
     }
 
-    [[nodiscard]] ToolItem& ensure_tool(
-        const std::string& call_id,
-        const std::string& name,
-        const std::string& arguments,
-        bool begin_call = false) {
+    [[nodiscard]] ToolItem& ensure_tool(const std::string& call_id,
+            const std::string& name,
+            const std::string& arguments,
+            bool begin_call = false) {
         if (const auto found = owned_tools.find(call_id); found != owned_tools.end()) {
             auto& tool = *found->second;
             if (!begin_call || tool.status == ToolStatus::Pending) {
@@ -535,34 +546,31 @@ struct ChatContainer::Impl {
         }
         // A tool without an owning assistant message renders standalone.
         items.emplace_back(MessageItem{
-            .message = ai::MessageVariant{ai::ToolResultMessage{}},
-            .component = {},
-            .tools = {},
+                .message = ai::MessageVariant{ai::ToolResultMessage{}},
+                .component = {},
+                .tools = {},
+                .committed = false,
+                .cache = {},
         });
         auto& item = std::get<MessageItem>(items.back());
         auto tool = std::make_unique<ToolItem>(ToolItem{
-            .call_id = call_id,
-            .name = name,
-            .arguments = arguments,
-            .result = {},
-            .component = std::make_unique<ToolExecutionComponent>(
-                theme,
-                keybindings,
-                name,
-                call_id,
-                arguments),
+                .call_id = call_id,
+                .name = name,
+                .arguments = arguments,
+                .result = {},
+                .component = std::make_unique<ToolExecutionComponent>(theme, keybindings, name, call_id, arguments),
         });
         tool->component->set_expanded(tools_expanded);
         auto* tool_pointer = tool.get();
         item.tools.push_back(tool_pointer);
         owned_tools.insert_or_assign(call_id, std::move(tool));
+        update_item_commitment(item);
         return *tool_pointer;
     }
 
     [[nodiscard]] std::string tool_failure_detail(const ai::AssistantMessage& assistant) {
         if (assistant.stop_reason == ai::AssistantStopReason::Aborted) {
-            if (assistant.error_message &&
-                *assistant.error_message != "Request was aborted") {
+            if (assistant.error_message && *assistant.error_message != "Request was aborted") {
                 return *assistant.error_message;
             }
             return "Operation aborted";
@@ -577,20 +585,17 @@ struct ChatContainer::Impl {
             if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message->message)) {
                 (void)bash;
                 if (message->component) {
-                    static_cast<BashExecutionComponent*>(message->component.get())
-                        ->set_expanded(tools_expanded);
+                    static_cast<BashExecutionComponent*>(message->component.get())->set_expanded(tools_expanded);
                 }
             } else if (auto* custom = std::get_if<ai::CustomMessage>(&message->message)) {
                 (void)custom;
                 if (message->component) {
-                    static_cast<BoxedMessageComponent*>(message->component.get())
-                        ->set_expanded(tools_expanded);
+                    static_cast<BoxedMessageComponent*>(message->component.get())->set_expanded(tools_expanded);
                 }
             } else if (std::holds_alternative<ai::BranchSummaryMessage>(message->message) ||
-                std::holds_alternative<ai::CompactionSummaryMessage>(message->message)) {
+                       std::holds_alternative<ai::CompactionSummaryMessage>(message->message)) {
                 if (message->component) {
-                    static_cast<BoxedMessageComponent*>(message->component.get())
-                        ->set_expanded(tools_expanded);
+                    static_cast<BoxedMessageComponent*>(message->component.get())->set_expanded(tools_expanded);
                 }
             }
             for (auto* tool : message->tools) {
@@ -603,10 +608,9 @@ struct ChatContainer::Impl {
         for (auto& item : items) {
             auto* message = std::get_if<MessageItem>(&item);
             if (message == nullptr) continue;
-            if (std::holds_alternative<ai::AssistantMessage>(message->message) &&
-                message->component) {
+            if (std::holds_alternative<ai::AssistantMessage>(message->message) && message->component) {
                 static_cast<AssistantMessageComponent*>(message->component.get())
-                    ->set_hide_thinking_block(hide_thinking_block);
+                        ->set_hide_thinking_block(hide_thinking_block);
             }
         }
     }
@@ -616,18 +620,24 @@ struct ChatContainer::Impl {
             auto* message = std::get_if<MessageItem>(&item);
             if (message == nullptr || message->component == nullptr) continue;
             if (std::holds_alternative<ai::UserMessage>(message->message) ||
-                std::holds_alternative<ai::AssistantMessage>(message->message)) {
+                    std::holds_alternative<ai::AssistantMessage>(message->message)) {
                 rebuild_message(*message);
             }
         }
     }
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render_item(
-        const ItemVariant& item,
-        std::size_t width,
-        std::size_t item_index) {
+            ItemVariant& item, std::size_t width, std::size_t item_index) {
         (void)item_index;
-        if (const auto* message = std::get_if<MessageItem>(&item)) {
+        if (auto* message = std::get_if<MessageItem>(&item)) {
+            if (message->committed && message->cache.valid && message->cache.cached_width == width) {
+                ++cache_hit_count;
+                cch::tui::RenderResult cached_result;
+                cached_result.lines = message->cache.lines;
+                cached_result.images = message->cache.images;
+                return cached_result;
+            }
+            ++cold_render_count;
             cch::tui::RenderResult result;
             if (message->component) {
                 auto rendered = message->component->render(width);
@@ -638,6 +648,12 @@ struct ChatContainer::Impl {
                 auto rendered = tool->component->render(width);
                 if (!rendered) return std::unexpected(rendered.error());
                 append_render_result(result, std::move(*rendered));
+            }
+            if (message->committed) {
+                message->cache.lines = result.lines;
+                message->cache.images = result.images;
+                message->cache.cached_width = width;
+                message->cache.valid = true;
             }
             return result;
         }
@@ -651,10 +667,10 @@ struct ChatContainer::Impl {
             if (item_index > 0) {
                 result.lines.emplace_back();
             }
-            auto rendered = render_plain(
-                theme, trust_warning->text, width, ThemeToken::Warning);
+            auto rendered = render_plain(theme, trust_warning->text, width, ThemeToken::Warning);
             if (!rendered) return std::unexpected(rendered.error());
-            for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
+            for (auto& line : rendered->lines)
+                result.lines.push_back(std::move(line));
             return result;
         }
         if (const auto* status = std::get_if<StatusItem>(&item)) {
@@ -663,24 +679,15 @@ struct ChatContainer::Impl {
             result.lines.emplace_back();
             auto rendered = render_plain(theme, status->text, width, ThemeToken::Dim);
             if (!rendered) return std::unexpected(rendered.error());
-            for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
+            for (auto& line : rendered->lines)
+                result.lines.push_back(std::move(line));
             return result;
         }
         const auto& diagnostic = std::get<DiagnosticItem>(item);
         if (diagnostic.warning) {
-            return render_plain(
-                theme,
-                "Warning: " + diagnostic.text,
-                width,
-                ThemeToken::Warning,
-                !diagnostic.raw);
+            return render_plain(theme, "Warning: " + diagnostic.text, width, ThemeToken::Warning, !diagnostic.raw);
         }
-        return render_plain(
-            theme,
-            "Error: " + diagnostic.text,
-            width,
-            ThemeToken::Error,
-            !diagnostic.raw);
+        return render_plain(theme, "Error: " + diagnostic.text, width, ThemeToken::Error, !diagnostic.raw);
     }
 
     const LiveTheme& theme; // must outlive this presentation reducer.
@@ -693,11 +700,12 @@ struct ChatContainer::Impl {
     bool tools_expanded{false};
     bool hide_thinking_block{false};
     std::size_t output_pad{1};
+    std::size_t last_rendered_width{0};
+    std::uint64_t cache_hit_count{0};
+    std::uint64_t cold_render_count{0};
 };
 
-ChatContainer::ChatContainer(
-    const LiveTheme& theme,
-    std::shared_ptr<const SharedKeybindings> keybindings)
+ChatContainer::ChatContainer(const LiveTheme& theme, std::shared_ptr<const SharedKeybindings> keybindings)
     : impl_(std::make_unique<Impl>(theme, std::move(keybindings))) {}
 ChatContainer::ChatContainer(ChatContainer&&) noexcept = default;
 ChatContainer& ChatContainer::operator=(ChatContainer&&) noexcept = default;
@@ -708,8 +716,21 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     for (const auto& message : snapshot.agent_state.messages) {
         impl_->add_message(message);
     }
+    for (auto& item : impl_->items) {
+        if (auto* msg = std::get_if<Impl::MessageItem>(&item)) {
+            impl_->update_item_commitment(*msg);
+        }
+    }
     if (snapshot.agent_state.streaming_message) {
+        const auto assistant_index = impl_->items.size();
         impl_->add_message(ai::MessageVariant{*snapshot.agent_state.streaming_message});
+        impl_->active_assistant_item = assistant_index;
+        if (assistant_index < impl_->items.size()) {
+            if (auto* msg = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
+                msg->committed = false;
+                msg->cache.invalidate();
+            }
+        }
     }
 }
 
@@ -722,6 +743,12 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
             const auto assistant_index = impl_->items.size();
             impl_->add_message(start->message);
             impl_->active_assistant_item = assistant_index;
+            if (assistant_index < impl_->items.size()) {
+                if (auto* msg = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
+                    msg->committed = false;
+                    msg->cache.invalidate();
+                }
+            }
         } else {
             impl_->add_message(start->message);
         }
@@ -735,60 +762,61 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     }
     if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
         if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
-            impl_->replace_assistant(std::get<ai::AssistantMessage>(end->message));
-            impl_->active_assistant_item.reset();
+            const auto& assistant = std::get<ai::AssistantMessage>(end->message);
+            impl_->replace_assistant(assistant);
+            if (impl_->active_assistant_item) {
+                const auto index = *impl_->active_assistant_item;
+                impl_->active_assistant_item.reset();
+                if (index < impl_->items.size()) {
+                    if (auto* item = std::get_if<Impl::MessageItem>(&impl_->items[index])) {
+                        impl_->update_item_commitment(*item);
+                    }
+                }
+            }
         } else if (const auto* result = std::get_if<ai::ToolResultMessage>(&end->message)) {
             impl_->settle_tool(*result);
         }
         return;
     }
     if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
-        auto& tool = impl_->ensure_tool(
-            start->tool_call_id,
-            start->tool_name,
-            serialized_arguments(start->args),
-            true);
+        auto& tool = impl_->ensure_tool(start->tool_call_id, start->tool_name, serialized_arguments(start->args), true);
         tool.status = Impl::ToolStatus::Pending;
+        impl_->invalidate_and_update_tool_owner(&tool);
         return;
     }
     if (const auto* update = std::get_if<agent::ToolExecutionUpdateEvent>(&event)) {
-        auto& tool = impl_->ensure_tool(
-            update->tool_call_id,
-            update->tool_name,
-            serialized_arguments(update->args));
+        auto& tool = impl_->ensure_tool(update->tool_call_id, update->tool_name, serialized_arguments(update->args));
         if (tool.status != Impl::ToolStatus::Pending) return;
-        tool.component->update_result(ai::ToolResultMessage{
-            .tool_call_id = tool.call_id,
-            .tool_name = tool.name,
-            .content = update->partial_result.content,
-            .details = update->partial_result.details,
-            .is_error = update->partial_result.is_error,
-        }, true);
+        tool.component->update_result(
+                ai::ToolResultMessage{
+                        .tool_call_id = tool.call_id,
+                        .tool_name = tool.name,
+                        .content = update->partial_result.content,
+                        .details = update->partial_result.details,
+                        .is_error = update->partial_result.is_error,
+                },
+                true);
+        impl_->invalidate_and_update_tool_owner(&tool);
         return;
     }
     if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
         auto& tool = impl_->ensure_tool(end->tool_call_id, end->tool_name, {});
-        tool.status = end->is_error || end->result.is_error
-            ? Impl::ToolStatus::Failure
-            : Impl::ToolStatus::Success;
+        tool.status = end->is_error || end->result.is_error ? Impl::ToolStatus::Failure : Impl::ToolStatus::Success;
         tool.result = ai::ToolResultMessage{
-            .tool_call_id = tool.call_id,
-            .tool_name = tool.name,
-            .content = end->result.content,
-            .details = end->result.details,
-            .is_error = end->result.is_error,
+                .tool_call_id = tool.call_id,
+                .tool_name = tool.name,
+                .content = end->result.content,
+                .details = end->result.details,
+                .is_error = end->result.is_error,
         };
         tool.component->update_result(tool.result);
+        impl_->invalidate_and_update_tool_owner(&tool);
     }
 }
 
-void ChatContainer::append_committed_message(ai::MessageVariant message) {
-    impl_->add_message(std::move(message));
-}
+void ChatContainer::append_committed_message(ai::MessageVariant message) { impl_->add_message(std::move(message)); }
 
-void ChatContainer::clear() {
-    impl_->clear();
-}
+void ChatContainer::clear() { impl_->clear(); }
 
 void ChatContainer::append_frontend_message(std::string text) {
     if (!text.empty()) {
@@ -802,15 +830,15 @@ void ChatContainer::append_diagnostic(std::string text) {
 
 void ChatContainer::append_warning(std::string text) {
     impl_->items.emplace_back(Impl::DiagnosticItem{
-        .text = safe_text(std::move(text)),
-        .raw = false,
-        .warning = true,
+            .text = safe_text(std::move(text)),
+            .raw = false,
+            .warning = true,
     });
 }
 
 void ChatContainer::append_trust_warning(std::string text) {
     impl_->items.emplace_back(Impl::TrustWarningItem{
-        .text = safe_text(std::move(text)),
+            .text = safe_text(std::move(text)),
     });
 }
 
@@ -827,35 +855,49 @@ void ChatContainer::append_status_message(std::string text) {
 
 void ChatContainer::append_user_bash_diagnostic(std::string text) {
     impl_->items.emplace_back(Impl::DiagnosticItem{
-        .text = bounded_presentation(text),
-        .raw = true,
+            .text = bounded_presentation(text),
+            .raw = true,
     });
 }
 
 void ChatContainer::toggle_tool_output() {
     impl_->tools_expanded = !impl_->tools_expanded;
     impl_->apply_expanded_to_components();
+    impl_->invalidate_all_caches();
 }
 
 void ChatContainer::set_hide_thinking_block(bool hide) {
     impl_->hide_thinking_block = hide;
     impl_->apply_thinking_to_components();
+    impl_->invalidate_all_caches();
 }
 
 void ChatContainer::set_output_pad(std::size_t output_pad) {
     if (impl_->output_pad == output_pad) return;
     impl_->output_pad = output_pad;
     impl_->apply_output_pad_to_components();
+    impl_->invalidate_all_caches();
 }
 
-bool ChatContainer::tools_expanded() const {
-    return impl_->tools_expanded;
-}
+bool ChatContainer::tools_expanded() const { return impl_->tools_expanded; }
 
 support::Expected<cch::tui::RenderResult> ChatContainer::render(std::size_t width) {
+    if (width != impl_->last_rendered_width) {
+        impl_->invalidate_all_caches();
+        impl_->last_rendered_width = width;
+    }
+
     cch::tui::RenderResult result;
     for (std::size_t index = 0; index < impl_->items.size(); ++index) {
-        auto rendered = impl_->render_item(impl_->items[index], width, index);
+        auto& item = impl_->items[index];
+        if (auto* message = std::get_if<Impl::MessageItem>(&item)) {
+            if (message->committed && message->cache.valid && message->cache.cached_width == width) {
+                ++impl_->cache_hit_count;
+                append_cached_lines(result, message->cache);
+                continue;
+            }
+        }
+        auto rendered = impl_->render_item(item, width, index);
         if (!rendered) return std::unexpected(rendered.error());
         append_render_result(result, std::move(*rendered));
     }
@@ -863,12 +905,49 @@ support::Expected<cch::tui::RenderResult> ChatContainer::render(std::size_t widt
 }
 
 void ChatContainer::invalidate() {
-    for (const auto& item : impl_->items) {
-        if (const auto* message = std::get_if<Impl::MessageItem>(&item);
-            message != nullptr && message->component) {
-            message->component->invalidate();
+    for (auto& item : impl_->items) {
+        if (auto* message = std::get_if<Impl::MessageItem>(&item)) {
+            message->cache.invalidate();
+            if (message->component) {
+                message->component->invalidate();
+            }
         }
     }
 }
+
+std::size_t ChatContainer::item_count() const { return impl_->items.size(); }
+
+bool ChatContainer::is_item_committed(std::size_t index) const {
+    if (index >= impl_->items.size()) return false;
+    const auto* message = std::get_if<Impl::MessageItem>(&impl_->items[index]);
+    return message != nullptr && message->committed;
+}
+
+bool ChatContainer::is_item_cache_valid(std::size_t index) const {
+    if (index >= impl_->items.size()) return false;
+    const auto* message = std::get_if<Impl::MessageItem>(&impl_->items[index]);
+    return message != nullptr && message->cache.valid;
+}
+
+std::size_t ChatContainer::cached_line_count(std::size_t index) const {
+    if (index >= impl_->items.size()) return 0;
+    const auto* message = std::get_if<Impl::MessageItem>(&impl_->items[index]);
+    if (message == nullptr || !message->cache.valid) return 0;
+    return message->cache.lines.size();
+}
+
+std::size_t ChatContainer::committed_item_count() const {
+    std::size_t count = 0;
+    for (const auto& item : impl_->items) {
+        if (const auto* message = std::get_if<Impl::MessageItem>(&item); message != nullptr && message->committed) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::uint64_t ChatContainer::cache_hit_count() const { return impl_->cache_hit_count; }
+
+std::uint64_t ChatContainer::cold_render_count() const { return impl_->cold_render_count; }
 
 } // namespace cch::coding_agent::tui

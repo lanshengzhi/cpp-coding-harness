@@ -48,6 +48,9 @@ struct VirtualTerminal::Impl {
     bool progress_active{false};
     bool clear_screen_called{false};
     bool clear_scrollback_called{false};
+    std::size_t margin_top{0};
+    std::size_t margin_bottom{0};
+    bool margins_active{false};
 };
 
 namespace {
@@ -123,16 +126,19 @@ void refresh_screen(T& impl) {
 template <typename T>
 void scroll_up(T& impl, std::size_t count) {
     if (count == 0) return;
-    const auto keep = impl.dimensions.rows > count ? impl.dimensions.rows - count : 0;
-    for (std::size_t row = 0; row < count && row < impl.dimensions.rows; ++row) {
-        impl.scrollback_cells.push_back(std::move(impl.cells[row]));
+    const auto top = impl.margins_active ? impl.margin_top : 0;
+    const auto bottom = impl.margins_active ? impl.margin_bottom : (impl.dimensions.rows > 0 ? impl.dimensions.rows - 1 : 0);
+    if (top >= bottom || bottom >= impl.dimensions.rows) return;
+    const auto region_height = bottom - top + 1;
+
+    for (std::size_t i = 0; i < count && i < region_height; ++i) {
+        impl.scrollback_cells.push_back(std::move(impl.cells[top + i]));
     }
-    for (std::size_t row = 0; row < keep; ++row) {
-        impl.cells[row] = std::move(impl.cells[row + count]);
+    for (std::size_t r = top; r + count <= bottom; ++r) {
+        impl.cells[r] = std::move(impl.cells[r + count]);
     }
-    impl.cells.resize(impl.dimensions.rows);
-    for (std::size_t row = keep; row < impl.dimensions.rows; ++row) {
-        impl.cells[row].assign(impl.dimensions.columns, {});
+    for (std::size_t r = (count < region_height ? bottom - count + 1 : top); r <= bottom; ++r) {
+        impl.cells[r].assign(impl.dimensions.columns, {});
     }
     impl.viewport_top += count;
     refresh_screen(impl);
@@ -206,11 +212,22 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
     for (const auto& token : tokens) {
         if (token.kind == detail::TerminalTokenKind::Newline) {
             impl.cursor.column = 0;
-            if (impl.cursor.row + 1 >= impl.dimensions.rows) {
-                scroll_up(impl, 1);
-                impl.cursor.row = impl.dimensions.rows - 1;
+            if (impl.margins_active) {
+                if (impl.cursor.row == impl.margin_bottom) {
+                    scroll_up(impl, 1);
+                    impl.cursor.row = impl.margin_bottom;
+                } else if (impl.cursor.row + 1 >= impl.dimensions.rows) {
+                    impl.cursor.row = impl.dimensions.rows - 1;
+                } else {
+                    ++impl.cursor.row;
+                }
             } else {
-                ++impl.cursor.row;
+                if (impl.cursor.row + 1 >= impl.dimensions.rows) {
+                    scroll_up(impl, 1);
+                    impl.cursor.row = impl.dimensions.rows - 1;
+                } else {
+                    ++impl.cursor.row;
+                }
             }
             continue;
         }
@@ -223,11 +240,22 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             // column wraps to the next row before this grapheme paints,
             // scrolling when it sits on the bottom row.
             impl.cursor.column = 0;
-            if (impl.cursor.row + 1 >= impl.dimensions.rows) {
-                scroll_up(impl, 1);
-                impl.cursor.row = impl.dimensions.rows - 1;
+            if (impl.margins_active) {
+                if (impl.cursor.row == impl.margin_bottom) {
+                    scroll_up(impl, 1);
+                    impl.cursor.row = impl.margin_bottom;
+                } else if (impl.cursor.row + 1 >= impl.dimensions.rows) {
+                    impl.cursor.row = impl.dimensions.rows - 1;
+                } else {
+                    ++impl.cursor.row;
+                }
             } else {
-                ++impl.cursor.row;
+                if (impl.cursor.row + 1 >= impl.dimensions.rows) {
+                    scroll_up(impl, 1);
+                    impl.cursor.row = impl.dimensions.rows - 1;
+                } else {
+                    ++impl.cursor.row;
+                }
             }
         }
         if (impl.cursor.row < impl.cells.size()) {
@@ -324,6 +352,12 @@ support::ExpectedVoid VirtualTerminal::stop() {
     impl_->modes.bracketed_paste = false;
     impl_->modes.cursor_visible = true;
     impl_->images.clear();
+    if (impl_->margins_active) {
+        impl_->output.push_back("\x1b[r");
+        impl_->margins_active = false;
+        impl_->margin_top = 0;
+        impl_->margin_bottom = 0;
+    }
     return {};
 }
 
@@ -488,18 +522,67 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
         ? impl_->viewport_top - impl_->scroll_origin
         : std::size_t{0};
     if (position.row < first_visible_row) {
-        impl_->cursor.row = 0;
+        impl_->cursor.row = impl_->margins_active ? impl_->margin_top : 0;
     } else {
         const auto screen_row = impl_->scroll_origin + position.row - impl_->viewport_top;
-        if (screen_row >= impl_->dimensions.rows) {
-            const auto scroll = screen_row - (impl_->dimensions.rows - 1);
-            scroll_up(*impl_, scroll);
-            impl_->cursor.row = impl_->dimensions.rows - 1;
+        if (impl_->margins_active) {
+            const auto viewport_height = impl_->margin_bottom - impl_->margin_top + 1;
+            if (screen_row >= viewport_height) {
+                const auto scroll = screen_row - (viewport_height - 1);
+                scroll_up(*impl_, scroll);
+                impl_->cursor.row = impl_->margin_bottom;
+            } else {
+                impl_->cursor.row = impl_->margin_top + screen_row;
+            }
         } else {
-            impl_->cursor.row = screen_row;
+            if (screen_row >= impl_->dimensions.rows) {
+                const auto scroll = screen_row - (impl_->dimensions.rows - 1);
+                scroll_up(*impl_, scroll);
+                impl_->cursor.row = impl_->dimensions.rows - 1;
+            } else {
+                impl_->cursor.row = screen_row;
+            }
         }
     }
     impl_->cursor.column = position.column;
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (bottom_row >= impl_->dimensions.rows || top_row >= bottom_row) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Virtual Terminal scroll margins are invalid"));
+    }
+    impl_->margin_top = top_row;
+    impl_->margin_bottom = bottom_row;
+    impl_->margins_active = true;
+    impl_->output.push_back(std::format("\x1b[{};{}r", top_row + 1, bottom_row + 1));
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::reset_scroll_margins() {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (!impl_->margins_active) return {};
+    impl_->margins_active = false;
+    impl_->margin_top = 0;
+    impl_->margin_bottom = 0;
+    impl_->output.push_back(std::format("\x1b[1;{}r", impl_->dimensions.rows));
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::set_dock_cursor(std::size_t dock_row, std::size_t column) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    const auto dock_start = impl_->margins_active ? (impl_->margin_bottom + 1) : 0;
+    const auto screen_row = dock_start + dock_row;
+    if (screen_row >= impl_->dimensions.rows || column > impl_->dimensions.columns) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Virtual Terminal dock cursor position is outside its dimensions"));
+    }
+    impl_->cursor.row = screen_row;
+    impl_->cursor.column = column;
     return {};
 }
 

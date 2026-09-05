@@ -22,6 +22,7 @@
 #include <boost/asio/steady_timer.hpp>
 
 #include <cstddef>
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -48,7 +49,7 @@ struct RetrySettings {
 /// construction), resources, and session presentation. Owned through the
 /// AgentSession handle's shared_ptr so a lazy coroutine admitted before the
 /// public handle moves or is destroyed keeps the implementation alive.
-struct AgentSession::Impl {
+struct AgentSession::Impl : public SessionProjectionSource {
     explicit Impl(runtime::AgentSessionAssembly assembly);
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
@@ -221,9 +222,13 @@ struct AgentSession::Impl {
     [[nodiscard]] boost::asio::awaitable<AutoCompactionOutcome> check_auto_compaction(
             const ai::AssistantMessage& assistant_message, bool skip_aborted_check);
 
-    // ── State accessors ────────────────────────────────────────────────────
+    // ── State accessors & projection ───────────────────────────────────────
 
-    [[nodiscard]] AgentSessionSnapshot snapshot() const;
+    [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> snapshot() const override;
+    [[nodiscard]] uint64_t state_version() const noexcept override;
+    void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
+    void update_projection();
+    [[nodiscard]] AgentSessionSnapshot create_snapshot() const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
 
@@ -493,6 +498,9 @@ struct AgentSession::Impl {
     /// Released (cancelled) when the active prompt settles; a concurrent
     /// manual compaction awaits it after requesting run cancellation.
     std::optional<boost::asio::steady_timer> prompt_settled_signal_;
+    mutable std::atomic<uint64_t> state_version_{1};
+    mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> current_snapshot_{nullptr};
+    std::move_only_function<void()> dirty_listener_{nullptr};
 };
 
 namespace detail {

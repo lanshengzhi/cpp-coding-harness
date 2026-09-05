@@ -425,7 +425,11 @@ support::ExpectedVoid AgentSession::Impl::steer(
     }
     auto message = detail::make_admitted_user_message(
             std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
-    return agent_->steer(ai::MessageVariant{std::move(message)});
+    auto result = agent_->steer(ai::MessageVariant{std::move(message)});
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::follow_up(
@@ -435,47 +439,71 @@ support::ExpectedVoid AgentSession::Impl::follow_up(
     }
     auto message = detail::make_admitted_user_message(
             std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
-    return agent_->follow_up(ai::MessageVariant{std::move(message)});
+    auto result = agent_->follow_up(ai::MessageVariant{std::move(message)});
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::set_steering_mode(agent::InputQueueMode mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->set_steering_mode(mode)
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->set_steering_mode(mode)
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::set_follow_up_mode(agent::InputQueueMode mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->set_follow_up_mode(mode)
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->set_follow_up_mode(mode)
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_steering_queue() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_steering_queue()
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->clear_steering_queue()
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_follow_up_queue() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_follow_up_queue()
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->clear_follow_up_queue()
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_input_queues() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_input_queues()
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->clear_input_queues()
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::string_view level) {
@@ -515,6 +543,7 @@ support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::strin
             return std::unexpected(std::move(saved.error()));
         }
     }
+    update_projection();
     return effective;
 }
 
@@ -882,7 +911,7 @@ support::ExpectedVoid AgentSession::Impl::set_entry_label(std::string_view entry
     return session_.store->append_label_change(std::move(parent_id), std::string{entry_id}, std::move(label));
 }
 
-AgentSessionSnapshot AgentSession::Impl::snapshot() const {
+AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
     return AgentSessionSnapshot{
             .agent_state = agent_ ? agent_->state() : agent::AgentState{},
             .metadata = session_.metadata,
@@ -890,6 +919,34 @@ AgentSessionSnapshot AgentSession::Impl::snapshot() const {
             .session_path = session_path_,
             .session_event_diagnostics = session_event_diagnostics_,
     };
+}
+
+std::shared_ptr<const AgentSessionSnapshot> AgentSession::Impl::snapshot() const {
+    auto current = current_snapshot_.load(std::memory_order_acquire);
+    if (!current) {
+        auto created = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
+        current_snapshot_.store(created, std::memory_order_release);
+        return created;
+    }
+    return current;
+}
+
+uint64_t AgentSession::Impl::state_version() const noexcept {
+    return state_version_.load(std::memory_order_acquire);
+}
+
+void AgentSession::Impl::set_dirty_listener(std::move_only_function<void()> on_dirty) {
+    dirty_listener_ = std::move(on_dirty);
+}
+
+void AgentSession::Impl::update_projection() {
+    std::shared_ptr<const AgentSessionSnapshot> updated =
+        std::make_shared<const AgentSessionSnapshot>(create_snapshot());
+    current_snapshot_.store(std::move(updated), std::memory_order_release);
+    state_version_.fetch_add(1, std::memory_order_release);
+    if (dirty_listener_) {
+        dirty_listener_();
+    }
 }
 
 std::size_t AgentSession::Impl::message_count() const { return agent_ ? agent_->state().messages.size() : 0; }
@@ -924,6 +981,7 @@ support::Expected<std::optional<std::string>> AgentSession::Impl::set_session_na
     if (auto appended = session_.store->append_session_info(std::move(parent_id), sanitized); !appended) {
         return std::unexpected(appended.error());
     }
+    update_projection();
     return sanitized;
 }
 
