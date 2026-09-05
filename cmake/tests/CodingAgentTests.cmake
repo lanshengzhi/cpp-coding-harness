@@ -38,6 +38,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
         tests/support/ModelRuntimeTestSupport.cpp
+        tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
