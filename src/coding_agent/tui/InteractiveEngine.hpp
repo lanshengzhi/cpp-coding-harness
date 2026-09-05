@@ -33,6 +33,7 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/coding_agent/SessionProjectionSource.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/support/Error.hpp>
 
@@ -134,6 +135,41 @@ public:
     /// already waited for prompt/User Bash/compaction settle, so its Close
     /// finalizes synchronously here.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> finish();
+
+    // ── Decoupled frame ticker (ADR 0051, issue #601) ────────────────────
+
+    /// Start the periodic frame ticker.
+    void start_frame_ticker();
+    void arm_frame_ticker();
+    void on_frame_tick();
+
+    void set_projection_source(std::shared_ptr<SessionProjectionSource> source) noexcept {
+        projection_source_ = std::move(source);
+    }
+    [[nodiscard]] std::shared_ptr<SessionProjectionSource> projection_source() const noexcept {
+        return projection_source_;
+    }
+    [[nodiscard]] uint64_t last_rendered_version() const noexcept {
+        return last_rendered_version_;
+    }
+    [[nodiscard]] bool local_dock_dirty() const noexcept {
+        return local_dock_dirty_.load(std::memory_order_acquire);
+    }
+    void set_local_dock_dirty(bool dirty = true) noexcept {
+        local_dock_dirty_.store(dirty, std::memory_order_release);
+    }
+    [[nodiscard]] std::size_t render_count() const noexcept {
+        return render_count_;
+    }
+    [[nodiscard]] bool ticker_running() const noexcept {
+        return ticker_running_;
+    }
+    [[nodiscard]] boost::asio::steady_timer& frame_ticker() noexcept {
+        return frame_ticker_;
+    }
+    static constexpr auto frame_interval() noexcept {
+        return kFrameInterval;
+    }
 
 private:
     // ── Submission kinds (folded from the deleted InteractionPolicy) ──────
@@ -566,6 +602,8 @@ private:
     /// Retry timer for render-path terminal backpressure. It is executor-
     /// confined and only armed after a typed Busy result.
     boost::asio::steady_timer render_retry_timer_;
+    /// Decoupled frame ticker running at 30 FPS (~33ms interval) per ADR 0051 / #601.
+    boost::asio::steady_timer frame_ticker_;
     /// Detached-flow quiescence (ADR 0040): the number of admitted
     /// controller flows still in flight. `finish()` awaits `flows_settled_`
     /// until this reaches zero so terminal restoration never races an
@@ -591,14 +629,12 @@ private:
     /// pi `lastEscapeTime`: the double-escape window base (500 ms, empty
     /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
     std::chrono::steady_clock::time_point last_escape_time_{};
-    /// Render-request coalescing for post_invalidate()/post_render(): at
-    /// most one queued handler each, so a live animation ticking from the
-    /// Loader's detached timer thread (~80 ms) cannot pile duplicate posts
-    /// onto a congested loop faster than it drains them (issue #553; the
-    /// coalescible render request of InteractiveView.hpp and ADR 0035's
-    /// render coalescing). Set off-executor, so atomic.
-    std::atomic<bool> invalidate_posted_{false};
-    std::atomic<bool> render_posted_{false};
+    std::shared_ptr<SessionProjectionSource> projection_source_{nullptr};
+    uint64_t last_rendered_version_{0};
+    std::atomic<bool> local_dock_dirty_{false};
+    bool ticker_running_{false};
+    std::size_t render_count_{0};
+    static constexpr auto kFrameInterval = std::chrono::milliseconds(33); // ~30 FPS
     bool render_retry_pending_{false};
     std::size_t render_retry_generation_{0};
     // Prompt-generation staleness for interrupt requests (pi onEscape
