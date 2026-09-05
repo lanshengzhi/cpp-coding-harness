@@ -6,23 +6,80 @@ This document is the human-readable map of the Agent lifecycle. The canonical de
 
 The flow begins only after input has been admitted as an **Agent Prompt**. Native TUI routing may instead handle the input as a **Slash Command** or **User Bash**; neither starts a Prompt Run.
 
-A **Prompt Run** is the outer session-level operation:
+A **Prompt Run** is the outer session-level operation.
 
-```text
-Agent Prompt
-└── Prompt Run
-    ├── prompt preflight
-    │   ├── prompt expansion
-    │   ├── authentication guidance
-    │   └── optional compaction
-    ├── Agent Run
-    │   ├── Agent Turn
-    │   ├── Agent Turn ...
-    │   └── Agent Run ends
-    ├── optional Auto-Retry or compaction recovery
-    │   └── another Agent Run through continuation
-    └── Prompt Run settles
-        └── Agent Session returns to idle
+## Prompt Run in one picture
+
+The diagram starts after frontend routing has admitted an **Agent Prompt**. The `loop` blocks show nesting, not a guarantee that every run takes every branch.
+
+```plantuml
+@startuml
+ title Prompt Run: from Agent Prompt to idle
+ hide footbox
+ skinparam monochrome true
+ skinparam shadowing false
+ skinparam sequenceMessageAlign center
+ skinparam ParticipantPadding 20
+ skinparam BoxPadding 10
+ skinparam sequence {
+   ArrowColor #4A5568
+   LifeLineBorderColor #A0AEC0
+   LifeLineBackgroundColor #F7FAFC
+   ParticipantBorderColor #4A5568
+   ParticipantBackgroundColor #EBF8FF
+ }
+
+ actor User
+ participant "Frontend" as Frontend
+ participant "Agent Session" as Session
+ participant Agent
+ participant Provider
+ participant "Tool Registry" as Tools
+
+ User -> Frontend: submit Agent Prompt
+ Frontend -> Session: start Prompt Run
+ activate Session
+ Session -> Session: prompt preflight
+
+ alt preflight rejected
+   Session --> Frontend: terminal outcome
+ else accepted
+   loop each Agent Run\n(initial or recovery continuation)
+     Session -> Agent: start Agent Run
+     activate Agent
+
+     loop each Agent Turn
+       Agent -> Provider: request Agent Stream Flow
+       activate Provider
+       Provider --> Agent: assistant outcome
+       deactivate Provider
+
+       alt no Tool Call Batch
+         Agent -> Agent: decide whether another turn is needed
+       else Tool Call Batch
+         loop each Tool Execution\n(parallel or sequential)
+           Agent -> Tools: execute Tool Call
+           Tools --> Agent: Tool Call Outcome
+         end
+         Agent -> Agent: decide whether another turn is needed
+       end
+     end
+
+     Agent --> Session: Agent Run ends
+     deactivate Agent
+
+     opt Auto-Retry or compaction recovery
+       Session -> Session: prepare continuation
+     end
+   end
+
+   Session --> Frontend: final response or terminal outcome
+ end
+
+ Session --> Frontend: Prompt Run settles
+ Frontend --> User: render response; accept next input
+ deactivate Session
+@enduml
 ```
 
 A preflight rejection may end a Prompt Run before an Agent Run starts. A normal Prompt Run may contain one Agent Run, while recovery can add more Agent Runs without creating another Prompt Run.
