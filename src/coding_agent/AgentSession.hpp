@@ -10,6 +10,7 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
+#include <cch/coding_agent/SessionProjectionSource.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
@@ -457,13 +458,25 @@ public:
 
     // ── State accessors ──────────────────────────────────────────────────
 
+    // ── SessionProjectionSource & State accessors ─────────────────────────
+
+    [[nodiscard]] uint64_t state_version() const noexcept;
+
+    [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> projection_snapshot() const;
+
     /// Copy one independent snapshot of authoritative Agent state plus Session
-    /// metadata and active-path topology. Like prompt() and other state access,
-    /// snapshot() is confined to the executor driving this session; it performs
-    /// no dispatch, callback, persistence, or Agent reentry and is safe to call
-    /// from a lifecycle subscriber on that executor, including during a run.
+    /// metadata and active-path topology.
     [[nodiscard]] AgentSessionSnapshot snapshot() const;
 
+    void set_dirty_listener(std::move_only_function<void()> on_dirty);
+
+    /// Expose the SessionProjectionSource interface for read-only projection consumers.
+    [[nodiscard]] SessionProjectionSource& projection_source() noexcept;
+    [[nodiscard]] std::shared_ptr<SessionProjectionSource> shared_projection_source() noexcept;
+
+    /// Update projection snapshot and increment state_version (with release order),
+    /// notifying dirty listener without locks.
+    void update_projection();
     /// Number of messages in live history.
     [[nodiscard]] std::size_t message_count() const;
 
