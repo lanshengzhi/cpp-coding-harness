@@ -435,11 +435,43 @@ support::Expected<SessionEventSubscription> AgentSession::subscribe_session(
     return subscription;
 }
 
+uint64_t AgentSession::state_version() const noexcept {
+    return impl_ ? impl_->state_version() : 0;
+}
+
+std::shared_ptr<const AgentSessionSnapshot> AgentSession::projection_snapshot() const {
+    if (!impl_) {
+        return nullptr;
+    }
+    return impl_->snapshot();
+}
+
 AgentSessionSnapshot AgentSession::snapshot() const {
     if (!impl_) {
         return {};
     }
-    return impl_->snapshot();
+    auto snap = impl_->snapshot();
+    return snap ? *snap : AgentSessionSnapshot{};
+}
+
+void AgentSession::set_dirty_listener(std::move_only_function<void()> on_dirty) {
+    if (impl_) {
+        impl_->set_dirty_listener(std::move(on_dirty));
+    }
+}
+
+SessionProjectionSource& AgentSession::projection_source() noexcept {
+    return *impl_;
+}
+
+std::shared_ptr<SessionProjectionSource> AgentSession::shared_projection_source() noexcept {
+    return impl_;
+}
+
+void AgentSession::update_projection() {
+    if (impl_) {
+        impl_->update_projection();
+    }
 }
 
 std::size_t AgentSession::message_count() const { return impl_ ? impl_->message_count() : 0; }

@@ -161,24 +161,16 @@ void SessionUiBinding::sync_session_observations() {
     displayed_agent_diagnostics_ = std::move(current);
 }
 
-void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& event) {
+void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& /*event*/) {
     if (!is_live()) return;
-    auto* const active_view = view();
-    if (active_view == nullptr) return;
-    active_view->apply_event(event);
-    // pi's working indicator: shown while the agent run streams. The
-    // retry/compaction indicators replace it through the session-event
-    // path and are cleared by their own end events.
-    if (std::holds_alternative<agent::AgentStartEvent>(event)) {
-        active_view->show_status_working();
-    } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
-        active_view->clear_status_indicator();
-    } else if (std::holds_alternative<agent::MessageStartEvent>(event) &&
-               prompt_active()) {
-        active_view->show_status_working();
+    if (session_ != nullptr) {
+        session_->update_projection();
+    } else {
+        state_version_.fetch_add(1, std::memory_order_release);
+        if (dirty_listener_) {
+            dirty_listener_();
+        }
     }
-    sync_session_observations();
-    if (hooks_.invalidate != nullptr) hooks_.invalidate();
 }
 
 /// pi's `session.on("auto_retry_start"...` / `compaction_start...`
@@ -396,6 +388,24 @@ InteractiveView* SessionUiBinding::view() {
 
 bool SessionUiBinding::prompt_active() {
     return hooks_.prompt_active != nullptr && hooks_.prompt_active();
+}
+uint64_t SessionUiBinding::state_version() const noexcept {
+    return session_ ? session_->state_version() : state_version_.load(std::memory_order_acquire);
+}
+
+std::shared_ptr<const AgentSessionSnapshot> SessionUiBinding::snapshot() const {
+    if (session_ != nullptr) {
+        return session_->projection_snapshot();
+    }
+    return fallback_snapshot_.load(std::memory_order_acquire);
+}
+
+void SessionUiBinding::set_dirty_listener(std::move_only_function<void()> on_dirty) {
+    if (session_ != nullptr) {
+        session_->set_dirty_listener(std::move(on_dirty));
+    } else {
+        dirty_listener_ = std::move(on_dirty);
+    }
 }
 
 } // namespace cch::coding_agent::tui
