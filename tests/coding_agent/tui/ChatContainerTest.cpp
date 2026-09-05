@@ -304,3 +304,58 @@ TEST_CASE("ChatContainer benchmark confirms rendering 50 historical messages is 
     // Exactly 50 items * 100 frames = 5000 cache hits!
     CHECK(chat.cache_hit_count() == 50 * kFrames);
 }
+
+TEST_CASE("Streaming assistant incremental block freeze maintains flat processing time across chunks",
+        "[coding_agent][tui][issue603][benchmark]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+
+    ai::AssistantMessage streaming_msg;
+    streaming_msg.content.push_back(ai::TextContent{.text = ""});
+
+    // Start streaming assistant turn
+    chat.apply_event(cch::agent::MessageStartEvent{.message = streaming_msg});
+
+    // Simulate 100 streaming token chunks, each adding text
+    // We produce closed paragraphs and code fences to exercise block freezing
+    std::vector<double> chunk_times_us;
+    chunk_times_us.reserve(100);
+
+    for (int chunk = 0; chunk < 100; ++chunk) {
+        std::string chunk_text;
+        if (chunk % 20 == 19) {
+            chunk_text = "\n\n"; // Closes a paragraph block!
+        } else if (chunk == 40) {
+            chunk_text = "\n```cpp\nint x = 42;\n";
+        } else if (chunk == 60) {
+            chunk_text = "```\n\n"; // Closes code fence!
+        } else {
+            chunk_text = std::format(" token_{}", chunk);
+        }
+
+        auto& text_part = std::get<ai::TextContent>(streaming_msg.content.front());
+        text_part.text += chunk_text;
+
+        const auto start = std::chrono::steady_clock::now();
+        chat.apply_event(cch::agent::MessageUpdateEvent{.message = streaming_msg, .assistant_event = {}});
+        const auto rendered = chat.render(80);
+        REQUIRE(rendered);
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        chunk_times_us.push_back(
+                static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()));
+    }
+
+    // Verify single-chunk processing time is flat and bounded under 2ms (2000 microseconds)
+    // eliminating O(N^2) whole-document reparsing degradation (issue #603 criterion)
+    double max_chunk_us = 0.0;
+    for (double us : chunk_times_us) {
+        if (us > max_chunk_us) max_chunk_us = us;
+    }
+    CHECK(max_chunk_us < 2000.0);
+
+    // End streaming
+    streaming_msg.stop_reason = ai::AssistantStopReason::Stop;
+    chat.apply_event(cch::agent::MessageEndEvent{.message = streaming_msg});
+    const auto final_render = chat.render(80);
+    REQUIRE(final_render);
+}

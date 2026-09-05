@@ -401,9 +401,15 @@ struct ChatContainer::Impl {
         auto& item = std::get<MessageItem>(items[*active_assistant_item]);
         item.message = ai::MessageVariant{message};
         item.cache.invalidate();
-        rebuild_message(item);
+        auto* const assistant_comp = dynamic_cast<AssistantMessageComponent*>(item.component.get());
+        if (assistant_comp != nullptr) {
+            assistant_comp->update_content(message);
+        } else {
+            rebuild_message(item);
+        }
         synchronize_tools(item, message);
         settle_provider_tools(message);
+        update_item_commitment(item);
     }
 
     void rebuild_message(MessageItem& item) {
