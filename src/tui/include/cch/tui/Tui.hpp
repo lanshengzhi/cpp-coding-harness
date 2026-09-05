@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -89,7 +88,6 @@ private:
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
     Terminal& terminal_; // must outlive this Tui.
-    std::recursive_mutex mutex_;
     std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
     TuiRenderRequestSink render_request_sink_;

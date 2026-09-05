@@ -37,7 +37,6 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -214,9 +213,8 @@ public:
 
     /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()` →
     /// shared-manager mutation, ADR 0035): swap the shared slot every durable
-    /// component observes and rebind the editor's snapshot. Serialized under
-    /// the view mutex so concurrent render/input on the terminal thread never
-    /// observes a torn registry.
+    /// component observes and rebind the editor's snapshot. Serialized on the
+    /// single-threaded event loop so render/input never observes a torn registry.
     void set_keybindings(
         std::shared_ptr<const cch::tui::KeybindingRegistry> registry);
 
@@ -320,7 +318,6 @@ private:
     std::move_only_function<FooterData()> footer_data_source_;
     bool user_bash_available_{false};
     std::optional<support::Error> callback_error_;
-    mutable std::mutex mutex_;
     // pi's main-screen containers.
     KeybindingHints header_;
     /// The loaded-resources startup block (pi's `loadedResourcesContainer`,
