@@ -1,8 +1,9 @@
 #include <cch/tui/Editor.hpp>
-
+#include "tui/EditorCompletionSession.hpp"
+#include <cch/tui/Terminal.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Utils.hpp>
-#include "tui/EditorCompletionSession.hpp"
+
 #include "tui/InteractionUtils.hpp"
 #include "tui/TextBuffer.hpp"
 #include "tui/UnicodeWidth.hpp"
@@ -849,6 +850,146 @@ struct Editor::Impl {
     void jump_to(std::string_view target, JumpDirection direction) {
         buffer.jump_to(target, direction == JumpDirection::Forward);
     }
+
+    std::size_t last_rendered_line_count{0};
+
+    support::Expected<std::vector<std::string>> format_lines(std::size_t width) {
+        if (width == 0) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
+        }
+        layout_width = width;
+        for (const auto& logical_line : buffer.document()) {
+            for (const auto& segment : logical_line) {
+                for (const auto& grapheme : detail::split_graphemes(segment.text)) {
+                    if (detail::grapheme_width(grapheme) > width) {
+                        return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation,
+                            "Editor grapheme is wider than the available visible width"));
+                    }
+                }
+            }
+        }
+        const auto visual = visual_lines(width);
+        std::size_t cursor_line = 0;
+        const auto cur = buffer.cursor();
+        for (std::size_t index = 0; index < visual.size(); ++index) {
+            if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
+                cur.column <= visual[index].end) {
+                cursor_line = index;
+                break;
+            }
+        }
+        const auto visible_count = std::max<std::size_t>(1, content_height());
+        if (cursor_line < scroll_offset) scroll_offset = cursor_line;
+        if (cursor_line >= scroll_offset + visible_count) scroll_offset = cursor_line + 1 - visible_count;
+        std::vector<std::string> result;
+        if (theme.border) {
+            auto top_border =
+                    scroll_offset > 0 ? scroll_border("↑", scroll_offset, width) : horizontal_rule(width);
+            auto styled_border = detail::apply_text_style(theme.border, std::move(top_border), "Editor border");
+            if (!styled_border) return std::unexpected(styled_border.error());
+            result.push_back(std::move(*styled_border));
+        }
+        const auto end = std::min(visual.size(), scroll_offset + visible_count);
+        for (std::size_t index = scroll_offset; index < end; ++index) {
+            auto line = visual[index].text;
+            if (index == cursor_line) {
+                insert_fake_cursor(visual[index], width, line);
+            }
+            const auto line_width = visible_width(line);
+            if (line_width < width) line.append(width - line_width, ' ');
+            auto styled = detail::apply_text_style(theme.text, std::move(line), "Editor text");
+            if (!styled) return std::unexpected(styled.error());
+            result.push_back(std::move(*styled));
+        }
+        if (result.size() == (theme.border ? 1 : 0)) {
+            auto styled = detail::apply_text_style(theme.text, std::string(width, ' '), "Editor text");
+            if (!styled) return std::unexpected(styled.error());
+            result.push_back(std::move(*styled));
+        }
+        if (theme.border) {
+            const auto shown = scroll_offset + visible_count;
+            const auto lines_below = visual.size() > shown ? visual.size() - shown : 0;
+            auto bottom_border = lines_below > 0 ? scroll_border("↓", lines_below, width) : horizontal_rule(width);
+            auto styled_border = detail::apply_text_style(theme.border, std::move(bottom_border), "Editor border");
+            if (!styled_border) return std::unexpected(styled_border.error());
+            result.push_back(std::move(*styled_border));
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::optional<CursorPosition> cursor_location_internal(bool require_focused = true) const {
+        if ((require_focused && !focused) || layout_width == 0) return std::nullopt;
+        const auto visual = visual_lines(layout_width);
+        if (visual.empty()) return std::nullopt;
+
+        std::size_t visual_row = 0;
+        bool found = false;
+        const auto cur = buffer.cursor();
+        for (std::size_t index = 0; index < visual.size(); ++index) {
+            if (visual[index].logical_line == cur.line &&
+                cur.column >= visual[index].start &&
+                cur.column <= visual[index].end) {
+                visual_row = index;
+                found = true;
+                break;
+            }
+        }
+        if (!found) return std::nullopt;
+
+        const auto visible_count = std::max<std::size_t>(1, content_height());
+        if (visual_row < scroll_offset) return std::nullopt;
+        if (visual_row >= scroll_offset + visible_count) return std::nullopt;
+
+        const auto display_row = border_rows() + visual_row - scroll_offset;
+
+        const auto& vl = visual[visual_row];
+        const auto vl_text_width = visible_width(vl.text);
+        const auto cursor_in_line = cur.column - vl.start;
+        const auto segs_in_line = vl.end - vl.start;
+        std::size_t col = 0;
+        if (segs_in_line > 0 && cursor_in_line <= segs_in_line) {
+            const auto seg_end = vl.start + cursor_in_line;
+            const auto& doc = buffer.document();
+            for (std::size_t i = vl.start; i < seg_end && i < doc[vl.logical_line].size(); ++i) {
+                col += visible_width(doc[vl.logical_line][i].text);
+            }
+            col = std::min(col, vl_text_width);
+        }
+        return CursorPosition{.column = col, .row = display_row};
+    }
+
+    void echo_local() {
+        if (!options.terminal) return;
+        const auto width = layout_width > 0 ? layout_width : options.terminal->dimensions().columns;
+        if (width == 0) return;
+
+        auto lines_result = format_lines(width);
+        if (!lines_result) return;
+        const auto& lines = *lines_result;
+
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            static_cast<void>(options.terminal->set_dock_cursor(options.dock_offset + i, 0));
+            static_cast<void>(options.terminal->write(lines[i]));
+        }
+
+        auto loc = cursor_location_internal(/*require_focused=*/false);
+        if (loc) {
+            static_cast<void>(options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column));
+        }
+
+        const auto current_line_count = lines.size();
+        const bool height_changed = (last_rendered_line_count > 0 && current_line_count != last_rendered_line_count);
+        last_rendered_line_count = current_line_count;
+        if (height_changed) {
+            request_render();
+        }
+    }
+
+    void echo_cursor() {
+        if (!options.terminal) return;
+        echo_local();
+    }
 };
 
 Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSink on_submit)
@@ -1157,10 +1298,12 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.deleteCharBackward" || matches_key(*event, "shift+backspace")) {
         impl.erase_at_cursor(true);
+        impl.echo_local();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteCharForward" || matches_key(*event, "shift+delete")) {
         impl.erase_at_cursor(false);
+        impl.echo_local();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordBackward") {
@@ -1189,18 +1332,22 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.cursorLineStart") {
         impl.move_to_line_start();
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLineEnd") {
         impl.move_to_line_end();
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLeft") {
         impl.move_left();
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorRight") {
         impl.move_right();
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordLeft") {
@@ -1256,6 +1403,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (detail::is_printable(*event)) {
         impl.insert_character(detail::printable_text(*event));
+        impl.echo_local();
         return InputAdmissionOutcome::Consumed;
     }
     return InputAdmissionOutcome::Unhandled;
@@ -1322,4 +1470,34 @@ void Editor::set_available_height(std::size_t rows) {
     impl.available_height = rows;
 }
 
+
+void Editor::set_terminal(Terminal* terminal) {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    impl.options.terminal = terminal;
+}
+
+Terminal* Editor::terminal() const {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    return impl.options.terminal;
+}
+
+void Editor::set_dock_offset(std::size_t offset) {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    impl.options.dock_offset = offset;
+}
+
+std::size_t Editor::dock_offset() const {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    return impl.options.dock_offset;
+}
+
+bool Editor::has_local_echo() const {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    return impl.options.terminal != nullptr;
+}
 } // namespace cch::tui

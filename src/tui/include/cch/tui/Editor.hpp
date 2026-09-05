@@ -17,6 +17,7 @@
 
 namespace cch::tui {
 
+class Terminal;
 struct EditorCursor {
     std::size_t line{0};
     /// Grapheme offset within line, never a UTF-8 byte offset.
@@ -50,6 +51,9 @@ struct EditorOptions {
     /// provider replacement, or accepted asynchronous results) land so the
     /// host can schedule a repaint.
     EditorRenderRequestSink render_request{};
+    /// Direct terminal echo for pinned dock in-place prediction.
+    Terminal* terminal{nullptr};
+    std::size_t dock_offset{0};
 };
 
 struct EditorTheme {
@@ -93,6 +97,13 @@ public:
     /// shape over the immutable registry, ADR 0035): subsequent input matches
     /// the new registry. Confined to the app layer's `/reload` re-catalog.
     void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
+
+    /// Direct terminal echo configuration for pinned dock in-place prediction.
+    void set_terminal(Terminal* terminal);
+    [[nodiscard]] Terminal* terminal() const;
+    void set_dock_offset(std::size_t offset);
+    [[nodiscard]] std::size_t dock_offset() const;
+    [[nodiscard]] bool has_local_echo() const;
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;

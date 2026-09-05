@@ -1666,3 +1666,54 @@ TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][ed
     CHECK(render_requests == 2);
 }
 #endif
+
+TEST_CASE("Editor client-side prediction emits in-place local echo to pinned dock",
+        "[tui][editor][dock][issue605]") {
+    cch::tui::VirtualTerminal vt(cch::tui::VirtualTerminalOptions{
+            .columns = 80,
+            .rows = 24,
+    });
+    REQUIRE(vt.start(
+            [](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+    std::string submitted_text;
+    cch::tui::EditorOptions options{
+        .max_visible_lines = 5,
+        .terminal = &vt,
+        .dock_offset = 18,
+    };
+    cch::tui::Editor editor(
+        std::move(options),
+        /*on_change=*/{},
+        /*on_submit=*/[&](std::string text) -> cch::support::ExpectedVoid {
+            submitted_text = std::move(text);
+            return {};
+        });
+    editor.set_focused(true);
+
+    // Warm layout width
+    auto initial_render = editor.render(80);
+    REQUIRE(initial_render);
+
+    // Benchmark typing latency
+    const auto start = std::chrono::steady_clock::now();
+    for (char c : std::string_view{"echo test message"}) {
+        type(editor, std::string(1, c));
+    }
+    const auto duration = std::chrono::steady_clock::now() - start;
+    const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+    const double avg_us_per_char = static_cast<double>(elapsed_us) / 17.0;
+
+    // Issue #605 acceptance criterion: latency < 1ms (< 1000us per keypress)
+    CHECK(avg_us_per_char < 1000.0);
+    CHECK(editor.text() == "echo test message");
+
+    // Test backspace in-place echo
+    key(editor, "backspace");
+    CHECK(editor.text() == "echo test messag");
+
+    // Test Enter submits the full accumulated prompt text
+    key(editor, "enter");
+    CHECK(submitted_text == "echo test messag");
+}
