@@ -307,6 +307,12 @@ support::ExpectedVoid Tui::render() {
     const auto first_render = first_render_;
 
     const auto supports_sync = capabilities.synchronized_output;
+    const auto initial_viewport_top = viewport_top_;
+    const auto initial_active_images = active_images_;
+    const auto rollback_render_state = [&] {
+        viewport_top_ = initial_viewport_top;
+        active_images_ = initial_active_images;
+    };
 
     // Begin synchronized update if supported
     if (supports_sync) {
@@ -474,12 +480,16 @@ support::ExpectedVoid Tui::render() {
 
     if (supports_sync) {
         if (auto end_result = terminal_.end_synchronized_update(); !end_result) {
+            rollback_render_state();
             if (!render_result) return std::unexpected(render_result.error());
             return std::unexpected(end_result.error());
         }
     }
 
-    if (!render_result) return std::unexpected(render_result.error());
+    if (!render_result) {
+        rollback_render_state();
+        return std::unexpected(render_result.error());
+    }
 
     // Update cached state
     previous_lines_ = std::move(new_lines);

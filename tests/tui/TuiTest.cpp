@@ -82,6 +82,82 @@ private:
     cch::tui::TerminalModeState modes_;
 };
 
+class RenderBackpressureTerminal final : public cch::tui::Terminal {
+public:
+    [[nodiscard]] cch::support::ExpectedVoid start(
+        cch::tui::TerminalInputSink,
+        cch::tui::TerminalResizeSink) override {
+        modes_.started = true;
+        return {};
+    }
+
+    [[nodiscard]] cch::support::ExpectedVoid stop() override {
+        modes_.started = false;
+        return {};
+    }
+
+    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override {
+        return {.columns = 10, .rows = 3};
+    }
+
+    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override {
+        return {.synchronized_output = true};
+    }
+
+    [[nodiscard]] cch::tui::TerminalModeState modes() const override { return modes_; }
+    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override {
+        ++clear_screen_calls;
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid write(std::string_view) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
+        const cch::tui::TerminalImage&) override {
+        return cch::tui::TerminalImageHandle{};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid remove_image(
+        cch::tui::TerminalImageHandle,
+        const cch::tui::CellRegion&) override {
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override {
+        if (fail_next_end) {
+            fail_next_end = false;
+            return std::unexpected(cch::support::make_error(
+                cch::support::ErrorCode::Busy,
+                "render frame was not admitted"));
+        }
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid drain_input(
+        std::chrono::milliseconds,
+        std::chrono::milliseconds) override {
+        return {};
+    }
+
+    bool fail_next_end{true};
+    std::size_t clear_screen_calls{0};
+
+private:
+    cch::tui::TerminalModeState modes_;
+};
+
+class MutableLinesComponent final : public cch::tui::Component {
+public:
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{
+            .lines = std::vector<std::string>(line_count, "line")};
+    }
+
+    void invalidate() override {}
+
+    std::size_t line_count{5};
+};
+
 class FocusableInputComponent final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
@@ -120,6 +196,33 @@ private:
 };
 
 } // namespace
+
+TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][issue462]") {
+    RenderBackpressureTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<MutableLinesComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    const auto first = tui.render();
+    REQUIRE_FALSE(first);
+    CHECK(first.error().code == cch::support::ErrorCode::Busy);
+
+    // The failed five-line frame must not advance the cached viewport. The
+    // next successful render is still the first frame and replaces it with a
+    // one-line presentation.
+    component_pointer->line_count = 1;
+    REQUIRE(tui.render());
+
+    // With the viewport rolled back, growing to two lines is a normal
+    // differential update. Without the rollback it looks like a change above
+    // the stale viewport and incorrectly forces a full clear.
+    component_pointer->line_count = 2;
+    REQUIRE(tui.render());
+    CHECK(terminal.clear_screen_calls == 0);
+    REQUIRE(tui.stop());
+}
 
 TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][issue45]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});

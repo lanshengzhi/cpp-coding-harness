@@ -349,6 +349,29 @@ TEST_CASE(
     CHECK(fixture.invalidations > 0);
 }
 
+TEST_CASE("editor cursor navigation requests a Native TUI repaint", "[coding_agent][tui][editor]") {
+    ViewFixture fixture;
+    auto& view = *fixture.view;
+    view.set_focused(true);
+    fixture.type("hello");
+
+    REQUIRE(view.render(80));
+    const auto at_end = view.cursor_location();
+    REQUIRE(at_end);
+
+    static_cast<void>(view.handle_input(key("home")));
+    CHECK(fixture.invalidations == 2);
+    const auto at_start = view.cursor_location();
+    REQUIRE(at_start);
+    CHECK(at_start->column < at_end->column);
+
+    static_cast<void>(view.handle_input(key("end")));
+    CHECK(fixture.invalidations == 3);
+    const auto back_at_end = view.cursor_location();
+    REQUIRE(back_at_end);
+    CHECK(back_at_end->column == at_end->column);
+}
+
 TEST_CASE(
     "the coalescible invalidate request stays separate from the action seam",
     "[coding_agent][tui][view_actions]") {

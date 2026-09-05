@@ -336,6 +336,17 @@ struct ProcessTerminal::Impl {
     bool keyboard_protocol_pushed{false};
     bool modify_other_keys_active{false};
     std::size_t synchronized_update_depth{0};
+    /// Output staged between begin/end so a render is admitted as one ordered
+    /// queue item. This keeps a backed-up terminal from displaying or
+    /// partially admitting a frame that cannot be retried atomically.
+    std::string synchronized_output;
+    struct SynchronizedOutputState {
+        CursorPosition cursor;
+        std::size_t scroll_origin{0};
+        std::size_t viewport_top{0};
+        std::uint64_t next_image_handle{1};
+    };
+    std::optional<SynchronizedOutputState> synchronized_output_state;
     bool progress_active{false};
     std::chrono::steady_clock::time_point progress_next_keepalive{};
     std::uint64_t next_image_handle{1};
@@ -581,11 +592,12 @@ void emit_progress_keepalive(T& impl) {
     if (!impl.progress_active) return;
     const auto now = std::chrono::steady_clock::now();
     if (now < impl.progress_next_keepalive) return;
-    // While the ordered queue is non-empty the output is backed up; a direct
-    // keepalive write could interleave ahead of queued render bytes and
-    // truncate the escape sequence. Skip this beat and retry on the next
-    // deadline (the indicator is best-effort and re-emitted).
-    if (!impl.output_queue.empty() || impl.output_draining) {
+    // While the ordered queue is non-empty or a synchronized render frame is
+    // being staged, a direct keepalive write could interleave ahead of the
+    // render bytes and truncate an escape sequence. Skip this beat and retry
+    // on the next deadline (the indicator is best-effort and re-emitted).
+    if (!impl.output_queue.empty() || impl.output_draining ||
+        impl.synchronized_update_depth > 0) {
         impl.progress_next_keepalive = now + kProgressKeepalive;
         return;
     }
@@ -638,6 +650,10 @@ bool output_pending(const T& impl) {
 template <typename T>
 [[nodiscard]] support::ExpectedVoid enqueue_output(T& impl, std::string_view bytes) {
     if (bytes.empty()) return {};
+    if (impl.synchronized_update_depth > 0) {
+        impl.synchronized_output.append(bytes);
+        return {};
+    }
     if (impl.output_queue.empty() && !impl.output_draining) {
         const auto written = ::write(impl.options.output_fd, bytes.data(), bytes.size());
         if (written > 0 && static_cast<std::size_t>(written) == bytes.size()) return {};
@@ -1325,6 +1341,9 @@ support::ExpectedVoid ProcessTerminal::start(
     impl_->output_queue.clear();
     impl_->output_queued_bytes = 0;
     impl_->output_draining = false;
+    impl_->synchronized_output.clear();
+    impl_->synchronized_output_state.reset();
+    impl_->synchronized_update_depth = 0;
     impl_->last_resize_check = std::chrono::steady_clock::now();
 
     impl_->input_sink = std::move(owned_input_sink);
@@ -1410,6 +1429,8 @@ support::ExpectedVoid ProcessTerminal::stop() {
         impl_->output_queue.clear();
         impl_->output_queued_bytes = 0;
         impl_->output_draining = false;
+        impl_->synchronized_output.clear();
+        impl_->synchronized_output_state.reset();
         retain_error(result, restore_terminal_modes(*impl_));
     }
 
@@ -1625,9 +1646,16 @@ support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
         ++impl_->synchronized_update_depth;
         return {};
     }
-    auto result = enqueue_output(*impl_, kBeginSynchronizedUpdate);
-    if (result) impl_->synchronized_update_depth = 1;
-    return result;
+    impl_->synchronized_output_state = ProcessTerminal::Impl::SynchronizedOutputState{
+        .cursor = impl_->cursor,
+        .scroll_origin = impl_->scroll_origin,
+        .viewport_top = impl_->viewport_top,
+        .next_image_handle = impl_->next_image_handle,
+    };
+    impl_->synchronized_output.clear();
+    impl_->synchronized_output.append(kBeginSynchronizedUpdate);
+    impl_->synchronized_update_depth = 1;
+    return {};
 }
 
 support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
@@ -1642,8 +1670,19 @@ support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
         --impl_->synchronized_update_depth;
         return {};
     }
-    auto ended = enqueue_output(*impl_, kEndSynchronizedUpdate);
-    if (ended) impl_->synchronized_update_depth = 0;
+
+    impl_->synchronized_output.append(kEndSynchronizedUpdate);
+    impl_->synchronized_update_depth = 0;
+    auto frame = std::move(impl_->synchronized_output);
+    impl_->synchronized_output.clear();
+    auto ended = enqueue_output(*impl_, frame);
+    if (!ended && impl_->synchronized_output_state) {
+        impl_->cursor = impl_->synchronized_output_state->cursor;
+        impl_->scroll_origin = impl_->synchronized_output_state->scroll_origin;
+        impl_->viewport_top = impl_->synchronized_output_state->viewport_top;
+        impl_->next_image_handle = impl_->synchronized_output_state->next_image_handle;
+    }
+    impl_->synchronized_output_state.reset();
     return ended;
 }
 

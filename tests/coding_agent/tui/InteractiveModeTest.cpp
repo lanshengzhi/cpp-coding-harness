@@ -290,6 +290,74 @@ public:
     }
 };
 
+class TransientRenderBackpressureTerminal final : public tui::Terminal {
+public:
+    [[nodiscard]] support::ExpectedVoid start(
+        tui::TerminalInputSink input_sink,
+        tui::TerminalResizeSink) override {
+        input_sink_ = std::move(input_sink);
+        modes_.started = true;
+        return {};
+    }
+
+    [[nodiscard]] support::ExpectedVoid stop() override {
+        modes_ = {};
+        input_sink_ = nullptr;
+        return {};
+    }
+
+    [[nodiscard]] tui::TerminalDimensions dimensions() const override {
+        return {.columns = 80, .rows = 24};
+    }
+    [[nodiscard]] tui::TerminalCapabilities capabilities() const override {
+        return {.synchronized_output = true};
+    }
+    [[nodiscard]] tui::TerminalModeState modes() const override { return modes_; }
+    [[nodiscard]] support::ExpectedVoid clear_screen() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
+        const tui::TerminalImage&) override {
+        return tui::TerminalImageHandle{};
+    }
+    [[nodiscard]] support::ExpectedVoid remove_image(
+        tui::TerminalImageHandle,
+        const tui::CellRegion&) override {
+        return {};
+    }
+    [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid end_synchronized_update() override {
+        ++render_end_calls;
+        if (render_end_calls == fail_on_render_end) {
+            return std::unexpected(support::make_error(
+                fail_with_process_error ? support::ErrorCode::Process : support::ErrorCode::Busy,
+                fail_with_process_error ? "render frame failed" : "render frame was not admitted"));
+        }
+        return {};
+    }
+    [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid drain_input(
+        std::chrono::milliseconds,
+        std::chrono::milliseconds) override {
+        return {};
+    }
+
+    [[nodiscard]] support::ExpectedVoid inject(std::string input) {
+        if (!input_sink_) return {};
+        return input_sink_(std::move(input));
+    }
+
+    std::size_t render_end_calls{0};
+    std::size_t fail_on_render_end{3};
+    bool fail_with_process_error{false};
+
+private:
+    tui::TerminalInputSink input_sink_;
+    tui::TerminalModeState modes_;
+};
+
 class FailingCleanupTerminal final : public tui::Terminal {
 public:
     [[nodiscard]] support::ExpectedVoid start(
@@ -2322,6 +2390,51 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(run_result);
     CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI retries a transient render backpressure failure",
+    "[coding_agent][tui][issue462]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+        create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    TransientRenderBackpressureTerminal terminal;
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            terminal,
+            make_run(*created->session, {.agent_config_directory = config.path()})),
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+    REQUIRE_FALSE(run_result.has_value());
+    REQUIRE(terminal.render_end_calls == 2);
+
+    // The third frame is rejected with Busy. The retry timer must keep the
+    // interactive run alive and submit the same pending presentation again.
+    REQUIRE(terminal.inject("x"));
+    REQUIRE(pump_until(io, [&] {
+        return terminal.render_end_calls >= 4;
+    }, std::chrono::milliseconds{1000}));
+    CHECK_FALSE(run_result.has_value());
+
+    // Other render failures remain fatal, but are presented as runtime render
+    // failures rather than being mislabeled as startup failures.
+    terminal.fail_on_render_end = 5;
+    terminal.fail_with_process_error = true;
+    REQUIRE(terminal.inject("y"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE_FALSE(*run_result);
+    CHECK(run_result->error().message == "Native TUI render failed");
 }
 
 TEST_CASE(

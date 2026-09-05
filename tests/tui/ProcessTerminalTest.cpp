@@ -1498,6 +1498,77 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Process Terminal retries a synchronized frame after output backpressure",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ScopedEnvironmentVariable terminal_environment("TERM");
+    ScopedEnvironmentVariable program_environment("TERM_PROGRAM");
+    terminal_environment.set("xterm-kitty");
+    program_environment.unset();
+
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [](std::string) -> cch::support::ExpectedVoid { return {}; },
+        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Fill the ordered queue without consuming the PTY. A render frame must
+    // be staged behind the synchronized-update seam rather than rejected a
+    // chunk at a time or leaving the terminal inside an open update.
+    std::string expected;
+    bool saw_busy = false;
+    for (std::size_t i = 0; i < 2000; ++i) {
+        const auto chunk = std::format(
+            "queued-{:06d}-{};", i, std::string(4000, 'q'));
+        auto result = terminal.write(chunk);
+        if (!result) {
+            CHECK(result.error().code == cch::support::ErrorCode::Busy);
+            saw_busy = true;
+            break;
+        }
+        expected += chunk;
+    }
+    REQUIRE(saw_busy);
+
+    const auto frame_payload = std::string("frame-payload-") + std::string(8000, 'f');
+    REQUIRE(terminal.begin_synchronized_update());
+    REQUIRE(terminal.write(frame_payload));
+    const auto first_end = terminal.end_synchronized_update();
+    REQUIRE_FALSE(first_end);
+    CHECK(first_end.error().code == cch::support::ErrorCode::Busy);
+
+    // The rejected frame was never admitted. Once the queue drains, a fresh
+    // begin/end pair can submit the complete frame in one ordered chunk.
+    std::string received;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (received.size() < expected.size() &&
+        std::chrono::steady_clock::now() < deadline) {
+        received += cch::tests::read_available(
+            pty->master.get(), std::chrono::milliseconds(50));
+    }
+    REQUIRE(received.size() == expected.size());
+    CHECK(received == expected);
+
+    REQUIRE(terminal.begin_synchronized_update());
+    REQUIRE(terminal.write(frame_payload));
+    REQUIRE(terminal.end_synchronized_update());
+
+    received.clear();
+    while (received.find("\x1b[?2026hframe-payload-") == std::string::npos &&
+        std::chrono::steady_clock::now() < deadline) {
+        received += cch::tests::read_available(
+            pty->master.get(), std::chrono::milliseconds(50));
+    }
+    CHECK(received.find("\x1b[?2026hframe-payload-") != std::string::npos);
+    CHECK(received.find("\x1b[?2026l") != std::string::npos);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
     "Process Terminal admits a large single write on a draining terminal",
     "[tui][terminal][issue462]") {
     auto pty = cch::tests::open_pseudo_terminal();

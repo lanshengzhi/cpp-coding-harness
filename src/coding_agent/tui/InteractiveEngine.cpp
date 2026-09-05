@@ -50,6 +50,11 @@ namespace {
             support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
 }
 
+/// Pi throttles render work to roughly one display frame while the terminal
+/// catches up. A typed terminal Busy result uses the same cadence instead of
+/// turning recoverable output backpressure into an application failure.
+constexpr auto kRenderRetryInterval = std::chrono::milliseconds(16);
+
 } // namespace
 
 using interactive_view_detail::queued_editor_texts;
@@ -64,8 +69,10 @@ InteractiveEngine::InteractiveEngine(
       tui_(terminal),
       executor_(std::move(executor)),
       exit_wait_(executor_),
+      render_retry_timer_(executor_),
       flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
+    render_retry_timer_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
@@ -283,6 +290,9 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
+    render_retry_pending_ = false;
+    ++render_retry_generation_;
+    (void)render_retry_timer_.cancel();
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
@@ -607,6 +617,20 @@ void InteractiveEngine::post_render() {
     });
 }
 
+void InteractiveEngine::schedule_render_retry() {
+    if (!running_ || render_retry_pending_) return;
+    render_retry_pending_ = true;
+    const auto retry_generation = ++render_retry_generation_;
+    render_retry_timer_.expires_after(kRenderRetryInterval);
+    const auto weak = weak_from_this();
+    render_retry_timer_.async_wait([weak, retry_generation](const boost::system::error_code& error) {
+        const auto self = weak.lock();
+        if (!self || self->render_retry_generation_ != retry_generation) return;
+        self->render_retry_pending_ = false;
+        if (!error && self->running_) self->render();
+    });
+}
+
 void InteractiveEngine::post_close_overlay() {
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
@@ -709,8 +733,20 @@ void InteractiveEngine::invalidate() {
 
 void InteractiveEngine::render() {
     if (!running_) return;
-    if (auto rendered = tui_.render(); !rendered) {
-        completion_result_ = std::unexpected(startup_error(rendered.error()));
+    if (auto rendered = tui_.render(); rendered) {
+        if (render_retry_pending_) {
+            render_retry_pending_ = false;
+            ++render_retry_generation_;
+            (void)render_retry_timer_.cancel();
+        }
+        return;
+    } else if (rendered.error().code == support::ErrorCode::Busy) {
+        schedule_render_retry();
+        return;
+    } else {
+        completion_result_ = std::unexpected(presentation_error(
+            rendered.error(),
+            "Native TUI render failed"));
         request_exit();
     }
 }

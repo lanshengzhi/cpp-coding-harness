@@ -656,7 +656,17 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
     }
-    return editor_.handle_input(input);
+    const auto before_cursor = editor_.cursor();
+    const auto before_text = editor_.text();
+    const auto outcome = editor_.handle_input(input);
+    // Text changes already notify through the editor's change sink. Cursor-only
+    // navigation has no change notification, but it still changes the visible
+    // fake/hardware cursor and must schedule the same repaint as pi.
+    if (outcome == cch::tui::InputAdmissionOutcome::Consumed && before_text == editor_.text() &&
+            before_cursor != editor_.cursor()) {
+        invoke_invalidate();
+    }
+    return outcome;
 }
 
 void InteractiveView::set_focused(bool focused) {

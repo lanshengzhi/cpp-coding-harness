@@ -199,6 +199,7 @@ private:
     void post_invalidate();
     void post_exit();
     void post_render();
+    void schedule_render_retry();
     void post_close_overlay();
 
     /// Post one view-thread action to the executor.
@@ -562,6 +563,9 @@ private:
     PromptOptions initial_prompt_options_{};
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;
+    /// Retry timer for render-path terminal backpressure. It is executor-
+    /// confined and only armed after a typed Busy result.
+    boost::asio::steady_timer render_retry_timer_;
     /// Detached-flow quiescence (ADR 0040): the number of admitted
     /// controller flows still in flight. `finish()` awaits `flows_settled_`
     /// until this reaches zero so terminal restoration never races an
@@ -595,6 +599,8 @@ private:
     /// render coalescing). Set off-executor, so atomic.
     std::atomic<bool> invalidate_posted_{false};
     std::atomic<bool> render_posted_{false};
+    bool render_retry_pending_{false};
+    std::size_t render_retry_generation_{0};
     // Prompt-generation staleness for interrupt requests (pi onEscape
     // routing; the deleted InterruptAdmission's generation). The generation
     // is read from the input thread at post time, so it stays atomic; the
