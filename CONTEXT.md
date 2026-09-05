@@ -404,3 +404,19 @@ _Avoid_: Escape sequences in render lines, component-owned protocol bytes
 **Main-Screen Scrollback Flow**:
 The TUI Toolkit's main-screen rendering model (pi `TuiMainScreen` parity) in which the renderer writes the full composed buffer to the terminal's main screen, lets overflow advance into the terminal's native scrollback, and tracks a viewport top over the buffer instead of clipping to the visible height; the terminal's own scrollback is the history surface, and a resize full-redraw clears screen and scrollback together. Startup content stays visible until the buffer grows past one screen, then scrolls away with it.
 _Avoid_: Viewport-clip redraw, in-place line rewrite, alt-screen scrolling
+
+**Headless Core**:
+The authoritative agent engine, session store, tool runners, and model inference loops, strictly devoid of layout, ANSI escape sequences, terminal geometries, UI components, or presentation threads. It emits only typed, versioned state patches and snapshots.
+_Avoid_: UI-driven runtime, mixed controller-view engine
+
+**Projection**:
+A decoupled, asynchronous, read-only observer that samples versioned state snapshots from the Headless Core and renders them to a specific surface (Native TUI, Web, GUI, Spectator) without driving or delaying the Headless Core.
+_Avoid_: Synchronous UI hook, view controller, bidirectional display binding
+
+**Block Frozen Protocol**:
+The transcript lifecycle where rendered blocks transition through `Active` -> `Finalized` -> `Committed`. Committed blocks permanently freeze their rasterized line cache and are never re-parsed or re-rendered across subsequent streaming chunks.
+_Avoid_: Whole-document reparsing, stateless full rerender
+
+**Client-Side Prediction**:
+The local transient input engine that manages the user prompt editing buffer and cursor with immediate, sub-millisecond local echo on the terminal, isolated from Headless Core execution until an explicit command submission.
+_Avoid_: Server-roundtrip keystroke echo, blocking input loop
