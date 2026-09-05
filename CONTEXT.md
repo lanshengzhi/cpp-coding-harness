@@ -165,12 +165,32 @@ _Avoid_: Agent Session, agent loop
 One ongoing coding-agent conversation, including its current interaction state and durable history.
 _Avoid_: Conversation handle, runtime session
 
+**Agent Prompt**:
+A user input admitted to the Agent for model-driven work rather than handled as a Slash Command or User Bash; it starts a Prompt Run.
+_Avoid_: Raw user input, Slash Command, User Bash
+
+**Prompt Run**:
+The complete lifecycle of one admitted Agent Prompt from acceptance through its terminal response or outcome and return of the Agent Session to idle; it includes every Agent Run used for tool use, Auto-Retry, or compaction recovery.
+_Avoid_: Agent Run, Agent Turn, raw input, agent loop
+
+**Agent Run**:
+One contiguous execution of the Agent's turn machine inside a Prompt Run; it may contain one or more Agent Turns, while each Auto-Retry or compaction continuation starts another Agent Run.
+_Avoid_: Prompt Run, Agent Turn, agent loop
+
 **Agent Turn**:
-One ordered agent lifecycle step from a model request through its assistant and tool outcomes to the next-turn decision point.
-_Avoid_: Provider request, prompt
+One ordered Agent lifecycle step from one model request through its assistant outcome and any Tool Call Batch and Tool Executions it produces to the decision whether another turn is needed.
+_Avoid_: Provider request, Prompt Run, agent loop
+
+**Tool Call Batch**:
+The group of one or more tool calls emitted by one assistant outcome and handled as one turn-level tool decision; a batch is not a sequence of Agent Turns.
+_Avoid_: Tool Execution, multiple Agent Turns
+
+**Tool Execution**:
+The execution lifecycle of one tool call from admission through its Tool Call Outcome.
+_Avoid_: Tool Call Batch, Tool Call Outcome
 
 **Agent Stream Flow**:
-The Agent's consumption of one model stream through the provider's `streamSimple` surface: the per-turn request-option set (reasoning, sessionId, cacheRetention, timeoutMs, maxRetries, maxRetryDelayMs, headers, signal), the terminal-error-event contract (exactly one error or aborted terminal event plus a final assistant message carrying stopReason and errorMessage), and the six-category error channel carried through the single Expected outcome.
+The Agent's consumption of one model stream within an Agent Turn through the provider's `streamSimple` surface: the per-turn request-option set (reasoning, sessionId, cacheRetention, timeoutMs, maxRetries, maxRetryDelayMs, headers, signal), the terminal-error-event contract (exactly one error or aborted terminal event plus a final assistant message carrying stopReason and errorMessage), and the six-category error channel carried through the single Expected outcome.
 _Avoid_: Provider request, per-adapter option struct, second exception hierarchy
 
 **Thinking Level**:
@@ -302,7 +322,7 @@ The two user-facing guidance outcomes produced when a request has no usable cred
 _Avoid_: Generic auth failure, silent credential fallback
 
 **Auto-Retry**:
-The session policy that re-enters the agent loop with exponential backoff after a retryable terminal error (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
+The session policy that starts another Agent Run with exponential backoff after a retryable terminal error (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
 _Avoid_: Infinite retry, silent retry, adapter-level retry
 
 **OAuth Callback Server**:

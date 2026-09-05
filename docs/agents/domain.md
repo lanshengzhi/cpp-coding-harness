@@ -44,6 +44,8 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
+When a task changes or interprets the Prompt Run, Agent Run, Agent Turn, Tool Call Batch, or Tool Execution lifecycle, read the [Agent lifecycle](../agent-lifecycle.md) reference as well.
+
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:

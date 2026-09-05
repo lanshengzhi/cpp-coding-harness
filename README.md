@@ -121,4 +121,4 @@ Default tests are deterministic, use fake Providers, and make no live-provider r
 
 See [docs/usage.md](docs/usage.md) for prompts, files and images, model authentication, sessions, configuration, Native TUI commands, and User Bash.
 
-Project terminology lives in [CONTEXT.md](CONTEXT.md), keybinding details in [docs/keybindings.md](docs/keybindings.md), and architecture decisions in [docs/adr/](docs/adr/).
+Project terminology lives in [CONTEXT.md](CONTEXT.md), the Agent lifecycle is described in [docs/agent-lifecycle.md](docs/agent-lifecycle.md), keybinding details in [docs/keybindings.md](docs/keybindings.md), and architecture decisions in [docs/adr/](docs/adr/).
