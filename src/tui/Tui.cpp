@@ -71,6 +71,17 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
     return terminal.write(std::string(columns, ' '));
 }
 
+/// Write a single full-width line directly to the terminal's reserved bottom dock region.
+[[nodiscard]] support::ExpectedVoid write_dock_line(
+    Terminal& terminal,
+    std::size_t dock_row,
+    std::string_view line) {
+    if (auto result = terminal.set_dock_cursor(dock_row, 0); !result) {
+        return std::unexpected(result.error());
+    }
+    return terminal.write(line);
+}
+
 } // namespace
 
 Tui::Tui(Terminal& terminal)
@@ -203,6 +214,8 @@ support::ExpectedVoid Tui::stop() {
     compositor_->clear_focus_history();
 
     const auto image_result = remove_active_images();
+    (void)terminal_.reset_scroll_margins();
+    previous_dock_lines_.clear();
     // pi TuiMainScreen::beforeTerminalStop: move the cursor below the composed
     // buffer's last line and end the line, so the shell prompt resumes under
     // the transcript instead of overwriting its last line. Under the anchored
@@ -252,6 +265,8 @@ support::ExpectedVoid Tui::clear_screen() {
     if (auto cleared = terminal_.clear_screen(); !cleared) {
         return std::unexpected(cleared.error());
     }
+    (void)terminal_.reset_scroll_margins();
+    previous_dock_lines_.clear();
     previous_lines_.clear();
     previous_dimensions_ = {};
     viewport_top_ = 0;
@@ -291,6 +306,11 @@ support::ExpectedVoid Tui::render() {
     }
     auto& new_lines = materialized.lines;
     auto desired_images = std::move(materialized.images);
+    auto& new_dock_lines = materialized.dock_lines;
+    const bool has_dock = !new_dock_lines.empty() || materialized.viewport_height.has_value();
+    const std::size_t dock_height = new_dock_lines.size();
+    const std::size_t viewport_height = materialized.viewport_height.value_or(
+        dimensions.rows > dock_height ? dimensions.rows - dock_height : 0);
 
     // The full composed buffer is written to the terminal's main screen with
     // no viewport clipping; overflow advances into the terminal's native
@@ -301,6 +321,13 @@ support::ExpectedVoid Tui::render() {
             line.append(dimensions.columns - line.size(), ' ');
         }
     }
+    if (has_dock) {
+        for (auto& line : new_dock_lines) {
+            if (line.size() < dimensions.columns) {
+                line.append(dimensions.columns - line.size(), ' ');
+            }
+        }
+    }
 
     const auto width_changed = dimensions.columns != previous_dimensions_.columns;
     const auto height_changed = dimensions.rows != previous_dimensions_.rows;
@@ -309,9 +336,11 @@ support::ExpectedVoid Tui::render() {
     const auto supports_sync = capabilities.synchronized_output;
     const auto initial_viewport_top = viewport_top_;
     const auto initial_active_images = active_images_;
+    const auto initial_previous_dock_lines = previous_dock_lines_;
     const auto rollback_render_state = [&] {
         viewport_top_ = initial_viewport_top;
         active_images_ = initial_active_images;
+        previous_dock_lines_ = initial_previous_dock_lines;
     };
 
     // Begin synchronized update if supported
@@ -321,12 +350,41 @@ support::ExpectedVoid Tui::render() {
         }
     }
 
-    // Write the full composed buffer with pi's line-flow ordering (rows at or
-    // past the visible bottom advance the terminal's scrollback through the
-    // absolute-cursor seam).
+    auto apply_scroll_margins = [&]() -> support::ExpectedVoid {
+        if (has_dock && viewport_height >= 2) {
+            return terminal_.set_scroll_margins(0, viewport_height - 1);
+        }
+        return terminal_.reset_scroll_margins();
+    };
+
+    auto write_dock_lines = [&]() -> support::ExpectedVoid {
+        for (std::size_t i = 0; i < new_dock_lines.size(); ++i) {
+            if (auto result = write_dock_line(terminal_, i, new_dock_lines[i]); !result) {
+                return std::unexpected(result.error());
+            }
+        }
+        if (new_dock_lines.size() < previous_dock_lines_.size()) {
+            const std::string empty_line(dimensions.columns, ' ');
+            for (std::size_t i = new_dock_lines.size(); i < previous_dock_lines_.size(); ++i) {
+                if (auto result = write_dock_line(terminal_, i, empty_line); !result) {
+                    return std::unexpected(result.error());
+                }
+            }
+        }
+        return {};
+    };
+
     auto write_full_buffer = [&]() -> support::ExpectedVoid {
+        if (auto margins = apply_scroll_margins(); !margins) {
+            return std::unexpected(margins.error());
+        }
         for (std::size_t row = 0; row < new_lines.size(); ++row) {
             if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
+                return std::unexpected(result.error());
+            }
+        }
+        if (has_dock) {
+            if (auto result = write_dock_lines(); !result) {
                 return std::unexpected(result.error());
             }
         }
@@ -355,13 +413,15 @@ support::ExpectedVoid Tui::render() {
             if (auto result = write_full_buffer(); !result) {
                 return std::unexpected(result.error());
             }
-            // Leave the cursor at the end of the written content (column 0) so
-            // the terminal advances its scrollback past the rendered content.
-            if (auto result = terminal_.set_cursor(CursorPosition{
-                    .column = 0,
-                    .row = new_lines.empty() ? 0U : new_lines.size() - 1});
-                !result) {
-                return std::unexpected(result.error());
+            if (!has_dock) {
+                // Leave the cursor at the end of the written content (column 0) so
+                // the terminal advances its scrollback past the rendered content.
+                if (auto result = terminal_.set_cursor(CursorPosition{
+                        .column = 0,
+                        .row = new_lines.empty() ? 0U : new_lines.size() - 1});
+                    !result) {
+                    return std::unexpected(result.error());
+                }
             }
             return {};
         }
@@ -373,6 +433,10 @@ support::ExpectedVoid Tui::render() {
         if (width_changed || height_changed) {
             return clear_and_rewrite();
         }
+        if (auto margins = apply_scroll_margins(); !margins) {
+            return std::unexpected(margins.error());
+        }
+
 
         // pi differential: first-changed-line tracking over the full buffer.
         const auto min_previous = std::min(previous_lines_.size(), new_lines.size());
@@ -380,9 +444,13 @@ support::ExpectedVoid Tui::render() {
         while (first_diff < min_previous && previous_lines_[first_diff] == new_lines[first_diff]) {
             ++first_diff;
         }
-        const auto unchanged =
+        const auto viewport_unchanged =
             first_diff == min_previous && previous_lines_.size() == new_lines.size();
-        if (unchanged) return {};
+        const auto dock_unchanged =
+            !has_dock || (previous_dock_lines_ == new_dock_lines);
+        if (viewport_unchanged && dock_unchanged) return {};
+
+        if (!viewport_unchanged) {
 
         // A change above the tracked viewport, or new content that ends above
         // it, cannot be reached with line flow: reflow from a clean screen
@@ -415,23 +483,31 @@ support::ExpectedVoid Tui::render() {
         // Clear-on-shrink: stale rows below the new content that are still
         // inside the visible viewport are cleared in place (rows that already
         // scrolled into the terminal's scrollback keep their history).
-        if (new_lines.size() < previous_lines_.size()) {
-            const auto stale_end = std::min(
-                previous_lines_.size(),
-                viewport_top_ + dimensions.rows);
-            for (std::size_t row = new_lines.size(); row < stale_end; ++row) {
-                const CellRegion region{
-                    .column = 0,
-                    .row = row,
-                    .columns = dimensions.columns,
-                    .rows = 1,
-                };
-                if (auto result = remove_images_intersecting(region); !result) {
-                    return std::unexpected(result.error());
+            if (new_lines.size() < previous_lines_.size()) {
+                const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
+                const auto stale_end = std::min(
+                    previous_lines_.size(),
+                    viewport_top_ + visible_rows);
+                for (std::size_t row = new_lines.size(); row < stale_end; ++row) {
+                    const CellRegion region{
+                        .column = 0,
+                        .row = row,
+                        .columns = dimensions.columns,
+                        .rows = 1,
+                    };
+                    if (auto result = remove_images_intersecting(region); !result) {
+                        return std::unexpected(result.error());
+                    }
+                    if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
+                        return std::unexpected(result.error());
+                    }
                 }
-                if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
-                    return std::unexpected(result.error());
-                }
+            }
+        }
+
+        if (has_dock) {
+            if (auto result = write_dock_lines(); !result) {
+                return std::unexpected(result.error());
             }
         }
         return {};
@@ -455,25 +531,39 @@ support::ExpectedVoid Tui::render() {
     // `previousViewportTop = max(prev, len - height)`). The stale-row clearing
     // inside the render body used the pre-write viewport, which is the correct
     // bound for rows already visible before any scroll.
+    const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
     viewport_top_ = std::max(
         viewport_top_,
-        new_lines.size() > dimensions.rows ? new_lines.size() - dimensions.rows : 0U);
+        new_lines.size() > visible_rows ? new_lines.size() - visible_rows : 0U);
 
     // Position IME cursor based on focused component
     if (render_result) {
         auto cursor_loc = resolve_cursor_location();
         if (cursor_loc) {
-            // Clamp the buffer-relative cursor to the visible viewport so the
-            // hardware cursor stays on screen (pi positionHardwareCursor); the
-            // cursor must not scroll the terminal, only track it.
-            const auto viewport_bottom = viewport_top_ + dimensions.rows - 1;
-            if (cursor_loc->row < viewport_top_) cursor_loc->row = viewport_top_;
-            else if (cursor_loc->row > viewport_bottom) cursor_loc->row = viewport_bottom;
-            // Position the hardware cursor at the focused component's cursor location
-            // for IME composition without making it visible by default
-            // We position but keep invisible so the IME knows where the cursor is
-            if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
-                render_result = std::unexpected(cursor_result.error());
+            if (has_dock) {
+                std::size_t dock_row = cursor_loc->row;
+                if (dock_row >= viewport_height && dock_row < dimensions.rows) {
+                    dock_row -= viewport_height;
+                }
+                if (dock_row < new_dock_lines.size()) {
+                    if (auto cursor_result = terminal_.set_dock_cursor(dock_row, cursor_loc->column); !cursor_result) {
+                        render_result = std::unexpected(cursor_result.error());
+                    }
+                } else {
+                    const auto viewport_bottom = viewport_top_ + viewport_height - 1;
+                    if (cursor_loc->row < viewport_top_) cursor_loc->row = viewport_top_;
+                    else if (cursor_loc->row > viewport_bottom) cursor_loc->row = viewport_bottom;
+                    if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
+                        render_result = std::unexpected(cursor_result.error());
+                    }
+                }
+            } else {
+                const auto viewport_bottom = viewport_top_ + dimensions.rows - 1;
+                if (cursor_loc->row < viewport_top_) cursor_loc->row = viewport_top_;
+                else if (cursor_loc->row > viewport_bottom) cursor_loc->row = viewport_bottom;
+                if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
+                    render_result = std::unexpected(cursor_result.error());
+                }
             }
         }
     }
@@ -493,6 +583,7 @@ support::ExpectedVoid Tui::render() {
 
     // Update cached state
     previous_lines_ = std::move(new_lines);
+    previous_dock_lines_ = std::move(new_dock_lines);
     previous_dimensions_ = dimensions;
     first_render_ = false;
     pending_render_ = false;
@@ -516,6 +607,14 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
         for (auto& image : rendered->images) {
             image.region.row += row_offset;
             output.images.push_back(std::move(image));
+        }
+        if (rendered->viewport_height.has_value()) {
+            output.viewport_height = rendered->viewport_height;
+        }
+        for (auto& line : rendered->dock_lines) {
+            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            output.dock_lines.push_back(std::move(*prepared));
         }
     }
     return output;
