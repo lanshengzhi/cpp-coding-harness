@@ -695,8 +695,7 @@ template <typename T>
 /// enqueue_output is exact; a real write failure records the worker error and
 /// drops the undeliverable queued bytes.
 template <typename T>
-void drain_output(T& impl, bool writable) {
-    std::lock_guard lock(impl.mutex);
+void drain_output_locked(T& impl, bool writable) {
     if (impl.output_queue.empty() || !writable) return;
     impl.output_draining = true;
     while (!impl.output_queue.empty()) {
@@ -726,6 +725,12 @@ void drain_output(T& impl, bool writable) {
         break;
     }
     impl.output_draining = false;
+}
+
+template <typename T>
+void drain_output(T& impl, bool writable) {
+    std::lock_guard lock(impl.mutex);
+    drain_output_locked(impl, writable);
 }
 
 
@@ -1210,6 +1215,22 @@ support::ExpectedVoid ProcessTerminal::start(
     return {};
 }
 
+void ProcessTerminal::set_executor(boost::asio::any_io_executor executor) {
+    std::lock_guard lock(impl_->mutex);
+    impl_->options.executor = executor;
+    if (impl_->modes.started && !impl_->input_stream) {
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        try {
+#endif
+            impl_->input_stream.emplace(executor, impl_->options.input_fd);
+            start_async_read(*impl_);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+        } catch (...) {
+        }
+#endif
+    }
+}
+
 support::ExpectedVoid ProcessTerminal::stop() {
     std::lock_guard lock(impl_->mutex);
     if (!impl_->modes.started) {
@@ -1231,7 +1252,7 @@ support::ExpectedVoid ProcessTerminal::stop() {
     impl_->resize_sink.reset();
     impl_->modes.started = false;
 
-    drain_output(*impl_, true);
+    drain_output_locked(*impl_, true);
     impl_->output_queue.clear();
     impl_->output_queued_bytes = 0;
     impl_->output_draining = false;
@@ -1248,10 +1269,10 @@ support::ExpectedVoid ProcessTerminal::stop() {
 }
 
 TerminalDimensions ProcessTerminal::dimensions() const {
-    std::lock_guard lock(impl_->mutex);
-    if (!impl_->options.executor && impl_->modes.started) {
-        poll_nonblocking(*impl_);
+    if (impl_->modes.started) {
+        deliver_resize_if_changed(*impl_);
     }
+    std::lock_guard lock(impl_->mutex);
     return impl_->dimensions;
 }
 
@@ -1613,7 +1634,7 @@ support::ExpectedVoid ProcessTerminal::drain_input(
         impl_->modify_other_keys_active = false;
     }
 
-    drain_output(*impl_, true);
+    drain_output_locked(*impl_, true);
 
     impl_->draining = true;
     impl_->drain_last_activity = std::chrono::steady_clock::now();

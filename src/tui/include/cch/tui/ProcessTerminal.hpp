@@ -62,6 +62,7 @@ public:
         std::chrono::milliseconds max_ms = kDrainInputMaxMs,
         std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
     [[nodiscard]] support::ExpectedVoid poll_input();
+    void set_executor(boost::asio::any_io_executor executor);
 
 private:
     struct Impl;

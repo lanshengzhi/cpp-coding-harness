@@ -356,13 +356,15 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     // Wait for resize to take effect and new scroll margins / dock rows to be emitted
     // Viewport height becomes 32 - 7 = 25 rows -> margin \x1b[1;25r
     // Dock lines move to bottom rows 26..32
-    REQUIRE(cch::tests::wait_until(
+    bool matched = cch::tests::wait_until(
         [&] {
             output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
             return output.find("\x1b[1;25r") != std::string::npos &&
                    output.find("\x1b[32;") != std::string::npos;
         },
-        std::chrono::seconds(5)));
+        std::chrono::seconds(2));
+    UNSCOPED_INFO("Resize test output:\n" << output);
+    REQUIRE(matched);
 
     CHECK(output.find("\x1b[1;25r") != std::string::npos);
     // Editor top border at row 28 (1-based: 25 + 2 + 1 = 28)
@@ -379,4 +381,119 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     CHECK(run_exception == nullptr);
     REQUIRE(run_result);
     CHECK(*run_result);
+}
+
+TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token streaming and cleanly restores PTY",
+        "[coding_agent][tui][terminal][benchmark][spec597][issue606]") {
+    auto pty = cch::tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    termios original{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
+
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace config;
+    cch::tests::RuntimeFixture runtime;
+    cch::tests::ModelsSessionOptions options;
+    options.session_target = cch::coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
+    auto models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
+    cch::coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            cch::coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    REQUIRE(created);
+    cch::tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+        .executor = io.get_executor(),
+    });
+    std::optional<cch::support::ExpectedVoid> run_result;
+    std::exception_ptr run_exception;
+    auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
+        .with_session(*created->session)
+        .with_initial_prompt("pty prompt")
+        .build();
+    boost::asio::co_spawn(
+        io,
+        cch::coding_agent::tui::run_interactive_mode(
+            terminal,
+            std::move(run)),
+        [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
+            run_exception = exception;
+            run_result.emplace(std::move(result));
+        });
+    std::jthread runner([&] { io.run(); });
+    InteractiveSmokeCleanup cleanup{
+        *created->session,
+        terminal,
+        io,
+        runner,
+        pty->master.get(),
+    };
+    REQUIRE(cch::tests::wait_until(
+        [&] { return terminal.modes().started; },
+        std::chrono::seconds(2)));
+    auto output = cch::tests::read_available(pty->master.get());
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake: pty prompt", "fake-model"}));
+
+    // Inject keystrokes into the master PTY and measure echo latency
+    const std::string test_input = "hello world";
+    std::vector<double> latencies_ms;
+    latencies_ms.reserve(test_input.size());
+
+    for (char c : test_input) {
+        const auto t_write = std::chrono::steady_clock::now();
+        REQUIRE(::write(pty->master.get(), &c, 1) == 1);
+
+        bool echoed = false;
+        std::string accumulated;
+        const auto deadline = t_write + std::chrono::milliseconds(500);
+        while (!echoed && std::chrono::steady_clock::now() < deadline) {
+            auto chunk = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(2));
+            accumulated += chunk;
+            if (accumulated.find(c) != std::string::npos) {
+                const auto t_read = std::chrono::steady_clock::now();
+                const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(t_read - t_write).count();
+                latencies_ms.push_back(static_cast<double>(elapsed_us) / 1000.0);
+                echoed = true;
+            }
+        }
+        REQUIRE(echoed);
+    }
+
+    double max_subsequent_ms = 0.0;
+    for (std::size_t i = 0; i < latencies_ms.size(); ++i) {
+        UNSCOPED_INFO("Key '" << test_input[i] << "' latency: " << latencies_ms[i] << " ms");
+        if (i > 0 && latencies_ms[i] > max_subsequent_ms) {
+            max_subsequent_ms = latencies_ms[i];
+        }
+    }
+    CHECK(max_subsequent_ms < 5.0);
+
+    // Verify bottom dock remains pinned
+    CHECK(output.find("\x1b[1;17r") != std::string::npos);
+    // Erase typed characters with backspace so the editor buffer is empty without submitting
+    for (std::size_t i = 0; i < test_input.size(); ++i) {
+        constexpr char kBackspace = '\x7f';
+        REQUIRE(::write(pty->master.get(), &kBackspace, 1) == 1);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Now that editor is empty, Ctrl+D exits cleanly
+    constexpr char kExit = '\x04';
+    REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
+    runner.join();
+    cleanup.dismiss();
+    CHECK(run_exception == nullptr);
+
+    // Verify clean terminal restoration against original termios
+    termios restored{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
+    CHECK(cch::tests::same_terminal_state(restored, original));
 }

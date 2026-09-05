@@ -184,6 +184,7 @@ struct InteractiveViewOptions {
     cch::tui::EditorRenderRequestSink render_request;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
+    cch::tui::Terminal* terminal{nullptr};
 };
 
 /// The pi main-screen composition. Emits one closed `ViewAction` per
@@ -214,10 +215,9 @@ public:
     /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()` →
     /// shared-manager mutation, ADR 0035): swap the shared slot every durable
     /// component observes and rebind the editor's snapshot. Serialized on the
-    /// single-threaded event loop so render/input never observes a torn registry.
     void set_keybindings(
         std::shared_ptr<const cch::tui::KeybindingRegistry> registry);
-
+    void set_terminal(cch::tui::Terminal* terminal);
     void apply_event(const agent::AgentLifecycleEvent& event);
     void append_committed_message(ai::MessageVariant message);
     void clear_transcript();

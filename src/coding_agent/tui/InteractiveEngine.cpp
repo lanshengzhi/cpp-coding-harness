@@ -433,6 +433,7 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(
     std::weak_ptr<InteractiveEngine> weak) {
     InteractiveViewOptions options;
     options.keybindings = keybindings_;
+    options.terminal = &terminal_;
     // Preserve the existing production hint: the application supplies
     // the clipboard action path even when the clipboard reader is
     // unavailable, so the hint remains part of the assembled Native TUI.
@@ -768,6 +769,7 @@ void InteractiveEngine::arm_frame_ticker() {
 void InteractiveEngine::on_frame_tick() {
     if (!running_ || !ticker_running_) return;
 
+    (void)terminal_.dimensions();
     const uint64_t current_version = projection_source_ ? projection_source_->state_version() : 0;
     const bool core_dirty = (current_version != last_rendered_version_);
     const bool dock_dirty = local_dock_dirty_.load(std::memory_order_acquire);
@@ -790,6 +792,8 @@ void InteractiveEngine::on_frame_tick() {
 void InteractiveEngine::request_exit() {
     if (!running_ || exit_requested_) return;
     exit_requested_ = true;
+    ticker_running_ = false;
+    (void)frame_ticker_.cancel();
     if (session_ != nullptr) session_->close();
     if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
         signal_exit();
@@ -797,19 +801,9 @@ void InteractiveEngine::request_exit() {
 }
 
 void InteractiveEngine::signal_exit() {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        (void)exit_wait_.cancel();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        if (!completion_result_) {
-            completion_result_ = std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "Native TUI exit notification failed"));
-        }
-    }
-#endif
+    ticker_running_ = false;
+    (void)frame_ticker_.cancel();
+    (void)exit_wait_.cancel();
 }
 
 } // namespace cch::coding_agent::tui

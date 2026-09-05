@@ -63,6 +63,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
+    editor_.set_terminal(options.terminal);
 }
 
 void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) {
@@ -83,6 +84,10 @@ void InteractiveView::set_keybindings(
     std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
     keybindings_->replace(registry);
     editor_.set_keybindings(std::move(registry));
+}
+
+void InteractiveView::set_terminal(cch::tui::Terminal* terminal) {
+    editor_.set_terminal(terminal);
 }
 
 void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) {
@@ -485,6 +490,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         std::make_move_iterator(status_lines.begin()),
         std::make_move_iterator(status_lines.end()));
     editor_row_offset_ = pending_lines.size() + status_lines.size();
+    editor_.set_dock_offset(editor_row_offset_);
     transcript_result.dock_lines.insert(
         transcript_result.dock_lines.end(),
         std::make_move_iterator(editor_lines.begin()),
