@@ -146,6 +146,21 @@ public:
     [[nodiscard]] virtual support::ExpectedVoid set_cursor(CursorPosition position) = 0;
     [[nodiscard]] virtual support::ExpectedVoid set_cursor_visible(bool visible) = 0;
 
+    /// Configures the scrollable viewport margins (rows [top_row, bottom_row], 0-based inclusive).
+    /// Content above top_row or below bottom_row is preserved during viewport scrolling.
+    [[nodiscard]] virtual support::ExpectedVoid set_scroll_margins(
+        std::size_t top_row,
+        std::size_t bottom_row) = 0;
+
+    /// Resets scroll margins to full-screen scrolling.
+    [[nodiscard]] virtual support::ExpectedVoid reset_scroll_margins() = 0;
+
+    /// Direct cursor positioning in the reserved bottom dock region (dock_row is 0-based relative
+    /// to the dock starting row, i.e., margin_bottom + 1 when margins are active).
+    [[nodiscard]] virtual support::ExpectedVoid set_dock_cursor(
+        std::size_t dock_row,
+        std::size_t column) = 0;
+
     /// Place one validated image inside a TUI-owned absolute cell region. The
     /// terminal positions the cursor at the region origin before emitting the
     /// protocol sequence; the returned handle becomes the protocol image ID.

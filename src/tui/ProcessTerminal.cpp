@@ -345,6 +345,9 @@ struct ProcessTerminal::Impl {
         std::size_t scroll_origin{0};
         std::size_t viewport_top{0};
         std::uint64_t next_image_handle{1};
+        std::size_t margin_top{0};
+        std::size_t margin_bottom{0};
+        bool margins_active{false};
     };
     std::optional<SynchronizedOutputState> synchronized_output_state;
     bool progress_active{false};
@@ -353,6 +356,9 @@ struct ProcessTerminal::Impl {
     bool draining{false};
     std::chrono::steady_clock::time_point drain_last_activity{};
     CursorPosition cursor{};
+    std::size_t margin_top{0};
+    std::size_t margin_bottom{0};
+    bool margins_active{false};
     /// Screen row where buffer row 0 was first written: the shell's cursor row
     /// at startup (0-based), established once by the startup cursor-position
     /// probe (ADR 0041 anchored absolute flow; the DSR timeout fallback clears
@@ -1105,6 +1111,15 @@ template <typename T>
         if (disabled) impl.modes.bracketed_paste = false;
         retain_error(first_error, std::move(disabled));
     }
+    if (impl.margins_active) {
+        auto reset_margins = write_all(impl.options.output_fd, "\x1b[r");
+        if (reset_margins) {
+            impl.margins_active = false;
+            impl.margin_top = 0;
+            impl.margin_bottom = 0;
+        }
+        retain_error(first_error, std::move(reset_margins));
+    }
     if (impl.has_original_termios) {
         if (::tcsetattr(impl.options.input_fd, TCSAFLUSH, &impl.original_termios) == 0) {
             impl.has_original_termios = false;
@@ -1497,14 +1512,33 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         : std::size_t{0};
     if (position.row < first_visible_row) {
         // Rows above the first visible buffer row are in the terminal's
-        // scrollback; as before the anchor, they clamp to screen row 0.
-        impl_->cursor.row = 0;
+        // scrollback; as before the anchor, they clamp to screen row 0 (or margin_top).
+        impl_->cursor.row = impl_->margins_active ? impl_->margin_top : 0;
         impl_->cursor.column = position.column;
         return enqueue_output(
             *impl_,
             std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
     }
     const auto screen_row = impl_->scroll_origin + position.row - impl_->viewport_top;
+    if (impl_->margins_active) {
+        const auto viewport_height = impl_->margin_bottom - impl_->margin_top + 1;
+        if (screen_row >= viewport_height) {
+            const auto scroll = screen_row - (viewport_height - 1);
+            std::string sequence;
+            sequence += std::format("\x1b[{};1H", impl_->margin_bottom + 1);
+            sequence.append(scroll, '\n');
+            impl_->viewport_top += scroll;
+            impl_->cursor.row = impl_->margin_bottom;
+            impl_->cursor.column = position.column;
+            sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1);
+            return enqueue_output(*impl_, sequence);
+        }
+        impl_->cursor.row = impl_->margin_top + screen_row;
+        impl_->cursor.column = position.column;
+        return enqueue_output(
+            *impl_,
+            std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+    }
     if (screen_row >= impl_->dimensions.rows) {
         const auto scroll = screen_row - (impl_->dimensions.rows - 1);
         const auto bottom = impl_->dimensions.rows - 1;
@@ -1526,6 +1560,50 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
 }
 
+support::ExpectedVoid ProcessTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    if (bottom_row >= impl_->dimensions.rows || top_row >= bottom_row) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Process Terminal scroll margins are invalid"));
+    }
+    impl_->margin_top = top_row;
+    impl_->margin_bottom = bottom_row;
+    impl_->margins_active = true;
+    auto sequence = std::format("\x1b[{};{}r", top_row + 1, bottom_row + 1);
+    sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, impl_->cursor.column + 1);
+    return enqueue_output(*impl_, sequence);
+}
+
+support::ExpectedVoid ProcessTerminal::reset_scroll_margins() {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    if (!impl_->margins_active) return {};
+    impl_->margins_active = false;
+    impl_->margin_top = 0;
+    impl_->margin_bottom = 0;
+    auto sequence = std::format("\x1b[1;{}r", impl_->dimensions.rows);
+    sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, impl_->cursor.column + 1);
+    return enqueue_output(*impl_, sequence);
+}
+
+support::ExpectedVoid ProcessTerminal::set_dock_cursor(std::size_t dock_row, std::size_t column) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    const auto dock_start = impl_->margins_active ? (impl_->margin_bottom + 1) : 0;
+    const auto screen_row = dock_start + dock_row;
+    if (screen_row >= impl_->dimensions.rows || column > impl_->dimensions.columns) {
+        return std::unexpected(support::make_error(
+            support::ErrorCode::Validation,
+            "Process Terminal dock cursor position is outside its dimensions"));
+    }
+    impl_->cursor.row = screen_row;
+    impl_->cursor.column = column;
+    return enqueue_output(
+        *impl_,
+        std::format("\x1b[{};{}H", screen_row + 1, column + 1));
+}
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
@@ -1651,6 +1729,9 @@ support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
         .scroll_origin = impl_->scroll_origin,
         .viewport_top = impl_->viewport_top,
         .next_image_handle = impl_->next_image_handle,
+        .margin_top = impl_->margin_top,
+        .margin_bottom = impl_->margin_bottom,
+        .margins_active = impl_->margins_active,
     };
     impl_->synchronized_output.clear();
     impl_->synchronized_output.append(kBeginSynchronizedUpdate);
@@ -1681,6 +1762,9 @@ support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
         impl_->scroll_origin = impl_->synchronized_output_state->scroll_origin;
         impl_->viewport_top = impl_->synchronized_output_state->viewport_top;
         impl_->next_image_handle = impl_->synchronized_output_state->next_image_handle;
+        impl_->margin_top = impl_->synchronized_output_state->margin_top;
+        impl_->margin_bottom = impl_->synchronized_output_state->margin_bottom;
+        impl_->margins_active = impl_->synchronized_output_state->margins_active;
     }
     impl_->synchronized_output_state.reset();
     return ended;
