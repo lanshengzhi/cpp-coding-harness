@@ -488,7 +488,13 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         chat_result = std::move(*rendered);
     }
 
+    const std::size_t dock_k =
+        pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
+    const std::size_t viewport_height =
+        available_rows_ > dock_k ? (available_rows_ - dock_k) : 0;
+
     cch::tui::RenderResult transcript_result;
+    transcript_result.viewport_height = viewport_height;
     transcript_result.lines = std::move(header_lines);
     transcript_result.lines.insert(
         transcript_result.lines.end(),
@@ -502,20 +508,23 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         transcript_result.lines.end(),
         std::make_move_iterator(chat_result.lines.begin()),
         std::make_move_iterator(chat_result.lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
+
+    transcript_result.dock_lines.reserve(dock_k);
+    transcript_result.dock_lines.insert(
+        transcript_result.dock_lines.end(),
         std::make_move_iterator(pending_lines.begin()),
         std::make_move_iterator(pending_lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
+    transcript_result.dock_lines.insert(
+        transcript_result.dock_lines.end(),
         std::make_move_iterator(status_lines.begin()),
         std::make_move_iterator(status_lines.end()));
-    editor_row_offset_ = transcript_result.lines.size();
-    transcript_result.lines.insert(transcript_result.lines.end(),
-            std::make_move_iterator(editor_lines.begin()),
-            std::make_move_iterator(editor_lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
+    editor_row_offset_ = pending_lines.size() + status_lines.size();
+    transcript_result.dock_lines.insert(
+        transcript_result.dock_lines.end(),
+        std::make_move_iterator(editor_lines.begin()),
+        std::make_move_iterator(editor_lines.end()));
+    transcript_result.dock_lines.insert(
+        transcript_result.dock_lines.end(),
         std::make_move_iterator(footer_lines.begin()),
         std::make_move_iterator(footer_lines.end()));
     return transcript_result;
