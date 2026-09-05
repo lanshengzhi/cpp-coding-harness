@@ -108,7 +108,7 @@ public:
     [[nodiscard]] FooterData compute_footer_data();
     // ── SessionProjectionSource ──────────────────────────────────────────
 
-    [[nodiscard]] uint64_t state_version() const noexcept override;
+    [[nodiscard]] std::uint64_t state_version() const noexcept override;
 
     [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> snapshot() const override;
 
@@ -142,7 +142,7 @@ private:
     /// `FooterDataProvider` subset).
     FooterDataProvider footer_data_provider_{std::filesystem::path{}};
     std::vector<std::string> displayed_agent_diagnostics_;
-    mutable std::atomic<uint64_t> state_version_{1};
+    mutable std::atomic<std::uint64_t> state_version_{1};
     mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> fallback_snapshot_{nullptr};
     std::move_only_function<void()> dirty_listener_{nullptr};
 };

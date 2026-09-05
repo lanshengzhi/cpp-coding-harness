@@ -196,6 +196,12 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     refresh_bash_session_environment();
     current_snapshot_.store(std::make_shared<const AgentSessionSnapshot>(create_snapshot()), std::memory_order_release);
     state_version_.store(1, std::memory_order_release);
+    if (auto sub = agent_->subscribe([this](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+            update_projection();
+            return {};
+        }); sub) {
+        agent_event_subscription_.emplace(std::move(*sub));
+    }
 }
 
 std::string AgentSession::Impl::rebuild_system_prompt() const {

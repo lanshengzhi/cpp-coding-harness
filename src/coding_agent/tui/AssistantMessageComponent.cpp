@@ -1,4 +1,5 @@
 #include "AssistantMessageComponent.hpp"
+#include "coding_agent/tui/RenderResultUtils.hpp"
 
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/Text.hpp>
@@ -93,16 +94,6 @@ constexpr std::string_view kOsc133ZoneFinal = "\x1b]133;C\x07";
         std::format("\x1b[3m{}\x1b[23m", text));
 }
 
-void append_render_result(cch::tui::RenderResult& destination, cch::tui::RenderResult rendered) {
-    const auto row_offset = destination.lines.size();
-    destination.lines.insert(destination.lines.end(),
-            std::make_move_iterator(rendered.lines.begin()),
-            std::make_move_iterator(rendered.lines.end()));
-    for (auto& image : rendered.images) {
-        image.region.row += row_offset;
-        destination.images.push_back(std::move(image));
-    }
-}
 
 } // namespace
 

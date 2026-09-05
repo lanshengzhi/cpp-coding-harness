@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <cch/support/Error.hpp>
 
 #include <chrono>
@@ -134,6 +135,7 @@ public:
     [[nodiscard]] virtual support::ExpectedVoid start(
         TerminalInputSink input_sink,
         TerminalResizeSink resize_sink) = 0;
+    virtual void attach_io_executor(std::any /*executor*/) {}
     [[nodiscard]] virtual support::ExpectedVoid stop() = 0;
     [[nodiscard]] virtual TerminalDimensions dimensions() const = 0;
     [[nodiscard]] virtual TerminalCapabilities capabilities() const = 0;

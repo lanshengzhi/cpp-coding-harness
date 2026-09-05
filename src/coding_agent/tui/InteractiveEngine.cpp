@@ -770,7 +770,7 @@ void InteractiveEngine::on_frame_tick() {
     if (!running_ || !ticker_running_) return;
 
     (void)terminal_.dimensions();
-    const uint64_t current_version = projection_source_ ? projection_source_->state_version() : 0;
+    const std::uint64_t current_version = projection_source_ ? projection_source_->state_version() : 0;
     const bool core_dirty = (current_version != last_rendered_version_);
     const bool dock_dirty = local_dock_dirty_.load(std::memory_order_acquire);
 
@@ -779,7 +779,6 @@ void InteractiveEngine::on_frame_tick() {
         local_dock_dirty_.store(false, std::memory_order_release);
         if (core_dirty && view_ != nullptr && projection_source_ != nullptr) {
             if (const auto snap = projection_source_->snapshot()) {
-                view_->initialize(*snap);
                 view_->set_pending_input(snap->agent_state.input_queues);
             }
         }

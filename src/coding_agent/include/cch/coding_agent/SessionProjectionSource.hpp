@@ -18,7 +18,7 @@ public:
 
     /// Monotonically increasing version counter. Incremented on any state
     /// mutation (message chunks, lifecycle transitions, tool events).
-    [[nodiscard]] virtual uint64_t state_version() const noexcept = 0;
+    [[nodiscard]] virtual std::uint64_t state_version() const noexcept = 0;
 
     /// Returns an immutable, copy-on-write snapshot of the session state.
     /// Thread-safe and lock-free for readers.

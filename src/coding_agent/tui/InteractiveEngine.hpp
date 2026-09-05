@@ -630,7 +630,7 @@ private:
     /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
     std::chrono::steady_clock::time_point last_escape_time_{};
     std::shared_ptr<SessionProjectionSource> projection_source_{nullptr};
-    uint64_t last_rendered_version_{0};
+    std::uint64_t last_rendered_version_{0};
     std::atomic<bool> local_dock_dirty_{false};
     bool ticker_running_{false};
     std::size_t render_count_{0};

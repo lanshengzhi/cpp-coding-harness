@@ -225,7 +225,7 @@ struct AgentSession::Impl : public SessionProjectionSource {
     // ── State accessors & projection ───────────────────────────────────────
 
     [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> snapshot() const override;
-    [[nodiscard]] uint64_t state_version() const noexcept override;
+    [[nodiscard]] std::uint64_t state_version() const noexcept override;
     void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
     void update_projection();
     [[nodiscard]] AgentSessionSnapshot create_snapshot() const;
@@ -498,9 +498,10 @@ struct AgentSession::Impl : public SessionProjectionSource {
     /// Released (cancelled) when the active prompt settles; a concurrent
     /// manual compaction awaits it after requesting run cancellation.
     std::optional<boost::asio::steady_timer> prompt_settled_signal_;
-    mutable std::atomic<uint64_t> state_version_{1};
+    mutable std::atomic<std::uint64_t> state_version_{1};
     mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> current_snapshot_{nullptr};
     std::move_only_function<void()> dirty_listener_{nullptr};
+    std::optional<agent::AgentEventSubscription> agent_event_subscription_{std::nullopt};
 };
 
 namespace detail {

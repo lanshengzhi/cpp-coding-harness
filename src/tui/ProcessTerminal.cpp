@@ -8,6 +8,7 @@
 #include <cch/support/Error.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <array>
 #include <cerrno>
 #include <charconv>
@@ -1186,48 +1187,32 @@ support::ExpectedVoid ProcessTerminal::start(
         impl_->startup_input.clear();
     }
 
-    if (impl_->options.executor) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            impl_->input_stream.emplace(*impl_->options.executor, impl_->options.input_fd);
-            start_async_read(*impl_);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception& error) {
-            impl_->modes.started = false;
-            impl_->input_sink.reset();
-            impl_->resize_sink.reset();
-            return fail_startup(support::make_error(
-                support::ErrorCode::Process,
-                "Process Terminal could not start async input stream",
-                error.what()));
-        } catch (...) {
-            impl_->modes.started = false;
-            impl_->input_sink.reset();
-            impl_->resize_sink.reset();
-            return fail_startup(support::make_error(
-                support::ErrorCode::Process,
-                "Process Terminal could not start async input stream",
-                "unknown exception"));
+    if (impl_->options.executor.has_value()) {
+        if (auto* exec = std::any_cast<boost::asio::any_io_executor>(&impl_->options.executor)) {
+            boost::system::error_code ec;
+            impl_->input_stream.emplace(*exec);
+            impl_->input_stream->assign(impl_->options.input_fd, ec);
+            if (!ec) {
+                start_async_read(*impl_);
+            }
         }
-#endif
     }
     return {};
 }
 
-void ProcessTerminal::set_executor(boost::asio::any_io_executor executor) {
-    std::lock_guard lock(impl_->mutex);
-    impl_->options.executor = executor;
-    if (impl_->modes.started && !impl_->input_stream) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            impl_->input_stream.emplace(executor, impl_->options.input_fd);
-            start_async_read(*impl_);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
+void ProcessTerminal::attach_io_executor(std::any executor) {
+    if (!executor.has_value()) return;
+    if (auto* exec = std::any_cast<boost::asio::any_io_executor>(&executor)) {
+        std::lock_guard lock(impl_->mutex);
+        impl_->options.executor = *exec;
+        if (impl_->modes.started && !impl_->input_stream) {
+            boost::system::error_code ec;
+            impl_->input_stream.emplace(*exec);
+            impl_->input_stream->assign(impl_->options.input_fd, ec);
+            if (!ec) {
+                start_async_read(*impl_);
+            }
         }
-#endif
     }
 }
 
@@ -1278,7 +1263,7 @@ TerminalDimensions ProcessTerminal::dimensions() const {
 
 TerminalCapabilities ProcessTerminal::capabilities() const {
     std::lock_guard lock(impl_->mutex);
-    if (!impl_->options.executor && impl_->modes.started) {
+    if (!impl_->options.executor.has_value() && impl_->modes.started) {
         poll_nonblocking(*impl_);
     }
     return impl_->capabilities;
@@ -1286,7 +1271,7 @@ TerminalCapabilities ProcessTerminal::capabilities() const {
 
 TerminalModeState ProcessTerminal::modes() const {
     std::lock_guard lock(impl_->mutex);
-    if (!impl_->options.executor && impl_->modes.started) {
+    if (!impl_->options.executor.has_value() && impl_->modes.started) {
         poll_nonblocking(*impl_);
     }
     return impl_->modes;
@@ -1687,11 +1672,5 @@ support::ExpectedVoid ProcessTerminal::drain_input(
     return {};
 }
 
-support::ExpectedVoid ProcessTerminal::poll_input() {
-    std::lock_guard lock(impl_->mutex);
-    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    poll_nonblocking(*impl_);
-    return {};
-}
 
 } // namespace cch::tui

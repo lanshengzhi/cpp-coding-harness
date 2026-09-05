@@ -4,9 +4,7 @@
 
 #include <cch/support/Error.hpp>
 
-#include <chrono>
-#include <boost/asio/any_io_executor.hpp>
-#include <optional>
+#include <any>
 #include <memory>
 
 namespace cch::tui {
@@ -16,7 +14,7 @@ namespace cch::tui {
 struct ProcessTerminalOptions {
     int input_fd{0};
     int output_fd{1};
-    std::optional<boost::asio::any_io_executor> executor{std::nullopt};
+    std::any executor{};
 };
 
 /// Linux terminal adapter for the reusable TUI package.
@@ -61,8 +59,7 @@ public:
     [[nodiscard]] support::ExpectedVoid drain_input(
         std::chrono::milliseconds max_ms = kDrainInputMaxMs,
         std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
-    [[nodiscard]] support::ExpectedVoid poll_input();
-    void set_executor(boost::asio::any_io_executor executor);
+    void attach_io_executor(std::any executor) override;
 
 private:
     struct Impl;

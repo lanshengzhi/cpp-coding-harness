@@ -435,7 +435,7 @@ support::Expected<SessionEventSubscription> AgentSession::subscribe_session(
     return subscription;
 }
 
-uint64_t AgentSession::state_version() const noexcept {
+std::uint64_t AgentSession::state_version() const noexcept {
     return impl_ ? impl_->state_version() : 0;
 }
 
@@ -468,11 +468,6 @@ std::shared_ptr<SessionProjectionSource> AgentSession::shared_projection_source(
     return impl_;
 }
 
-void AgentSession::update_projection() {
-    if (impl_) {
-        impl_->update_projection();
-    }
-}
 
 std::size_t AgentSession::message_count() const { return impl_ ? impl_->message_count() : 0; }
 

@@ -163,13 +163,9 @@ void SessionUiBinding::sync_session_observations() {
 
 void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& /*event*/) {
     if (!is_live()) return;
-    if (session_ != nullptr) {
-        session_->update_projection();
-    } else {
-        state_version_.fetch_add(1, std::memory_order_release);
-        if (dirty_listener_) {
-            dirty_listener_();
-        }
+    state_version_.fetch_add(1, std::memory_order_release);
+    if (dirty_listener_) {
+        dirty_listener_();
     }
 }
 
@@ -389,7 +385,7 @@ InteractiveView* SessionUiBinding::view() {
 bool SessionUiBinding::prompt_active() {
     return hooks_.prompt_active != nullptr && hooks_.prompt_active();
 }
-uint64_t SessionUiBinding::state_version() const noexcept {
+std::uint64_t SessionUiBinding::state_version() const noexcept {
     return session_ ? session_->state_version() : state_version_.load(std::memory_order_acquire);
 }
 

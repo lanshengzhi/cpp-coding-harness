@@ -406,17 +406,20 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
-    boost::asio::io_context io;
     cch::tui::ProcessTerminal terminal({
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
-        .executor = io.get_executor(),
     });
+    boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
         .with_session(*created->session)
+        .with_agent_config_directory(config.path())
         .with_initial_prompt("pty prompt")
+        .with_initial_prompt_options({
+            .images = {cch::ai::image_content("cG5n", "image/png")},
+        })
         .build();
     boost::asio::co_spawn(
         io,
@@ -439,9 +442,7 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
         [&] { return terminal.modes().started; },
         std::chrono::seconds(2)));
     auto output = cch::tests::read_available(pty->master.get());
-    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake: pty prompt", "fake-model"}));
-
-    // Inject keystrokes into the master PTY and measure echo latency
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
     const std::string test_input = "hello world";
     std::vector<double> latencies_ms;
     latencies_ms.reserve(test_input.size());

@@ -931,7 +931,7 @@ std::shared_ptr<const AgentSessionSnapshot> AgentSession::Impl::snapshot() const
     return current;
 }
 
-uint64_t AgentSession::Impl::state_version() const noexcept {
+std::uint64_t AgentSession::Impl::state_version() const noexcept {
     return state_version_.load(std::memory_order_acquire);
 }
 

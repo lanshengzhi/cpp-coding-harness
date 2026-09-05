@@ -460,7 +460,7 @@ public:
 
     // ── SessionProjectionSource & State accessors ─────────────────────────
 
-    [[nodiscard]] uint64_t state_version() const noexcept;
+    [[nodiscard]] std::uint64_t state_version() const noexcept;
 
     [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> projection_snapshot() const;
 
@@ -474,9 +474,6 @@ public:
     [[nodiscard]] SessionProjectionSource& projection_source() noexcept;
     [[nodiscard]] std::shared_ptr<SessionProjectionSource> shared_projection_source() noexcept;
 
-    /// Update projection snapshot and increment state_version (with release order),
-    /// notifying dirty listener without locks.
-    void update_projection();
     /// Number of messages in live history.
     [[nodiscard]] std::size_t message_count() const;
 

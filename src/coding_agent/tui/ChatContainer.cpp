@@ -1,4 +1,5 @@
 #include "ChatContainer.hpp"
+#include "coding_agent/tui/RenderResultUtils.hpp"
 
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Markdown.hpp>
@@ -48,16 +49,6 @@ namespace {
     return "{}";
 }
 
-void append_render_result(cch::tui::RenderResult& destination, cch::tui::RenderResult rendered) {
-    const auto row_offset = destination.lines.size();
-    destination.lines.insert(destination.lines.end(),
-            std::make_move_iterator(rendered.lines.begin()),
-            std::make_move_iterator(rendered.lines.end()));
-    for (auto& image : rendered.images) {
-        image.region.row += row_offset;
-        destination.images.push_back(std::move(image));
-    }
-}
 
 struct CommittedLineCache {
     std::vector<std::string> lines{};
