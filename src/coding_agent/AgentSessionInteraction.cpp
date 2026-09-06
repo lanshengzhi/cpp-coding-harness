@@ -599,8 +599,6 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::
     if (auto swapped = agent_->set_model(std::move(model)); !swapped) {
         co_return std::unexpected(std::move(swapped.error()));
     }
-    update_projection();
-
     const auto& active_model = agent_->state().model;
 
     // Persist the `model_change` session entry (pi `appendModelChange`).
@@ -629,6 +627,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::
     }
     // The model Bash Tool reads the live model at execution time.
     refresh_bash_session_environment();
+    // Publish the switched model (and re-clamped level) to lazy projection
+    // readers: set_thinking_level only publishes on a level change, so an
+    // unchanged level would otherwise leave snapshot() stale on the old
+    // model (#597).
+    update_projection();
     co_return support::ExpectedVoid{};
 }
 

@@ -431,6 +431,14 @@ TEST_CASE(
     REQUIRE(running.terminal.inject_input("\x1b[B"));
     drain_ready(running.io);
     REQUIRE(running.terminal.inject_input("\r"));
+    // The selection crosses runtime worker hops and two render posts; wait
+    // on the painted outcome itself (never a bare drain or bare state
+    // poll) before capturing the settled screen.
+    REQUIRE(tests::pump_until(running.io, [&] {
+        const auto settled = visible_screen(running.terminal);
+        return settled.find("Model: beta-1") != std::string::npos &&
+               settled.find("Only showing models") == std::string::npos;
+    }));
     drain_ready(running.io);
 
     const auto screen = visible_screen(running.terminal);
