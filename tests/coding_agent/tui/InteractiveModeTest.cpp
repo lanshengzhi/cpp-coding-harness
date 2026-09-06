@@ -2434,7 +2434,10 @@ TEST_CASE(
 
     // The third frame is rejected with Busy. The retry timer must keep the
     // interactive run alive and submit the same pending presentation again.
-    REQUIRE(terminal.inject("x"));
+    // A full-frame-producing action is required here: under the pinned-dock
+    // projection plain editor input is echoed locally in the dock and no
+    // longer triggers a TUI frame (#597), so toggle tool output instead.
+    REQUIRE(terminal.inject("\x0f"));
     REQUIRE(pump_until(io, [&] {
         return terminal.render_end_calls >= 4;
     }, std::chrono::milliseconds{1000}));
@@ -2444,7 +2447,7 @@ TEST_CASE(
     // failures rather than being mislabeled as startup failures.
     terminal.fail_on_render_end = 5;
     terminal.fail_with_process_error = true;
-    REQUIRE(terminal.inject("y"));
+    REQUIRE(terminal.inject("\x0f"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE_FALSE(*run_result);
     CHECK(run_result->error().message == "Native TUI render failed");
