@@ -55,7 +55,7 @@ public:
     [[nodiscard]] support::ExpectedVoid drain_input(
         std::chrono::milliseconds max_ms = kDrainInputMaxMs,
         std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
-    void attach_io_executor(std::any executor) override;
+    void attach_io_executor(std::any executor);
 
 private:
     struct Impl;

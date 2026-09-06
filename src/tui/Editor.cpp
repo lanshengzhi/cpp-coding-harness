@@ -962,17 +962,29 @@ struct Editor::Impl {
         if (width == 0) return;
 
         auto lines_result = format_lines(width);
-        if (!lines_result) return;
+        if (!lines_result) {
+            if (!callback_error) callback_error = std::move(lines_result.error());
+            return;
+        }
         const auto& lines = *lines_result;
 
         for (std::size_t i = 0; i < lines.size(); ++i) {
-            static_cast<void>(options.terminal->set_dock_cursor(options.dock_offset + i, 0));
-            static_cast<void>(options.terminal->write(lines[i]));
+            if (auto result = options.terminal->set_dock_cursor(options.dock_offset + i, 0); !result) {
+                if (!callback_error) callback_error = std::move(result.error());
+                return;
+            }
+            if (auto result = options.terminal->write(lines[i]); !result) {
+                if (!callback_error) callback_error = std::move(result.error());
+                return;
+            }
         }
 
         auto loc = cursor_location_internal(/*require_focused=*/false);
         if (loc) {
-            static_cast<void>(options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column));
+            if (auto result = options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column); !result) {
+                if (!callback_error) callback_error = std::move(result.error());
+                return;
+            }
         }
 
         const auto current_line_count = lines.size();

@@ -51,7 +51,8 @@ struct EditorOptions {
     /// provider replacement, or accepted asynchronous results) land so the
     /// host can schedule a repaint.
     EditorRenderRequestSink render_request{};
-    /// Direct terminal echo for pinned dock in-place prediction.
+    /// Direct terminal echo for pinned dock in-place prediction. The terminal
+    /// is borrowed and must outlive every Editor operation.
     Terminal* terminal{nullptr};
     std::size_t dock_offset{0};
 };
@@ -99,6 +100,7 @@ public:
     void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
 
     /// Direct terminal echo configuration for pinned dock in-place prediction.
+    /// The terminal is borrowed and must outlive every Editor operation.
     void set_terminal(Terminal* terminal);
     [[nodiscard]] Terminal* terminal() const;
     void set_dock_offset(std::size_t offset);

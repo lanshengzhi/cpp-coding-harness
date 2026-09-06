@@ -184,6 +184,8 @@ struct InteractiveViewOptions {
     cch::tui::EditorRenderRequestSink render_request;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
+    /// Borrowed by the editor for local dock echo; it must outlive every view
+    /// operation.
     cch::tui::Terminal* terminal{nullptr};
 };
 
@@ -217,6 +219,7 @@ public:
     /// component observes and rebind the editor's snapshot. Serialized on the
     void set_keybindings(
         std::shared_ptr<const cch::tui::KeybindingRegistry> registry);
+    /// The terminal is borrowed and must outlive every view operation.
     void set_terminal(cch::tui::Terminal* terminal);
     void apply_event(const agent::AgentLifecycleEvent& event);
     void append_committed_message(ai::MessageVariant message);

@@ -44,6 +44,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -149,7 +150,7 @@ public:
     [[nodiscard]] std::shared_ptr<SessionProjectionSource> projection_source() const noexcept {
         return projection_source_;
     }
-    [[nodiscard]] uint64_t last_rendered_version() const noexcept { return last_rendered_version_; }
+    [[nodiscard]] std::uint64_t last_rendered_version() const noexcept { return last_rendered_version_; }
     [[nodiscard]] bool local_dock_dirty() const noexcept { return local_dock_dirty_.load(std::memory_order_acquire); }
     void set_local_dock_dirty(bool dirty = true) noexcept { local_dock_dirty_.store(dirty, std::memory_order_release); }
     [[nodiscard]] std::size_t render_count() const noexcept { return render_count_; }

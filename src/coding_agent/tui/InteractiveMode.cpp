@@ -18,6 +18,9 @@
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SuspendController.hpp"
 
+#include <cch/tui/ProcessTerminal.hpp>
+
+#include <any>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -518,7 +521,9 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
     cch::tui::Terminal& terminal,
     InteractiveSessionRun run) {
     const auto executor = co_await boost::asio::this_coro::executor;
-    terminal.attach_io_executor(std::any{executor});
+    if (auto* process_terminal = dynamic_cast<cch::tui::ProcessTerminal*>(&terminal)) {
+        process_terminal->attach_io_executor(std::any{executor});
+    }
     const bool is_boot = std::holds_alternative<DeferBoot>(run.session_intent());
     auto engine = std::make_shared<InteractiveEngine>(terminal, executor);
     if (auto started = engine->start(std::move(run)); !started) {
