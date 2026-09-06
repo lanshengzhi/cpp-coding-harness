@@ -161,6 +161,11 @@ support::ExpectedVoid Tui::start() {
         return {};
     }
 
+    // The latch is armed before the terminal starts: ProcessTerminal
+    // forwards startup-preserved input synchronously inside start(), and
+    // dropping it on the not-yet-started guard would lose keystrokes typed
+    // during the capability probes (#610).
+    started_ = true;
     if (auto result = terminal_.start(
             [this](std::string input) -> support::ExpectedVoid {
                 handle_input(std::move(input));
@@ -171,9 +176,9 @@ support::ExpectedVoid Tui::start() {
                 return {};
             });
         !result) {
+        started_ = false;
         return std::unexpected(result.error());
     }
-    started_ = true;
 
     if (auto result = terminal_.set_cursor_visible(false); !result) {
         started_ = false;
@@ -302,7 +307,7 @@ support::ExpectedVoid Tui::render() {
     // Cropped rows are never addressed, so the overflow is nonfatal; real
     // terminal write failures still propagate.
     const std::size_t dock_capacity =
-            has_dock && viewport_height >= 2 ? dimensions.rows - viewport_height : dimensions.rows;
+            has_dock && viewport_height >= 1 ? dimensions.rows - viewport_height : dimensions.rows;
     const std::size_t dock_skip = dock_height > dock_capacity ? dock_height - dock_capacity : 0;
 
     // The full composed buffer is written to the terminal's main screen with
@@ -350,7 +355,9 @@ support::ExpectedVoid Tui::render() {
     }
 
     auto apply_scroll_margins = [&]() -> support::ExpectedVoid {
-        if (has_dock && viewport_height >= 2) {
+        // A one-row viewport is a one-row scroll region (0;0): the transcript
+        // row stays above the dock instead of the dock overwriting it (#611).
+        if (has_dock && viewport_height >= 1) {
             return terminal_.set_scroll_margins(0, viewport_height - 1);
         }
         return terminal_.reset_scroll_margins();

@@ -551,7 +551,9 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
 
 support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
-    if (bottom_row >= impl_->dimensions.rows || top_row >= bottom_row) {
+    // An equal top and bottom is a valid one-row scroll region; the dock
+    // cursor arithmetic depends on it for a one-row viewport (#611).
+    if (bottom_row >= impl_->dimensions.rows || top_row > bottom_row) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Virtual Terminal scroll margins are invalid"));
     }
