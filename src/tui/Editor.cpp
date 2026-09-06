@@ -275,10 +275,15 @@ struct Editor::Impl {
     void notify_render_request() {
         if (!render_request_sink || !*render_request_sink) return;
         bool sink_threw = false;
+        std::optional<support::Error> sink_error;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
 #endif
-            if (*render_request_sink) static_cast<void>((*render_request_sink)());
+            if (*render_request_sink) {
+                if (auto result = (*render_request_sink)(); !result) {
+                    sink_error = std::move(result.error());
+                }
+            }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (...) {
             sink_threw = true;
@@ -290,6 +295,11 @@ struct Editor::Impl {
             callback_error = support::make_error(support::ErrorCode::Unknown,
                     "Editor render request sink failed",
                     "the render request callback threw an exception");
+            *render_request_sink = nullptr;
+        } else if (sink_error) {
+            // An Expected failure deactivates the same weak observer so a
+            // failing sink cannot flood the loop with repeat requests.
+            callback_error = std::move(*sink_error);
             *render_request_sink = nullptr;
         }
     }
