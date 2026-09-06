@@ -61,17 +61,9 @@ using interactive_view_detail::queued_editor_texts;
 
 InteractiveEngine::~InteractiveEngine() = default;
 
-InteractiveEngine::InteractiveEngine(
-    cch::tui::Terminal& terminal,
-    boost::asio::any_io_executor executor)
-    : session_(nullptr),
-      terminal_(terminal),
-      tui_(terminal),
-      executor_(std::move(executor)),
-      exit_wait_(executor_),
-      render_retry_timer_(executor_),
-      frame_ticker_(executor_),
-      flows_settled_(executor_) {
+InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor)
+    : session_(nullptr), terminal_(terminal), tui_(terminal), executor_(std::move(executor)), exit_wait_(executor_),
+      render_retry_timer_(executor_), frame_ticker_(executor_), flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     render_retry_timer_.expires_at(std::chrono::steady_clock::time_point::max());
     frame_ticker_.expires_at(std::chrono::steady_clock::time_point::max());
@@ -597,9 +589,7 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
     return std::unexpected(startup_error(error));
 }
 
-void InteractiveEngine::post_invalidate() {
-    local_dock_dirty_.store(true, std::memory_order_release);
-}
+void InteractiveEngine::post_invalidate() { local_dock_dirty_.store(true, std::memory_order_release); }
 
 void InteractiveEngine::post_exit() {
     const auto weak = weak_from_this();
@@ -608,9 +598,7 @@ void InteractiveEngine::post_exit() {
     });
 }
 
-void InteractiveEngine::post_render() {
-    local_dock_dirty_.store(true, std::memory_order_release);
-}
+void InteractiveEngine::post_render() { local_dock_dirty_.store(true, std::memory_order_release); }
 
 void InteractiveEngine::schedule_render_retry() {
     if (!running_ || render_retry_pending_) return;
@@ -718,9 +706,7 @@ void InteractiveEngine::show_error(std::string text) {
     tui_.invalidate();
 }
 
-void InteractiveEngine::request_render() {
-    local_dock_dirty_.store(true, std::memory_order_release);
-}
+void InteractiveEngine::request_render() { local_dock_dirty_.store(true, std::memory_order_release); }
 
 void InteractiveEngine::invalidate() {
     local_dock_dirty_.store(true, std::memory_order_release);

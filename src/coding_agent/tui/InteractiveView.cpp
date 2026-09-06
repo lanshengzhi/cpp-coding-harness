@@ -66,61 +66,41 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
     editor_.set_terminal(options.terminal);
 }
 
-void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) {
-    chat_.initialize(snapshot);
-}
+void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) { chat_.initialize(snapshot); }
 
 void InteractiveView::apply_render_settings(bool hide_thinking_block, std::size_t output_pad) {
     chat_.set_hide_thinking_block(hide_thinking_block);
     chat_.set_output_pad(output_pad);
 }
 
-void InteractiveView::set_autocomplete_provider(
-    std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
+void InteractiveView::set_autocomplete_provider(std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
     editor_.set_autocomplete_provider(std::move(provider));
 }
 
-void InteractiveView::set_keybindings(
-    std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
+void InteractiveView::set_keybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
     keybindings_->replace(registry);
     editor_.set_keybindings(std::move(registry));
 }
 
-void InteractiveView::set_terminal(cch::tui::Terminal* terminal) {
-    editor_.set_terminal(terminal);
-}
+void InteractiveView::set_terminal(cch::tui::Terminal* terminal) { editor_.set_terminal(terminal); }
 
-void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) {
-    chat_.apply_event(event);
-}
+void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) { chat_.apply_event(event); }
 
 void InteractiveView::append_committed_message(ai::MessageVariant message) {
     chat_.append_committed_message(std::move(message));
 }
 
-void InteractiveView::clear_transcript() {
-    chat_.clear();
-}
+void InteractiveView::clear_transcript() { chat_.clear(); }
 
-void InteractiveView::append_frontend_message(std::string text) {
-    chat_.append_frontend_message(std::move(text));
-}
+void InteractiveView::append_frontend_message(std::string text) { chat_.append_frontend_message(std::move(text)); }
 
-void InteractiveView::append_diagnostic(std::string text) {
-    chat_.append_diagnostic(std::move(text));
-}
+void InteractiveView::append_diagnostic(std::string text) { chat_.append_diagnostic(std::move(text)); }
 
-void InteractiveView::append_warning(std::string text) {
-    chat_.append_warning(std::move(text));
-}
+void InteractiveView::append_warning(std::string text) { chat_.append_warning(std::move(text)); }
 
-void InteractiveView::append_trust_warning(std::string text) {
-    chat_.append_trust_warning(std::move(text));
-}
+void InteractiveView::append_trust_warning(std::string text) { chat_.append_trust_warning(std::move(text)); }
 
-void InteractiveView::append_status_message(std::string text) {
-    chat_.append_status_message(std::move(text));
-}
+void InteractiveView::append_status_message(std::string text) { chat_.append_status_message(std::move(text)); }
 
 void InteractiveView::show_status_working(std::string message) {
     // pi `setWorkingVisible`: an already-active Working indicator is
@@ -155,13 +135,9 @@ void InteractiveView::set_status_retry_message(int attempt, int max_attempts, in
         retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
 }
 
-void InteractiveView::set_loaded_resources_data(LoadedResources::Data data) {
-    resources_.set_data(std::move(data));
-}
+void InteractiveView::set_loaded_resources_data(LoadedResources::Data data) { resources_.set_data(std::move(data)); }
 
-void InteractiveView::clear_status_indicator() {
-    status_indicator_.reset();
-}
+void InteractiveView::clear_status_indicator() { status_indicator_.reset(); }
 
 void InteractiveView::replace_status_indicator(StatusIndicator::Kind kind, std::string message) {
     status_indicator_ = std::make_unique<StatusIndicator>(
@@ -196,17 +172,13 @@ void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component
     }
 }
 
-void InteractiveView::restore_editor() {
-    editor_replacement_.reset();
-}
+void InteractiveView::restore_editor() { editor_replacement_.reset(); }
 
 void InteractiveView::append_user_bash_diagnostic(std::string text) {
     chat_.append_user_bash_diagnostic(std::move(text));
 }
 
-void InteractiveView::restore_submitted_text(const std::string& text) {
-    restore_editor_text({text});
-}
+void InteractiveView::restore_submitted_text(const std::string& text) { restore_editor_text({text}); }
 
 void InteractiveView::clear_pending_bash(const EditorInterruptRequest& request) {
     if (editor_revision_ == request.editor_revision) {
@@ -218,25 +190,15 @@ void InteractiveView::clear_pending_bash(const EditorInterruptRequest& request) 
         editor_.expanded_text()));
 }
 
-void InteractiveView::insert_editor_text(std::string text) {
-    editor_.insert_text_at_cursor(std::move(text));
-}
+void InteractiveView::insert_editor_text(std::string text) { editor_.insert_text_at_cursor(std::move(text)); }
 
-std::string InteractiveView::editor_text() const {
-    return editor_.text();
-}
+std::string InteractiveView::editor_text() const { return editor_.text(); }
 
-std::string InteractiveView::editor_expanded_text() const {
-    return editor_.expanded_text();
-}
+std::string InteractiveView::editor_expanded_text() const { return editor_.expanded_text(); }
 
-void InteractiveView::set_editor_text(std::string text) {
-    editor_.set_text(std::move(text));
-}
+void InteractiveView::set_editor_text(std::string text) { editor_.set_text(std::move(text)); }
 
-void InteractiveView::restore_queued_text(const std::vector<std::string>& messages) {
-    restore_editor_text(messages);
-}
+void InteractiveView::restore_queued_text(const std::vector<std::string>& messages) { restore_editor_text(messages); }
 
 void InteractiveView::set_pending_input(const agent::AgentInputQueues& queues) {
     pending_steering_.clear();
@@ -470,10 +432,8 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         chat_result = std::move(*rendered);
     }
 
-    const std::size_t dock_k =
-        pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
-    const std::size_t viewport_height =
-        available_rows_ > dock_k ? (available_rows_ - dock_k) : 0;
+    const std::size_t dock_k = pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
+    const std::size_t viewport_height = available_rows_ > dock_k ? (available_rows_ - dock_k) : 0;
 
     cch::tui::RenderResult transcript_result;
     transcript_result.viewport_height = viewport_height;
@@ -492,24 +452,20 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         std::make_move_iterator(chat_result.lines.end()));
 
     transcript_result.dock_lines.reserve(dock_k);
-    transcript_result.dock_lines.insert(
-        transcript_result.dock_lines.end(),
-        std::make_move_iterator(pending_lines.begin()),
-        std::make_move_iterator(pending_lines.end()));
-    transcript_result.dock_lines.insert(
-        transcript_result.dock_lines.end(),
-        std::make_move_iterator(status_lines.begin()),
-        std::make_move_iterator(status_lines.end()));
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(pending_lines.begin()),
+            std::make_move_iterator(pending_lines.end()));
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(status_lines.begin()),
+            std::make_move_iterator(status_lines.end()));
     editor_row_offset_ = pending_lines.size() + status_lines.size();
     editor_.set_dock_offset(editor_row_offset_);
-    transcript_result.dock_lines.insert(
-        transcript_result.dock_lines.end(),
-        std::make_move_iterator(editor_lines.begin()),
-        std::make_move_iterator(editor_lines.end()));
-    transcript_result.dock_lines.insert(
-        transcript_result.dock_lines.end(),
-        std::make_move_iterator(footer_lines.begin()),
-        std::make_move_iterator(footer_lines.end()));
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(editor_lines.begin()),
+            std::make_move_iterator(editor_lines.end()));
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(footer_lines.begin()),
+            std::make_move_iterator(footer_lines.end()));
     return transcript_result;
 }
 
@@ -697,9 +653,7 @@ std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const
     return cursor;
 }
 
-void InteractiveView::set_available_height(std::size_t rows) {
-    available_rows_ = std::max<std::size_t>(1, rows);
-}
+void InteractiveView::set_available_height(std::size_t rows) { available_rows_ = std::max<std::size_t>(1, rows); }
 
 void InteractiveView::record_callback_error(
     std::string message,

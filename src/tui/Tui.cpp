@@ -71,10 +71,7 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
 }
 
 /// Write a single full-width line directly to the terminal's reserved bottom dock region.
-[[nodiscard]] support::ExpectedVoid write_dock_line(
-    Terminal& terminal,
-    std::size_t dock_row,
-    std::string_view line) {
+[[nodiscard]] support::ExpectedVoid write_dock_line(Terminal& terminal, std::size_t dock_row, std::string_view line) {
     if (auto result = terminal.set_dock_cursor(dock_row, 0); !result) {
         return std::unexpected(result.error());
     }
@@ -295,8 +292,8 @@ support::ExpectedVoid Tui::render() {
     auto& new_dock_lines = materialized.dock_lines;
     const bool has_dock = !new_dock_lines.empty() || materialized.viewport_height.has_value();
     const std::size_t dock_height = new_dock_lines.size();
-    const std::size_t viewport_height = materialized.viewport_height.value_or(
-        dimensions.rows > dock_height ? dimensions.rows - dock_height : 0);
+    const std::size_t viewport_height =
+            materialized.viewport_height.value_or(dimensions.rows > dock_height ? dimensions.rows - dock_height : 0);
     // A dock taller than its addressable rows (an oversized replacement
     // dialog or autocomplete under a shrunk terminal, #607) is cropped from
     // the top so the editor and footer keep the physical bottom rows.
@@ -414,10 +411,9 @@ support::ExpectedVoid Tui::render() {
             if (!has_dock) {
                 // Leave the cursor at the end of the written content (column 0) so
                 // the terminal advances its scrollback past the rendered content.
-                if (auto result = terminal_.set_cursor(CursorPosition{
-                        .column = 0,
-                        .row = new_lines.empty() ? 0U : new_lines.size() - 1});
-                    !result) {
+                if (auto result = terminal_.set_cursor(
+                            CursorPosition{.column = 0, .row = new_lines.empty() ? 0U : new_lines.size() - 1});
+                        !result) {
                     return std::unexpected(result.error());
                 }
             }
@@ -435,63 +431,58 @@ support::ExpectedVoid Tui::render() {
             return std::unexpected(margins.error());
         }
 
-
         // pi differential: first-changed-line tracking over the full buffer.
         const auto min_previous = std::min(previous_lines_.size(), new_lines.size());
         std::size_t first_diff = 0;
         while (first_diff < min_previous && previous_lines_[first_diff] == new_lines[first_diff]) {
             ++first_diff;
         }
-        const auto viewport_unchanged =
-            first_diff == min_previous && previous_lines_.size() == new_lines.size();
-        const auto dock_unchanged =
-            !has_dock || (previous_dock_lines_ == new_dock_lines);
+        const auto viewport_unchanged = first_diff == min_previous && previous_lines_.size() == new_lines.size();
+        const auto dock_unchanged = !has_dock || (previous_dock_lines_ == new_dock_lines);
         if (viewport_unchanged && dock_unchanged) return {};
 
         if (!viewport_unchanged) {
 
-        // A change above the tracked viewport, or new content that ends above
-        // it, cannot be reached with line flow: reflow from a clean screen
-        // (pi `firstChanged < viewportTop` / `targetRow < viewportTop` full
-        // redraw).
-        const auto target_row = new_lines.empty() ? 0U : new_lines.size() - 1;
-        if (first_diff < viewport_top_ || target_row < viewport_top_) {
-            return clear_and_rewrite();
-        }
-
-        // Line-flow differential: write changed and appended lines from
-        // first_diff through the end of the buffer. Rows at or past the
-        // visible bottom advance the terminal's scrollback (the absolute-
-        // cursor seam scrolls on addressing a row below the viewport).
-        for (std::size_t row = first_diff; row < new_lines.size(); ++row) {
-            const CellRegion region{
-                .column = 0,
-                .row = row,
-                .columns = dimensions.columns,
-                .rows = 1,
-            };
-            if (auto result = remove_images_intersecting(region); !result) {
-                return std::unexpected(result.error());
+            // A change above the tracked viewport, or new content that ends above
+            // it, cannot be reached with line flow: reflow from a clean screen
+            // (pi `firstChanged < viewportTop` / `targetRow < viewportTop` full
+            // redraw).
+            const auto target_row = new_lines.empty() ? 0U : new_lines.size() - 1;
+            if (first_diff < viewport_top_ || target_row < viewport_top_) {
+                return clear_and_rewrite();
             }
-            if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
-                return std::unexpected(result.error());
-            }
-        }
 
-        // Clear-on-shrink: stale rows below the new content that are still
-        // inside the visible viewport are cleared in place (rows that already
-        // scrolled into the terminal's scrollback keep their history).
-            if (new_lines.size() < previous_lines_.size()) {
-                const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
-                const auto stale_end = std::min(
-                    previous_lines_.size(),
-                    viewport_top_ + visible_rows);
-                for (std::size_t row = new_lines.size(); row < stale_end; ++row) {
-                    const CellRegion region{
+            // Line-flow differential: write changed and appended lines from
+            // first_diff through the end of the buffer. Rows at or past the
+            // visible bottom advance the terminal's scrollback (the absolute-
+            // cursor seam scrolls on addressing a row below the viewport).
+            for (std::size_t row = first_diff; row < new_lines.size(); ++row) {
+                const CellRegion region{
                         .column = 0,
                         .row = row,
                         .columns = dimensions.columns,
                         .rows = 1,
+                };
+                if (auto result = remove_images_intersecting(region); !result) {
+                    return std::unexpected(result.error());
+                }
+                if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
+                    return std::unexpected(result.error());
+                }
+            }
+
+            // Clear-on-shrink: stale rows below the new content that are still
+            // inside the visible viewport are cleared in place (rows that already
+            // scrolled into the terminal's scrollback keep their history).
+            if (new_lines.size() < previous_lines_.size()) {
+                const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
+                const auto stale_end = std::min(previous_lines_.size(), viewport_top_ + visible_rows);
+                for (std::size_t row = new_lines.size(); row < stale_end; ++row) {
+                    const CellRegion region{
+                            .column = 0,
+                            .row = row,
+                            .columns = dimensions.columns,
+                            .rows = 1,
                     };
                     if (auto result = remove_images_intersecting(region); !result) {
                         return std::unexpected(result.error());
@@ -530,9 +521,7 @@ support::ExpectedVoid Tui::render() {
     // inside the render body used the pre-write viewport, which is the correct
     // bound for rows already visible before any scroll.
     const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
-    viewport_top_ = std::max(
-        viewport_top_,
-        new_lines.size() > visible_rows ? new_lines.size() - visible_rows : 0U);
+    viewport_top_ = std::max(viewport_top_, new_lines.size() > visible_rows ? new_lines.size() - visible_rows : 0U);
 
     // Position IME cursor based on focused component
     if (render_result) {
@@ -553,16 +542,20 @@ support::ExpectedVoid Tui::render() {
                     }
                 } else {
                     const auto viewport_bottom = viewport_top_ + viewport_height - 1;
-                    if (cursor_loc->row < viewport_top_) cursor_loc->row = viewport_top_;
-                    else if (cursor_loc->row > viewport_bottom) cursor_loc->row = viewport_bottom;
+                    if (cursor_loc->row < viewport_top_)
+                        cursor_loc->row = viewport_top_;
+                    else if (cursor_loc->row > viewport_bottom)
+                        cursor_loc->row = viewport_bottom;
                     if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
                         render_result = std::unexpected(cursor_result.error());
                     }
                 }
             } else {
                 const auto viewport_bottom = viewport_top_ + dimensions.rows - 1;
-                if (cursor_loc->row < viewport_top_) cursor_loc->row = viewport_top_;
-                else if (cursor_loc->row > viewport_bottom) cursor_loc->row = viewport_bottom;
+                if (cursor_loc->row < viewport_top_)
+                    cursor_loc->row = viewport_top_;
+                else if (cursor_loc->row > viewport_bottom)
+                    cursor_loc->row = viewport_bottom;
                 if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
                     render_result = std::unexpected(cursor_result.error());
                 }
@@ -747,9 +740,7 @@ support::ExpectedVoid Tui::set_focus(Component* component) {
     return {};
 }
 
-void Tui::set_render_request_sink(TuiRenderRequestSink sink) {
-    render_request_sink_ = std::move(sink);
-}
+void Tui::set_render_request_sink(TuiRenderRequestSink sink) { render_request_sink_ = std::move(sink); }
 
 void Tui::invalidate() {
     const bool request_render = started_ && !pending_render_;

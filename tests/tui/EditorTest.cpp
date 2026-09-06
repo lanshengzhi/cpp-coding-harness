@@ -1667,29 +1667,26 @@ TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][ed
 }
 #endif
 
-TEST_CASE("Editor client-side prediction emits in-place local echo to pinned dock",
-        "[tui][editor][dock][issue605]") {
+TEST_CASE("Editor client-side prediction emits in-place local echo to pinned dock", "[tui][editor][dock][issue605]") {
     cch::tui::VirtualTerminal vt(cch::tui::VirtualTerminalOptions{
             .columns = 80,
             .rows = 24,
     });
-    REQUIRE(vt.start(
-            [](std::string) -> cch::support::ExpectedVoid { return {}; },
+    REQUIRE(vt.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
             [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     std::string submitted_text;
     cch::tui::EditorOptions options{
-        .max_visible_lines = 5,
-        .terminal = &vt,
-        .dock_offset = 18,
+            .max_visible_lines = 5,
+            .terminal = &vt,
+            .dock_offset = 18,
     };
-    cch::tui::Editor editor(
-        std::move(options),
-        /*on_change=*/{},
-        /*on_submit=*/[&](std::string text) -> cch::support::ExpectedVoid {
-            submitted_text = std::move(text);
-            return {};
-        });
+    cch::tui::Editor editor(std::move(options),
+            /*on_change=*/{},
+            /*on_submit=*/[&](std::string text) -> cch::support::ExpectedVoid {
+                submitted_text = std::move(text);
+                return {};
+            });
     editor.set_focused(true);
 
     // Warm layout width

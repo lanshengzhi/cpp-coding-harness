@@ -65,8 +65,7 @@ struct SessionUiBindingHooks {
 /// `session.on(...)`), and `detach()` releases them for session replacement
 /// and final Close. Executor-confined like the host it serves; the footer
 /// data computation is polled by the view's footer on every render.
-class SessionUiBinding final : public SessionProjectionSource,
-                               public std::enable_shared_from_this<SessionUiBinding> {
+class SessionUiBinding final : public SessionProjectionSource, public std::enable_shared_from_this<SessionUiBinding> {
 public:
     SessionUiBinding(
         boost::asio::any_io_executor executor,

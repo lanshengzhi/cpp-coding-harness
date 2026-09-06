@@ -210,13 +210,11 @@ TEST_CASE(
     REQUIRE(tui.stop());
 }
 
-TEST_CASE(
-    "VirtualTerminal partitioned scrolling preserves bottom dock rows in place",
-    "[tui][terminal][dock][issue598]") {
+TEST_CASE("VirtualTerminal partitioned scrolling preserves bottom dock rows in place",
+        "[tui][terminal][dock][issue598]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
-    REQUIRE(terminal.start(
-        [](std::string) -> support::ExpectedVoid { return {}; },
-        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
 
     // Configure scroll margins: rows 0..6 as viewport (height 7), rows 7..9 as dock (height 3).
     REQUIRE(terminal.set_scroll_margins(0, 6));
@@ -277,13 +275,11 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-    "VirtualTerminal set_dock_cursor validates dimensions and positions correctly",
-    "[tui][terminal][dock][issue598]") {
+TEST_CASE("VirtualTerminal set_dock_cursor validates dimensions and positions correctly",
+        "[tui][terminal][dock][issue598]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
-    REQUIRE(terminal.start(
-        [](std::string) -> support::ExpectedVoid { return {}; },
-        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
 
     // With scroll margins 0..6 (dock rows 7..9, dock height 3)
     REQUIRE(terminal.set_scroll_margins(0, 6));
@@ -325,13 +321,10 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-    "VirtualTerminal reset_scroll_margins restores full-screen scrolling",
-    "[tui][terminal][dock][issue598]") {
+TEST_CASE("VirtualTerminal reset_scroll_margins restores full-screen scrolling", "[tui][terminal][dock][issue598]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
-    REQUIRE(terminal.start(
-        [](std::string) -> support::ExpectedVoid { return {}; },
-        [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
 
     // Set scroll margins 0..6
     REQUIRE(terminal.set_scroll_margins(0, 6));

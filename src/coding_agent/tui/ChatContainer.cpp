@@ -49,7 +49,6 @@ namespace {
     return "{}";
 }
 
-
 struct CommittedLineCache {
     std::vector<std::string> lines{};
     std::vector<cch::tui::InlineImageRenderRegion> images{};

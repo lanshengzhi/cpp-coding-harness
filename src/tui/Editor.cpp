@@ -249,8 +249,8 @@ struct Editor::Impl {
                current.cursor_line == expected.cursor_line && current.cursor_column == expected.cursor_column;
     }
 
-    void update_completion_effect(detail::EditorCompletionEffect effect,
-            const detail::EditorCompletionView& request_view) {
+    void update_completion_effect(
+            detail::EditorCompletionEffect effect, const detail::EditorCompletionView& request_view) {
         autocomplete_menu = std::move(effect.menu);
         if (!effect.application || !completion_view_matches(request_view)) return;
         const auto submit_after = effect.submit;
@@ -258,8 +258,8 @@ struct Editor::Impl {
         if (submit_after) submit();
     }
 
-    void handle_completion_interaction(detail::EditorCompletionInteraction interaction,
-            const detail::EditorCompletionView& request_view) {
+    void handle_completion_interaction(
+            detail::EditorCompletionInteraction interaction, const detail::EditorCompletionView& request_view) {
         auto result = completion_session->handle(std::move(interaction), request_view);
         if (!result) {
             callback_error = std::move(result.error());
@@ -562,8 +562,7 @@ struct Editor::Impl {
         maybe_trigger_autocomplete(text.back());
     }
 
-    void insert_text(
-            std::string text, bool record_undo, bool update_autocomplete = true) {
+    void insert_text(std::string text, bool record_undo, bool update_autocomplete = true) {
         text = normalize_input(std::move(text));
         if (text.empty()) return;
         exit_history_browsing();
@@ -855,16 +854,16 @@ struct Editor::Impl {
 
     support::Expected<std::vector<std::string>> format_lines(std::size_t width) {
         if (width == 0) {
-            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
         }
         layout_width = width;
         for (const auto& logical_line : buffer.document()) {
             for (const auto& segment : logical_line) {
                 for (const auto& grapheme : detail::split_graphemes(segment.text)) {
                     if (detail::grapheme_width(grapheme) > width) {
-                        return std::unexpected(support::make_error(
-                            support::ErrorCode::Validation,
-                            "Editor grapheme is wider than the available visible width"));
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Editor grapheme is wider than the available visible width"));
                     }
                 }
             }
@@ -874,7 +873,7 @@ struct Editor::Impl {
         const auto cur = buffer.cursor();
         for (std::size_t index = 0; index < visual.size(); ++index) {
             if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
-                cur.column <= visual[index].end) {
+                    cur.column <= visual[index].end) {
                 cursor_line = index;
                 break;
             }
@@ -884,8 +883,7 @@ struct Editor::Impl {
         if (cursor_line >= scroll_offset + visible_count) scroll_offset = cursor_line + 1 - visible_count;
         std::vector<std::string> result;
         if (theme.border) {
-            auto top_border =
-                    scroll_offset > 0 ? scroll_border("↑", scroll_offset, width) : horizontal_rule(width);
+            auto top_border = scroll_offset > 0 ? scroll_border("↑", scroll_offset, width) : horizontal_rule(width);
             auto styled_border = detail::apply_text_style(theme.border, std::move(top_border), "Editor border");
             if (!styled_border) return std::unexpected(styled_border.error());
             result.push_back(std::move(*styled_border));
@@ -927,9 +925,8 @@ struct Editor::Impl {
         bool found = false;
         const auto cur = buffer.cursor();
         for (std::size_t index = 0; index < visual.size(); ++index) {
-            if (visual[index].logical_line == cur.line &&
-                cur.column >= visual[index].start &&
-                cur.column <= visual[index].end) {
+            if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
+                    cur.column <= visual[index].end) {
                 visual_row = index;
                 found = true;
                 break;
@@ -1469,7 +1466,6 @@ void Editor::set_available_height(std::size_t rows) {
     auto& impl = operation.impl;
     impl.available_height = rows;
 }
-
 
 void Editor::set_terminal(Terminal* terminal) {
     auto operation = impl_->serialized_operation(impl_);

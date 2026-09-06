@@ -127,7 +127,8 @@ template <typename T>
 void scroll_up(T& impl, std::size_t count) {
     if (count == 0) return;
     const auto top = impl.margins_active ? impl.margin_top : 0;
-    const auto bottom = impl.margins_active ? impl.margin_bottom : (impl.dimensions.rows > 0 ? impl.dimensions.rows - 1 : 0);
+    const auto bottom =
+            impl.margins_active ? impl.margin_bottom : (impl.dimensions.rows > 0 ? impl.dimensions.rows - 1 : 0);
     if (top >= bottom || bottom >= impl.dimensions.rows) return;
     const auto region_height = bottom - top + 1;
 
@@ -551,9 +552,8 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
 support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     if (bottom_row >= impl_->dimensions.rows || top_row >= bottom_row) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal scroll margins are invalid"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal scroll margins are invalid"));
     }
     impl_->margin_top = top_row;
     impl_->margin_bottom = bottom_row;
@@ -578,8 +578,7 @@ support::ExpectedVoid VirtualTerminal::set_dock_cursor(std::size_t dock_row, std
     const auto screen_row = dock_start + dock_row;
     if (screen_row >= impl_->dimensions.rows || column > impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal dock cursor position is outside its dimensions"));
+                support::ErrorCode::Validation, "Virtual Terminal dock cursor position is outside its dimensions"));
     }
     impl_->cursor.row = screen_row;
     impl_->cursor.column = column;

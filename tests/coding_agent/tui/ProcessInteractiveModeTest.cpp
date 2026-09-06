@@ -207,8 +207,8 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
     cch::tui::ProcessTerminal terminal({
-        .input_fd = pty->slave.get(),
-        .output_fd = pty->slave.get(),
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
     });
     boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
@@ -220,30 +220,25 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
     }
 
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created->session)
-        .with_agent_config_directory(config.path())
-        .with_initial_prompt(long_prompt)
-        .build();
-    boost::asio::co_spawn(
-        io,
-        cch::coding_agent::tui::run_interactive_mode(
-            terminal,
-            std::move(run)),
-        [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
-            run_exception = exception;
-            run_result.emplace(std::move(result));
-        });
+                       .with_session(*created->session)
+                       .with_agent_config_directory(config.path())
+                       .with_initial_prompt(long_prompt)
+                       .build();
+    boost::asio::co_spawn(io,
+            cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
+                run_exception = exception;
+                run_result.emplace(std::move(result));
+            });
     std::jthread runner([&] { io.run(); });
     InteractiveSmokeCleanup cleanup{
-        *created->session,
-        terminal,
-        io,
-        runner,
-        pty->master.get(),
+            *created->session,
+            terminal,
+            io,
+            runner,
+            pty->master.get(),
     };
-    REQUIRE(cch::tests::wait_until(
-        [&] { return terminal.modes().started; },
-        std::chrono::seconds(2)));
+    REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
     auto output = cch::tests::read_available(pty->master.get());
 
     // Wait for the prompt and assistant response to settle
@@ -303,38 +298,33 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
     cch::tui::ProcessTerminal terminal({
-        .input_fd = pty->slave.get(),
-        .output_fd = pty->slave.get(),
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
     });
     boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
 
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created->session)
-        .with_agent_config_directory(config.path())
-        .with_initial_prompt("test prompt")
-        .build();
-    boost::asio::co_spawn(
-        io,
-        cch::coding_agent::tui::run_interactive_mode(
-            terminal,
-            std::move(run)),
-        [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
-            run_exception = exception;
-            run_result.emplace(std::move(result));
-        });
+                       .with_session(*created->session)
+                       .with_agent_config_directory(config.path())
+                       .with_initial_prompt("test prompt")
+                       .build();
+    boost::asio::co_spawn(io,
+            cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
+                run_exception = exception;
+                run_result.emplace(std::move(result));
+            });
     std::jthread runner([&] { io.run(); });
     InteractiveSmokeCleanup cleanup{
-        *created->session,
-        terminal,
-        io,
-        runner,
-        pty->master.get(),
+            *created->session,
+            terminal,
+            io,
+            runner,
+            pty->master.get(),
     };
-    REQUIRE(cch::tests::wait_until(
-        [&] { return terminal.modes().started; },
-        std::chrono::seconds(2)));
+    REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
     auto output = cch::tests::read_available(pty->master.get());
     REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
 
@@ -343,10 +333,10 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
 
     // Resize terminal from 24 to 32 rows
     winsize dimensions{
-        .ws_row = 32,
-        .ws_col = 80,
-        .ws_xpixel = 0,
-        .ws_ypixel = 0,
+            .ws_row = 32,
+            .ws_col = 80,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
     };
     REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &dimensions) == 0);
 
@@ -357,12 +347,11 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     // Viewport height becomes 32 - 7 = 25 rows -> margin \x1b[1;25r
     // Dock lines move to bottom rows 26..32
     bool matched = cch::tests::wait_until(
-        [&] {
-            output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
-            return output.find("\x1b[1;25r") != std::string::npos &&
-                   output.find("\x1b[32;") != std::string::npos;
-        },
-        std::chrono::seconds(2));
+            [&] {
+                output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
+                return output.find("\x1b[1;25r") != std::string::npos && output.find("\x1b[32;") != std::string::npos;
+            },
+            std::chrono::seconds(2));
     UNSCOPED_INFO("Resize test output:\n" << output);
     REQUIRE(matched);
 
@@ -407,40 +396,35 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
     cch::tui::ProcessTerminal terminal({
-        .input_fd = pty->slave.get(),
-        .output_fd = pty->slave.get(),
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
     });
     boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(*created->session)
-        .with_agent_config_directory(config.path())
-        .with_initial_prompt("pty prompt")
-        .with_initial_prompt_options({
-            .images = {cch::ai::image_content("cG5n", "image/png")},
-        })
-        .build();
-    boost::asio::co_spawn(
-        io,
-        cch::coding_agent::tui::run_interactive_mode(
-            terminal,
-            std::move(run)),
-        [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
-            run_exception = exception;
-            run_result.emplace(std::move(result));
-        });
+                       .with_session(*created->session)
+                       .with_agent_config_directory(config.path())
+                       .with_initial_prompt("pty prompt")
+                       .with_initial_prompt_options({
+                               .images = {cch::ai::image_content("cG5n", "image/png")},
+                       })
+                       .build();
+    boost::asio::co_spawn(io,
+            cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
+                run_exception = exception;
+                run_result.emplace(std::move(result));
+            });
     std::jthread runner([&] { io.run(); });
     InteractiveSmokeCleanup cleanup{
-        *created->session,
-        terminal,
-        io,
-        runner,
-        pty->master.get(),
+            *created->session,
+            terminal,
+            io,
+            runner,
+            pty->master.get(),
     };
-    REQUIRE(cch::tests::wait_until(
-        [&] { return terminal.modes().started; },
-        std::chrono::seconds(2)));
+    REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
     auto output = cch::tests::read_available(pty->master.get());
     REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
     const std::string test_input = "hello world";

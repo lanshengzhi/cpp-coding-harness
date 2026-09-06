@@ -209,9 +209,7 @@ bool AssistantMessageComponent::has_tool_calls() const {
     return has_tool_calls_;
 }
 
-std::size_t AssistantMessageComponent::frozen_block_count() const {
-    return frozen_blocks_.size();
-}
+std::size_t AssistantMessageComponent::frozen_block_count() const { return frozen_blocks_.size(); }
 
 bool AssistantMessageComponent::has_open_tail() const {
     return !trimmed(std::string_view{active_tail_text_}.substr(active_tail_begin_)).empty();
@@ -413,12 +411,12 @@ void AssistantMessageComponent::update_suffix() {
 
     if (stop_reason_ == ai::AssistantStopReason::Length) {
         (void)suffix_content_.add_child(std::make_unique<cch::tui::Spacer>(1));
-        (void)suffix_content_.add_child(std::make_unique<cch::tui::Text>(
-            theme_.foreground(
-                ThemeToken::Error,
-                "Error: Model stopped because it reached the maximum output token limit. The response may be incomplete."),
-            output_pad_,
-            0));
+        (void)suffix_content_.add_child(
+                std::make_unique<cch::tui::Text>(theme_.foreground(ThemeToken::Error,
+                                                         "Error: Model stopped because it reached the maximum output "
+                                                         "token limit. The response may be incomplete."),
+                        output_pad_,
+                        0));
     } else if (!has_tool_calls_) {
         std::optional<std::string> notice;
         if (stop_reason_ == ai::AssistantStopReason::Aborted) {
@@ -454,8 +452,7 @@ support::Expected<std::vector<std::string>> AssistantMessageComponent::render_se
 support::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std::size_t width) {
     if (width == 0) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI AssistantMessageComponent requires a positive visible width"));
+                support::ErrorCode::Validation, "TUI AssistantMessageComponent requires a positive visible width"));
     }
 
     cch::tui::RenderResult result;
@@ -548,8 +545,7 @@ support::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std:
 
     if (!has_tool_calls_ && !result.lines.empty()) {
         result.lines.front() = std::string{kOsc133ZoneStart} + result.lines.front();
-        result.lines.back() =
-            std::string{kOsc133ZoneEnd} + std::string{kOsc133ZoneFinal} + result.lines.back();
+        result.lines.back() = std::string{kOsc133ZoneEnd} + std::string{kOsc133ZoneFinal} + result.lines.back();
     }
     return result;
 }

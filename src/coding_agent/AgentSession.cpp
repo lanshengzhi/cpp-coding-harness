@@ -435,9 +435,7 @@ support::Expected<SessionEventSubscription> AgentSession::subscribe_session(
     return subscription;
 }
 
-std::uint64_t AgentSession::state_version() const noexcept {
-    return impl_ ? impl_->state_version() : 0;
-}
+std::uint64_t AgentSession::state_version() const noexcept { return impl_ ? impl_->state_version() : 0; }
 
 std::shared_ptr<const AgentSessionSnapshot> AgentSession::projection_snapshot() const {
     if (!impl_) {
@@ -460,14 +458,9 @@ void AgentSession::set_dirty_listener(std::move_only_function<void()> on_dirty) 
     }
 }
 
-SessionProjectionSource& AgentSession::projection_source() noexcept {
-    return *impl_;
-}
+SessionProjectionSource& AgentSession::projection_source() noexcept { return *impl_; }
 
-std::shared_ptr<SessionProjectionSource> AgentSession::shared_projection_source() noexcept {
-    return impl_;
-}
-
+std::shared_ptr<SessionProjectionSource> AgentSession::shared_projection_source() noexcept { return impl_; }
 
 std::size_t AgentSession::message_count() const { return impl_ ? impl_->message_count() : 0; }
 
