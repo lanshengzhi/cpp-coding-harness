@@ -7,6 +7,8 @@
 
 #include <cch/support/Error.hpp>
 #include <boost/asio/buffer.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <array>
@@ -93,10 +95,9 @@ constexpr std::size_t kOutputQueueMaxBytes = 256 * 1024;
 constexpr auto kStopDrainTimeout = std::chrono::milliseconds(250);
 
 [[nodiscard]] support::Error process_error(std::string message, std::string_view operation, int error_number) {
-    return support::make_error(
-        support::ErrorCode::Process,
-        std::move(message),
-        std::format("{} failed (errno {})", operation, error_number));
+    return support::make_error(support::ErrorCode::Process,
+            std::move(message),
+            std::format("{} failed (errno {})", operation, error_number));
 }
 
 struct WriteAttempt {
@@ -107,20 +108,16 @@ struct WriteAttempt {
 [[nodiscard]] WriteAttempt attempt_write_all(int descriptor, std::string_view output) {
     WriteAttempt attempt;
     while (attempt.bytes_written < output.size()) {
-        const auto written = ::write(
-            descriptor,
-            output.data() + attempt.bytes_written,
-            output.size() - attempt.bytes_written);
+        const auto written =
+                ::write(descriptor, output.data() + attempt.bytes_written, output.size() - attempt.bytes_written);
         if (written > 0) {
             attempt.bytes_written += static_cast<std::size_t>(written);
             continue;
         }
         if (written < 0 && errno == EINTR) continue;
         const auto error_number = written < 0 ? errno : EIO;
-        attempt.result = std::unexpected(process_error(
-            "Process Terminal could not write terminal output",
-            "write",
-            error_number));
+        attempt.result = std::unexpected(
+                process_error("Process Terminal could not write terminal output", "write", error_number));
         return attempt;
     }
     return attempt;
@@ -147,10 +144,9 @@ struct WriteAttempt {
 [[nodiscard]] bool supports_synchronized_output() {
     const auto terminal = environment("TERM");
     const auto program = environment("TERM_PROGRAM");
-    return terminal == "xterm-kitty" || terminal == "alacritty" ||
-        terminal == "foot" || terminal == "foot-extra" || terminal == "wezterm" ||
-        terminal == "ghostty" || program == "iTerm.app" || program == "WezTerm" ||
-        program == "ghostty";
+    return terminal == "xterm-kitty" || terminal == "alacritty" || terminal == "foot" || terminal == "foot-extra" ||
+           terminal == "wezterm" || terminal == "ghostty" || program == "iTerm.app" || program == "WezTerm" ||
+           program == "ghostty";
 }
 
 [[nodiscard]] TerminalColorCapability detect_color_capability() {
@@ -163,16 +159,15 @@ struct WriteAttempt {
 
     const auto program = lowercase_environment("TERM_PROGRAM");
     const auto emulator = lowercase_environment("TERMINAL_EMULATOR");
-    const bool known_true_color = !environment("KITTY_WINDOW_ID").empty() || program == "kitty" ||
-        program == "ghostty" || terminal.find("ghostty") != std::string::npos ||
-        !environment("GHOSTTY_RESOURCES_DIR").empty() || !environment("WEZTERM_PANE").empty() ||
-        program == "wezterm" || program == "warpterminal" || !environment("WARP_SESSION_ID").empty() ||
-        !environment("WARP_TERMINAL_SESSION_UUID").empty() || !environment("ITERM_SESSION_ID").empty() ||
-        program == "iterm.app" || !environment("WT_SESSION").empty() || program == "vscode" ||
-        program == "alacritty" || emulator == "jetbrains-jediterm";
-    return known_true_color || has_true_color_hint
-        ? TerminalColorCapability::TrueColor
-        : TerminalColorCapability::Xterm256;
+    const bool known_true_color =
+            !environment("KITTY_WINDOW_ID").empty() || program == "kitty" || program == "ghostty" ||
+            terminal.find("ghostty") != std::string::npos || !environment("GHOSTTY_RESOURCES_DIR").empty() ||
+            !environment("WEZTERM_PANE").empty() || program == "wezterm" || program == "warpterminal" ||
+            !environment("WARP_SESSION_ID").empty() || !environment("WARP_TERMINAL_SESSION_UUID").empty() ||
+            !environment("ITERM_SESSION_ID").empty() || program == "iterm.app" || !environment("WT_SESSION").empty() ||
+            program == "vscode" || program == "alacritty" || emulator == "jetbrains-jediterm";
+    return known_true_color || has_true_color_hint ? TerminalColorCapability::TrueColor
+                                                   : TerminalColorCapability::Xterm256;
 }
 
 struct EnvironmentRgb {
@@ -183,19 +178,31 @@ struct EnvironmentRgb {
 
 [[nodiscard]] EnvironmentRgb xterm_index_to_rgb(int index) {
     constexpr std::array<EnvironmentRgb, 16> basic{{
-        {0, 0, 0}, {128, 0, 0}, {0, 128, 0}, {128, 128, 0},
-        {0, 0, 128}, {128, 0, 128}, {0, 128, 128}, {192, 192, 192},
-        {128, 128, 128}, {255, 0, 0}, {0, 255, 0}, {255, 255, 0},
-        {0, 0, 255}, {255, 0, 255}, {0, 255, 255}, {255, 255, 255},
+            {0, 0, 0},
+            {128, 0, 0},
+            {0, 128, 0},
+            {128, 128, 0},
+            {0, 0, 128},
+            {128, 0, 128},
+            {0, 128, 128},
+            {192, 192, 192},
+            {128, 128, 128},
+            {255, 0, 0},
+            {0, 255, 0},
+            {255, 255, 0},
+            {0, 0, 255},
+            {255, 0, 255},
+            {0, 255, 255},
+            {255, 255, 255},
     }};
     if (index < 16) return basic[static_cast<std::size_t>(index)];
     if (index < 232) {
         const auto cube = index - 16;
         const auto channel = [](int value) { return value == 0 ? 0 : 55 + value * 40; };
         return {
-            .red = channel(cube / 36),
-            .green = channel((cube % 36) / 6),
-            .blue = channel(cube % 6),
+                .red = channel(cube / 36),
+                .green = channel((cube % 36) / 6),
+                .blue = channel(cube % 6),
         };
     }
     const auto gray = 8 + (index - 232) * 10;
@@ -209,8 +216,8 @@ struct EnvironmentRgb {
 
 [[nodiscard]] TerminalAppearance appearance_for_index(int index) {
     const auto rgb = xterm_index_to_rgb(index);
-    const auto luminance = 0.2126 * linear_channel(rgb.red) +
-        0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
+    const auto luminance =
+            0.2126 * linear_channel(rgb.red) + 0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
     return luminance >= 0.5 ? TerminalAppearance::Light : TerminalAppearance::Dark;
 }
 
@@ -255,9 +262,7 @@ struct StartupProbe {
     std::string forwarded_input;
 };
 
-void collect_probe_responses(
-    StartupProbe& probe,
-    const std::vector<detail::TerminalResponseVariant>& responses) {
+void collect_probe_responses(StartupProbe& probe, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
         if (const auto* position = std::get_if<CursorPosition>(&response)) {
             probe.position = *position;
@@ -282,16 +287,13 @@ void collect_probe_responses(
 /// appearance probe always runs out its full window; the cursor-position
 /// probe returns early once the DSR answer arrives (ADR 0041).
 void poll_startup_probe(
-    StartupProbe& probe,
-    int descriptor,
-    std::chrono::milliseconds timeout,
-    bool stop_at_cursor_position) {
+        StartupProbe& probe, int descriptor, std::chrono::milliseconds timeout, bool stop_at_cursor_position) {
     constexpr std::size_t kProbeReadChunkBytes{4096};
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true) {
         if (stop_at_cursor_position && probe.position) return;
-        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-            deadline - std::chrono::steady_clock::now());
+        const auto remaining =
+                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
         if (remaining.count() <= 0) return;
         pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
         const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
@@ -308,8 +310,7 @@ void poll_startup_probe(
             return;
         }
         if (count == 0) return;
-        auto decoded = probe.decoder.feed(
-            std::string_view(buffer.data(), static_cast<std::size_t>(count)));
+        auto decoded = probe.decoder.feed(std::string_view(buffer.data(), static_cast<std::size_t>(count)));
         probe.forwarded_input += decoded.forwarded_input;
         collect_probe_responses(probe, decoded.responses);
     }
@@ -320,16 +321,14 @@ struct WorkerInputState {
     detail::TerminalStreamDecoder decoder;
     bool color_scheme_reported{false};
     bool needs_input_flush{false};
-    std::chrono::steady_clock::time_point negotiation_deadline{
-        std::chrono::steady_clock::time_point::max()};
+    std::chrono::steady_clock::time_point negotiation_deadline{std::chrono::steady_clock::time_point::max()};
 };
 
-
 struct ProcessTerminal::Impl {
-    explicit Impl(ProcessTerminalOptions configured_options)
-        : options(configured_options) {}
+    explicit Impl(ProcessTerminalOptions configured_options) : options(configured_options) {}
 
     ProcessTerminalOptions options;
+    std::weak_ptr<Impl> self;
     mutable std::mutex mutex;
     TerminalDimensions dimensions;
     TerminalCapabilities capabilities;
@@ -339,6 +338,9 @@ struct ProcessTerminal::Impl {
     std::string startup_input;
     bool startup_color_scheme_reported{false};
     std::optional<boost::asio::posix::stream_descriptor> input_stream;
+    std::optional<boost::asio::posix::stream_descriptor> output_stream;
+    std::optional<boost::asio::steady_timer> keepalive_timer;
+    std::optional<boost::asio::steady_timer> readiness_timer;
     std::array<char, 4096> read_buffer{};
     WorkerInputState input_state;
     std::shared_ptr<bool> session_alive;
@@ -400,6 +402,7 @@ struct ProcessTerminal::Impl {
     std::deque<std::string> output_queue;
     std::size_t output_queued_bytes{0};
     bool output_draining{false};
+    bool output_wait_armed{false};
     /// Resize watchdog deadline base, owned by the worker thread: the worker
     /// wakes at least this often to re-read TIOCGWINSZ, so resizes are
     /// detected even without SIGWINCH delivery.
@@ -408,30 +411,25 @@ struct ProcessTerminal::Impl {
 
 namespace {
 
-template <typename T>
-[[nodiscard]] support::ExpectedVoid require_started(const T& impl) {
+template <typename T> [[nodiscard]] support::ExpectedVoid require_started(const T& impl) {
     if (impl.modes.started) return {};
     return std::unexpected(support::make_error(
-        support::ErrorCode::Validation,
-        "Process Terminal must be started before terminal operations"));
+            support::ErrorCode::Validation, "Process Terminal must be started before terminal operations"));
 }
 
 [[nodiscard]] support::Expected<TerminalDimensions> read_dimensions(int descriptor) {
     winsize size{};
     if (::ioctl(descriptor, TIOCGWINSZ, &size) != 0) {
-        return std::unexpected(process_error(
-            "Process Terminal could not read terminal dimensions",
-            "ioctl(TIOCGWINSZ)",
-            errno));
+        return std::unexpected(
+                process_error("Process Terminal could not read terminal dimensions", "ioctl(TIOCGWINSZ)", errno));
     }
     if (size.ws_col == 0 || size.ws_row == 0) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal requires positive terminal dimensions"));
+                support::ErrorCode::Validation, "Process Terminal requires positive terminal dimensions"));
     }
     return TerminalDimensions{
-        .columns = size.ws_col,
-        .rows = size.ws_row,
+            .columns = size.ws_col,
+            .rows = size.ws_row,
     };
 }
 
@@ -441,16 +439,10 @@ template <typename T>
 }
 
 [[nodiscard]] support::Error combine_errors(
-    support::Error primary,
-    const support::Error& secondary,
-    std::string message) {
-    return support::make_error(
-        primary.code,
-        std::move(message),
-        std::format(
-            "primary: {}; secondary: {}",
-            describe_error(primary),
-            describe_error(secondary)));
+        support::Error primary, const support::Error& secondary, std::string message) {
+    return support::make_error(primary.code,
+            std::move(message),
+            std::format("primary: {}; secondary: {}", describe_error(primary), describe_error(secondary)));
 }
 
 void retain_error(support::ExpectedVoid& accumulated, support::ExpectedVoid candidate) {
@@ -459,30 +451,24 @@ void retain_error(support::ExpectedVoid& accumulated, support::ExpectedVoid cand
         accumulated = std::unexpected(candidate.error());
         return;
     }
-    accumulated = std::unexpected(combine_errors(
-        std::move(accumulated.error()),
-        candidate.error(),
-        "Process Terminal restoration encountered multiple failures"));
+    accumulated = std::unexpected(combine_errors(std::move(accumulated.error()),
+            candidate.error(),
+            "Process Terminal restoration encountered multiple failures"));
 }
 
-[[nodiscard]] support::Error startup_failure(
-    support::Error acquisition_error,
-    const support::ExpectedVoid& rollback) {
+[[nodiscard]] support::Error startup_failure(support::Error acquisition_error, const support::ExpectedVoid& rollback) {
     if (rollback) return acquisition_error;
-    return combine_errors(
-        std::move(acquisition_error),
-        rollback.error(),
-        "Process Terminal startup failed and rollback was incomplete");
+    return combine_errors(std::move(acquisition_error),
+            rollback.error(),
+            "Process Terminal startup failed and rollback was incomplete");
 }
 
-template <typename T>
-void record_worker_error(T& impl, support::Error error) {
+template <typename T> void record_worker_error(T& impl, support::Error error) {
     std::lock_guard lock(impl.mutex);
     if (!impl.worker_error) impl.worker_error = std::move(error);
 }
 
-template <typename T>
-void invoke_input(T& impl, std::string input) {
+template <typename T> void invoke_input(T& impl, std::string input) {
     std::shared_ptr<TerminalInputSink> sink;
     {
         std::lock_guard lock(impl.mutex);
@@ -500,36 +486,37 @@ void invoke_input(T& impl, std::string input) {
         }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
-        record_worker_error(impl, support::make_error(
-            support::ErrorCode::Unknown,
-            "Process Terminal input sink failed",
-            "the input callback threw an exception"));
+        record_worker_error(impl,
+                support::make_error(support::ErrorCode::Unknown,
+                        "Process Terminal input sink failed",
+                        "the input callback threw an exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.input_sink == sink) impl.input_sink.reset();
     } catch (...) {
-        record_worker_error(impl, support::make_error(
-            support::ErrorCode::Unknown,
-            "Process Terminal input sink failed",
-            "the input callback threw an unknown exception"));
+        record_worker_error(impl,
+                support::make_error(support::ErrorCode::Unknown,
+                        "Process Terminal input sink failed",
+                        "the input callback threw an unknown exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.input_sink == sink) impl.input_sink.reset();
     }
 #endif
 }
 
-template <typename T>
-void deliver_resize_if_changed(T& impl) {
+template <typename T> void deliver_resize_if_changed(T& impl) {
     // The watchdog base advances on every check so the poll timeout stays in
     // the future and the worker never spins on an immediate resize deadline.
-    impl.last_resize_check = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lock(impl.mutex);
+        impl.last_resize_check = std::chrono::steady_clock::now();
+    }
     winsize size{};
-    if (::ioctl(impl.options.output_fd, TIOCGWINSZ, &size) != 0 ||
-        size.ws_col == 0 || size.ws_row == 0) {
+    if (::ioctl(impl.options.output_fd, TIOCGWINSZ, &size) != 0 || size.ws_col == 0 || size.ws_row == 0) {
         return;
     }
     const TerminalDimensions dimensions{
-        .columns = size.ws_col,
-        .rows = size.ws_row,
+            .columns = size.ws_col,
+            .rows = size.ws_row,
     };
     std::shared_ptr<TerminalResizeSink> sink;
     {
@@ -549,27 +536,25 @@ void deliver_resize_if_changed(T& impl) {
         }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
-        record_worker_error(impl, support::make_error(
-            support::ErrorCode::Unknown,
-            "Process Terminal resize sink failed",
-            "the resize callback threw an exception"));
+        record_worker_error(impl,
+                support::make_error(support::ErrorCode::Unknown,
+                        "Process Terminal resize sink failed",
+                        "the resize callback threw an exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     } catch (...) {
-        record_worker_error(impl, support::make_error(
-            support::ErrorCode::Unknown,
-            "Process Terminal resize sink failed",
-            "the resize callback threw an unknown exception"));
+        record_worker_error(impl,
+                support::make_error(support::ErrorCode::Unknown,
+                        "Process Terminal resize sink failed",
+                        "the resize callback threw an unknown exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     }
 #endif
 }
 
-template <typename T>
-void enable_modify_other_keys(T& impl) {
-    if (impl.capabilities.keyboard_protocol == KeyboardProtocol::Kitty ||
-        impl.modify_other_keys_active) {
+template <typename T> void enable_modify_other_keys(T& impl) {
+    if (impl.capabilities.keyboard_protocol == KeyboardProtocol::Kitty || impl.modify_other_keys_active) {
         return;
     }
     if (auto enabled = write_all(impl.options.output_fd, kModifyOtherKeysEnable); !enabled) {
@@ -580,11 +565,9 @@ void enable_modify_other_keys(T& impl) {
     impl.capabilities.keyboard_protocol = KeyboardProtocol::ModifyOtherKeys;
 }
 
-template <typename T>
-void apply_keyboard_response(T& impl, const detail::KeyboardProtocolResponse& response) {
+template <typename T> void apply_keyboard_response(T& impl, const detail::KeyboardProtocolResponse& response) {
     std::lock_guard lock(impl.mutex);
-    if (response.kind == detail::KeyboardProtocolResponseKind::DeviceAttributes ||
-        response.flags == 0) {
+    if (response.kind == detail::KeyboardProtocolResponseKind::DeviceAttributes || response.flags == 0) {
         enable_modify_other_keys(impl);
         return;
     }
@@ -597,51 +580,87 @@ void apply_keyboard_response(T& impl, const detail::KeyboardProtocolResponse& re
     }
     impl.capabilities.keyboard_protocol = KeyboardProtocol::Kitty;
 }
+template <typename T> void drain_output_locked(T& impl, bool writable);
+template <typename T> [[nodiscard]] support::ExpectedVoid enqueue_output(T& impl, std::string_view bytes);
 
-template <typename T>
-void emit_progress_keepalive(T& impl) {
+template <typename T> void emit_progress_keepalive(T& impl) {
     std::lock_guard lock(impl.mutex);
     if (!impl.progress_active) return;
     const auto now = std::chrono::steady_clock::now();
     if (now < impl.progress_next_keepalive) return;
-    // While the ordered queue is non-empty or a synchronized render frame is
-    // being staged, a direct keepalive write could interleave ahead of the
-    // render bytes and truncate an escape sequence. Skip this beat and retry
-    // on the next deadline (the indicator is best-effort and re-emitted).
-    if (!impl.output_queue.empty() || impl.output_draining ||
-        impl.synchronized_update_depth > 0) {
+    if (!impl.output_queue.empty() || impl.output_draining || impl.synchronized_update_depth > 0) {
         impl.progress_next_keepalive = now + kProgressKeepalive;
         return;
     }
-    // Non-blocking best-effort write: on any non-delivery outcome, re-arm the
-    // keepalive so the next deadline (and poll timeout) stays in the future
-    // and the worker never spins on an immediate deadline.
-    const auto written = ::write(
-        impl.options.output_fd,
-        kProgressActiveSequence.data(),
-        kProgressActiveSequence.size());
-    if (written == static_cast<ssize_t>(kProgressActiveSequence.size())) {
-        impl.progress_next_keepalive = now + kProgressKeepalive;
-        return;
-    }
-    if (written < 0 && errno != EINTR && !impl.worker_error) {
-        impl.worker_error = process_error(
-            "Process Terminal could not write terminal output",
-            "write",
-            errno);
+    if (auto queued = enqueue_output(impl, kProgressActiveSequence);
+            !queued && queued.error().code != support::ErrorCode::Busy && !impl.worker_error) {
+        impl.worker_error = queued.error();
     }
     impl.progress_next_keepalive = now + kProgressKeepalive;
 }
 
-/// Wake the delivery worker's blocking readiness wait (stop, output enqueue,
-/// or another worker-relevant state change). Best-effort; a full pipe is
-/// drained on the next wakeup and cannot wedge the wait.
-template <typename T>
-void wake_worker(T&) {}
+/// Arm one executor-owned writable wait for the FIFO. The caller holds the
+/// implementation mutex; the completion reacquires it before draining, so
+/// enqueue and drain remain strictly ordered.
+template <typename T> void arm_output_wait_locked(T& impl) {
+    if (!impl.modes.started || impl.output_queue.empty() || impl.output_wait_armed) return;
+    auto* stream = impl.output_stream ? &*impl.output_stream : (impl.input_stream ? &*impl.input_stream : nullptr);
+    if (stream == nullptr) return;
+    const auto self = impl.self.lock();
+    if (!self) return;
+    impl.output_wait_armed = true;
+    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
+    stream->async_wait(boost::asio::posix::stream_descriptor::wait_write,
+            [self, weak_alive](const boost::system::error_code& error) {
+                auto& impl = *self;
+                const auto alive = weak_alive.lock();
+                if (!alive || !*alive) return;
+                std::lock_guard lock(impl.mutex);
+                impl.output_wait_armed = false;
+                if (error) {
+                    if (error != boost::asio::error::operation_aborted && !impl.worker_error) {
+                        impl.worker_error = support::make_error(support::ErrorCode::Process,
+                                "Process Terminal output readiness failed",
+                                error.message());
+                    }
+                    return;
+                }
+                if (!impl.modes.started) return;
+                drain_output_locked(impl, true);
+                arm_output_wait_locked(impl);
+            });
+}
+
+template <typename T> void arm_keepalive_timer_locked(T& impl) {
+    if (!impl.keepalive_timer || !impl.modes.started || !impl.progress_active) return;
+    const auto self = impl.self.lock();
+    if (!self) return;
+    impl.keepalive_timer->expires_at(impl.progress_next_keepalive);
+    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
+    impl.keepalive_timer->async_wait([self, weak_alive](const boost::system::error_code& error) {
+        auto& impl = *self;
+        const auto alive = weak_alive.lock();
+        if (!alive || !*alive) return;
+        if (error == boost::asio::error::operation_aborted) return;
+        if (error) {
+            std::lock_guard lock(impl.mutex);
+            if (!impl.worker_error) {
+                impl.worker_error = support::make_error(
+                        support::ErrorCode::Process, "Process Terminal keepalive timer failed", error.message());
+            }
+            return;
+        }
+        emit_progress_keepalive(impl);
+        std::lock_guard lock(impl.mutex);
+        arm_keepalive_timer_locked(impl);
+    });
+}
+
+/// Wake the executor-owned writable readiness wait after output enqueue.
+template <typename T> void wake_worker(T& impl) { arm_output_wait_locked(impl); }
 
 /// Whether ordered output is still pending (queued or being drained).
-template <typename T>
-bool output_pending(const T& impl) {
+template <typename T> bool output_pending(const T& impl) {
     std::lock_guard lock(impl.mutex);
     return !impl.output_queue.empty() || impl.output_draining;
 }
@@ -649,15 +668,8 @@ bool output_pending(const T& impl) {
 /// Submit one ordered output chunk through the bounded queue. Caller holds
 /// `impl.mutex`. The common fast path writes the whole chunk inline when the
 /// queue is empty and the descriptor accepts it; partial writes and
-/// backpressure fall into the bounded FIFO the delivery worker drains in
-/// order. The bound caps the accumulated backlog: once the queue is non-empty
-/// (the terminal is behind), writes that would push it past `kOutputQueueMaxBytes`
-/// are rejected with explicit backpressure (`Busy`) instead of blocking the
-/// caller. A single in-flight write is always admitted when the queue is
-/// empty, so a large one-shot render (e.g. an inline image) is never rejected
-/// on a healthy, draining terminal (issue #462).
-template <typename T>
-[[nodiscard]] support::ExpectedVoid enqueue_output(T& impl, std::string_view bytes) {
+/// backpressure fall into the bounded FIFO drained by executor readiness.
+template <typename T> [[nodiscard]] support::ExpectedVoid enqueue_output(T& impl, std::string_view bytes) {
     if (bytes.empty()) return {};
     if (impl.synchronized_update_depth > 0) {
         impl.synchronized_output.append(bytes);
@@ -669,34 +681,22 @@ template <typename T>
         if (written > 0) {
             bytes.remove_prefix(static_cast<std::size_t>(written));
         } else if (written < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
-            return std::unexpected(process_error(
-                "Process Terminal could not write terminal output",
-                "write",
-                errno));
+            return std::unexpected(process_error("Process Terminal could not write terminal output", "write", errno));
         }
-        // EINTR with no bytes, or a partial write: the remainder is queued.
     }
-    if (!impl.output_queue.empty() &&
-        impl.output_queued_bytes + bytes.size() > kOutputQueueMaxBytes) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Busy,
-            "Process Terminal output is backed up",
-            std::format(
-                "the bounded output queue ({} bytes) cannot admit more output",
-                kOutputQueueMaxBytes)));
+    if (!impl.output_queue.empty() && impl.output_queued_bytes + bytes.size() > kOutputQueueMaxBytes) {
+        return std::unexpected(support::make_error(support::ErrorCode::Busy,
+                "Process Terminal output is backed up",
+                std::format("the bounded output queue ({} bytes) cannot admit more output", kOutputQueueMaxBytes)));
     }
     impl.output_queue.push_back(std::string(bytes));
     impl.output_queued_bytes += bytes.size();
     wake_worker(impl);
     return {};
 }
-
 /// Drain the ordered output queue into the output descriptor while it is
-/// writable. Non-blocking writes run under `impl.mutex`, so ordering with
-/// enqueue_output is exact; a real write failure records the worker error and
-/// drops the undeliverable queued bytes.
-template <typename T>
-void drain_output_locked(T& impl, bool writable) {
+/// writable. The mutex serializes queue admission and partial writes.
+template <typename T> void drain_output_locked(T& impl, bool writable) {
     if (impl.output_queue.empty() || !writable) return;
     impl.output_draining = true;
     while (!impl.output_queue.empty()) {
@@ -712,13 +712,10 @@ void drain_output_locked(T& impl, bool writable) {
             break;
         }
         if (written < 0 && errno == EINTR) continue;
-        if (written < 0 && errno == EAGAIN) break;
+        if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
         if (written < 0) {
             if (!impl.worker_error) {
-                impl.worker_error = process_error(
-                    "Process Terminal could not write terminal output",
-                    "write",
-                    errno);
+                impl.worker_error = process_error("Process Terminal could not write terminal output", "write", errno);
             }
             impl.output_queued_bytes = 0;
             impl.output_queue.clear();
@@ -728,25 +725,20 @@ void drain_output_locked(T& impl, bool writable) {
     impl.output_draining = false;
 }
 
-template <typename T>
-void drain_output(T& impl, bool writable) {
+template <typename T> void drain_output(T& impl, bool writable) {
     std::lock_guard lock(impl.mutex);
     drain_output_locked(impl, writable);
 }
 
-
-template <typename T>
-void apply_cell_size_response(
-    T& impl,
-    const detail::CellSizeResponse& response) {
+template <typename T> void apply_cell_size_response(T& impl, const detail::CellSizeResponse& response) {
     if (response.height_px == 0 || response.width_px == 0) return;
     std::shared_ptr<TerminalResizeSink> sink;
     TerminalDimensions dimensions;
     {
         std::lock_guard lock(impl.mutex);
         const CellPixelDimensions updated{
-            .width = response.width_px,
-            .height = response.height_px,
+                .width = response.width_px,
+                .height = response.height_px,
         };
         if (impl.capabilities.cell_pixels && *impl.capabilities.cell_pixels == updated) {
             return;
@@ -766,17 +758,17 @@ void apply_cell_size_response(
         }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const std::exception&) {
-        record_worker_error(impl, support::make_error(
-            support::ErrorCode::Unknown,
-            "Process Terminal resize sink failed",
-            "the resize callback threw an exception"));
+        record_worker_error(impl,
+                support::make_error(support::ErrorCode::Unknown,
+                        "Process Terminal resize sink failed",
+                        "the resize callback threw an exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     } catch (...) {
-        record_worker_error(impl, support::make_error(
-            support::ErrorCode::Unknown,
-            "Process Terminal resize sink failed",
-            "the resize callback threw an unknown exception"));
+        record_worker_error(impl,
+                support::make_error(support::ErrorCode::Unknown,
+                        "Process Terminal resize sink failed",
+                        "the resize callback threw an unknown exception"));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     }
@@ -785,9 +777,7 @@ void apply_cell_size_response(
 
 template <typename T>
 void apply_terminal_responses(
-    T& impl,
-    WorkerInputState& state,
-    const std::vector<detail::TerminalResponseVariant>& responses) {
+        T& impl, WorkerInputState& state, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
         if (const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response)) {
             apply_cell_size_response(impl, *cell_size);
@@ -815,14 +805,14 @@ void apply_terminal_responses(
         }
     }
 }
-
-template <typename T>
-void process_input_chunk(T& impl, std::string_view chunk) {
+template <typename T> void process_input_chunk(T& impl, std::string_view chunk) {
     if (chunk.empty()) return;
-    if (impl.draining) {
+    {
         std::lock_guard lock(impl.mutex);
-        impl.drain_last_activity = std::chrono::steady_clock::now();
-        return;
+        if (impl.draining) {
+            impl.drain_last_activity = std::chrono::steady_clock::now();
+            return;
+        }
     }
     impl.input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
     auto decoded = impl.input_state.decoder.feed(chunk);
@@ -833,9 +823,11 @@ void process_input_chunk(T& impl, std::string_view chunk) {
     }
 }
 
-template <typename T>
-void poll_nonblocking(T& impl) {
-    if (!impl.modes.started) return;
+template <typename T> void poll_nonblocking(T& impl) {
+    {
+        std::lock_guard lock(impl.mutex);
+        if (!impl.modes.started) return;
+    }
     deliver_resize_if_changed(impl);
     drain_output(impl, true);
 
@@ -853,37 +845,141 @@ void poll_nonblocking(T& impl) {
         }
     }
 }
+template <typename T> void arm_readiness_timer_locked(T& impl);
 
-template <typename T>
-void start_async_read(T& impl) {
+template <typename T> void start_async_read(T& impl) {
     if (!impl.input_stream || !impl.modes.started) return;
-    auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
-    impl.input_stream->async_read_some(
-        boost::asio::buffer(impl.read_buffer),
-        [&impl, weak_alive](const boost::system::error_code& ec, std::size_t bytes_read) {
-            auto alive = weak_alive.lock();
-            if (!alive || !*alive) return;
-            if (ec) {
-                if (ec == boost::asio::error::operation_aborted) return;
-                if (ec == boost::asio::error::eof) return;
-                record_worker_error(impl, support::make_error(
-                    support::ErrorCode::Process,
-                    "Process Terminal input read failed",
-                    ec.message()));
-                return;
+    const auto self = impl.self.lock();
+    if (!self) return;
+    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
+    impl.input_stream->async_read_some(boost::asio::buffer(impl.read_buffer),
+            [self, weak_alive](const boost::system::error_code& ec, std::size_t bytes_read) {
+                auto& impl = *self;
+                const auto alive = weak_alive.lock();
+                if (!alive || !*alive) return;
+                if (ec) {
+                    if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
+                        return;
+                    }
+                    record_worker_error(impl,
+                            support::make_error(
+                                    support::ErrorCode::Process, "Process Terminal input read failed", ec.message()));
+                    return;
+                }
+                {
+                    std::lock_guard lock(impl.mutex);
+                    if (!impl.modes.started) return;
+                }
+                deliver_resize_if_changed(impl);
+                drain_output(impl, true);
+                if (bytes_read > 0) {
+                    process_input_chunk(impl, std::string_view(impl.read_buffer.data(), bytes_read));
+                }
+                std::lock_guard lock(impl.mutex);
+                if (!impl.modes.started) return;
+                arm_readiness_timer_locked(impl);
+                start_async_read(impl);
+            });
+}
+template <typename T> void arm_readiness_timer_locked(T& impl) {
+    if (!impl.readiness_timer || !impl.modes.started) return;
+    auto deadline = impl.last_resize_check + kResizeWatchdogInterval;
+    if (impl.input_state.negotiation_deadline < deadline) {
+        deadline = impl.input_state.negotiation_deadline;
+    }
+    impl.readiness_timer->expires_at(deadline);
+    const auto self = impl.self.lock();
+    if (!self) return;
+    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
+    impl.readiness_timer->async_wait([self, weak_alive](const boost::system::error_code& error) {
+        auto& impl = *self;
+        const auto alive = weak_alive.lock();
+        if (!alive || !*alive) return;
+        if (error == boost::asio::error::operation_aborted) return;
+        if (error) {
+            std::lock_guard lock(impl.mutex);
+            if (!impl.worker_error) {
+                impl.worker_error = support::make_error(
+                        support::ErrorCode::Process, "Process Terminal readiness timer failed", error.message());
             }
-            if (!impl.modes.started) return;
-            deliver_resize_if_changed(impl);
-            drain_output(impl, true);
-            if (bytes_read > 0) {
-                process_input_chunk(impl, std::string_view(impl.read_buffer.data(), bytes_read));
+            return;
+        }
+
+        deliver_resize_if_changed(impl);
+        std::vector<detail::TerminalResponseVariant> responses;
+        std::string forwarded_input;
+        bool needs_input_flush = false;
+        {
+            std::lock_guard lock(impl.mutex);
+            const auto now = std::chrono::steady_clock::now();
+            if (impl.input_state.negotiation_deadline != std::chrono::steady_clock::time_point::max() &&
+                    now >= impl.input_state.negotiation_deadline) {
+                auto decoded = impl.input_state.decoder.flush();
+                responses = std::move(decoded.responses);
+                forwarded_input = std::move(decoded.forwarded_input);
+                needs_input_flush = impl.input_state.needs_input_flush;
+                impl.input_state.needs_input_flush = false;
+                impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
             }
-            start_async_read(impl);
-        });
+        }
+        apply_terminal_responses(impl, impl.input_state, responses);
+        if (!forwarded_input.empty()) invoke_input(impl, std::move(forwarded_input));
+        if (needs_input_flush) invoke_input(impl, {});
+        std::lock_guard lock(impl.mutex);
+        arm_readiness_timer_locked(impl);
+    });
 }
 
-template <typename T>
-[[nodiscard]] support::ExpectedVoid restore_terminal_modes(T& impl) {
+[[nodiscard]] std::optional<boost::asio::any_io_executor> normalized_executor(const std::any& value) {
+    if (const auto* executor = std::any_cast<boost::asio::any_io_executor>(&value)) {
+        return *executor;
+    }
+    if (const auto* executor = std::any_cast<boost::asio::io_context::executor_type>(&value)) {
+        return boost::asio::any_io_executor{*executor};
+    }
+    return std::nullopt;
+}
+
+template <typename T> void start_async_io(T& impl) {
+    if (!impl.modes.started) return;
+    const auto executor = normalized_executor(impl.options.executor);
+    if (!executor) return;
+    bool start_read = false;
+    if (!impl.input_stream) {
+        impl.input_stream.emplace(*executor);
+        boost::system::error_code error;
+        impl.input_stream->assign(impl.options.input_fd, error);
+        if (error) {
+            impl.input_stream.reset();
+            if (!impl.worker_error) {
+                impl.worker_error = support::make_error(
+                        support::ErrorCode::Process, "Process Terminal input readiness setup failed", error.message());
+            }
+            return;
+        }
+        start_read = true;
+    }
+    if (impl.options.output_fd != impl.options.input_fd && !impl.output_stream) {
+        impl.output_stream.emplace(*executor);
+        boost::system::error_code error;
+        impl.output_stream->assign(impl.options.output_fd, error);
+        if (error) {
+            impl.output_stream.reset();
+            if (!impl.worker_error) {
+                impl.worker_error = support::make_error(
+                        support::ErrorCode::Process, "Process Terminal output readiness setup failed", error.message());
+            }
+        }
+    }
+    if (!impl.keepalive_timer) impl.keepalive_timer.emplace(*executor);
+    if (!impl.readiness_timer) impl.readiness_timer.emplace(*executor);
+    if (start_read) start_async_read(impl);
+    arm_output_wait_locked(impl);
+    arm_keepalive_timer_locked(impl);
+    arm_readiness_timer_locked(impl);
+}
+
+template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes(T& impl) {
     support::ExpectedVoid first_error;
 
     // Restore the output descriptor to its original flags first so the
@@ -891,24 +987,18 @@ template <typename T>
     // already drained the ordered output queue before stop() restores).
     if (impl.output_nonblock && impl.original_fd_flags >= 0) {
         if (::fcntl(impl.options.output_fd, F_SETFL, impl.original_fd_flags) != 0) {
-            retain_error(
-                first_error,
-                std::unexpected(process_error(
-                    "Process Terminal could not restore output descriptor flags",
-                    "fcntl(F_SETFL)",
-                    errno)));
+            retain_error(first_error,
+                    std::unexpected(process_error(
+                            "Process Terminal could not restore output descriptor flags", "fcntl(F_SETFL)", errno)));
         } else {
             impl.output_nonblock = false;
         }
     }
     if (impl.input_nonblock && impl.original_input_flags >= 0) {
         if (::fcntl(impl.options.input_fd, F_SETFL, impl.original_input_flags) != 0) {
-            retain_error(
-                first_error,
-                std::unexpected(process_error(
-                    "Process Terminal could not restore input descriptor flags",
-                    "fcntl(F_SETFL)",
-                    errno)));
+            retain_error(first_error,
+                    std::unexpected(process_error(
+                            "Process Terminal could not restore input descriptor flags", "fcntl(F_SETFL)", errno)));
         } else {
             impl.input_nonblock = false;
         }
@@ -961,12 +1051,9 @@ template <typename T>
             impl.has_original_termios = false;
             impl.modes.raw_input = false;
         } else {
-            retain_error(
-                first_error,
-                std::unexpected(process_error(
-                    "Process Terminal could not restore input mode",
-                    "tcsetattr",
-                    errno)));
+            retain_error(first_error,
+                    std::unexpected(
+                            process_error("Process Terminal could not restore input mode", "tcsetattr", errno)));
         }
     }
 
@@ -975,46 +1062,34 @@ template <typename T>
 
 } // namespace
 
-ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options)
-    : impl_(std::make_unique<Impl>(options)) {}
-
-ProcessTerminal::~ProcessTerminal() {
-    (void)stop();
+ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::make_shared<Impl>(options)) {
+    impl_->self = impl_;
 }
 
-support::ExpectedVoid ProcessTerminal::start(
-    TerminalInputSink input_sink,
-    TerminalResizeSink resize_sink) {
-    std::lock_guard lock(impl_->mutex);
+ProcessTerminal::~ProcessTerminal() { (void)stop(); }
+support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) {
+    std::unique_lock<std::mutex> lock(impl_->mutex);
     if (impl_->modes.started) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal is already started"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Process Terminal is already started"));
     }
-    if (impl_->has_original_termios || impl_->modes.bracketed_paste ||
-        !impl_->modes.cursor_visible || impl_->keyboard_protocol_pushed ||
-        impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 ||
-        impl_->progress_active) {
+    if (impl_->has_original_termios || impl_->modes.bracketed_paste || !impl_->modes.cursor_visible ||
+            impl_->keyboard_protocol_pushed || impl_->modify_other_keys_active ||
+            impl_->synchronized_update_depth > 0 || impl_->progress_active) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "Process Terminal has unrestored state from a previous stop"));
+                support::ErrorCode::Process, "Process Terminal has unrestored state from a previous stop"));
     }
     if (::isatty(impl_->options.input_fd) != 1 || ::isatty(impl_->options.output_fd) != 1) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal requires TTY input and output descriptors",
-            std::format(
-                "input fd {} and output fd {} must both refer to terminals",
-                impl_->options.input_fd,
-                impl_->options.output_fd)));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Process Terminal requires TTY input and output descriptors",
+                std::format("input fd {} and output fd {} must both refer to terminals",
+                        impl_->options.input_fd,
+                        impl_->options.output_fd)));
     }
 
     termios original{};
     if (::tcgetattr(impl_->options.input_fd, &original) != 0) {
-        return std::unexpected(process_error(
-            "Process Terminal could not snapshot input mode",
-            "tcgetattr",
-            errno));
+        return std::unexpected(process_error("Process Terminal could not snapshot input mode", "tcgetattr", errno));
     }
     auto dimensions = read_dimensions(impl_->options.output_fd);
     if (!dimensions) return std::unexpected(dimensions.error());
@@ -1023,11 +1098,11 @@ support::ExpectedVoid ProcessTerminal::start(
     const auto environment_appearance = detect_terminal_appearance();
     const auto detected_images = detect_image_capabilities();
     impl_->capabilities = TerminalCapabilities{
-        .synchronized_output = supports_synchronized_output(),
-        .inline_images = detected_images.images,
-        .hyperlinks = detected_images.hyperlinks,
-        .color = detect_color_capability(),
-        .appearance = environment_appearance,
+            .synchronized_output = supports_synchronized_output(),
+            .inline_images = detected_images.images,
+            .hyperlinks = detected_images.hyperlinks,
+            .color = detect_color_capability(),
+            .appearance = environment_appearance,
     };
     auto owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
     auto owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
@@ -1035,17 +1110,13 @@ support::ExpectedVoid ProcessTerminal::start(
     // the acquisition error with any incomplete rollback (issue #462).
     const auto fail_startup = [this](support::Error acquisition_error) -> support::ExpectedVoid {
         auto rollback = restore_terminal_modes(*impl_);
-        return std::unexpected(
-            startup_failure(std::move(acquisition_error), rollback));
+        return std::unexpected(startup_failure(std::move(acquisition_error), rollback));
     };
 
     auto raw = original;
     ::cfmakeraw(&raw);
     if (::tcsetattr(impl_->options.input_fd, TCSAFLUSH, &raw) != 0) {
-        return std::unexpected(process_error(
-            "Process Terminal could not acquire raw input mode",
-            "tcsetattr",
-            errno));
+        return std::unexpected(process_error("Process Terminal could not acquire raw input mode", "tcsetattr", errno));
     }
     impl_->original_termios = original;
     impl_->has_original_termios = true;
@@ -1058,19 +1129,13 @@ support::ExpectedVoid ProcessTerminal::start(
     impl_->modes.bracketed_paste = true;
 
     auto appearance_query = attempt_write_all(
-        impl_->options.output_fd,
-        std::string(kColorSchemeQuery) + std::string(kBackgroundColorQuery));
+            impl_->options.output_fd, std::string(kColorSchemeQuery) + std::string(kBackgroundColorQuery));
     if (!appearance_query.result) {
         return fail_startup(appearance_query.result.error());
     }
     StartupProbe probe;
-    poll_startup_probe(
-        probe,
-        impl_->options.input_fd,
-        kAppearanceProbeTimeout,
-        false);
-    impl_->capabilities.appearance = probe.color_scheme.value_or(
-        probe.background.value_or(environment_appearance));
+    poll_startup_probe(probe, impl_->options.input_fd, kAppearanceProbeTimeout, false);
+    impl_->capabilities.appearance = probe.color_scheme.value_or(probe.background.value_or(environment_appearance));
 
     // ADR 0041 anchored absolute flow (issue #476): query the cursor position
     // once (DSR `\x1b[6n`) through the same blocking pre-worker write path and
@@ -1082,13 +1147,8 @@ support::ExpectedVoid ProcessTerminal::start(
     if (!cursor_query.result) {
         return fail_startup(cursor_query.result.error());
     }
-    poll_startup_probe(
-        probe,
-        impl_->options.input_fd,
-        kCursorPositionTimeout,
-        true);
-    impl_->capabilities.appearance = probe.color_scheme.value_or(
-        probe.background.value_or(environment_appearance));
+    poll_startup_probe(probe, impl_->options.input_fd, kCursorPositionTimeout, true);
+    impl_->capabilities.appearance = probe.color_scheme.value_or(probe.background.value_or(environment_appearance));
     if (probe.position) {
         impl_->scroll_origin = probe.position->row;
         impl_->viewport_top = 0;
@@ -1130,36 +1190,28 @@ support::ExpectedVoid ProcessTerminal::start(
             return fail_startup(cell_size_query.result.error());
         }
     }
+    const int original_input_flags = ::fcntl(impl_->options.input_fd, F_GETFL);
+    if (original_input_flags < 0) {
+        return fail_startup(
+                process_error("Process Terminal could not read input descriptor flags", "fcntl(F_GETFL)", errno));
+    }
 
     const int original_flags = ::fcntl(impl_->options.output_fd, F_GETFL);
     if (original_flags < 0) {
-        return fail_startup(process_error(
-            "Process Terminal could not read output descriptor flags",
-            "fcntl(F_GETFL)",
-            errno));
+        return fail_startup(
+                process_error("Process Terminal could not read output descriptor flags", "fcntl(F_GETFL)", errno));
     }
     impl_->original_fd_flags = original_flags;
     if (::fcntl(impl_->options.output_fd, F_SETFL, original_flags | O_NONBLOCK) != 0) {
-        return fail_startup(process_error(
-            "Process Terminal could not set non-blocking output",
-            "fcntl(F_SETFL)",
-            errno));
+        return fail_startup(
+                process_error("Process Terminal could not set non-blocking output", "fcntl(F_SETFL)", errno));
     }
     impl_->output_nonblock = true;
 
-    const int original_input_flags = ::fcntl(impl_->options.input_fd, F_GETFL);
-    if (original_input_flags < 0) {
-        return fail_startup(process_error(
-            "Process Terminal could not read input descriptor flags",
-            "fcntl(F_GETFL)",
-            errno));
-    }
     impl_->original_input_flags = original_input_flags;
     if (::fcntl(impl_->options.input_fd, F_SETFL, original_input_flags | O_NONBLOCK) != 0) {
-        return fail_startup(process_error(
-            "Process Terminal could not set non-blocking input",
-            "fcntl(F_SETFL)",
-            errno));
+        return fail_startup(
+                process_error("Process Terminal could not set non-blocking input", "fcntl(F_SETFL)", errno));
     }
     impl_->input_nonblock = true;
 
@@ -1177,43 +1229,29 @@ support::ExpectedVoid ProcessTerminal::start(
     impl_->modes.started = true;
     impl_->session_alive = std::make_shared<bool>(true);
 
-    if (!impl_->startup_input.empty()) {
-        auto decoded = impl_->input_state.decoder.feed(impl_->startup_input);
+    auto startup_input = std::move(impl_->startup_input);
+    impl_->startup_input.clear();
+    lock.unlock();
+    if (!startup_input.empty()) {
+        impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
+        auto decoded = impl_->input_state.decoder.feed(startup_input);
         apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
         if (!decoded.forwarded_input.empty()) {
             invoke_input(*impl_, std::move(decoded.forwarded_input));
             impl_->input_state.needs_input_flush = true;
         }
-        impl_->startup_input.clear();
     }
-
-    if (impl_->options.executor.has_value()) {
-        if (auto* exec = std::any_cast<boost::asio::any_io_executor>(&impl_->options.executor)) {
-            boost::system::error_code ec;
-            impl_->input_stream.emplace(*exec);
-            impl_->input_stream->assign(impl_->options.input_fd, ec);
-            if (!ec) {
-                start_async_read(*impl_);
-            }
-        }
-    }
+    lock.lock();
+    start_async_io(*impl_);
     return {};
 }
 
 void ProcessTerminal::attach_io_executor(std::any executor) {
-    if (!executor.has_value()) return;
-    if (auto* exec = std::any_cast<boost::asio::any_io_executor>(&executor)) {
-        std::lock_guard lock(impl_->mutex);
-        impl_->options.executor = *exec;
-        if (impl_->modes.started && !impl_->input_stream) {
-            boost::system::error_code ec;
-            impl_->input_stream.emplace(*exec);
-            impl_->input_stream->assign(impl_->options.input_fd, ec);
-            if (!ec) {
-                start_async_read(*impl_);
-            }
-        }
-    }
+    const auto normalized = normalized_executor(executor);
+    if (!normalized) return;
+    std::lock_guard lock(impl_->mutex);
+    impl_->options.executor = *normalized;
+    if (impl_->modes.started) start_async_io(*impl_);
 }
 
 support::ExpectedVoid ProcessTerminal::stop() {
@@ -1227,11 +1265,26 @@ support::ExpectedVoid ProcessTerminal::stop() {
     }
 
     if (impl_->input_stream) {
-        boost::system::error_code ec;
-        impl_->input_stream->cancel(ec);
+        boost::system::error_code error;
+        impl_->input_stream->cancel(error);
         impl_->input_stream->release();
         impl_->input_stream.reset();
     }
+    if (impl_->output_stream) {
+        boost::system::error_code error;
+        impl_->output_stream->cancel(error);
+        impl_->output_stream->release();
+        impl_->output_stream.reset();
+    }
+    if (impl_->keepalive_timer) {
+        impl_->keepalive_timer->cancel();
+        impl_->keepalive_timer.reset();
+    }
+    if (impl_->readiness_timer) {
+        impl_->readiness_timer->cancel();
+        impl_->readiness_timer.reset();
+    }
+    impl_->output_wait_armed = false;
 
     impl_->input_sink.reset();
     impl_->resize_sink.reset();
@@ -1252,28 +1305,36 @@ support::ExpectedVoid ProcessTerminal::stop() {
     retain_error(result, restore_terminal_modes(*impl_));
     return result;
 }
-
 TerminalDimensions ProcessTerminal::dimensions() const {
-    if (impl_->modes.started) {
-        deliver_resize_if_changed(*impl_);
+    bool started = false;
+    {
+        std::lock_guard lock(impl_->mutex);
+        started = impl_->modes.started;
     }
+    if (started) deliver_resize_if_changed(*impl_);
     std::lock_guard lock(impl_->mutex);
     return impl_->dimensions;
 }
 
 TerminalCapabilities ProcessTerminal::capabilities() const {
-    std::lock_guard lock(impl_->mutex);
-    if (!impl_->options.executor.has_value() && impl_->modes.started) {
-        poll_nonblocking(*impl_);
+    bool should_poll = false;
+    {
+        std::lock_guard lock(impl_->mutex);
+        should_poll = !impl_->options.executor.has_value() && impl_->modes.started;
     }
+    if (should_poll) poll_nonblocking(*impl_);
+    std::lock_guard lock(impl_->mutex);
     return impl_->capabilities;
 }
 
 TerminalModeState ProcessTerminal::modes() const {
-    std::lock_guard lock(impl_->mutex);
-    if (!impl_->options.executor.has_value() && impl_->modes.started) {
-        poll_nonblocking(*impl_);
+    bool should_poll = false;
+    {
+        std::lock_guard lock(impl_->mutex);
+        should_poll = !impl_->options.executor.has_value() && impl_->modes.started;
     }
+    if (should_poll) poll_nonblocking(*impl_);
+    std::lock_guard lock(impl_->mutex);
     return impl_->modes;
 }
 
@@ -1299,8 +1360,7 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (position.column > impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal cursor position is outside its dimensions"));
+                support::ErrorCode::Validation, "Process Terminal cursor position is outside its dimensions"));
     }
     // `row` is a buffer row under the main-screen scrollback flow: the
     // renderer writes the full composed buffer in increasing row order, and
@@ -1313,17 +1373,14 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     // screen row of buffer row b is `scroll_origin + b - viewport_top`, and
     // the emulated scroll count stays in sync with the renderer's own tracked
     // viewport.
-    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
-        ? impl_->viewport_top - impl_->scroll_origin
-        : std::size_t{0};
+    const auto first_visible_row =
+            impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
     if (position.row < first_visible_row) {
         // Rows above the first visible buffer row are in the terminal's
         // scrollback; as before the anchor, they clamp to screen row 0 (or margin_top).
         impl_->cursor.row = impl_->margins_active ? impl_->margin_top : 0;
         impl_->cursor.column = position.column;
-        return enqueue_output(
-            *impl_,
-            std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+        return enqueue_output(*impl_, std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
     }
     const auto screen_row = impl_->scroll_origin + position.row - impl_->viewport_top;
     if (impl_->margins_active) {
@@ -1341,9 +1398,7 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         }
         impl_->cursor.row = impl_->margin_top + screen_row;
         impl_->cursor.column = position.column;
-        return enqueue_output(
-            *impl_,
-            std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+        return enqueue_output(*impl_, std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
     }
     if (screen_row >= impl_->dimensions.rows) {
         const auto scroll = screen_row - (impl_->dimensions.rows - 1);
@@ -1361,18 +1416,15 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     }
     impl_->cursor.row = screen_row;
     impl_->cursor.column = position.column;
-    return enqueue_output(
-        *impl_,
-        std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+    return enqueue_output(*impl_, std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
 }
 
 support::ExpectedVoid ProcessTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (bottom_row >= impl_->dimensions.rows || top_row >= bottom_row) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal scroll margins are invalid"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Process Terminal scroll margins are invalid"));
     }
     impl_->margin_top = top_row;
     impl_->margin_bottom = bottom_row;
@@ -1401,14 +1453,11 @@ support::ExpectedVoid ProcessTerminal::set_dock_cursor(std::size_t dock_row, std
     const auto screen_row = dock_start + dock_row;
     if (screen_row >= impl_->dimensions.rows || column > impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal dock cursor position is outside its dimensions"));
+                support::ErrorCode::Validation, "Process Terminal dock cursor position is outside its dimensions"));
     }
     impl_->cursor.row = screen_row;
     impl_->cursor.column = column;
-    return enqueue_output(
-        *impl_,
-        std::format("\x1b[{};{}H", screen_row + 1, column + 1));
+    return enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, column + 1));
 }
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);
@@ -1422,19 +1471,14 @@ support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
 support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage& image) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    const auto handle = image.preferred_handle
-        ? *image.preferred_handle
-        : TerminalImageHandle{.value = impl_->next_image_handle};
-    auto encoded = detail::encode_terminal_image(
-        impl_->capabilities.inline_images,
-        image,
-        handle);
+    const auto handle =
+            image.preferred_handle ? *image.preferred_handle : TerminalImageHandle{.value = impl_->next_image_handle};
+    auto encoded = detail::encode_terminal_image(impl_->capabilities.inline_images, image, handle);
     if (!encoded) return std::unexpected(encoded.error());
     if (image.region.column >= impl_->dimensions.columns ||
-        image.region.columns > impl_->dimensions.columns - image.region.column) {
+            image.region.columns > impl_->dimensions.columns - image.region.column) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Inline image region is outside terminal dimensions"));
+                support::ErrorCode::Validation, "Inline image region is outside terminal dimensions"));
     }
     // Image regions are buffer-absolute under the main-screen scrollback flow.
     // A region whose buffer row has scrolled into the terminal's native
@@ -1443,26 +1487,21 @@ support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const Termin
     // already held by its scroll history; skip the placement but keep
     // the handle allocation so the renderer's active-image tracking stays
     // consistent (fork-B image-follows-content, ADR 0037).
-    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
-        ? impl_->viewport_top - impl_->scroll_origin
-        : std::size_t{0};
+    const auto first_visible_row =
+            impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
     if (image.region.row < first_visible_row) {
         if (!image.preferred_handle) ++impl_->next_image_handle;
         return handle;
     }
     const auto screen_row = impl_->scroll_origin + image.region.row - impl_->viewport_top;
-    if (screen_row >= impl_->dimensions.rows ||
-        image.region.rows > impl_->dimensions.rows - screen_row) {
+    if (screen_row >= impl_->dimensions.rows || image.region.rows > impl_->dimensions.rows - screen_row) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Inline image region is outside terminal dimensions"));
+                support::ErrorCode::Validation, "Inline image region is outside terminal dimensions"));
     }
     // Both protocols anchor the image's top-left at the cursor, so position
     // the cursor at the region origin before emitting the sequence.
-    if (auto positioned = enqueue_output(
-            *impl_,
-            std::format("\x1b[{};{}H", screen_row + 1, image.region.column + 1));
-        !positioned) {
+    if (auto positioned = enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, image.region.column + 1));
+            !positioned) {
         return std::unexpected(positioned.error());
     }
     if (auto written = enqueue_output(*impl_, *encoded); !written) {
@@ -1472,35 +1511,28 @@ support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const Termin
     return handle;
 }
 
-support::ExpectedVoid ProcessTerminal::remove_image(
-    TerminalImageHandle handle,
-    const CellRegion& region) {
+support::ExpectedVoid ProcessTerminal::remove_image(TerminalImageHandle handle, const CellRegion& region) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (region.column >= impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Inline image removal region is outside terminal dimensions"));
+                support::ErrorCode::Validation, "Inline image removal region is outside terminal dimensions"));
     }
     // Buffer-absolute removal region (fork-B): regions that scrolled into the
     // native scrollback (above the first visible buffer row under the anchored
     // mapping, ADR 0041) are already out of the visible screen, so there is
     // nothing to blank in place; skip them.
-    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
-        ? impl_->viewport_top - impl_->scroll_origin
-        : std::size_t{0};
+    const auto first_visible_row =
+            impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
     if (region.row >= first_visible_row) {
         const auto screen_row = impl_->scroll_origin + region.row - impl_->viewport_top;
         const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
         if (screen_row >= impl_->dimensions.rows) {
             return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "Inline image removal region is outside terminal dimensions"));
+                    support::ErrorCode::Validation, "Inline image removal region is outside terminal dimensions"));
         }
         const auto rows = std::min(region.rows, impl_->dimensions.rows - screen_row);
-        auto removal = detail::encode_terminal_image_removal(
-            impl_->capabilities.inline_images,
-            handle);
+        auto removal = detail::encode_terminal_image_removal(impl_->capabilities.inline_images, handle);
         if (!removal) return std::unexpected(removal.error());
         if (auto written = enqueue_output(*impl_, *removal); !written) {
             return std::unexpected(written.error());
@@ -1509,14 +1541,9 @@ support::ExpectedVoid ProcessTerminal::remove_image(
         // delete restores the blanked cells the TUI placed the image over, and
         // the blanking is idempotent with it (matching the VirtualTerminal
         // recorded removal semantics).
-        if (auto cleared = enqueue_output(
-                *impl_,
-                std::format(
-                    "\x1b[{};{}H{}",
-                    screen_row + 1,
-                    region.column + 1,
-                    std::string(columns * rows, ' ')));
-            !cleared) {
+        if (auto cleared = enqueue_output(*impl_,
+                    std::format("\x1b[{};{}H{}", screen_row + 1, region.column + 1, std::string(columns * rows, ' ')));
+                !cleared) {
             return std::unexpected(cleared.error());
         }
     }
@@ -1531,13 +1558,13 @@ support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
         return {};
     }
     impl_->synchronized_output_state = ProcessTerminal::Impl::SynchronizedOutputState{
-        .cursor = impl_->cursor,
-        .scroll_origin = impl_->scroll_origin,
-        .viewport_top = impl_->viewport_top,
-        .next_image_handle = impl_->next_image_handle,
-        .margin_top = impl_->margin_top,
-        .margin_bottom = impl_->margin_bottom,
-        .margins_active = impl_->margins_active,
+            .cursor = impl_->cursor,
+            .scroll_origin = impl_->scroll_origin,
+            .viewport_top = impl_->viewport_top,
+            .next_image_handle = impl_->next_image_handle,
+            .margin_top = impl_->margin_top,
+            .margin_bottom = impl_->margin_bottom,
+            .margins_active = impl_->margins_active,
     };
     impl_->synchronized_output.clear();
     impl_->synchronized_output.append(kBeginSynchronizedUpdate);
@@ -1550,8 +1577,7 @@ support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->synchronized_update_depth == 0) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Process Terminal synchronized update is not active"));
+                support::ErrorCode::Validation, "Process Terminal synchronized update is not active"));
     }
     if (impl_->synchronized_update_depth > 1) {
         --impl_->synchronized_update_depth;
@@ -1585,24 +1611,25 @@ support::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
 support::ExpectedVoid ProcessTerminal::set_progress(bool active) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    auto result = enqueue_output(
-        *impl_,
-        active ? kProgressActiveSequence : kProgressClearSequence);
+    auto result = enqueue_output(*impl_, active ? kProgressActiveSequence : kProgressClearSequence);
     if (!result) return result;
     if (active) {
         if (!impl_->progress_active) {
             impl_->progress_active = true;
             impl_->progress_next_keepalive = std::chrono::steady_clock::now() + kProgressKeepalive;
+            arm_keepalive_timer_locked(*impl_);
         }
     } else {
         impl_->progress_active = false;
+        if (impl_->keepalive_timer) {
+            impl_->keepalive_timer->cancel();
+        }
     }
     return {};
 }
 
 support::ExpectedVoid ProcessTerminal::drain_input(
-    std::chrono::milliseconds max_ms,
-    std::chrono::milliseconds idle_ms) {
+        std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) {
     std::unique_lock lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->keyboard_protocol_pushed) {
@@ -1633,9 +1660,8 @@ support::ExpectedVoid ProcessTerminal::drain_input(
         if (now >= deadline) break;
         const auto idle_elapsed = now - last_activity;
         if (idle_elapsed >= idle_ms) break;
-        const auto remaining = std::min(
-            std::chrono::duration_cast<std::chrono::milliseconds>(idle_ms - idle_elapsed),
-            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now));
+        const auto remaining = std::min(std::chrono::duration_cast<std::chrono::milliseconds>(idle_ms - idle_elapsed),
+                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now));
 
         pollfd pfd{.fd = impl_->options.input_fd, .events = POLLIN, .revents = 0};
         const int timeout_ms = std::max(1, static_cast<int>(remaining.count()));
@@ -1671,6 +1697,5 @@ support::ExpectedVoid ProcessTerminal::drain_input(
     impl_->draining = false;
     return {};
 }
-
 
 } // namespace cch::tui
