@@ -14,6 +14,7 @@ Press ctrl+o to show full startup help and loaded resources.
  THINKING END                                                           
                                                                         
  I will read the persisted file.                                        
+                                                                        
  I will continue after the tool.                                        
                                                                         
  read saved.txt                                                         
@@ -40,6 +41,8 @@ Press ctrl+o to show full startup help and loaded resources.
                                                                         
  Branch summary (ctrl+o to expand)                                      
                                                                         
+
+
                                                                         
                                                                         
 ────────────────────────────────────────────────────────────────────────
@@ -47,6 +50,3 @@ Press ctrl+o to show full startup help and loaded resources.
 ────────────────────────────────────────────────────────────────────────
 /tmp/cpp-harness-rendering-message-pipeline             
 ?/128k (auto)                                                 fake-model
-
-
-
