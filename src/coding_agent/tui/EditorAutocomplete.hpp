@@ -69,8 +69,7 @@ build_editor_autocomplete_provider(
 /// Executor-bound one-shot debounce timer for the editor's autocomplete
 /// requests. All timer state is confined to the executor thread via posts;
 /// the shared state keeps the wait handler safe after the editor is gone.
-class AsioAutocompleteDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {
-public:
+class AsioAutocompleteDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {public:
     explicit AsioAutocompleteDebounceTimer(boost::asio::any_io_executor executor);
     AsioAutocompleteDebounceTimer(AsioAutocompleteDebounceTimer&&) = delete;
     AsioAutocompleteDebounceTimer& operator=(AsioAutocompleteDebounceTimer&&) = delete;
@@ -81,6 +80,46 @@ public:
     void start(std::chrono::milliseconds delay,
                std::move_only_function<support::ExpectedVoid()> on_fire) override;
     void cancel() override;
+
+private:
+    struct State;
+    std::shared_ptr<State> state_;
+};
+
+/// Delivers autocomplete results on the editor's serialized domain (issue
+/// #609). The AutocompleteProvider contract allows a provider to compute on
+/// a worker thread, but the receiver re-enters the editor's serialized
+/// domain through the render request; this composition-root wrapper passes
+/// through delivery that is already on the serialized domain thread (so
+/// synchronous provider flows keep their in-interaction atomicity) and
+/// posts worker-thread delivery onto the composed executor, exactly like
+/// AsioAutocompleteDebounceTimer confines its callbacks.
+class ExecutorAutocompleteProvider final : public cch::tui::AutocompleteProvider {
+public:
+    /// The wrapped provider is owned; the executor must outlive every posted
+    /// delivery (the engine's io_context does).
+    explicit ExecutorAutocompleteProvider(
+            boost::asio::any_io_executor executor,
+            std::unique_ptr<cch::tui::AutocompleteProvider> wrapped);
+    ExecutorAutocompleteProvider(ExecutorAutocompleteProvider&&) = delete;
+    ExecutorAutocompleteProvider& operator=(ExecutorAutocompleteProvider&&) = delete;
+    ~ExecutorAutocompleteProvider() override = default;
+    ExecutorAutocompleteProvider(const ExecutorAutocompleteProvider&) = delete;
+    ExecutorAutocompleteProvider& operator=(const ExecutorAutocompleteProvider&) = delete;
+
+    [[nodiscard]] std::vector<std::string> trigger_characters() const override;
+    void get_suggestions(const cch::tui::AutocompleteRequest& request,
+            cch::tui::AutocompleteResultSink sink) override;
+    [[nodiscard]] cch::tui::AutocompleteApplyResult apply_completion(
+            const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem& item,
+            std::string_view prefix) override;
+    [[nodiscard]] bool should_trigger_file_completion(
+            const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column) const override;
 
 private:
     struct State;

@@ -70,8 +70,12 @@ struct AutocompleteApplyResult {
 };
 
 /// Called exactly once per request with std::nullopt when no suggestions are
-/// available. May be invoked synchronously inside `get_suggestions` or later
-/// from any thread; the receiver must be safe for cross-thread invocation.
+/// available. Delivery reaches the receiver on the editor's serialized
+/// execution domain: synchronously inside `get_suggestions` (which runs on
+/// that domain), or marshaled onto it afterwards. A provider that computes
+/// on a worker thread must not invoke the sink there — the production
+/// composition root wraps the provider so worker-thread delivery is posted
+/// onto the composed executor (#609).
 using AutocompleteResultSink = std::move_only_function<support::ExpectedVoid(std::optional<AutocompleteSuggestions>)>;
 
 /// The asynchronous suggestion source (pi `AutocompleteProvider`).
