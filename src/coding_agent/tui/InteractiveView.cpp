@@ -421,6 +421,17 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         } else {
             editor_lines = std::move(replaced->lines);
         }
+        // Height-bound the swap-in dialog (#607): pending/status/footer keep
+        // their dock rows and the minimum chat slice stays visible, so an
+        // oversized dialog is cropped from the top. Its input and selection
+        // rows remain at the physical bottom instead of growing past the
+        // terminal's addressable dock rows.
+        const auto dock_rest_rows = pending_lines.size() + status_lines.size() + footer_lines.size();
+        const auto replacement_budget =
+                available_rows_ > dock_rest_rows + kMinChatRows ? available_rows_ - dock_rest_rows - kMinChatRows : 1;
+        if (editor_lines.size() > replacement_budget) {
+            editor_lines.erase(editor_lines.begin(), editor_lines.end() - replacement_budget);
+        }
     } else {
         editor_.set_available_height(available_rows_ > fixed_rows ? available_rows_ - fixed_rows : 0);
         // The editor enters Bash mode as soon as the trimmed input begins

@@ -297,6 +297,14 @@ support::ExpectedVoid Tui::render() {
     const std::size_t dock_height = new_dock_lines.size();
     const std::size_t viewport_height = materialized.viewport_height.value_or(
         dimensions.rows > dock_height ? dimensions.rows - dock_height : 0);
+    // A dock taller than its addressable rows (an oversized replacement
+    // dialog or autocomplete under a shrunk terminal, #607) is cropped from
+    // the top so the editor and footer keep the physical bottom rows.
+    // Cropped rows are never addressed, so the overflow is nonfatal; real
+    // terminal write failures still propagate.
+    const std::size_t dock_capacity =
+            has_dock && viewport_height >= 2 ? dimensions.rows - viewport_height : dimensions.rows;
+    const std::size_t dock_skip = dock_height > dock_capacity ? dock_height - dock_capacity : 0;
 
     // The full composed buffer is written to the terminal's main screen with
     // no viewport clipping; overflow advances into the terminal's native
@@ -344,15 +352,19 @@ support::ExpectedVoid Tui::render() {
     };
 
     auto write_dock_lines = [&]() -> support::ExpectedVoid {
-        for (std::size_t i = 0; i < new_dock_lines.size(); ++i) {
-            if (auto result = write_dock_line(terminal_, i, new_dock_lines[i]); !result) {
+        for (std::size_t i = dock_skip; i < new_dock_lines.size(); ++i) {
+            if (auto result = write_dock_line(terminal_, i - dock_skip, new_dock_lines[i]); !result) {
                 return std::unexpected(result.error());
             }
         }
-        if (new_dock_lines.size() < previous_dock_lines_.size()) {
+        // Stale-row clearing compares the visible row counts: a previously
+        // cropped dock only ever occupied `dock_capacity` rows on screen.
+        const std::size_t visible_rows = new_dock_lines.size() - dock_skip;
+        const std::size_t previous_visible = std::min(previous_dock_lines_.size(), dock_capacity);
+        if (visible_rows < previous_visible) {
             const std::string empty_line(dimensions.columns, ' ');
-            for (std::size_t i = new_dock_lines.size(); i < previous_dock_lines_.size(); ++i) {
-                if (auto result = write_dock_line(terminal_, i, empty_line); !result) {
+            for (std::size_t row = visible_rows; row < previous_visible; ++row) {
+                if (auto result = write_dock_line(terminal_, row, empty_line); !result) {
                     return std::unexpected(result.error());
                 }
             }
@@ -532,7 +544,11 @@ support::ExpectedVoid Tui::render() {
                     dock_row -= viewport_height;
                 }
                 if (dock_row < new_dock_lines.size()) {
-                    if (auto cursor_result = terminal_.set_dock_cursor(dock_row, cursor_loc->column); !cursor_result) {
+                    // The crop shifts every dock row up; a cursor on a
+                    // cropped row clamps to the first visible dock row.
+                    const std::size_t visible_row = dock_row > dock_skip ? dock_row - dock_skip : 0;
+                    if (auto cursor_result = terminal_.set_dock_cursor(visible_row, cursor_loc->column);
+                            !cursor_result) {
                         render_result = std::unexpected(cursor_result.error());
                     }
                 } else {

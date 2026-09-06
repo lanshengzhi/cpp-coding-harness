@@ -498,3 +498,202 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
     CHECK(cch::tests::same_terminal_state(restored, original));
 }
+
+TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the editor and footer docked and the "
+          "session running",
+        "[coding_agent][tui][terminal][dock][resize][issue599][issue607]") {
+    auto pty = cch::tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    termios original{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
+
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace config;
+    cch::tests::RuntimeFixture runtime;
+    cch::tests::ModelsSessionOptions options;
+    options.session_target = cch::coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
+    auto models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
+    cch::coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            cch::coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    REQUIRE(created);
+    cch::tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+    });
+    boost::asio::io_context io;
+    std::optional<cch::support::ExpectedVoid> run_result;
+    std::exception_ptr run_exception;
+    auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(*created->session)
+                       .with_agent_config_directory(config.path())
+                       .build();
+    boost::asio::co_spawn(io,
+            cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
+                run_exception = exception;
+                run_result.emplace(std::move(result));
+            });
+    std::jthread runner([&] { io.run(); });
+    InteractiveSmokeCleanup cleanup{
+            *created->session,
+            terminal,
+            io,
+            runner,
+            pty->master.get(),
+    };
+    REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+    auto output = cch::tests::read_available(pty->master.get());
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
+
+    // '/' at message start opens autocomplete in the main editor.
+    REQUIRE(::write(pty->master.get(), "/", 1) == 1);
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"> /"}));
+
+    // Shrink below the open dock's height. The editor/menu and footer remain
+    // live at the physical bottom instead of turning a dock address error
+    // into InteractiveEngine::request_exit().
+    const auto before_resize = output.size();
+    winsize dimensions{
+            .ws_row = 6,
+            .ws_col = 80,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
+    };
+    REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &dimensions) == 0);
+    ::kill(::getpid(), SIGWINCH);
+
+    const bool footer_redocked = cch::tests::wait_until(
+            [&] {
+                output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
+                return output.find("fake-model", before_resize) != std::string::npos &&
+                       output.find("\x1b[6;", before_resize) != std::string::npos;
+            },
+            std::chrono::seconds(10));
+    UNSCOPED_INFO("Slash resize test output:\n" << output.substr(before_resize));
+    CHECK(footer_redocked);
+    CHECK(terminal.modes().started);
+
+    // Close the menu, erase '/', then exit through the empty-editor Ctrl+D.
+    constexpr char kEscape = '\x1b';
+    REQUIRE(::write(pty->master.get(), &kEscape, 1) == 1);
+    constexpr char kBackspace = '\x7f';
+    REQUIRE(::write(pty->master.get(), &kBackspace, 1) == 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    constexpr char kExit = '\x04';
+    REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
+    runner.join();
+    cleanup.dismiss();
+
+    CHECK(run_exception == nullptr);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize keeps the footer docked and the "
+          "session running",
+        "[coding_agent][tui][terminal][dock][resize][issue599][issue607]") {
+    auto pty = cch::tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    termios original{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
+
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace config;
+    cch::tests::RuntimeFixture runtime;
+    cch::tests::ModelsSessionOptions options;
+    options.session_target = cch::coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.execution_runtime_target = runtime.make_target();
+    auto models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
+    cch::coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            cch::coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    REQUIRE(created);
+    cch::tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+    });
+    boost::asio::io_context io;
+    std::optional<cch::support::ExpectedVoid> run_result;
+    std::exception_ptr run_exception;
+    auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(*created->session)
+                       .with_agent_config_directory(config.path())
+                       .build();
+    boost::asio::co_spawn(io,
+            cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
+                run_exception = exception;
+                run_result.emplace(std::move(result));
+            });
+    std::jthread runner([&] { io.run(); });
+    InteractiveSmokeCleanup cleanup{
+            *created->session,
+            terminal,
+            io,
+            runner,
+            pty->master.get(),
+    };
+    REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+    auto output = cch::tests::read_available(pty->master.get());
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
+
+    // Ctrl+L opens a model selector in the replacement editor slot.
+    const auto before_selector = output.size();
+    REQUIRE(::write(pty->master.get(), "\x0c", 1) == 1);
+    const bool selector_shown = cch::tests::wait_until(
+            [&] {
+                output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
+                return output.find("Only showing models from configured providers.", before_selector) !=
+                       std::string::npos;
+            },
+            std::chrono::seconds(10));
+    UNSCOPED_INFO("Selector output:\n" << output.substr(before_selector));
+    REQUIRE(selector_shown);
+
+    // '/' is owned by the replacement dialog, not the main editor.
+    REQUIRE(::write(pty->master.get(), "/", 1) == 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
+    REQUIRE(terminal.modes().started);
+
+    const auto before_resize = output.size();
+    winsize dimensions{
+            .ws_row = 6,
+            .ws_col = 80,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
+    };
+    REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &dimensions) == 0);
+    ::kill(::getpid(), SIGWINCH);
+
+    const bool footer_redocked = cch::tests::wait_until(
+            [&] {
+                output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
+                return output.find("fake-model", before_resize) != std::string::npos &&
+                       output.find("\x1b[6;", before_resize) != std::string::npos;
+            },
+            std::chrono::seconds(10));
+    UNSCOPED_INFO("Dialog resize test output:\n" << output.substr(before_resize));
+    CHECK(footer_redocked);
+    CHECK(terminal.modes().started);
+    // The dialog owns Escape and Ctrl+D while it is open; stop the PTY after
+    // the liveness assertion so teardown cannot turn selector cancellation
+    // timing into a test failure.
+    REQUIRE(terminal.stop());
+    io.stop();
+    runner.join();
+    CHECK(terminal.modes().started == false);
+}
