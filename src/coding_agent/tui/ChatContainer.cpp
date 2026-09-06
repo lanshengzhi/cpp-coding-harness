@@ -734,11 +734,15 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
 void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
         if (std::holds_alternative<ai::AssistantMessage>(start->message)) {
+            // A MessageStart begins a stream even when a synthetic caller
+            // leaves the passive stop reason at its default value.
+            auto message = start->message;
+            std::get<ai::AssistantMessage>(message).stop_reason = ai::AssistantStopReason::Pending;
             // Capture the item index before add_message: synchronize_tools
             // may append standalone tool items after it, so the streaming
             // target must not be the last deque entry.
             const auto assistant_index = impl_->items.size();
-            impl_->add_message(start->message);
+            impl_->add_message(std::move(message));
             impl_->active_assistant_item = assistant_index;
             if (assistant_index < impl_->items.size()) {
                 if (auto* msg = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
