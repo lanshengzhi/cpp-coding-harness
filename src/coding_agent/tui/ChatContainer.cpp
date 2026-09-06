@@ -370,6 +370,42 @@ struct ChatContainer::Impl {
         }
     }
 
+    /// Refresh the latest committed bash entry when its snapshot counterpart
+    /// mutated in place (cancel flag, output, exit code). The append cursor
+    /// cannot observe same-size mutations, so without this the view keeps
+    /// the pre-cancel rendering forever (#597). Only the latest bash pair
+    /// is compared: cancellation always settles the newest execution, and
+    /// items interleave non-message entries so positional pairing beyond
+    /// the tail is unreliable. Pairing keys on the command text.
+    void sync_committed_bash(const std::vector<ai::MessageVariant>& messages) {
+        const ai::BashExecutionMessage* updated = nullptr;
+        for (auto iterator = messages.rbegin(); iterator != messages.rend(); ++iterator) {
+            if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&*iterator); bash != nullptr) {
+                updated = bash;
+                break;
+            }
+        }
+        if (updated == nullptr) return;
+        for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
+            auto* item = std::get_if<MessageItem>(&*iterator);
+            if (item == nullptr) continue;
+            auto* current = std::get_if<ai::BashExecutionMessage>(&item->message);
+            if (current == nullptr) continue;
+            if (current->command != updated->command) return;
+            if (current->output == updated->output && current->exit_code == updated->exit_code &&
+                    current->cancelled == updated->cancelled && current->truncated == updated->truncated &&
+                    current->full_output_path == updated->full_output_path &&
+                    current->exclude_from_context == updated->exclude_from_context) {
+                return;
+            }
+            item->message = ai::MessageVariant{*updated};
+            rebuild_message(*item);
+            item->cache.invalidate();
+            update_item_commitment(*item);
+            return;
+        }
+    }
+
     void add_message(ai::MessageVariant message) {
         // Tool results settle their owning tool component; they never render
         // as standalone chat entries (pi addMessageToChat "toolResult").
@@ -744,7 +780,22 @@ ChatContainer& ChatContainer::operator=(ChatContainer&&) noexcept = default;
 ChatContainer::~ChatContainer() = default;
 
 void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
+    // In-flight tool executions outlive transcript rebuilds: their partial
+    // results live only in the view (snapshots carry no partials), so a
+    // rebuild that drops them loses live output forever. Preserve Pending
+    // entries across the clear below; the add loop re-claims them by call
+    // id into the rebuilt transcript (#597). Settled entries rebuild from
+    // the snapshot instead, so stale outcomes cannot survive a rewind.
+    std::unordered_map<std::string, std::unique_ptr<Impl::ToolItem>> pending_tools;
+    for (auto& entry : impl_->owned_tools) {
+        if (entry.second != nullptr && entry.second->status == Impl::ToolStatus::Pending) {
+            pending_tools.emplace(entry.first, std::move(entry.second));
+        }
+    }
     impl_->clear();
+    for (auto& entry : pending_tools) {
+        impl_->owned_tools.emplace(entry.first, std::move(entry.second));
+    }
     for (const auto& message : snapshot.agent_state.messages) {
         impl_->add_message(message);
     }
@@ -771,11 +822,17 @@ void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
     const auto& messages = snapshot.agent_state.messages;
     if (!snapshot.agent_state.streaming_message && impl_->transcript_needs_reconcile) {
         // A projection can briefly expose the newly submitted user message
-        // before the assistant's committed MessageEnd. Preserve the live
-        // component until that committed assistant arrives.
-        if (messages.empty() || std::get_if<ai::AssistantMessage>(&messages.back()) == nullptr) return;
-        initialize(snapshot);
-        return;
+        // before the assistant's committed MessageEnd. Rebuild from the
+        // snapshot once that committed assistant arrives; otherwise fall
+        // through and append committed history below. Never return here
+        // merely because the back is not an assistant: with no live
+        // streaming item there is nothing to preserve, and returning would
+        // skip trailing committed entries (e.g. a cancelled bash message
+        // at Session Close) forever (#597).
+        if (!messages.empty() && std::get_if<ai::AssistantMessage>(&messages.back()) != nullptr) {
+            initialize(snapshot);
+            return;
+        }
     }
     if (messages.size() < impl_->committed_message_count) {
         initialize(snapshot);
@@ -810,6 +867,7 @@ void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
         impl_->add_message(messages[next_message]);
     }
     impl_->committed_message_count = messages.size();
+    impl_->sync_committed_bash(messages);
     if (!messages.empty()) {
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&messages.back())) {
             impl_->update_latest_assistant(*assistant);
