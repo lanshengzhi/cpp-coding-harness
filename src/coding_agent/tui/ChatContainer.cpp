@@ -279,6 +279,12 @@ struct ChatContainer::Impl {
         std::string name;
         std::string arguments;
         ToolStatus status{ToolStatus::Pending};
+        // True between a ToolExecutionStart and its settle. A repeated call
+        // id re-enters execution while the snapshot still carries the previous
+        // invocation's committed result; replaying that stale result during a
+        // transcript rebuild must not clobber the in-flight state (pi
+        // correlation by call id renders one component per id).
+        bool in_flight{false};
         ai::ToolResultMessage result;
         std::unique_ptr<ToolExecutionComponent> component;
     };
@@ -406,11 +412,11 @@ struct ChatContainer::Impl {
         }
     }
 
-    void add_message(ai::MessageVariant message) {
+    void add_message(ai::MessageVariant message, bool from_snapshot = false) {
         // Tool results settle their owning tool component; they never render
         // as standalone chat entries (pi addMessageToChat "toolResult").
         if (const auto* result = std::get_if<ai::ToolResultMessage>(&message)) {
-            settle_tool(*result);
+            settle_tool(*result, from_snapshot);
             return;
         }
         items.emplace_back(MessageItem{
@@ -424,6 +430,11 @@ struct ChatContainer::Impl {
         rebuild_message(item);
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&item.message)) {
             synchronize_tools(item, *assistant);
+            // Snapshot replay must restore the settled provider-outcome
+            // invariant: a committed assistant with unmatched tool calls and a
+            // non-ToolUse stop reason renders its provider failure on the tool
+            // block (pi assistant-message.ts), not as a pending execution.
+            settle_provider_tools(*assistant);
         }
         update_item_commitment(item);
     }
@@ -588,8 +599,14 @@ struct ChatContainer::Impl {
         }
     }
 
-    void settle_tool(const ai::ToolResultMessage& result) {
+    /// Applies a tool result to its owning component. `from_snapshot` marks
+    /// transcript replay: a committed result for a call id that is currently
+    /// executing again belongs to the previous invocation and is skipped so it
+    /// cannot overwrite the in-flight partial state (#1752 repeated call id).
+    void settle_tool(const ai::ToolResultMessage& result, bool from_snapshot = false) {
         auto& tool = ensure_tool(result.tool_call_id, result.tool_name, {});
+        if (from_snapshot && tool.in_flight) return;
+        tool.in_flight = false;
         tool.status = result.is_error ? ToolStatus::Failure : ToolStatus::Success;
         tool.result = result;
         tool.component->update_result(result);
@@ -809,7 +826,7 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
         impl_->owned_tools.emplace(entry.first, std::move(entry.second));
     }
     for (const auto& message : snapshot.agent_state.messages) {
-        impl_->add_message(message);
+        impl_->add_message(message, true);
     }
     impl_->committed_message_count = snapshot.agent_state.messages.size();
     for (auto& item : impl_->items) {
@@ -956,6 +973,7 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
         auto& tool = impl_->ensure_tool(start->tool_call_id, start->tool_name, serialized_arguments(start->args), true);
         tool.status = Impl::ToolStatus::Pending;
+        tool.in_flight = true;
         impl_->invalidate_and_update_tool_owner(&tool);
         return;
     }
@@ -976,6 +994,7 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     }
     if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
         auto& tool = impl_->ensure_tool(end->tool_call_id, end->tool_name, {});
+        tool.in_flight = false;
         tool.status = end->is_error || end->result.is_error ? Impl::ToolStatus::Failure : Impl::ToolStatus::Success;
         tool.result = ai::ToolResultMessage{
                 .tool_call_id = tool.call_id,
