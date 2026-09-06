@@ -292,10 +292,16 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
                         std::move(invocation->command),
                         invocation->exclude_from_context,
                         [self](const runtime::UserBashProgress& progress) -> support::ExpectedVoid {
-                            if (self->running_ && self->view_ != nullptr) {
-                                self->view_->set_user_bash_progress(progress);
-                                self->tui_.invalidate();
-                            }
+                            // Session-domain progress: serialize the view mutation
+                            // onto the executor like the binding event paths
+                            // (ADR 0040) and schedule its frame.
+                            auto owned_progress = progress;
+                            self->post_from_view(
+                                    [owned_progress = std::move(owned_progress)](InteractiveEngine& engine) mutable {
+                                        if (!engine.user_bash_active_ || engine.view_ == nullptr) return;
+                                        engine.view_->set_user_bash_progress(std::move(owned_progress));
+                                        engine.invalidate_frame();
+                                    });
                             return {};
                         });
                 self->user_bash_finished(started_generation, std::move(result), recall);
@@ -499,8 +505,11 @@ void InteractiveEngine::user_bash_finished(
     user_bash_active_ = false;
     if (view_ != nullptr && running_) {
         if (result) {
-            view_->commit_user_bash(
-                ai::MessageVariant{std::move(result->message)});
+            // The committed message arrives through the snapshot pull
+            // (single committer, #597); pushing it here as well duplicates
+            // the block whenever the pull wins the race. Only the transient
+            // progress is cleared on this path.
+            view_->clear_user_bash_progress();
             if (result->diagnostic) {
                 view_->append_user_bash_diagnostic(
                     combined_error_text(*result->diagnostic));

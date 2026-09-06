@@ -223,7 +223,6 @@ public:
     /// The terminal is borrowed and must outlive every view operation.
     void set_terminal(cch::tui::Terminal* terminal);
     void apply_event(const agent::AgentLifecycleEvent& event);
-    void append_committed_message(ai::MessageVariant message);
     void clear_transcript();
     void append_frontend_message(std::string text);
     void append_diagnostic(std::string text);
@@ -277,11 +276,6 @@ public:
     void set_pending_input(const agent::AgentInputQueues& queues);
     void set_user_bash_progress(runtime::UserBashProgress progress);
     void clear_user_bash_progress();
-
-    /// Replaces the pending block with its committed transcript entry in one
-    /// step, so the clear-pending-before-append ordering cannot drift apart
-    /// at call sites.
-    void commit_user_bash(ai::MessageVariant message);
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;

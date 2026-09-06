@@ -89,10 +89,6 @@ void InteractiveView::set_terminal(cch::tui::Terminal* terminal) { editor_.set_t
 
 void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) { chat_.apply_event(event); }
 
-void InteractiveView::append_committed_message(ai::MessageVariant message) {
-    chat_.append_committed_message(std::move(message));
-}
-
 void InteractiveView::clear_transcript() { chat_.clear(); }
 
 void InteractiveView::append_frontend_message(std::string text) { chat_.append_frontend_message(std::move(text)); }
@@ -257,13 +253,6 @@ void InteractiveView::clear_user_bash_progress() {
     pending_bash_.reset();
     last_bash_output_size_ = 0;
     bash_outcome_set_ = false;
-}
-
-void InteractiveView::commit_user_bash(ai::MessageVariant message) {
-    pending_bash_.reset();
-    last_bash_output_size_ = 0;
-    bash_outcome_set_ = false;
-    chat_.append_committed_message(std::move(message));
 }
 
 support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t width) {

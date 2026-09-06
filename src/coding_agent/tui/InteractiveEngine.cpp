@@ -848,7 +848,28 @@ void InteractiveEngine::request_exit() {
 void InteractiveEngine::signal_exit() {
     ticker_running_ = false;
     (void)frame_ticker_.cancel();
+    // The ticker is stopped, so no further frames will pull the terminal
+    // publication (e.g. cancelled completions after Session Close): paint
+    // it synchronously before the run tears down (#597). Idempotent: the
+    // reconcile cursor and the Tui differential absorb repeat calls.
+    paint_final_snapshot();
     (void)exit_wait_.cancel();
+}
+
+void InteractiveEngine::paint_final_snapshot() {
+    if (!running_ || view_ == nullptr || session_ == nullptr || session_ui_ == nullptr) return;
+    if (projection_source_ == nullptr) return;
+    const auto sampled_version = projection_source_->state_version();
+    if (sampled_version != last_rendered_version_) {
+        if (const auto snapshot = projection_source_->snapshot()) {
+            if (!session_ui_->reconcile_snapshot(*snapshot)) return;
+            last_rendered_version_ = sampled_version;
+        }
+    }
+    local_dock_dirty_.store(true, std::memory_order_release);
+    if (render()) {
+        local_dock_dirty_.store(false, std::memory_order_release);
+    }
 }
 
 } // namespace cch::coding_agent::tui

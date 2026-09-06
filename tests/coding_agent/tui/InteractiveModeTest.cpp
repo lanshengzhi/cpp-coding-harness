@@ -2163,8 +2163,12 @@ TEST_CASE(
     REQUIRE(tool_pointer->observed_stop_token.has_value());
     REQUIRE(client_pointer->first_stop_token.has_value());
     CHECK(*tool_pointer->observed_stop_token == *client_pointer->first_stop_token);
-    CHECK(visible_screen(terminal).find("partial tool output before abort") !=
-        std::string::npos);
+    // The partial crosses runtime worker hops before the first paint; wait
+    // on the painted outcome itself, never a bare drain (pump_until serves
+    // one ready handler per iteration so the loader repost cannot starve
+    // the deadline).
+    CHECK(tests::pump_until(io,
+            [&] { return visible_screen(terminal).find("partial tool output before abort") != std::string::npos; }));
 
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());

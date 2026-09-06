@@ -436,10 +436,30 @@ support::ExpectedVoid Tui::render() {
             return clear_and_rewrite();
         }
         // A viewport/dock re-partition repaints the full buffer at the new
-        // partition without clearing scrollback: orphaned rows rejoin the
-        // viewport and every dock row is rewritten at its new address.
+        // partition without clearing scrollback: every dock row is rewritten
+        // at its new address. Rows the shrunken dock vacated inside the
+        // grown viewport still show stale dock pixels (they are past the new
+        // transcript end, so no buffer line repaints them): clear that gap
+        // in place like the differential clear-on-shrink below (#597).
         if (viewport_height_changed) {
-            return write_full_buffer();
+            if (auto result = write_full_buffer(); !result) {
+                return std::unexpected(result.error());
+            }
+            for (std::size_t row = new_lines.size(); row < viewport_height; ++row) {
+                const CellRegion region{
+                        .column = 0,
+                        .row = row,
+                        .columns = dimensions.columns,
+                        .rows = 1,
+                };
+                if (auto result = remove_images_intersecting(region); !result) {
+                    return std::unexpected(result.error());
+                }
+                if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
+                    return std::unexpected(result.error());
+                }
+            }
+            return {};
         }
         if (auto margins = apply_scroll_margins(); !margins) {
             return std::unexpected(margins.error());

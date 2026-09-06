@@ -500,6 +500,9 @@ private:
     [[nodiscard]] bool render();
     void request_exit();
     void signal_exit();
+    /// Synchronously reconcile and render the terminal publication once
+    /// (Session Close final paint; idempotent).
+    void paint_final_snapshot();
 
     // ── State ────────────────────────────────────────────────────────────
 
