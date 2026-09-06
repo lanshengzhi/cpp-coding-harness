@@ -196,10 +196,14 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     refresh_bash_session_environment();
     current_snapshot_.store(std::make_shared<const AgentSessionSnapshot>(create_snapshot()), std::memory_order_release);
     state_version_.store(1, std::memory_order_release);
-    if (auto sub = agent_->subscribe([this](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-            update_projection();
+    current_snapshot_version_.store(1, std::memory_order_release);
+    projection_state_.store(
+            std::make_shared<const ProjectionState>(make_projection_state()), std::memory_order_release);
+    if (auto sub = agent_->subscribe([this](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
+            update_projection(event);
             return {};
-        }); sub) {
+        });
+            sub) {
         agent_event_subscription_.emplace(std::move(*sub));
     }
 }
@@ -688,7 +692,12 @@ void AgentSession::Impl::close() noexcept {
 }
 
 std::shared_ptr<harness::AsyncFileSystem> AgentSession::Impl::release_close_resources() noexcept {
+    // Close releases the live Agent below. Preserve the terminal immutable
+    // publication first so projection consumers can still sample after Close.
     if (agent_) {
+        auto terminal = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
+        current_snapshot_.store(std::move(terminal), std::memory_order_release);
+        current_snapshot_version_.store(state_version_.load(std::memory_order_acquire), std::memory_order_release);
         agent_->clear_subscriptions();
     }
     agent_.reset();

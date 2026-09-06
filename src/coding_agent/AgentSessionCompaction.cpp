@@ -198,7 +198,7 @@ boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::Impl::
     if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, context.messages); !replaced) {
         co_return std::unexpected(replaced.error());
     }
-
+    update_projection();
     std::size_t estimated_after = 0;
     for (const auto& message : context.messages) {
         estimated_after += harness::session::estimate_tokens(message);

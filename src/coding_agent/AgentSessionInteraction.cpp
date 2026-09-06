@@ -22,6 +22,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <format>
@@ -159,7 +160,7 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         config_.theme_diagnostics = std::move(loading->theme_diagnostics);
 
         agent_->set_system_prompt(rebuild_system_prompt());
-
+        update_projection();
         AgentSessionReloadResult result;
         result.skill_diagnostics = config_.skill_diagnostics;
         result.prompt_diagnostics = config_.prompt_diagnostics;
@@ -215,6 +216,7 @@ support::ExpectedVoid AgentSession::Impl::commit_user_bash_completion(runtime::U
     if (auto persisted = session_.store->append(ai::MessageVariant{completion.message}); !persisted) {
         completion.diagnostic = std::move(persisted.error());
     }
+    update_projection();
     return {};
 }
 
@@ -885,6 +887,7 @@ support::Expected<TreeNavigationResult> AgentSession::Impl::navigate_tree(std::s
     if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, context.messages); !replaced) {
         return std::unexpected(replaced.error());
     }
+    update_projection();
     return TreeNavigationResult{
             .editor_text = decision.editor_text,
             .cancelled = false,
@@ -921,14 +924,63 @@ AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
     };
 }
 
+AgentSession::Impl::ProjectionState AgentSession::Impl::make_projection_state() const {
+    const auto live = agent_ ? agent_->state() : agent::AgentState{};
+    return ProjectionState{
+            .system_prompt = live.system_prompt,
+            .messages = std::make_shared<const std::vector<ai::MessageVariant>>(live.messages),
+            .is_running = live.is_running,
+            .streaming_message = live.streaming_message,
+            .active_tool_names = live.active_tool_names,
+            .pending_tool_call_ids = live.pending_tool_call_ids,
+            .input_queues = live.input_queues,
+            .model = live.model,
+            .thinking_level = live.thinking_level,
+            .diagnostics = live.diagnostics,
+            .metadata = session_.metadata,
+            .topology = session_.topology,
+            .session_path = session_path_,
+            .session_event_diagnostics = session_event_diagnostics_,
+    };
+}
+
+AgentSessionSnapshot AgentSession::Impl::materialize_snapshot(const ProjectionState& state) const {
+    AgentSessionSnapshot snapshot;
+    snapshot.agent_state.system_prompt = state.system_prompt;
+    if (state.messages) {
+        snapshot.agent_state.messages = *state.messages;
+    }
+    snapshot.agent_state.is_running = state.is_running;
+    snapshot.agent_state.streaming_message = state.streaming_message;
+    snapshot.agent_state.active_tool_names = state.active_tool_names;
+    snapshot.agent_state.pending_tool_call_ids = state.pending_tool_call_ids;
+    snapshot.agent_state.input_queues = state.input_queues;
+    snapshot.agent_state.model = state.model;
+    snapshot.agent_state.thinking_level = state.thinking_level;
+    snapshot.agent_state.diagnostics = state.diagnostics;
+    snapshot.metadata = state.metadata;
+    snapshot.topology = state.topology;
+    snapshot.session_path = state.session_path;
+    snapshot.session_event_diagnostics = state.session_event_diagnostics;
+    return snapshot;
+}
+
 std::shared_ptr<const AgentSessionSnapshot> AgentSession::Impl::snapshot() const {
     auto current = current_snapshot_.load(std::memory_order_acquire);
-    if (!current) {
-        auto created = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
-        current_snapshot_.store(created, std::memory_order_release);
-        return created;
+    const auto version = state_version_.load(std::memory_order_acquire);
+    const auto published_version = current_snapshot_version_.load(std::memory_order_acquire);
+    if (current && published_version == version) {
+        return current;
     }
-    return current;
+
+    const auto projection = projection_state_.load(std::memory_order_acquire);
+    if (!projection) {
+        return current;
+    }
+    auto materialized = std::make_shared<const AgentSessionSnapshot>(materialize_snapshot(*projection));
+    current_snapshot_.store(materialized, std::memory_order_release);
+    current_snapshot_version_.store(version, std::memory_order_release);
+    return materialized;
 }
 
 std::uint64_t AgentSession::Impl::state_version() const noexcept {
@@ -940,15 +992,86 @@ void AgentSession::Impl::set_dirty_listener(std::move_only_function<void()> on_d
 }
 
 void AgentSession::Impl::update_projection() {
-    std::shared_ptr<const AgentSessionSnapshot> updated =
-        std::make_shared<const AgentSessionSnapshot>(create_snapshot());
-    current_snapshot_.store(std::move(updated), std::memory_order_release);
+    projection_state_.store(
+            std::make_shared<const ProjectionState>(make_projection_state()), std::memory_order_release);
     state_version_.fetch_add(1, std::memory_order_release);
-    if (dirty_listener_) {
-        dirty_listener_();
-    }
+    notify_dirty();
 }
 
+void AgentSession::Impl::notify_dirty() noexcept {
+    if (!dirty_listener_) {
+        return;
+    }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        dirty_listener_();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (...) {
+        dirty_listener_ = nullptr;
+    }
+#endif
+}
+
+void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& event) {
+    auto current = projection_state_.load(std::memory_order_acquire);
+    auto next = current ? std::make_shared<ProjectionState>(*current)
+                        : std::make_shared<ProjectionState>(make_projection_state());
+
+    if (const auto* start = std::get_if<agent::AgentStartEvent>(&event)) {
+        (void)start;
+        next->is_running = true;
+        next->streaming_message.reset();
+        next->pending_tool_call_ids.clear();
+    } else if (const auto* end = std::get_if<agent::AgentEndEvent>(&event)) {
+        (void)end;
+        next->is_running = false;
+        next->streaming_message.reset();
+        next->pending_tool_call_ids.clear();
+    } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&start->message)) {
+            next->streaming_message = *assistant;
+        }
+    } else if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&update->message)) {
+            next->streaming_message = *assistant;
+        }
+        if (const auto* tool_end = std::get_if<ai::ToolCallEndEvent>(&update->assistant_event);
+                tool_end != nullptr && !tool_end->tool_call.id.empty() &&
+                std::find(next->pending_tool_call_ids.begin(),
+                        next->pending_tool_call_ids.end(),
+                        tool_end->tool_call.id) == next->pending_tool_call_ids.end()) {
+            next->pending_tool_call_ids.push_back(tool_end->tool_call.id);
+        }
+    } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+        auto messages = next->messages ? std::make_shared<std::vector<ai::MessageVariant>>(*next->messages)
+                                       : std::make_shared<std::vector<ai::MessageVariant>>();
+        messages->push_back(end->message);
+        next->messages = std::move(messages);
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
+            next->streaming_message.reset();
+            next->pending_tool_call_ids.clear();
+            for (const auto& block : assistant->content) {
+                if (const auto* call = std::get_if<ai::ToolCallContent>(&block); call != nullptr && !call->id.empty()) {
+                    next->pending_tool_call_ids.push_back(call->id);
+                }
+            }
+        }
+    } else if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+        if (std::find(next->pending_tool_call_ids.begin(), next->pending_tool_call_ids.end(), start->tool_call_id) ==
+                next->pending_tool_call_ids.end()) {
+            next->pending_tool_call_ids.push_back(start->tool_call_id);
+        }
+    } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+        std::erase(next->pending_tool_call_ids, end->tool_call_id);
+    } else if (std::holds_alternative<agent::TurnEndEvent>(event)) {
+        next->pending_tool_call_ids.clear();
+    }
+
+    projection_state_.store(std::move(next), std::memory_order_release);
+    state_version_.fetch_add(1, std::memory_order_release);
+    notify_dirty();
+}
 std::size_t AgentSession::Impl::message_count() const { return agent_ ? agent_->state().messages.size() : 0; }
 
 std::optional<std::string> AgentSession::Impl::last_assistant_text() const {

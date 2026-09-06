@@ -228,6 +228,8 @@ struct AgentSession::Impl : public SessionProjectionSource {
     [[nodiscard]] std::uint64_t state_version() const noexcept override;
     void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
     void update_projection();
+    void update_projection(const agent::AgentLifecycleEvent& event);
+    void notify_dirty() noexcept;
     [[nodiscard]] AgentSessionSnapshot create_snapshot() const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
@@ -496,14 +498,36 @@ struct AgentSession::Impl : public SessionProjectionSource {
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;
     /// Released (cancelled) when the active prompt settles; a concurrent
-    /// manual compaction awaits it after requesting run cancellation.
     std::optional<boost::asio::steady_timer> prompt_settled_signal_;
+    /// Immutable reducer-owned projection state. Message history is held by
+    /// shared storage so chunk-only publications copy no history; a complete
+    /// `AgentSessionSnapshot` is materialized only by a sampling reader.
+    struct ProjectionState {
+        std::string system_prompt;
+        std::shared_ptr<const std::vector<ai::MessageVariant>> messages;
+        bool is_running{false};
+        std::optional<ai::AssistantMessage> streaming_message;
+        std::vector<std::string> active_tool_names;
+        std::vector<std::string> pending_tool_call_ids;
+        agent::AgentInputQueues input_queues;
+        ai::Model model;
+        std::string thinking_level;
+        std::vector<support::Error> diagnostics;
+        harness::session::SessionMetadata metadata;
+        harness::session::SessionTopology topology{harness::session::SessionTopology::Linear};
+        std::optional<std::filesystem::path> session_path;
+        std::vector<support::Error> session_event_diagnostics;
+    };
+    [[nodiscard]] ProjectionState make_projection_state() const;
+    [[nodiscard]] AgentSessionSnapshot materialize_snapshot(const ProjectionState& state) const;
+    mutable std::atomic<std::shared_ptr<const ProjectionState>> projection_state_{nullptr};
     mutable std::atomic<std::uint64_t> state_version_{1};
+    /// The immutable snapshot returned for the most recently sampled version.
+    mutable std::atomic<std::uint64_t> current_snapshot_version_{0};
     mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> current_snapshot_{nullptr};
     std::move_only_function<void()> dirty_listener_{nullptr};
     std::optional<agent::AgentEventSubscription> agent_event_subscription_{std::nullopt};
 };
-
 namespace detail {
 
 // ── Lazy-coroutine session entries ──────────────────────────────────────────
