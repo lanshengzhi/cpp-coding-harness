@@ -368,7 +368,7 @@ support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
             for (const auto& diagnostic : manager->diagnostics) {
                 view_->append_diagnostic(diagnostic.message);
             }
-            tui_.invalidate();
+            invalidate_frame();
         }
     }
     return {};
@@ -617,16 +617,20 @@ void InteractiveEngine::post_invalidate() {
         if (const auto self = weak.lock()) {
             self->frame_render_posted_.store(false, std::memory_order_release);
             if (self->running_) {
+                // Uncounted preview: the ticker keeps the counted frame and
+                // the version/dirty bookkeeping (#597). The preview never
+                // re-arms the ticker schedule.
                 self->immediate_frame_render_ = true;
                 self->on_frame_tick();
                 self->immediate_frame_render_ = false;
-                // The ticker owns the counted frame; keep the dirty state for
-                // the next scheduled/manual frame after an immediate flush.
-                self->last_rendered_version_ = 0;
-                self->local_dock_dirty_.store(true, std::memory_order_release);
             }
         }
     });
+}
+
+void InteractiveEngine::invalidate_frame() {
+    tui_.invalidate();
+    post_invalidate();
 }
 
 void InteractiveEngine::post_exit() {
@@ -664,7 +668,7 @@ void InteractiveEngine::post_close_overlay() {
 void InteractiveEngine::append_command_error(const support::Error& error) {
     if (view_ == nullptr) return;
     view_->append_diagnostic(combined_error_text(error));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 support::ExpectedVoid InteractiveEngine::attach_overlay(
@@ -685,7 +689,7 @@ support::ExpectedVoid InteractiveEngine::attach_overlay(
         active_overlay_ = nullptr;
         return std::unexpected(focus_error);
     }
-    tui_.invalidate();
+    invalidate_frame();
     return {};
 }
 
@@ -696,7 +700,7 @@ void InteractiveEngine::close_overlay() {
         return;
     }
     active_overlay_ = nullptr;
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::rebuild_chat() {
@@ -705,7 +709,7 @@ void InteractiveEngine::rebuild_chat() {
     const auto snapshot = session_->snapshot();
     view_->initialize(snapshot);
     view_->set_pending_input(snapshot.agent_state.input_queues);
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 /// Post one view-thread action to the executor.
@@ -725,28 +729,28 @@ void InteractiveEngine::show_overlay(std::unique_ptr<cch::tui::Overlay> overlay)
 void InteractiveEngine::replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) {
     if (view_ == nullptr) return;
     view_->set_editor_replacement(std::move(component));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::restore_prompt_slot() {
     if (view_ == nullptr) return;
     view_->restore_editor();
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::show_status(std::string text) {
     if (view_ == nullptr) return;
     view_->append_status_message(std::move(text));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::show_error(std::string text) {
     if (view_ == nullptr) return;
     view_->append_diagnostic(std::move(text));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
-void InteractiveEngine::request_render() { local_dock_dirty_.store(true, std::memory_order_release); }
+void InteractiveEngine::request_render() { invalidate_frame(); }
 
 void InteractiveEngine::invalidate() {
     local_dock_dirty_.store(true, std::memory_order_release);
@@ -796,6 +800,10 @@ void InteractiveEngine::arm_frame_ticker() {
 
 void InteractiveEngine::on_frame_tick() {
     if (!running_ || !ticker_running_) return;
+    // Previews render the latest snapshot without consuming it: version and
+    // dirty state stay for the ticker's counted authoritative frame, and the
+    // pending ticker schedule is left undisturbed.
+    const bool preview = immediate_frame_render_;
 
     const std::uint64_t sampled_version = projection_source_ != nullptr ? projection_source_->state_version() : 0;
     const bool core_dirty = sampled_version != last_rendered_version_;
@@ -805,23 +813,25 @@ void InteractiveEngine::on_frame_tick() {
     if (core_dirty && view_ != nullptr && projection_source_ != nullptr) {
         if (const auto snapshot = projection_source_->snapshot()) {
             if (session_ui_ != nullptr) {
-                session_ui_->reconcile_snapshot(*snapshot);
+                snapshot_applied = session_ui_->reconcile_snapshot(*snapshot);
             } else {
                 view_->initialize(*snapshot);
                 view_->set_pending_input(snapshot->agent_state.input_queues);
+                snapshot_applied = true;
             }
-            snapshot_applied = true;
         }
     }
 
     if ((core_dirty && snapshot_applied) || dock_dirty) {
         if (render()) {
-            if (core_dirty) last_rendered_version_ = sampled_version;
-            local_dock_dirty_.store(false, std::memory_order_release);
+            if (!preview) {
+                if (core_dirty) last_rendered_version_ = sampled_version;
+                local_dock_dirty_.store(false, std::memory_order_release);
+            }
         }
     }
 
-    arm_frame_ticker();
+    if (!preview) arm_frame_ticker();
 }
 
 void InteractiveEngine::request_exit() {

@@ -221,6 +221,12 @@ private:
     void post_invalidate();
     void post_exit();
     void post_render();
+    /// Mark the Tui dirty and schedule a coalesced immediate frame (#597:
+    /// every engine-side view mutation schedules; the 33 ms ticker stays the
+    /// counted authoritative render while the immediate flush is an
+    /// uncounted preview drained by ready handlers). Safe before start: the
+    /// flush drops while the dirty state persists.
+    void invalidate_frame();
     void schedule_render_retry();
     void post_close_overlay();
 

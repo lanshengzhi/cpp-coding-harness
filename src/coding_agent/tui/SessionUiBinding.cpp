@@ -179,10 +179,10 @@ void SessionUiBinding::sync_session_observations() {
     displayed_agent_diagnostics_ = std::move(current);
 }
 
-void SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
-    if (!is_live()) return;
+bool SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
+    if (!is_live()) return false;
     auto* const active_view = view();
-    if (active_view == nullptr) return;
+    if (active_view == nullptr) return false;
 
     active_view->reconcile_snapshot(snapshot);
     active_view->set_pending_input(snapshot.agent_state.input_queues);
@@ -213,6 +213,7 @@ void SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) 
         session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
     }
+    return true;
 }
 
 void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& event) {

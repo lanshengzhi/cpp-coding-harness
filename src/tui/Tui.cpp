@@ -187,6 +187,7 @@ support::ExpectedVoid Tui::start() {
     pending_render_ = false;
     viewport_top_ = 0;
     previous_lines_.clear();
+    previous_viewport_height_ = 0;
     previous_dimensions_ = terminal_.dimensions();
     return {};
 }
@@ -253,6 +254,7 @@ support::ExpectedVoid Tui::clear_screen() {
     previous_dock_lines_.clear();
     previous_lines_.clear();
     previous_dimensions_ = {};
+    previous_viewport_height_ = 0;
     viewport_top_ = 0;
     first_render_ = true;
     return {};
@@ -322,16 +324,22 @@ support::ExpectedVoid Tui::render() {
 
     const auto width_changed = dimensions.columns != previous_dimensions_.columns;
     const auto height_changed = dimensions.rows != previous_dimensions_.rows;
+    // A viewport/dock re-partition (overlay, autocomplete, editor wrap) moves
+    // physical rows between viewport and dock: repaint the full buffer at the
+    // new partition so orphaned rows rejoin with buffer content (#597).
+    const auto viewport_height_changed = !first_render_ && viewport_height != previous_viewport_height_;
     const auto first_render = first_render_;
 
     const auto supports_sync = capabilities.synchronized_output;
     const auto initial_viewport_top = viewport_top_;
     const auto initial_active_images = active_images_;
     const auto initial_previous_dock_lines = previous_dock_lines_;
+    const auto initial_previous_viewport_height = previous_viewport_height_;
     const auto rollback_render_state = [&] {
         viewport_top_ = initial_viewport_top;
         active_images_ = initial_active_images;
         previous_dock_lines_ = initial_previous_dock_lines;
+        previous_viewport_height_ = initial_previous_viewport_height;
     };
 
     // Begin synchronized update if supported
@@ -426,6 +434,12 @@ support::ExpectedVoid Tui::render() {
         // special-case is not applicable and is not ported).
         if (width_changed || height_changed) {
             return clear_and_rewrite();
+        }
+        // A viewport/dock re-partition repaints the full buffer at the new
+        // partition without clearing scrollback: orphaned rows rejoin the
+        // viewport and every dock row is rewritten at its new address.
+        if (viewport_height_changed) {
+            return write_full_buffer();
         }
         if (auto margins = apply_scroll_margins(); !margins) {
             return std::unexpected(margins.error());
@@ -579,6 +593,7 @@ support::ExpectedVoid Tui::render() {
     // Update cached state
     previous_lines_ = std::move(new_lines);
     previous_dock_lines_ = std::move(new_dock_lines);
+    previous_viewport_height_ = viewport_height;
     previous_dimensions_ = dimensions;
     first_render_ = false;
     pending_render_ = false;

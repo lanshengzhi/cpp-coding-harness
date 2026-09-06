@@ -98,8 +98,10 @@ public:
     /// Replace the session-backed view state from one sampled immutable
     /// snapshot. The frame ticker calls this once before its render pass;
     /// status indicators remain event-owned while messages, tools,
-    /// diagnostics, and queues come from the complete snapshot.
-    void reconcile_snapshot(const AgentSessionSnapshot& snapshot);
+    /// diagnostics, and queues come from the complete snapshot. Returns
+    /// false when there is no live view to apply to so the ticker keeps the
+    /// version dirty for the next frame (#597).
+    [[nodiscard]] bool reconcile_snapshot(const AgentSessionSnapshot& snapshot);
 
     /// Sync only the pending-input queue presentation.
     void sync_pending_input();
