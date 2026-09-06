@@ -37,7 +37,6 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -185,6 +184,9 @@ struct InteractiveViewOptions {
     cch::tui::EditorRenderRequestSink render_request;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
+    /// Borrowed by the editor for local dock echo; it must outlive every view
+    /// operation.
+    cch::tui::Terminal* terminal{nullptr};
 };
 
 /// The pi main-screen composition. Emits one closed `ViewAction` per
@@ -204,6 +206,7 @@ public:
     InteractiveView& operator=(const InteractiveView&) = delete;
 
     void initialize(const AgentSessionSnapshot& snapshot);
+    void reconcile_snapshot(const AgentSessionSnapshot& snapshot);
 
     void apply_render_settings(bool hide_thinking_block, std::size_t output_pad);
 
@@ -214,14 +217,12 @@ public:
 
     /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()` →
     /// shared-manager mutation, ADR 0035): swap the shared slot every durable
-    /// component observes and rebind the editor's snapshot. Serialized under
-    /// the view mutex so concurrent render/input on the terminal thread never
-    /// observes a torn registry.
+    /// component observes and rebind the editor's snapshot. Serialized on the
     void set_keybindings(
         std::shared_ptr<const cch::tui::KeybindingRegistry> registry);
-
+    /// The terminal is borrowed and must outlive every view operation.
+    void set_terminal(cch::tui::Terminal* terminal);
     void apply_event(const agent::AgentLifecycleEvent& event);
-    void append_committed_message(ai::MessageVariant message);
     void clear_transcript();
     void append_frontend_message(std::string text);
     void append_diagnostic(std::string text);
@@ -276,11 +277,6 @@ public:
     void set_user_bash_progress(runtime::UserBashProgress progress);
     void clear_user_bash_progress();
 
-    /// Replaces the pending block with its committed transcript entry in one
-    /// step, so the clear-pending-before-append ordering cannot drift apart
-    /// at call sites.
-    void commit_user_bash(ai::MessageVariant message);
-
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
     cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override;
@@ -319,8 +315,10 @@ private:
     /// source must not re-enter the view.
     std::move_only_function<FooterData()> footer_data_source_;
     bool user_bash_available_{false};
+    /// Bash-mode border state already presented on the dock; a change-sink
+    /// crossing it must repaint the full view (border token is render-owned).
+    bool presented_bash_mode_{false};
     std::optional<support::Error> callback_error_;
-    mutable std::mutex mutex_;
     // pi's main-screen containers.
     KeybindingHints header_;
     /// The loaded-resources startup block (pi's `loadedResourcesContainer`,

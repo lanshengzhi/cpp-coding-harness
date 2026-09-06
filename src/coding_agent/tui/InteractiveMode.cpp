@@ -18,12 +18,16 @@
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SuspendController.hpp"
 
+#include <cch/tui/ProcessTerminal.hpp>
+
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
+#include <any>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -289,10 +293,16 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
                         std::move(invocation->command),
                         invocation->exclude_from_context,
                         [self](const runtime::UserBashProgress& progress) -> support::ExpectedVoid {
-                            if (self->running_ && self->view_ != nullptr) {
-                                self->view_->set_user_bash_progress(progress);
-                                self->tui_.invalidate();
-                            }
+                            // Session-domain progress: serialize the view mutation
+                            // onto the executor like the binding event paths
+                            // (ADR 0040) and schedule its frame.
+                            auto owned_progress = progress;
+                            self->post_from_view(
+                                    [owned_progress = std::move(owned_progress)](InteractiveEngine& engine) mutable {
+                                        if (!engine.user_bash_active_ || engine.view_ == nullptr) return;
+                                        engine.view_->set_user_bash_progress(std::move(owned_progress));
+                                        engine.invalidate_frame();
+                                    });
                             return {};
                         });
                 self->user_bash_finished(started_generation, std::move(result), recall);
@@ -477,7 +487,7 @@ void InteractiveEngine::prompt_finished(
     if (!result && view_ != nullptr && running_) {
         view_->append_diagnostic(combined_error_text(result.error()));
         view_->restore_submitted_text(submitted_text);
-        tui_.invalidate();
+        invalidate_frame();
     }
     if (exit_requested_ && !user_bash_active_) signal_exit();
 }
@@ -496,8 +506,11 @@ void InteractiveEngine::user_bash_finished(
     user_bash_active_ = false;
     if (view_ != nullptr && running_) {
         if (result) {
-            view_->commit_user_bash(
-                ai::MessageVariant{std::move(result->message)});
+            // The committed message arrives through the snapshot pull
+            // (single committer, #597); pushing it here as well duplicates
+            // the block whenever the pull wins the race. Only the transient
+            // progress is cleared on this path.
+            view_->clear_user_bash_progress();
             if (result->diagnostic) {
                 view_->append_user_bash_diagnostic(
                     combined_error_text(*result->diagnostic));
@@ -518,6 +531,9 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
     cch::tui::Terminal& terminal,
     InteractiveSessionRun run) {
     const auto executor = co_await boost::asio::this_coro::executor;
+    if (auto* process_terminal = dynamic_cast<cch::tui::ProcessTerminal*>(&terminal)) {
+        process_terminal->attach_io_executor(std::any{executor});
+    }
     const bool is_boot = std::holds_alternative<DeferBoot>(run.session_intent());
     auto engine = std::make_shared<InteractiveEngine>(terminal, executor);
     if (auto started = engine->start(std::move(run)); !started) {

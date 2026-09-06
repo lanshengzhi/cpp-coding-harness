@@ -55,25 +55,23 @@ inline constexpr std::string_view kOverflowRecoveryFailedMessage =
         "Context overflow recovery failed after one compact-and-retry attempt. "
         "Try reducing context or switching to a larger-context model.";
 
-/// Bounded, redacted session-event observer diagnostic (ADR 0017): the
-/// session-assembly mirror of the Agent's weak-observer diagnostics channel.
-constexpr std::size_t kMaxSessionObserverDiagnostics = 16;
-constexpr std::size_t kMaxSessionObserverDetailBytes = 1024;
+} // namespace
 
-void record_session_observer_diagnostic(std::vector<support::Error>& diagnostics, const support::Error& failure) {
+void detail::record_session_observer_diagnostic(
+        std::vector<support::Error>& diagnostics, const support::Error& failure) {
+    constexpr std::size_t kMaxDiagnostics = 16;
+    constexpr std::size_t kMaxDetailBytes = 1024;
     std::string detail = failure.message;
     if (!failure.detail.empty()) {
         detail += ": ";
         detail += failure.detail;
     }
-    detail = support::bounded_redacted_text(std::move(detail), kMaxSessionObserverDetailBytes, "...");
-    if (diagnostics.size() == kMaxSessionObserverDiagnostics) {
+    detail = support::bounded_redacted_text(std::move(detail), kMaxDetailBytes, "...");
+    if (diagnostics.size() == kMaxDiagnostics) {
         diagnostics.erase(diagnostics.begin());
     }
     diagnostics.push_back(support::make_error(failure.code, "session event observer failed", std::move(detail)));
 }
-
-} // namespace
 
 ai::UserMessage detail::make_admitted_user_message(std::string text,
         const std::vector<Skill>& skills,
@@ -194,6 +192,18 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // Expose the live session facts to the model Bash Tool (pi
     // `resolveSpawnContext`); the Agent's clamped state is authoritative.
     refresh_bash_session_environment();
+    current_snapshot_.store(std::make_shared<const AgentSessionSnapshot>(create_snapshot()), std::memory_order_release);
+    state_version_.store(1, std::memory_order_release);
+    current_snapshot_version_.store(1, std::memory_order_release);
+    // `agent_event_subscription_` is destroyed before `agent_` and the
+    // enclosing Impl, so this callback cannot outlive its `this` target.
+    if (auto sub = agent_->subscribe([this](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
+            update_projection(event);
+            return {};
+        });
+            sub) {
+        agent_event_subscription_.emplace(std::move(*sub));
+    }
 }
 
 std::string AgentSession::Impl::rebuild_system_prompt() const {
@@ -521,19 +531,24 @@ void AgentSession::Impl::emit_session_event(const AgentSessionEvent& event) {
                 // A failing observer is deactivated and never vetoes retry
                 // progress or persistence (ADR 0017); its failure is recorded
                 // in the session's bounded, redacted diagnostics channel.
-                record_session_observer_diagnostic(session_event_diagnostics_, observed.error());
+                detail::record_session_observer_diagnostic(session_event_diagnostics_, observed.error());
+                // The new diagnostic is snapshot-visible state: publish it so
+                // the ticker re-samples instead of serving the cached value.
+                update_projection();
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
             }
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         } catch (const std::exception& exception) {
-            record_session_observer_diagnostic(
+            detail::record_session_observer_diagnostic(
                     session_event_diagnostics_, support::make_error(support::ErrorCode::Unknown, exception.what()));
+            update_projection();
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         } catch (...) {
-            record_session_observer_diagnostic(
+            detail::record_session_observer_diagnostic(
                     session_event_diagnostics_, support::make_error(support::ErrorCode::Unknown, "unknown exception"));
+            update_projection();
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         }
@@ -607,6 +622,7 @@ boost::asio::awaitable<bool> AgentSession::Impl::prepare_retry(
     if (auto popped = agent::detail::AgentMessageAccess::pop_trailing_assistant(*agent_); !popped) {
         co_return false;
     }
+    update_projection();
 
     // Abort-interruptible exponential backoff sleep (pi `sleep(delayMs,
     // this._retryAbortController.signal)`): a prompt-scoped abort cancels the
@@ -656,7 +672,7 @@ void AgentSession::Impl::close() noexcept {
         return;
     }
     lifecycle_ = Lifecycle::Closing;
-
+    update_projection();
     // Admission stopped above before any cancellation request below (issue
     // #467): every entry point's reject_if_closed observes Closing first.
     // Request work-scoped cancellation but retain the active loop, callbacks,
@@ -680,7 +696,12 @@ void AgentSession::Impl::close() noexcept {
 }
 
 std::shared_ptr<harness::AsyncFileSystem> AgentSession::Impl::release_close_resources() noexcept {
+    // Close releases the live Agent below. Preserve the terminal immutable
+    // publication first so projection consumers can still sample after Close.
     if (agent_) {
+        auto terminal = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
+        current_snapshot_.store(std::move(terminal), std::memory_order_release);
+        current_snapshot_version_.store(state_version_.load(std::memory_order_acquire), std::memory_order_release);
         agent_->clear_subscriptions();
     }
     agent_.reset();

@@ -9,10 +9,10 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
-
 namespace cch::coding_agent::tui {
 
 class LiveTheme;
@@ -27,9 +27,7 @@ class ChatContainer final : public cch::tui::Component {
 public:
     /// The theme must outlive this container; keybindings resolve through
     /// the shared slot (ADR 0035, #418).
-    explicit ChatContainer(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings);
+    explicit ChatContainer(const LiveTheme& theme, std::shared_ptr<const SharedKeybindings> keybindings);
     ChatContainer(ChatContainer&&) noexcept;
     ChatContainer& operator=(ChatContainer&&) noexcept;
     ~ChatContainer() override;
@@ -38,6 +36,10 @@ public:
     ChatContainer& operator=(const ChatContainer&) = delete;
 
     void initialize(const AgentSessionSnapshot& snapshot);
+    /// Reconcile session-backed messages without rebuilding existing
+    /// components. In particular, preserve AssistantMessageComponent's
+    /// incremental frozen-block state while a frame snapshot catches up.
+    void reconcile_snapshot(const AgentSessionSnapshot& snapshot);
     void apply_event(const agent::AgentLifecycleEvent& event);
     /// Append one runtime-confirmed passive message that has no lifecycle event.
     void append_committed_message(ai::MessageVariant message);
@@ -73,6 +75,21 @@ public:
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
+
+    /// Number of items in the container.
+    [[nodiscard]] std::size_t item_count() const;
+    /// Whether the item at index is committed (frozen historical block).
+    [[nodiscard]] bool is_item_committed(std::size_t index) const;
+    /// Whether the item at index currently has a valid cached render result.
+    [[nodiscard]] bool is_item_cache_valid(std::size_t index) const;
+    /// Cached line count of the item at index (0 if not cached).
+    [[nodiscard]] std::size_t cached_line_count(std::size_t index) const;
+    /// Total number of committed items.
+    [[nodiscard]] std::size_t committed_item_count() const;
+    /// Number of cache hits during render calls (reused without invoking child component render).
+    [[nodiscard]] std::uint64_t cache_hit_count() const;
+    /// Number of cold renders during render calls (invoking child component render).
+    [[nodiscard]] std::uint64_t cold_render_count() const;
 
 private:
     struct Impl;

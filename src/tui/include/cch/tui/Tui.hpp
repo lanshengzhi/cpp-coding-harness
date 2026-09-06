@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -89,7 +88,6 @@ private:
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
     Terminal& terminal_; // must outlive this Tui.
-    std::recursive_mutex mutex_;
     std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
     TuiRenderRequestSink render_request_sink_;
@@ -99,6 +97,11 @@ private:
     bool first_render_{true};
     bool pending_render_{false};
     std::vector<std::string> previous_lines_;
+    std::vector<std::string> previous_dock_lines_;
+    /// Viewport rows above the pinned dock on the previous render (#597: a
+    /// re-partition between scrollback viewport and dock leaves stale pixels
+    /// outside both differentials, so the render reflows like a resize).
+    std::size_t previous_viewport_height_{0};
     /// Buffer row at the top of the visible viewport under the main-screen
     /// scrollback flow (pi `TuiMainScreen` `previousViewportTop`): the
     /// composed buffer's lines below it are the terminal's native scrollback.

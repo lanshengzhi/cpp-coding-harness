@@ -106,8 +106,8 @@ startup_keybindings(
 /// `promptForMissingSessionCwd` before the main TUI on its own terminal).
 template <typename T, typename Coroutine>
 [[nodiscard]] support::Expected<T> run_process_terminal_host(Coroutine coroutine) {
-    cch::tui::ProcessTerminal terminal;
     boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal({.executor = io.get_executor()});
     auto future = boost::asio::co_spawn(
         io, std::move(coroutine)(terminal), boost::asio::use_future);
     io.run();

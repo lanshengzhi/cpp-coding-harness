@@ -35,6 +35,8 @@ struct InlineImageRenderRegion {
 struct RenderResult {
     std::vector<std::string> lines{};
     std::vector<InlineImageRenderRegion> images{};
+    std::optional<std::size_t> viewport_height{std::nullopt};
+    std::vector<std::string> dock_lines{};
 };
 
 /// A width-bounded piece of terminal presentation.

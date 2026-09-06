@@ -61,18 +61,29 @@ using interactive_view_detail::queued_editor_texts;
 
 InteractiveEngine::~InteractiveEngine() = default;
 
-InteractiveEngine::InteractiveEngine(
-    cch::tui::Terminal& terminal,
-    boost::asio::any_io_executor executor)
-    : session_(nullptr),
-      terminal_(terminal),
-      tui_(terminal),
-      executor_(std::move(executor)),
-      exit_wait_(executor_),
-      render_retry_timer_(executor_),
-      flows_settled_(executor_) {
+void InteractiveEngine::set_projection_source(std::shared_ptr<SessionProjectionSource> source) {
+    if (projection_source_ != nullptr && projection_source_ != source) {
+        projection_source_->set_dirty_listener(nullptr);
+    }
+    projection_source_ = std::move(source);
+    last_rendered_version_ = projection_source_ != nullptr ? projection_source_->state_version() : 0;
+    if (running_) {
+        local_dock_dirty_.store(true, std::memory_order_release);
+    }
+    if (projection_source_ != nullptr) {
+        const auto weak = weak_from_this();
+        projection_source_->set_dirty_listener([weak] {
+            if (const auto self = weak.lock()) self->post_invalidate();
+        });
+    }
+}
+
+InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor)
+    : session_(nullptr), terminal_(terminal), tui_(terminal), executor_(std::move(executor)), exit_wait_(executor_),
+      render_retry_timer_(executor_), frame_ticker_(executor_), flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     render_retry_timer_.expires_at(std::chrono::steady_clock::time_point::max());
+    frame_ticker_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
@@ -126,6 +137,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     session_flows_ = make_session_flow_controller();
     session_ui_ = make_session_ui_binding();
     settings_flows_ = make_settings_flow_controller();
+    if (!projection_source_) {
+        set_projection_source(session_ui_);
+    }
     suspend_controller_ = make_suspend_controller();
     if (!booting) {
         model_flows_->update_model_completion();
@@ -161,6 +175,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        last_rendered_version_ = projection_source_ ? projection_source_->state_version() : 0;
+        local_dock_dirty_.store(false, std::memory_order_release);
+        start_frame_ticker();
         if (run.initial_prompt()) {
             submit(
                 *run.initial_prompt(),
@@ -178,6 +195,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        last_rendered_version_ = projection_source_ ? projection_source_->state_version() : 0;
+        local_dock_dirty_.store(false, std::memory_order_release);
+        start_frame_ticker();
         initial_prompt_ = run.initial_prompt();
         initial_prompt_options_ = run.initial_prompt_options();
     }
@@ -278,6 +298,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     if (auto rendered = tui_.render(); !rendered) {
         co_return std::unexpected(rendered.error());
     }
+    last_rendered_version_ = projection_source_ ? projection_source_->state_version() : 0;
+    local_dock_dirty_.store(false, std::memory_order_release);
     if (initial_prompt_) {
         submit(
             std::move(*initial_prompt_),
@@ -290,6 +312,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
+    ticker_running_ = false;
+    (void)frame_ticker_.cancel();
     render_retry_pending_ = false;
     ++render_retry_generation_;
     (void)render_retry_timer_.cancel();
@@ -344,7 +368,7 @@ support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
             for (const auto& diagnostic : manager->diagnostics) {
                 view_->append_diagnostic(diagnostic.message);
             }
-            tui_.invalidate();
+            invalidate_frame();
         }
     }
     return {};
@@ -421,6 +445,7 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(
     std::weak_ptr<InteractiveEngine> weak) {
     InteractiveViewOptions options;
     options.keybindings = keybindings_;
+    options.terminal = &terminal_;
     // Preserve the existing production hint: the application supplies
     // the clipboard action path even when the clipboard reader is
     // unavailable, so the hint remains part of the assembled Native TUI.
@@ -585,16 +610,27 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
 }
 
 void InteractiveEngine::post_invalidate() {
-    // Drop the request when one is already queued: the queued handler
-    // invalidates the latest state, so a coalesced repeat loses nothing.
-    if (invalidate_posted_.exchange(true)) return;
+    local_dock_dirty_.store(true, std::memory_order_release);
+    if (frame_render_posted_.exchange(true, std::memory_order_acq_rel)) return;
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
-        const auto self = weak.lock();
-        if (!self) return;
-        self->invalidate_posted_.store(false);
-        if (self->running_) self->tui_.invalidate();
+        if (const auto self = weak.lock()) {
+            self->frame_render_posted_.store(false, std::memory_order_release);
+            if (self->running_) {
+                // Uncounted preview: the ticker keeps the counted frame and
+                // the version/dirty bookkeeping (#597). The preview never
+                // re-arms the ticker schedule.
+                self->immediate_frame_render_ = true;
+                self->on_frame_tick();
+                self->immediate_frame_render_ = false;
+            }
+        }
     });
+}
+
+void InteractiveEngine::invalidate_frame() {
+    tui_.invalidate();
+    post_invalidate();
 }
 
 void InteractiveEngine::post_exit() {
@@ -604,18 +640,7 @@ void InteractiveEngine::post_exit() {
     });
 }
 
-void InteractiveEngine::post_render() {
-    // Same coalescing as post_invalidate(): one queued render renders the
-    // latest invalidated state, so repeats while it is queued are redundant.
-    if (render_posted_.exchange(true)) return;
-    const auto weak = weak_from_this();
-    boost::asio::post(executor_, [weak] {
-        const auto self = weak.lock();
-        if (!self) return;
-        self->render_posted_.store(false);
-        self->render();
-    });
-}
+void InteractiveEngine::post_render() { post_invalidate(); }
 
 void InteractiveEngine::schedule_render_retry() {
     if (!running_ || render_retry_pending_) return;
@@ -627,7 +652,9 @@ void InteractiveEngine::schedule_render_retry() {
         const auto self = weak.lock();
         if (!self || self->render_retry_generation_ != retry_generation) return;
         self->render_retry_pending_ = false;
-        if (!error && self->running_) self->render();
+        if (!error && self->running_) {
+            self->local_dock_dirty_.store(true, std::memory_order_release);
+        }
     });
 }
 
@@ -641,7 +668,7 @@ void InteractiveEngine::post_close_overlay() {
 void InteractiveEngine::append_command_error(const support::Error& error) {
     if (view_ == nullptr) return;
     view_->append_diagnostic(combined_error_text(error));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 support::ExpectedVoid InteractiveEngine::attach_overlay(
@@ -662,7 +689,7 @@ support::ExpectedVoid InteractiveEngine::attach_overlay(
         active_overlay_ = nullptr;
         return std::unexpected(focus_error);
     }
-    tui_.invalidate();
+    invalidate_frame();
     return {};
 }
 
@@ -673,7 +700,7 @@ void InteractiveEngine::close_overlay() {
         return;
     }
     active_overlay_ = nullptr;
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::rebuild_chat() {
@@ -682,7 +709,7 @@ void InteractiveEngine::rebuild_chat() {
     const auto snapshot = session_->snapshot();
     view_->initialize(snapshot);
     view_->set_pending_input(snapshot.agent_state.input_queues);
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 /// Post one view-thread action to the executor.
@@ -702,58 +729,116 @@ void InteractiveEngine::show_overlay(std::unique_ptr<cch::tui::Overlay> overlay)
 void InteractiveEngine::replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) {
     if (view_ == nullptr) return;
     view_->set_editor_replacement(std::move(component));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::restore_prompt_slot() {
     if (view_ == nullptr) return;
     view_->restore_editor();
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::show_status(std::string text) {
     if (view_ == nullptr) return;
     view_->append_status_message(std::move(text));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::show_error(std::string text) {
     if (view_ == nullptr) return;
     view_->append_diagnostic(std::move(text));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
-void InteractiveEngine::request_render() {
-    post_invalidate();
-}
+void InteractiveEngine::request_render() { invalidate_frame(); }
 
 void InteractiveEngine::invalidate() {
+    local_dock_dirty_.store(true, std::memory_order_release);
     tui_.invalidate();
 }
 
-void InteractiveEngine::render() {
-    if (!running_) return;
+[[nodiscard]] bool InteractiveEngine::render() {
+    if (!running_) return false;
+    if (!immediate_frame_render_) ++render_count_;
     if (auto rendered = tui_.render(); rendered) {
         if (render_retry_pending_) {
             render_retry_pending_ = false;
             ++render_retry_generation_;
             (void)render_retry_timer_.cancel();
         }
-        return;
+        return true;
     } else if (rendered.error().code == support::ErrorCode::Busy) {
+        local_dock_dirty_.store(true, std::memory_order_release);
         schedule_render_retry();
-        return;
+        return false;
     } else {
         completion_result_ = std::unexpected(presentation_error(
             rendered.error(),
             "Native TUI render failed"));
         request_exit();
+        return false;
     }
+}
+
+void InteractiveEngine::start_frame_ticker() {
+    if (ticker_running_) return;
+    ticker_running_ = true;
+    arm_frame_ticker();
+}
+
+void InteractiveEngine::arm_frame_ticker() {
+    if (!running_ || !ticker_running_) return;
+    frame_ticker_.expires_after(kFrameInterval);
+    const auto weak = weak_from_this();
+    frame_ticker_.async_wait([weak](const boost::system::error_code& ec) {
+        if (ec) return;
+        if (const auto self = weak.lock()) {
+            self->on_frame_tick();
+        }
+    });
+}
+
+void InteractiveEngine::on_frame_tick() {
+    if (!running_ || !ticker_running_) return;
+    // Previews render the latest snapshot without consuming it: version and
+    // dirty state stay for the ticker's counted authoritative frame, and the
+    // pending ticker schedule is left undisturbed.
+    const bool preview = immediate_frame_render_;
+
+    const std::uint64_t sampled_version = projection_source_ != nullptr ? projection_source_->state_version() : 0;
+    const bool core_dirty = sampled_version != last_rendered_version_;
+    const bool dock_dirty = local_dock_dirty_.load(std::memory_order_acquire);
+    bool snapshot_applied = !core_dirty;
+
+    if (core_dirty && view_ != nullptr && projection_source_ != nullptr) {
+        if (const auto snapshot = projection_source_->snapshot()) {
+            if (session_ui_ != nullptr) {
+                snapshot_applied = session_ui_->reconcile_snapshot(*snapshot);
+            } else {
+                view_->initialize(*snapshot);
+                view_->set_pending_input(snapshot->agent_state.input_queues);
+                snapshot_applied = true;
+            }
+        }
+    }
+
+    if ((core_dirty && snapshot_applied) || dock_dirty) {
+        if (render()) {
+            if (!preview) {
+                if (core_dirty) last_rendered_version_ = sampled_version;
+                local_dock_dirty_.store(false, std::memory_order_release);
+            }
+        }
+    }
+
+    if (!preview) arm_frame_ticker();
 }
 
 void InteractiveEngine::request_exit() {
     if (!running_ || exit_requested_) return;
     exit_requested_ = true;
+    ticker_running_ = false;
+    (void)frame_ticker_.cancel();
     if (session_ != nullptr) session_->close();
     if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
         signal_exit();
@@ -761,19 +846,30 @@ void InteractiveEngine::request_exit() {
 }
 
 void InteractiveEngine::signal_exit() {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        (void)exit_wait_.cancel();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        if (!completion_result_) {
-            completion_result_ = std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "Native TUI exit notification failed"));
+    ticker_running_ = false;
+    (void)frame_ticker_.cancel();
+    // The ticker is stopped, so no further frames will pull the terminal
+    // publication (e.g. cancelled completions after Session Close): paint
+    // it synchronously before the run tears down (#597). Idempotent: the
+    // reconcile cursor and the Tui differential absorb repeat calls.
+    paint_final_snapshot();
+    (void)exit_wait_.cancel();
+}
+
+void InteractiveEngine::paint_final_snapshot() {
+    if (!running_ || view_ == nullptr || session_ == nullptr || session_ui_ == nullptr) return;
+    if (projection_source_ == nullptr) return;
+    const auto sampled_version = projection_source_->state_version();
+    if (sampled_version != last_rendered_version_) {
+        if (const auto snapshot = projection_source_->snapshot()) {
+            if (!session_ui_->reconcile_snapshot(*snapshot)) return;
+            last_rendered_version_ = sampled_version;
         }
     }
-#endif
+    local_dock_dirty_.store(true, std::memory_order_release);
+    if (render()) {
+        local_dock_dirty_.store(false, std::memory_order_release);
+    }
 }
 
 } // namespace cch::coding_agent::tui

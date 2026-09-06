@@ -22,6 +22,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <format>
@@ -159,7 +160,7 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         config_.theme_diagnostics = std::move(loading->theme_diagnostics);
 
         agent_->set_system_prompt(rebuild_system_prompt());
-
+        update_projection();
         AgentSessionReloadResult result;
         result.skill_diagnostics = config_.skill_diagnostics;
         result.prompt_diagnostics = config_.prompt_diagnostics;
@@ -215,6 +216,7 @@ support::ExpectedVoid AgentSession::Impl::commit_user_bash_completion(runtime::U
     if (auto persisted = session_.store->append(ai::MessageVariant{completion.message}); !persisted) {
         completion.diagnostic = std::move(persisted.error());
     }
+    update_projection();
     return {};
 }
 
@@ -425,7 +427,11 @@ support::ExpectedVoid AgentSession::Impl::steer(
     }
     auto message = detail::make_admitted_user_message(
             std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
-    return agent_->steer(ai::MessageVariant{std::move(message)});
+    auto result = agent_->steer(ai::MessageVariant{std::move(message)});
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::follow_up(
@@ -435,47 +441,71 @@ support::ExpectedVoid AgentSession::Impl::follow_up(
     }
     auto message = detail::make_admitted_user_message(
             std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
-    return agent_->follow_up(ai::MessageVariant{std::move(message)});
+    auto result = agent_->follow_up(ai::MessageVariant{std::move(message)});
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::set_steering_mode(agent::InputQueueMode mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->set_steering_mode(mode)
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->set_steering_mode(mode)
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::set_follow_up_mode(agent::InputQueueMode mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->set_follow_up_mode(mode)
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->set_follow_up_mode(mode)
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_steering_queue() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_steering_queue()
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->clear_steering_queue()
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_follow_up_queue() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_follow_up_queue()
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->clear_follow_up_queue()
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_input_queues() {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    return agent_ ? agent_->clear_input_queues()
-                  : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    auto result = agent_ ? agent_->clear_input_queues()
+                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (result) {
+        update_projection();
+    }
+    return result;
 }
 
 support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::string_view level) {
@@ -515,6 +545,7 @@ support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::strin
             return std::unexpected(std::move(saved.error()));
         }
     }
+    update_projection();
     return effective;
 }
 
@@ -596,6 +627,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::
     }
     // The model Bash Tool reads the live model at execution time.
     refresh_bash_session_environment();
+    // Publish the switched model (and re-clamped level) to lazy projection
+    // readers: set_thinking_level only publishes on a level change, so an
+    // unchanged level would otherwise leave snapshot() stale on the old
+    // model (#597).
+    update_projection();
     co_return support::ExpectedVoid{};
 }
 
@@ -856,6 +892,7 @@ support::Expected<TreeNavigationResult> AgentSession::Impl::navigate_tree(std::s
     if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, context.messages); !replaced) {
         return std::unexpected(replaced.error());
     }
+    update_projection();
     return TreeNavigationResult{
             .editor_text = decision.editor_text,
             .cancelled = false,
@@ -882,7 +919,7 @@ support::ExpectedVoid AgentSession::Impl::set_entry_label(std::string_view entry
     return session_.store->append_label_change(std::move(parent_id), std::string{entry_id}, std::move(label));
 }
 
-AgentSessionSnapshot AgentSession::Impl::snapshot() const {
+AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
     return AgentSessionSnapshot{
             .agent_state = agent_ ? agent_->state() : agent::AgentState{},
             .metadata = session_.metadata,
@@ -890,6 +927,66 @@ AgentSessionSnapshot AgentSession::Impl::snapshot() const {
             .session_path = session_path_,
             .session_event_diagnostics = session_event_diagnostics_,
     };
+}
+
+std::shared_ptr<const AgentSessionSnapshot> AgentSession::Impl::snapshot() const {
+    auto current = current_snapshot_.load(std::memory_order_acquire);
+    const auto version = state_version_.load(std::memory_order_acquire);
+    const auto published_version = current_snapshot_version_.load(std::memory_order_acquire);
+    if (current && published_version == version) {
+        return current;
+    }
+
+    // Sampling is deliberately the only operation that copies Agent state.
+    // The Core's serialized execution domain keeps this read coherent while
+    // publication and dirty notification remain O(1) per lifecycle event.
+    auto materialized = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
+    current_snapshot_.store(materialized, std::memory_order_release);
+    current_snapshot_version_.store(version, std::memory_order_release);
+    return materialized;
+}
+
+std::uint64_t AgentSession::Impl::state_version() const noexcept {
+    return state_version_.load(std::memory_order_acquire);
+}
+
+void AgentSession::Impl::set_dirty_listener(std::move_only_function<void()> on_dirty) {
+    dirty_listener_ = std::move(on_dirty);
+}
+
+void AgentSession::Impl::notify_dirty() noexcept {
+    if (!dirty_listener_) {
+        return;
+    }
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        dirty_listener_();
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (...) {
+        // Weak-observer contract (ADR 0017; §5.4): diagnose boundedly, then
+        // deactivate. Best-effort inside this noexcept edge: if diagnosis
+        // itself fails, the listener is still dropped. The current event
+        // already bumped the version, so the diagnostic is published with it.
+        try {
+            detail::record_session_observer_diagnostic(session_event_diagnostics_,
+                    support::make_error(support::ErrorCode::Unknown, "projection dirty listener failed"));
+        } catch (...) {
+        }
+        dirty_listener_ = nullptr;
+    }
+#endif
+}
+
+void AgentSession::Impl::update_projection() {
+    state_version_.fetch_add(1, std::memory_order_release);
+    notify_dirty();
+}
+
+void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent&) {
+    // Lifecycle events carry no projection payload by design: publication is
+    // a version bump plus the dirty edge; sampling materializes state lazily.
+    update_projection();
 }
 
 std::size_t AgentSession::Impl::message_count() const { return agent_ ? agent_->state().messages.size() : 0; }
@@ -924,6 +1021,7 @@ support::Expected<std::optional<std::string>> AgentSession::Impl::set_session_na
     if (auto appended = session_.store->append_session_info(std::move(parent_id), sanitized); !appended) {
         return std::unexpected(appended.error());
     }
+    update_projection();
     return sanitized;
 }
 

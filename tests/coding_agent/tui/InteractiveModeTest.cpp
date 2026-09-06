@@ -270,6 +270,9 @@ public:
     [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
@@ -317,6 +320,9 @@ public:
     [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
@@ -394,6 +400,9 @@ public:
         modes_.cursor_visible = visible;
         return {};
     }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
         const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
@@ -2154,8 +2163,12 @@ TEST_CASE(
     REQUIRE(tool_pointer->observed_stop_token.has_value());
     REQUIRE(client_pointer->first_stop_token.has_value());
     CHECK(*tool_pointer->observed_stop_token == *client_pointer->first_stop_token);
-    CHECK(visible_screen(terminal).find("partial tool output before abort") !=
-        std::string::npos);
+    // The partial crosses runtime worker hops before the first paint; wait
+    // on the painted outcome itself, never a bare drain (pump_until serves
+    // one ready handler per iteration so the loader repost cannot starve
+    // the deadline).
+    CHECK(tests::pump_until(io,
+            [&] { return visible_screen(terminal).find("partial tool output before abort") != std::string::npos; }));
 
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
@@ -2421,7 +2434,10 @@ TEST_CASE(
 
     // The third frame is rejected with Busy. The retry timer must keep the
     // interactive run alive and submit the same pending presentation again.
-    REQUIRE(terminal.inject("x"));
+    // A full-frame-producing action is required here: under the pinned-dock
+    // projection plain editor input is echoed locally in the dock and no
+    // longer triggers a TUI frame (#597), so toggle tool output instead.
+    REQUIRE(terminal.inject("\x0f"));
     REQUIRE(pump_until(io, [&] {
         return terminal.render_end_calls >= 4;
     }, std::chrono::milliseconds{1000}));
@@ -2431,7 +2447,7 @@ TEST_CASE(
     // failures rather than being mislabeled as startup failures.
     terminal.fail_on_render_end = 5;
     terminal.fail_with_process_error = true;
-    REQUIRE(terminal.inject("y"));
+    REQUIRE(terminal.inject("\x0f"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE_FALSE(*run_result);
     CHECK(run_result->error().message == "Native TUI render failed");

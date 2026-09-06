@@ -38,6 +38,8 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
         tests/support/ModelRuntimeTestSupport.cpp
+        tests/coding_agent/tui/AssistantMessageComponentTest.cpp
+        tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
@@ -60,6 +62,7 @@ include_guard(GLOBAL)
         tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/SessionDiscoveryTest.cpp
         tests/coding_agent/SessionPathPolicyTest.cpp
+        tests/coding_agent/SessionProjectionSourceTest.cpp
         tests/coding_agent/SetModelTest.cpp
         tests/coding_agent/SettingsManagerTest.cpp
         tests/coding_agent/SkillFormattingTest.cpp
@@ -116,6 +119,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/FooterTest.cpp
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
+        tests/coding_agent/tui/InteractiveFrameTickerTest.cpp
         tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
         tests/coding_agent/tui/InteractiveSessionRunTest.cpp
         tests/coding_agent/tui/InteractiveViewActionTest.cpp

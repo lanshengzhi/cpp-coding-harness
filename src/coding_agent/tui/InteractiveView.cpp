@@ -7,7 +7,6 @@
 #include <cctype>
 #include <format>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -42,10 +41,18 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                       },
               },
               [this](std::string text) -> support::ExpectedVoid {
-                  // Editor submission clears before invoking its submit sink;
-                  // keep that notification on the sampled text's revision.
+                  // Direct dock echo owns local editor presentation when a
+                  // terminal is configured; a full view invalidation would
+                  // route ordinary typing back through ChatContainer::render.
+                  // The one exception is crossing the bash-mode boundary: the
+                  // editor border token is applied by the full view render
+                  // (pi updateEditorBorderColor), so a `!` prefix or its
+                  // removal must repaint the dock with the new theme.
                   if (!text.empty()) ++editor_revision_;
-                  invoke_invalidate();
+                  const bool bash_mode = user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
+                  const bool bash_toggled = bash_mode != presented_bash_mode_;
+                  presented_bash_mode_ = bash_mode;
+                  if (!editor_.has_local_echo() || bash_toggled) invoke_invalidate();
                   return {};
               },
               [this](std::string text) -> support::ExpectedVoid {
@@ -64,74 +71,44 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
+    editor_.set_terminal(options.terminal);
 }
 
-void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) {
-    std::lock_guard lock(mutex_);
-    chat_.initialize(snapshot);
-}
+void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) { chat_.initialize(snapshot); }
+
+void InteractiveView::reconcile_snapshot(const AgentSessionSnapshot& snapshot) { chat_.reconcile_snapshot(snapshot); }
 
 void InteractiveView::apply_render_settings(bool hide_thinking_block, std::size_t output_pad) {
-    std::lock_guard lock(mutex_);
     chat_.set_hide_thinking_block(hide_thinking_block);
     chat_.set_output_pad(output_pad);
 }
 
-void InteractiveView::set_autocomplete_provider(
-    std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
-    std::lock_guard lock(mutex_);
+void InteractiveView::set_autocomplete_provider(std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
     editor_.set_autocomplete_provider(std::move(provider));
 }
 
-void InteractiveView::set_keybindings(
-    std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
-    std::lock_guard lock(mutex_);
+void InteractiveView::set_keybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
     keybindings_->replace(registry);
     editor_.set_keybindings(std::move(registry));
 }
 
-void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) {
-    std::lock_guard lock(mutex_);
-    chat_.apply_event(event);
-}
+void InteractiveView::set_terminal(cch::tui::Terminal* terminal) { editor_.set_terminal(terminal); }
 
-void InteractiveView::append_committed_message(ai::MessageVariant message) {
-    std::lock_guard lock(mutex_);
-    chat_.append_committed_message(std::move(message));
-}
+void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) { chat_.apply_event(event); }
 
-void InteractiveView::clear_transcript() {
-    std::lock_guard lock(mutex_);
-    chat_.clear();
-}
+void InteractiveView::clear_transcript() { chat_.clear(); }
 
-void InteractiveView::append_frontend_message(std::string text) {
-    std::lock_guard lock(mutex_);
-    chat_.append_frontend_message(std::move(text));
-}
+void InteractiveView::append_frontend_message(std::string text) { chat_.append_frontend_message(std::move(text)); }
 
-void InteractiveView::append_diagnostic(std::string text) {
-    std::lock_guard lock(mutex_);
-    chat_.append_diagnostic(std::move(text));
-}
+void InteractiveView::append_diagnostic(std::string text) { chat_.append_diagnostic(std::move(text)); }
 
-void InteractiveView::append_warning(std::string text) {
-    std::lock_guard lock(mutex_);
-    chat_.append_warning(std::move(text));
-}
+void InteractiveView::append_warning(std::string text) { chat_.append_warning(std::move(text)); }
 
-void InteractiveView::append_trust_warning(std::string text) {
-    std::lock_guard lock(mutex_);
-    chat_.append_trust_warning(std::move(text));
-}
+void InteractiveView::append_trust_warning(std::string text) { chat_.append_trust_warning(std::move(text)); }
 
-void InteractiveView::append_status_message(std::string text) {
-    std::lock_guard lock(mutex_);
-    chat_.append_status_message(std::move(text));
-}
+void InteractiveView::append_status_message(std::string text) { chat_.append_status_message(std::move(text)); }
 
 void InteractiveView::show_status_working(std::string message) {
-    std::lock_guard lock(mutex_);
     // pi `setWorkingVisible`: an already-active Working indicator is
     // kept (per-message re-shows must not restart the loader).
     if (status_indicator_ != nullptr &&
@@ -144,21 +121,18 @@ void InteractiveView::show_status_working(std::string message) {
 }
 
 void InteractiveView::show_status_compaction(std::string_view reason) {
-    std::lock_guard lock(mutex_);
     replace_status_indicator(
         StatusIndicator::Kind::Compaction,
         compaction_status_message(keybindings_->registry(), reason));
 }
 
 void InteractiveView::show_status_retry(int attempt, int max_attempts, int seconds) {
-    std::lock_guard lock(mutex_);
     replace_status_indicator(
         StatusIndicator::Kind::Retry,
         retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
 }
 
 void InteractiveView::set_status_retry_message(int attempt, int max_attempts, int seconds) {
-    std::lock_guard lock(mutex_);
     if (status_indicator_ == nullptr ||
         status_indicator_->kind() != StatusIndicator::Kind::Retry) {
         return;
@@ -167,15 +141,9 @@ void InteractiveView::set_status_retry_message(int attempt, int max_attempts, in
         retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
 }
 
-void InteractiveView::set_loaded_resources_data(LoadedResources::Data data) {
-    std::lock_guard lock(mutex_);
-    resources_.set_data(std::move(data));
-}
+void InteractiveView::set_loaded_resources_data(LoadedResources::Data data) { resources_.set_data(std::move(data)); }
 
-void InteractiveView::clear_status_indicator() {
-    std::lock_guard lock(mutex_);
-    status_indicator_.reset();
-}
+void InteractiveView::clear_status_indicator() { status_indicator_.reset(); }
 
 void InteractiveView::replace_status_indicator(StatusIndicator::Kind kind, std::string message) {
     status_indicator_ = std::make_unique<StatusIndicator>(
@@ -202,7 +170,6 @@ void InteractiveView::replace_status_indicator(StatusIndicator::Kind kind, std::
 }
 
 void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
-    std::lock_guard lock(mutex_);
     editor_replacement_ = std::move(component);
     if (editor_replacement_) {
         if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
@@ -211,23 +178,15 @@ void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component
     }
 }
 
-void InteractiveView::restore_editor() {
-    std::lock_guard lock(mutex_);
-    editor_replacement_.reset();
-}
+void InteractiveView::restore_editor() { editor_replacement_.reset(); }
 
 void InteractiveView::append_user_bash_diagnostic(std::string text) {
-    std::lock_guard lock(mutex_);
     chat_.append_user_bash_diagnostic(std::move(text));
 }
 
-void InteractiveView::restore_submitted_text(const std::string& text) {
-    std::lock_guard lock(mutex_);
-    restore_editor_text({text});
-}
+void InteractiveView::restore_submitted_text(const std::string& text) { restore_editor_text({text}); }
 
 void InteractiveView::clear_pending_bash(const EditorInterruptRequest& request) {
-    std::lock_guard lock(mutex_);
     if (editor_revision_ == request.editor_revision) {
         editor_.set_text({});
         return;
@@ -237,33 +196,17 @@ void InteractiveView::clear_pending_bash(const EditorInterruptRequest& request) 
         editor_.expanded_text()));
 }
 
-void InteractiveView::insert_editor_text(std::string text) {
-    std::lock_guard lock(mutex_);
-    editor_.insert_text_at_cursor(std::move(text));
-}
+void InteractiveView::insert_editor_text(std::string text) { editor_.insert_text_at_cursor(std::move(text)); }
 
-std::string InteractiveView::editor_text() const {
-    std::lock_guard lock(mutex_);
-    return editor_.text();
-}
+std::string InteractiveView::editor_text() const { return editor_.text(); }
 
-std::string InteractiveView::editor_expanded_text() const {
-    std::lock_guard lock(mutex_);
-    return editor_.expanded_text();
-}
+std::string InteractiveView::editor_expanded_text() const { return editor_.expanded_text(); }
 
-void InteractiveView::set_editor_text(std::string text) {
-    std::lock_guard lock(mutex_);
-    editor_.set_text(std::move(text));
-}
+void InteractiveView::set_editor_text(std::string text) { editor_.set_text(std::move(text)); }
 
-void InteractiveView::restore_queued_text(const std::vector<std::string>& messages) {
-    std::lock_guard lock(mutex_);
-    restore_editor_text(messages);
-}
+void InteractiveView::restore_queued_text(const std::vector<std::string>& messages) { restore_editor_text(messages); }
 
 void InteractiveView::set_pending_input(const agent::AgentInputQueues& queues) {
-    std::lock_guard lock(mutex_);
     pending_steering_.clear();
     pending_follow_up_.clear();
     for (const auto& message : queues.steering.messages) {
@@ -277,7 +220,6 @@ void InteractiveView::set_pending_input(const agent::AgentInputQueues& queues) {
 }
 
 void InteractiveView::set_user_bash_progress(runtime::UserBashProgress progress) {
-    std::lock_guard lock(mutex_);
     if (!pending_bash_) {
         pending_bash_ = std::make_unique<BashExecutionComponent>(
             *theme_,
@@ -315,22 +257,12 @@ void InteractiveView::set_user_bash_progress(runtime::UserBashProgress progress)
 }
 
 void InteractiveView::clear_user_bash_progress() {
-    std::lock_guard lock(mutex_);
     pending_bash_.reset();
     last_bash_output_size_ = 0;
     bash_outcome_set_ = false;
-}
-
-void InteractiveView::commit_user_bash(ai::MessageVariant message) {
-    std::lock_guard lock(mutex_);
-    pending_bash_.reset();
-    last_bash_output_size_ = 0;
-    bash_outcome_set_ = false;
-    chat_.append_committed_message(std::move(message));
 }
 
 support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t width) {
-    std::lock_guard lock(mutex_);
     if (callback_error_) return std::unexpected(*callback_error_);
 
     // Header (keybinding hints), the loaded-resources block, pending-
@@ -450,6 +382,17 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         } else {
             editor_lines = std::move(replaced->lines);
         }
+        // Height-bound the swap-in dialog (#607): pending/status/footer keep
+        // their dock rows and the minimum chat slice stays visible, so an
+        // oversized dialog is cropped from the top. Its input and selection
+        // rows remain at the physical bottom instead of growing past the
+        // terminal's addressable dock rows.
+        const auto dock_rest_rows = pending_lines.size() + status_lines.size() + footer_lines.size();
+        const auto replacement_budget =
+                available_rows_ > dock_rest_rows + kMinChatRows ? available_rows_ - dock_rest_rows - kMinChatRows : 1;
+        if (editor_lines.size() > replacement_budget) {
+            editor_lines.erase(editor_lines.begin(), editor_lines.end() - replacement_budget);
+        }
     } else {
         editor_.set_available_height(available_rows_ > fixed_rows ? available_rows_ - fixed_rows : 0);
         // The editor enters Bash mode as soon as the trimmed input begins
@@ -467,6 +410,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             editor_theme.text = theme_->editor_theme().text;
             editor_theme.border = theme_->foreground_hook(thinking_border_token);
         }
+        presented_bash_mode_ = unsubmitted_bash_mode();
         editor_.set_theme(std::move(editor_theme));
         if (auto editor = editor_.render(width); !editor) {
             return std::unexpected(editor.error());
@@ -488,7 +432,12 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         chat_result = std::move(*rendered);
     }
 
+    const std::size_t dock_line_count =
+            pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
+    const std::size_t viewport_height = available_rows_ > dock_line_count ? (available_rows_ - dock_line_count) : 0;
+
     cch::tui::RenderResult transcript_result;
+    transcript_result.viewport_height = viewport_height;
     transcript_result.lines = std::move(header_lines);
     transcript_result.lines.insert(
         transcript_result.lines.end(),
@@ -502,33 +451,31 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         transcript_result.lines.end(),
         std::make_move_iterator(chat_result.lines.begin()),
         std::make_move_iterator(chat_result.lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(pending_lines.begin()),
-        std::make_move_iterator(pending_lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(status_lines.begin()),
-        std::make_move_iterator(status_lines.end()));
-    editor_row_offset_ = transcript_result.lines.size();
-    transcript_result.lines.insert(transcript_result.lines.end(),
+
+    transcript_result.dock_lines.reserve(dock_line_count);
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(pending_lines.begin()),
+            std::make_move_iterator(pending_lines.end()));
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(status_lines.begin()),
+            std::make_move_iterator(status_lines.end()));
+    editor_row_offset_ = pending_lines.size() + status_lines.size();
+    editor_.set_dock_offset(editor_row_offset_);
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
             std::make_move_iterator(editor_lines.begin()),
             std::make_move_iterator(editor_lines.end()));
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(footer_lines.begin()),
-        std::make_move_iterator(footer_lines.end()));
+    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+            std::make_move_iterator(footer_lines.begin()),
+            std::make_move_iterator(footer_lines.end()));
     return transcript_result;
 }
 
 void InteractiveView::invalidate() {
-    std::lock_guard lock(mutex_);
     editor_.invalidate();
     if (editor_replacement_) editor_replacement_->invalidate();
 }
 
 cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::InputEventVariant& input) {
-    std::lock_guard lock(mutex_);
     if (editor_replacement_) {
         // pi routes every key to the focused dialog/selector; app-level
         // bindings resume when the editor is restored. pi's TUI
@@ -542,8 +489,8 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
     if (key != nullptr && key->type != cch::tui::KeyEventType::Release) {
         // One registry reference for the whole dispatch cascade (the
-        // shared slot, ADR 0035); `replace` is serialized under this
-        // view mutex.
+        // shared slot, ADR 0035); `replace` is serialized on the
+        // event loop.
         const auto& keys = keybindings_->registry();
         if (keys.matches(*key, "app.exit") && editor_.expanded_text().empty()) {
             emit_action(ExitAction{}, "Native TUI exit action failed");
@@ -663,14 +610,13 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
     // navigation has no change notification, but it still changes the visible
     // fake/hardware cursor and must schedule the same repaint as pi.
     if (outcome == cch::tui::InputAdmissionOutcome::Consumed && before_text == editor_.text() &&
-            before_cursor != editor_.cursor()) {
+            before_cursor != editor_.cursor() && !editor_.has_local_echo()) {
         invoke_invalidate();
     }
     return outcome;
 }
 
 void InteractiveView::set_focused(bool focused) {
-    std::lock_guard lock(mutex_);
     if (editor_replacement_) {
         if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
             focusable->set_focused(focused);
@@ -681,7 +627,6 @@ void InteractiveView::set_focused(bool focused) {
 }
 
 bool InteractiveView::focused() const {
-    std::lock_guard lock(mutex_);
     if (editor_replacement_) {
         if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
             return focusable->focused();
@@ -691,7 +636,6 @@ bool InteractiveView::focused() const {
 }
 
 std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const {
-    std::lock_guard lock(mutex_);
     std::optional<cch::tui::CursorPosition> cursor;
     if (editor_replacement_) {
         if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
@@ -710,10 +654,7 @@ std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const
     return cursor;
 }
 
-void InteractiveView::set_available_height(std::size_t rows) {
-    std::lock_guard lock(mutex_);
-    available_rows_ = std::max<std::size_t>(1, rows);
-}
+void InteractiveView::set_available_height(std::size_t rows) { available_rows_ = std::max<std::size_t>(1, rows); }
 
 void InteractiveView::record_callback_error(
     std::string message,

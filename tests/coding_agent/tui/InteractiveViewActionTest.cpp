@@ -16,10 +16,12 @@
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/tui/Keybindings.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Keys.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
 
 #include <memory>
 #include <optional>
@@ -145,7 +147,8 @@ struct ViewFixture {
 
     explicit ViewFixture(bool user_bash_available = false,
             std::unique_ptr<cch::tui::AutocompleteProvider> provider = nullptr,
-            std::vector<tui::KeybindingOverride> extra_overrides = {})
+            std::vector<tui::KeybindingOverride> extra_overrides = {},
+            tui::VirtualTerminal* terminal = nullptr)
         : keybindings(test_keybinding_slot(std::move(extra_overrides))), theme(test_theme()) {
         coding_agent::tui::InteractiveViewOptions options;
         options.keybindings = keybindings;
@@ -169,6 +172,7 @@ struct ViewFixture {
         options.hide_thinking_block = false;
         options.output_pad = 0;
         options.user_bash_available = user_bash_available;
+        options.terminal = terminal;
         options.autocomplete_provider = std::move(provider);
         options.theme = &theme;
         view = std::make_unique<coding_agent::tui::InteractiveView>(
@@ -184,6 +188,18 @@ struct ViewFixture {
         return actions.back();
     }
 };
+
+/// The autocomplete menu belongs to the dock partition (#599): scan the
+/// composed transcript and dock lines for the slash-menu row.
+[[nodiscard]] bool menu_row_in(const cch::tui::RenderResult& rendered) {
+    for (const auto& line : rendered.lines) {
+        if (line.starts_with("> /help")) return true;
+    }
+    for (const auto& line : rendered.dock_lines) {
+        if (line.starts_with("> /help")) return true;
+    }
+    return false;
+}
 
 } // namespace
 
@@ -424,11 +440,7 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
     fixture.type("/");
     const auto rendered_with_menu = view.render(80);
     REQUIRE(rendered_with_menu);
-    bool has_menu_row = false;
-    for (const auto& line : rendered_with_menu->lines) {
-        if (line.starts_with("> /help")) has_menu_row = true;
-    }
-    REQUIRE(has_menu_row);
+    REQUIRE(menu_row_in(*rendered_with_menu));
 
     // Escape with autocomplete open: cancels autocomplete and consumes the event.
     // No InterruptAction is emitted!
@@ -448,6 +460,28 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
     CHECK(second_escape_outcome == cch::tui::InputAdmissionOutcome::Consumed);
     REQUIRE(fixture.actions.size() == 1);
     CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[0]));
+}
+
+TEST_CASE("InteractiveView local editor input bypasses full-view invalidation",
+        "[coding_agent][tui][view_actions][dock][issue605]") {
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+
+    ViewFixture fixture(false, nullptr, {}, &terminal);
+    auto& view = *fixture.view;
+    view.set_focused(true);
+    REQUIRE(view.render(80));
+
+    fixture.type("h");
+    CHECK(fixture.invalidations == 0);
+    CHECK(std::any_of(terminal.screen().begin(), terminal.screen().end(), [](const auto& line) {
+        return line.starts_with("h");
+    }));
+
+    static_cast<void>(view.handle_input(key("left")));
+    CHECK(fixture.invalidations == 0);
+    CHECK(terminal.cursor().column == 0);
 }
 
 TEST_CASE("an interrupt key overlapping cancellation and insertion keeps application-first precedence",
@@ -474,11 +508,7 @@ TEST_CASE("an interrupt key overlapping cancellation and insertion keeps applica
     fixture.type("/");
     const auto rendered_with_menu = view.render(80);
     REQUIRE(rendered_with_menu);
-    bool has_menu_row = false;
-    for (const auto& line : rendered_with_menu->lines) {
-        if (line.starts_with("> /help")) has_menu_row = true;
-    }
-    REQUIRE(has_menu_row);
+    REQUIRE(menu_row_in(*rendered_with_menu));
 
     const auto open_outcome = view.handle_input(key("f6"));
     CHECK(open_outcome == cch::tui::InputAdmissionOutcome::Consumed);

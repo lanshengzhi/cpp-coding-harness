@@ -178,8 +178,8 @@ void print_session_diagnostics(
         bool model_runtime_cli_fake,
         CliStreams streams,
         coding_agent::runtime::AgentSessionCreationRequest request) {
-    cch::tui::ProcessTerminal terminal;
     auto io = std::make_shared<boost::asio::io_context>();
+    cch::tui::ProcessTerminal terminal({.executor = io->get_executor()});
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, kRuntimeLimits);
     // One Models runtime shared by the boot Session and every in-session
     // replacement (ADR 0029/0030, issue #466): the Runtime loop, worker

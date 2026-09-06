@@ -17,6 +17,7 @@
 
 namespace cch::tui {
 
+class Terminal;
 struct EditorCursor {
     std::size_t line{0};
     /// Grapheme offset within line, never a UTF-8 byte offset.
@@ -50,6 +51,10 @@ struct EditorOptions {
     /// provider replacement, or accepted asynchronous results) land so the
     /// host can schedule a repaint.
     EditorRenderRequestSink render_request{};
+    /// Direct terminal echo for pinned dock in-place prediction. The terminal
+    /// is borrowed and must outlive every Editor operation.
+    Terminal* terminal{nullptr};
+    std::size_t dock_offset{0};
 };
 
 struct EditorTheme {
@@ -63,9 +68,8 @@ struct EditorTheme {
 
 /// A reusable multiline Unicode editor controlled through semantic input.
 ///
-/// Public methods serialize internally and may be called from any thread; the
-/// autocomplete result sink and render-request sink may be invoked from any
-/// thread. Caller-provided sinks (change/submit/render-request) must not
+/// Public methods and callbacks run on the serialized execution domain.
+/// Caller-provided sinks (change/submit/render-request) must not
 /// re-enter the editor.
 class Editor final : public Component, public InputHandler, public Focusable, public ViewportAware {
 public:
@@ -94,6 +98,14 @@ public:
     /// shape over the immutable registry, ADR 0035): subsequent input matches
     /// the new registry. Confined to the app layer's `/reload` re-catalog.
     void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
+
+    /// Direct terminal echo configuration for pinned dock in-place prediction.
+    /// The terminal is borrowed and must outlive every Editor operation.
+    void set_terminal(Terminal* terminal);
+    [[nodiscard]] Terminal* terminal() const;
+    void set_dock_offset(std::size_t offset);
+    [[nodiscard]] std::size_t dock_offset() const;
+    [[nodiscard]] bool has_local_echo() const;
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;

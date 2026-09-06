@@ -198,7 +198,7 @@ boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::Impl::
     if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, context.messages); !replaced) {
         co_return std::unexpected(replaced.error());
     }
-
+    update_projection();
     std::size_t estimated_after = 0;
     for (const auto& message : context.messages) {
         estimated_after += harness::session::estimate_tokens(message);
@@ -275,6 +275,8 @@ boost::asio::awaitable<bool> AgentSession::Impl::run_auto_compaction(bool will_r
             co_return false;
         }
     }
+    update_projection();
+
     emit_session_event(CompactionEndEvent{
             .reason = std::move(reason),
             .aborted = false,
@@ -330,6 +332,8 @@ boost::asio::awaitable<AgentSession::Impl::AutoCompactionOutcome> AgentSession::
         if (auto popped = agent::detail::AgentMessageAccess::pop_trailing_assistant(*agent_); !popped) {
             co_return AutoCompactionOutcome::None;
         }
+        update_projection();
+
         if (co_await run_auto_compaction(true, "overflow")) {
             co_return AutoCompactionOutcome::OverflowRetry;
         }

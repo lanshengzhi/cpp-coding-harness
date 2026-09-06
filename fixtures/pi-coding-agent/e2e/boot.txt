@@ -3,8 +3,18 @@ Press ctrl+o to show full startup help and loaded resources.
                                                                         
  Resume request: check the notes file.                                  
                                                                         
-                                                                
+                                                                        
  Resumed reply: the notes file is ready.                                
+
+
+
+
+
+
+
+
+
+
                                                                         
                                                                         
 ────────────────────────────────────────────────────────────────────────
@@ -12,13 +22,3 @@ Press ctrl+o to show full startup help and loaded resources.
 ────────────────────────────────────────────────────────────────────────
 /tmp/cpp-harness-e2e-workspace                          
 0.0%/128k (auto)                                              fake-model
-
-
-
-
-
-
-
-
-
-

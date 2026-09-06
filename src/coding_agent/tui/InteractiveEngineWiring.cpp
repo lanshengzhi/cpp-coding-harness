@@ -349,7 +349,7 @@ std::shared_ptr<SessionUiBinding> InteractiveEngine::make_session_ui_binding() {
         return self && self->prompt_active_;
     };
     hooks.invalidate = [weak] {
-        if (const auto self = weak.lock()) self->tui_.invalidate();
+        if (const auto self = weak.lock()) self->invalidate_frame();
     };
     hooks.show_status = [weak](std::string text) {
         if (const auto self = weak.lock()) self->show_status(std::move(text));

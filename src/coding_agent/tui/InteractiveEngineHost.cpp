@@ -278,7 +278,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
     case SlashCommandId::Quit:
         if (view_ != nullptr) {
             tui_.invalidate();
-            render();
+            (void)render();
         }
         request_exit();
         return {};

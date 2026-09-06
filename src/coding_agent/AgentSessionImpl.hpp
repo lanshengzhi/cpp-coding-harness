@@ -22,6 +22,7 @@
 #include <boost/asio/steady_timer.hpp>
 
 #include <cstddef>
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -48,7 +49,7 @@ struct RetrySettings {
 /// construction), resources, and session presentation. Owned through the
 /// AgentSession handle's shared_ptr so a lazy coroutine admitted before the
 /// public handle moves or is destroyed keeps the implementation alive.
-struct AgentSession::Impl {
+struct AgentSession::Impl final : public SessionProjectionSource {
     explicit Impl(runtime::AgentSessionAssembly assembly);
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
@@ -221,9 +222,15 @@ struct AgentSession::Impl {
     [[nodiscard]] boost::asio::awaitable<AutoCompactionOutcome> check_auto_compaction(
             const ai::AssistantMessage& assistant_message, bool skip_aborted_check);
 
-    // ── State accessors ────────────────────────────────────────────────────
+    // ── State accessors & projection ───────────────────────────────────────
 
-    [[nodiscard]] AgentSessionSnapshot snapshot() const;
+    [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> snapshot() const override;
+    [[nodiscard]] std::uint64_t state_version() const noexcept override;
+    void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
+    void update_projection();
+    void update_projection(const agent::AgentLifecycleEvent&);
+    void notify_dirty() noexcept;
+    [[nodiscard]] AgentSessionSnapshot create_snapshot() const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
 
@@ -493,9 +500,22 @@ struct AgentSession::Impl {
     /// Released (cancelled) when the active prompt settles; a concurrent
     /// manual compaction awaits it after requesting run cancellation.
     std::optional<boost::asio::steady_timer> prompt_settled_signal_;
+    mutable std::atomic<std::uint64_t> state_version_{1};
+    /// The immutable snapshot returned for the most recently sampled version.
+    /// Sampling is performed on the Core's serialized execution domain; the
+    /// returned value is immutable and may then be read without a mutex.
+    mutable std::atomic<std::uint64_t> current_snapshot_version_{0};
+    mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> current_snapshot_{nullptr};
+    std::move_only_function<void()> dirty_listener_{nullptr};
+    std::optional<agent::AgentEventSubscription> agent_event_subscription_{std::nullopt};
 };
-
 namespace detail {
+
+/// Bounded, redacted observer-failure diagnostic (ADR 0017): the
+/// session-assembly mirror of the Agent's weak-observer diagnostics channel.
+/// Shared by the session-event delivery path and the projection dirty edge
+/// (defined in AgentSessionExecution.cpp).
+void record_session_observer_diagnostic(std::vector<support::Error>& diagnostics, const support::Error& failure);
 
 // ── Lazy-coroutine session entries ──────────────────────────────────────────
 // Each entry is the coroutine half of an AgentSession async operation. The
