@@ -189,6 +189,18 @@ struct ViewFixture {
     }
 };
 
+/// The autocomplete menu belongs to the dock partition (#599): scan the
+/// composed transcript and dock lines for the slash-menu row.
+[[nodiscard]] bool menu_row_in(const cch::tui::RenderResult& rendered) {
+    for (const auto& line : rendered.lines) {
+        if (line.starts_with("> /help")) return true;
+    }
+    for (const auto& line : rendered.dock_lines) {
+        if (line.starts_with("> /help")) return true;
+    }
+    return false;
+}
+
 } // namespace
 
 TEST_CASE(
@@ -428,11 +440,7 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
     fixture.type("/");
     const auto rendered_with_menu = view.render(80);
     REQUIRE(rendered_with_menu);
-    bool has_menu_row = false;
-    for (const auto& line : rendered_with_menu->lines) {
-        if (line.starts_with("> /help")) has_menu_row = true;
-    }
-    REQUIRE(has_menu_row);
+    REQUIRE(menu_row_in(*rendered_with_menu));
 
     // Escape with autocomplete open: cancels autocomplete and consumes the event.
     // No InterruptAction is emitted!
@@ -500,11 +508,7 @@ TEST_CASE("an interrupt key overlapping cancellation and insertion keeps applica
     fixture.type("/");
     const auto rendered_with_menu = view.render(80);
     REQUIRE(rendered_with_menu);
-    bool has_menu_row = false;
-    for (const auto& line : rendered_with_menu->lines) {
-        if (line.starts_with("> /help")) has_menu_row = true;
-    }
-    REQUIRE(has_menu_row);
+    REQUIRE(menu_row_in(*rendered_with_menu));
 
     const auto open_outcome = view.handle_input(key("f6"));
     CHECK(open_outcome == cch::tui::InputAdmissionOutcome::Consumed);
