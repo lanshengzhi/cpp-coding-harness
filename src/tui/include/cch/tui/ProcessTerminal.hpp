@@ -14,6 +14,8 @@ namespace cch::tui {
 struct ProcessTerminalOptions {
     int input_fd{0};
     int output_fd{1};
+    /// Optional Boost.Asio executor stored by value. Its execution context must
+    /// remain alive and running until stop() returns after asynchronous I/O is attached.
     std::any executor{};
 };
 

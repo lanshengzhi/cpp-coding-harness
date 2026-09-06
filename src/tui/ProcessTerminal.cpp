@@ -11,6 +11,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/asio/any_io_executor.hpp>
+#include <atomic>
 #include <array>
 #include <cerrno>
 #include <charconv>
@@ -70,29 +71,25 @@ constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
 constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
 constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
 /// Startup appearance probe window (the color-scheme and OSC 11 background
-/// queries run before the delivery worker starts; pi probes synchronously at
+/// queries run before asynchronous I/O starts; pi probes synchronously at
 /// startup).
 constexpr auto kAppearanceProbeTimeout = std::chrono::milliseconds(100);
 /// Escape-sequence and negotiation idle flush window: after input leaves a
 /// partial protocol/appearance response (or a decoder flush) pending, the
-/// delivery worker flushes it once this window passes (was 15 polls at 10 ms
-/// in the periodic-polling design; issue #462).
+/// event-loop readiness path flushes it once this window passes (was 15 polls
+/// at 10 ms in the periodic-polling design; issue #462).
 constexpr auto kNegotiationTimeout = std::chrono::milliseconds(150);
 /// Startup cursor-position poll bound (ADR 0041): a terminal that does not
 /// answer the DSR query within this window falls back to clear-screen + home +
 /// scrollback with the origin at row 0.
 constexpr auto kCursorPositionTimeout = std::chrono::milliseconds(250);
-/// The delivery worker re-reads TIOCGWINSZ at least this often so resizes are
-/// detected even without SIGWINCH delivery (it also checks on every wakeup).
+/// The readiness timer re-reads TIOCGWINSZ at least this often so resizes are
+/// detected even without SIGWINCH delivery.
 /// This is a low-rate watchdog timer, not input polling.
 constexpr auto kResizeWatchdogInterval = std::chrono::milliseconds(500);
 /// Ordered output queue bound: beyond this many queued bytes the terminal
 /// reports explicit backpressure (`Busy`) instead of buffering without limit.
 constexpr std::size_t kOutputQueueMaxBytes = 256 * 1024;
-/// While stop() is pending, the delivery worker bounds how long it waits for
-/// a backed-up output descriptor to drain, so cancellation never hangs on a
-/// stuck terminal (undrained queued output is dropped on exit).
-constexpr auto kStopDrainTimeout = std::chrono::milliseconds(250);
 
 [[nodiscard]] support::Error process_error(std::string message, std::string_view operation, int error_number) {
     return support::make_error(support::ErrorCode::Process,
@@ -249,9 +246,8 @@ struct EnvironmentRgb {
     return background ? appearance_for_index(*background) : TerminalAppearance::Unknown;
 }
 
-/// Startup probe state shared by the appearance and cursor-position probe
-/// phases: one stream decoder accumulates the pre-worker byte stream, so
-/// responses split across reads reassemble in the decoder's single fragment
+/// phases: one stream decoder accumulates the pre-I/O byte stream, so responses
+/// split across reads reassemble in the decoder's single fragment
 /// buffer and every other byte is preserved verbatim for the input sink.
 struct StartupProbe {
     detail::TerminalStreamDecoder decoder;
@@ -317,7 +313,7 @@ void poll_startup_probe(
 }
 
 } // namespace
-struct WorkerInputState {
+struct InputState {
     detail::TerminalStreamDecoder decoder;
     bool color_scheme_reported{false};
     bool needs_input_flush{false};
@@ -342,8 +338,8 @@ struct ProcessTerminal::Impl {
     std::optional<boost::asio::steady_timer> keepalive_timer;
     std::optional<boost::asio::steady_timer> readiness_timer;
     std::array<char, 4096> read_buffer{};
-    WorkerInputState input_state;
-    std::shared_ptr<bool> session_alive;
+    InputState input_state;
+    std::shared_ptr<std::atomic_bool> session_alive;
     std::optional<support::Error> worker_error;
     bool keyboard_protocol_pushed{false};
     bool modify_other_keys_active{false};
@@ -395,7 +391,7 @@ struct ProcessTerminal::Impl {
     /// descriptor at start and restored on every exit path).
     int original_fd_flags{-1};
     bool output_nonblock{false};
-    /// Ordered bounded output queue drained by the delivery worker when the
+    /// Ordered bounded output queue drained by executor readiness when the
     /// output descriptor is writable. The queue gives explicit backpressure
     /// (`Busy`) instead of blocking the caller indefinitely on a backed-up
     /// terminal.
@@ -403,8 +399,8 @@ struct ProcessTerminal::Impl {
     std::size_t output_queued_bytes{0};
     bool output_draining{false};
     bool output_wait_armed{false};
-    /// Resize watchdog deadline base, owned by the worker thread: the worker
-    /// wakes at least this often to re-read TIOCGWINSZ, so resizes are
+    /// Resize watchdog deadline base, owned by the readiness timer: the event
+    /// loop wakes at least this often to re-read TIOCGWINSZ, so resizes are
     /// detected even without SIGWINCH delivery.
     std::chrono::steady_clock::time_point last_resize_check{};
 };
@@ -604,17 +600,23 @@ template <typename T> void emit_progress_keepalive(T& impl) {
 /// enqueue and drain remain strictly ordered.
 template <typename T> void arm_output_wait_locked(T& impl) {
     if (!impl.modes.started || impl.output_queue.empty() || impl.output_wait_armed) return;
-    auto* stream = impl.output_stream ? &*impl.output_stream : (impl.input_stream ? &*impl.input_stream : nullptr);
+    boost::asio::posix::stream_descriptor* stream = nullptr;
+    if (impl.options.output_fd == impl.options.input_fd) {
+        if (impl.input_stream) stream = &*impl.input_stream;
+    } else if (impl.output_stream) {
+        stream = &*impl.output_stream;
+    }
     if (stream == nullptr) return;
-    const auto self = impl.self.lock();
-    if (!self) return;
+    const auto weak_self = impl.self;
     impl.output_wait_armed = true;
-    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
+    const auto weak_alive = std::weak_ptr<std::atomic_bool>{impl.session_alive};
     stream->async_wait(boost::asio::posix::stream_descriptor::wait_write,
-            [self, weak_alive](const boost::system::error_code& error) {
+            [weak_self, weak_alive](const boost::system::error_code& error) {
+                const auto self = weak_self.lock();
+                if (!self) return;
                 auto& impl = *self;
                 const auto alive = weak_alive.lock();
-                if (!alive || !*alive) return;
+                if (!alive || !alive->load()) return;
                 std::lock_guard lock(impl.mutex);
                 impl.output_wait_armed = false;
                 if (error) {
@@ -633,14 +635,15 @@ template <typename T> void arm_output_wait_locked(T& impl) {
 
 template <typename T> void arm_keepalive_timer_locked(T& impl) {
     if (!impl.keepalive_timer || !impl.modes.started || !impl.progress_active) return;
-    const auto self = impl.self.lock();
-    if (!self) return;
+    const auto weak_self = impl.self;
     impl.keepalive_timer->expires_at(impl.progress_next_keepalive);
-    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
-    impl.keepalive_timer->async_wait([self, weak_alive](const boost::system::error_code& error) {
+    const auto weak_alive = std::weak_ptr<std::atomic_bool>{impl.session_alive};
+    impl.keepalive_timer->async_wait([weak_self, weak_alive](const boost::system::error_code& error) {
+        const auto self = weak_self.lock();
+        if (!self) return;
         auto& impl = *self;
         const auto alive = weak_alive.lock();
-        if (!alive || !*alive) return;
+        if (!alive || !alive->load()) return;
         if (error == boost::asio::error::operation_aborted) return;
         if (error) {
             std::lock_guard lock(impl.mutex);
@@ -657,7 +660,7 @@ template <typename T> void arm_keepalive_timer_locked(T& impl) {
 }
 
 /// Wake the executor-owned writable readiness wait after output enqueue.
-template <typename T> void wake_worker(T& impl) { arm_output_wait_locked(impl); }
+template <typename T> void wake_output_wait(T& impl) { arm_output_wait_locked(impl); }
 
 /// Whether ordered output is still pending (queued or being drained).
 template <typename T> bool output_pending(const T& impl) {
@@ -691,7 +694,7 @@ template <typename T> [[nodiscard]] support::ExpectedVoid enqueue_output(T& impl
     }
     impl.output_queue.push_back(std::string(bytes));
     impl.output_queued_bytes += bytes.size();
-    wake_worker(impl);
+    wake_output_wait(impl);
     return {};
 }
 /// Drain the ordered output queue into the output descriptor while it is
@@ -777,7 +780,7 @@ template <typename T> void apply_cell_size_response(T& impl, const detail::CellS
 
 template <typename T>
 void apply_terminal_responses(
-        T& impl, WorkerInputState& state, const std::vector<detail::TerminalResponseVariant>& responses) {
+        T& impl, InputState& state, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
         if (const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response)) {
             apply_cell_size_response(impl, *cell_size);
@@ -849,14 +852,15 @@ template <typename T> void arm_readiness_timer_locked(T& impl);
 
 template <typename T> void start_async_read(T& impl) {
     if (!impl.input_stream || !impl.modes.started) return;
-    const auto self = impl.self.lock();
-    if (!self) return;
-    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
+    const auto weak_self = impl.self;
+    const auto weak_alive = std::weak_ptr<std::atomic_bool>{impl.session_alive};
     impl.input_stream->async_read_some(boost::asio::buffer(impl.read_buffer),
-            [self, weak_alive](const boost::system::error_code& ec, std::size_t bytes_read) {
+            [weak_self, weak_alive](const boost::system::error_code& ec, std::size_t bytes_read) {
+                const auto self = weak_self.lock();
+                if (!self) return;
                 auto& impl = *self;
                 const auto alive = weak_alive.lock();
-                if (!alive || !*alive) return;
+                if (!alive || !alive->load()) return;
                 if (ec) {
                     if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
                         return;
@@ -888,13 +892,14 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
         deadline = impl.input_state.negotiation_deadline;
     }
     impl.readiness_timer->expires_at(deadline);
-    const auto self = impl.self.lock();
-    if (!self) return;
-    const auto weak_alive = std::weak_ptr<bool>{impl.session_alive};
-    impl.readiness_timer->async_wait([self, weak_alive](const boost::system::error_code& error) {
+    const auto weak_self = impl.self;
+    const auto weak_alive = std::weak_ptr<std::atomic_bool>{impl.session_alive};
+    impl.readiness_timer->async_wait([weak_self, weak_alive](const boost::system::error_code& error) {
+        const auto self = weak_self.lock();
+        if (!self) return;
         auto& impl = *self;
         const auto alive = weak_alive.lock();
-        if (!alive || !*alive) return;
+        if (!alive || !alive->load()) return;
         if (error == boost::asio::error::operation_aborted) return;
         if (error) {
             std::lock_guard lock(impl.mutex);
@@ -1138,7 +1143,7 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     impl_->capabilities.appearance = probe.color_scheme.value_or(probe.background.value_or(environment_appearance));
 
     // ADR 0041 anchored absolute flow (issue #476): query the cursor position
-    // once (DSR `\x1b[6n`) through the same blocking pre-worker write path and
+    // once (DSR `\x1b[6n`) through the same blocking startup write path and
     // poll for the CPR response. The reported row anchors the buffer-to-screen
     // origin (`scroll_origin`), so the first frame lands at the shell's cursor
     // row instead of a hard-coded screen row 0, and the tracked cursor becomes
@@ -1227,7 +1232,7 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     impl_->resize_sink = std::move(owned_resize_sink);
     impl_->dimensions = *dimensions;
     impl_->modes.started = true;
-    impl_->session_alive = std::make_shared<bool>(true);
+    impl_->session_alive = std::make_shared<std::atomic_bool>(true);
 
     auto startup_input = std::move(impl_->startup_input);
     impl_->startup_input.clear();
@@ -1261,7 +1266,7 @@ support::ExpectedVoid ProcessTerminal::stop() {
     }
 
     if (impl_->session_alive) {
-        *impl_->session_alive = false;
+        impl_->session_alive->store(false);
     }
 
     if (impl_->input_stream) {
