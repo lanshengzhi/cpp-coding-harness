@@ -780,6 +780,18 @@ ChatContainer& ChatContainer::operator=(ChatContainer&&) noexcept = default;
 ChatContainer::~ChatContainer() = default;
 
 void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
+    // The transcript is message-owned: a rebuild replaces MessageItems from
+    // the snapshot. Host-appended notices (diagnostics, status, frontend)
+    // are view-local and never appear in a snapshot, so dropping them on a
+    // rebuild would erase e.g. the persistence-failure diagnostic right after
+    // the failed prompt appended it (#597). Preserve them and re-append after
+    // the rebuilt transcript.
+    std::vector<Impl::ItemVariant> host_notices;
+    for (auto& item : impl_->items) {
+        if (!std::holds_alternative<Impl::MessageItem>(item)) {
+            host_notices.push_back(std::move(item));
+        }
+    }
     // In-flight tool executions outlive transcript rebuilds: their partial
     // results live only in the view (snapshots carry no partials), so a
     // rebuild that drops them loses live output forever. Preserve Pending
@@ -816,6 +828,9 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
                 msg->cache.invalidate();
             }
         }
+    }
+    for (auto& notice : host_notices) {
+        impl_->items.push_back(std::move(notice));
     }
 }
 void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {

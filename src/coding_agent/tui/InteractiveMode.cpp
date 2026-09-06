@@ -486,7 +486,7 @@ void InteractiveEngine::prompt_finished(
     if (!result && view_ != nullptr && running_) {
         view_->append_diagnostic(combined_error_text(result.error()));
         view_->restore_submitted_text(submitted_text);
-        tui_.invalidate();
+        invalidate_frame();
     }
     if (exit_requested_ && !user_bash_active_) signal_exit();
 }
