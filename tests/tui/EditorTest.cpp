@@ -1714,3 +1714,93 @@ TEST_CASE("Editor client-side prediction emits in-place local echo to pinned doc
     key(editor, "enter");
     CHECK(submitted_text == "echo test messag");
 }
+TEST_CASE("Editor keeps history, cursor, autocomplete, and submit in the local dock",
+        "[tui][editor][dock][issue605]") {
+    cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{
+            .columns = 40,
+            .rows = 12,
+    });
+    REQUIRE(terminal.start(
+            [](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    provider->response = cch::tui::AutocompleteSuggestions{
+            .items = {
+                    {.value = "help", .label = "help", .description = {}},
+                    {.value = "history", .label = "history", .description = {}},
+            },
+            .prefix = "/",
+    };
+    std::string submitted;
+    cch::tui::Editor editor(
+            cch::tui::EditorOptions{
+                    .max_visible_lines = 5,
+                    .terminal = &terminal,
+                    .dock_offset = 0,
+            },
+            {},
+            [&submitted](std::string text) -> cch::support::ExpectedVoid {
+                submitted = std::move(text);
+                return {};
+            });
+    editor.set_focused(true);
+    editor.set_available_height(5);
+    editor.set_autocomplete_provider(std::move(provider));
+    REQUIRE(editor.render(40));
+
+    editor.add_to_history("history");
+    key(editor, "up");
+    CHECK(editor.text() == "history");
+    CHECK(terminal.screen()[0].starts_with("history"));
+
+    key(editor, "down");
+    CHECK(editor.text().empty());
+    CHECK(terminal.screen()[0].empty());
+
+    editor.set_text("one two");
+    key(editor, "home");
+    key(editor, "right", true);
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3}));
+    CHECK(terminal.cursor().column == 3);
+
+    editor.set_text({});
+    type(editor, "/");
+    REQUIRE(terminal.screen().size() == 12);
+    CHECK(terminal.screen()[1].starts_with("> /help"));
+
+    key(editor, "down");
+    CAPTURE(terminal.screen()[0], terminal.screen()[1]);
+    CHECK(terminal.screen()[1].starts_with("> /history"));
+
+    key(editor, "tab");
+    CHECK(editor.text() == "/history ");
+    CHECK(terminal.screen()[0].starts_with("/history "));
+
+    key(editor, "enter");
+    CHECK(submitted == "/history");
+    CHECK(terminal.screen()[0].empty());
+}
+
+TEST_CASE("Editor reports local dock terminal write failures", "[tui][editor][dock][issue605]") {
+    cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{
+            .columns = 40,
+            .rows = 12,
+    });
+    REQUIRE(terminal.start(
+            [](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+    cch::tui::Editor editor(cch::tui::EditorOptions{
+            .terminal = &terminal,
+            .dock_offset = 0,
+    });
+    REQUIRE(editor.render(40));
+    REQUIRE(terminal.stop());
+
+    type(editor, "x");
+    auto rendered = editor.render(40);
+    REQUIRE_FALSE(rendered);
+    CHECK(rendered.error().code == cch::support::ErrorCode::Validation);
+    CHECK(rendered.error().message == "Virtual Terminal must be started before terminal operations");
+}

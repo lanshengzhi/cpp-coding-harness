@@ -150,6 +150,8 @@ struct Editor::Impl {
     std::size_t available_height{5};
     std::size_t layout_width{80};
     std::size_t scroll_offset{0};
+    std::size_t last_echo_line_count{0};
+    std::size_t last_echo_width{0};
     enum class JumpDirection { Forward, Backward };
     std::optional<JumpDirection> jump_direction;
     std::optional<support::Error> callback_error;
@@ -270,7 +272,7 @@ struct Editor::Impl {
 
     std::shared_ptr<EditorRenderRequestSink> render_request_sink;
 
-    void request_render() {
+    void notify_render_request() {
         if (!render_request_sink || !*render_request_sink) return;
         bool sink_threw = false;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
@@ -290,6 +292,22 @@ struct Editor::Impl {
                     "the render request callback threw an exception");
             *render_request_sink = nullptr;
         }
+    }
+    void request_render() {
+        if (options.terminal) {
+            wake_autocomplete();
+            if (callback_error) {
+                notify_render_request();
+                return;
+            }
+            echo_local();
+            return;
+        }
+        notify_render_request();
+    }
+
+    void record_failure(support::Error error) {
+        if (!callback_error) callback_error = std::move(error);
     }
 
     void cancel_autocomplete(bool mutation_schedules_frame = false) {
@@ -552,6 +570,7 @@ struct Editor::Impl {
         buffer.push_undo();
         apply_completion_result(application.result, application.prefix);
         if (application.notify) notify_change();
+        echo_local();
     }
 
     void insert_character(std::string_view text) {
@@ -560,6 +579,7 @@ struct Editor::Impl {
         buffer.insert_character(text);
         notify_change();
         maybe_trigger_autocomplete(text.back());
+        echo_local();
     }
 
     void insert_text(std::string text, bool record_undo, bool update_autocomplete = true) {
@@ -569,6 +589,7 @@ struct Editor::Impl {
         buffer.insert_text(text, record_undo);
         notify_change();
         if (update_autocomplete) maybe_trigger_autocomplete(text.back());
+        echo_local();
     }
 
     void erase_at_cursor(bool backward) {
@@ -580,6 +601,7 @@ struct Editor::Impl {
         }
         notify_change();
         update_or_retrigger_after_erase();
+        echo_local();
     }
 
     void move_left() {
@@ -608,6 +630,7 @@ struct Editor::Impl {
             buffer.kill_to_line_start();
         }
         notify_change();
+        echo_local();
     }
 
     void delete_word(bool forward) {
@@ -618,18 +641,21 @@ struct Editor::Impl {
             buffer.delete_word_backward();
         }
         notify_change();
+        echo_local();
     }
 
     void yank() {
         exit_history_browsing();
         buffer.yank();
         notify_change();
+        echo_local();
     }
 
     void yank_pop() {
         exit_history_browsing();
         buffer.yank_pop();
         notify_change();
+        echo_local();
     }
 
     void undo_once() {
@@ -637,6 +663,7 @@ struct Editor::Impl {
         buffer.undo();
         cancel_autocomplete(true);
         notify_change();
+        echo_local();
     }
 
     void add_to_history(std::string text) {
@@ -698,6 +725,7 @@ struct Editor::Impl {
         }
         scroll_offset = 0;
         notify_change();
+        echo_local();
     }
 
     void navigate_history(int direction) {
@@ -721,6 +749,7 @@ struct Editor::Impl {
                 buffer = std::move(draft->buffer);
                 scroll_offset = 0;
                 notify_change();
+                echo_local();
             } else {
                 set_text_internal("", false);
             }
@@ -738,6 +767,7 @@ struct Editor::Impl {
         cancel_autocomplete(true);
         scroll_offset = 0;
         notify_change();
+        echo_local();
         if (!on_submit) return;
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
         try {
@@ -762,6 +792,7 @@ struct Editor::Impl {
         buffer.insert_paste(std::move(text));
         notify_change();
         cancel_autocomplete(true);
+        echo_local();
     }
 
     [[nodiscard]] std::vector<VisualLine> visual_lines(std::size_t width) const {
@@ -850,7 +881,36 @@ struct Editor::Impl {
         buffer.jump_to(target, direction == JumpDirection::Forward);
     }
 
-    std::size_t last_rendered_line_count{0};
+
+    support::ExpectedVoid append_autocomplete_lines(std::vector<std::string>& result, std::size_t width) const {
+        if (!autocomplete_menu.open || autocomplete_menu.items.empty()) return {};
+        constexpr std::size_t kMaxAutocompleteRows = 5;
+        const auto text_lines_count = result.size();
+        const auto remainder_height =
+                available_height > text_lines_count ? available_height - text_lines_count : 0;
+        const auto autocomplete_capacity = std::min(kMaxAutocompleteRows, remainder_height);
+        if (autocomplete_capacity == 0) return {};
+        const auto selected = autocomplete_menu.selected_index;
+        const auto first_autocomplete = selected < autocomplete_capacity ? 0 : selected - autocomplete_capacity + 1;
+        const auto autocomplete_count = std::min(autocomplete_capacity,
+                autocomplete_menu.items.size() -
+                        std::min(first_autocomplete, autocomplete_menu.items.size()));
+        for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
+            const auto index = first_autocomplete + offset;
+            std::string text = index == selected ? "> /" : "  /";
+            text += autocomplete_menu.items[index].label;
+            if (!autocomplete_menu.items[index].description.empty()) {
+                text += " — " + autocomplete_menu.items[index].description;
+            }
+            TruncatedText item{std::move(text)};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                result.push_back(std::move(rendered->lines.front()));
+            }
+        }
+        return {};
+    }
 
     support::Expected<std::vector<std::string>> format_lines(std::size_t width) {
         if (width == 0) {
@@ -913,6 +973,9 @@ struct Editor::Impl {
             if (!styled_border) return std::unexpected(styled_border.error());
             result.push_back(std::move(*styled_border));
         }
+        if (auto appended = append_autocomplete_lines(result, width); !appended) {
+            return std::unexpected(appended.error());
+        }
         return result;
     }
 
@@ -961,37 +1024,55 @@ struct Editor::Impl {
         const auto width = layout_width > 0 ? layout_width : options.terminal->dimensions().columns;
         if (width == 0) return;
 
+        const auto record_terminal_failure = [this](support::Error error) {
+            record_failure(std::move(error));
+            notify_render_request();
+        };
         auto lines_result = format_lines(width);
         if (!lines_result) {
-            if (!callback_error) callback_error = std::move(lines_result.error());
+            record_terminal_failure(lines_result.error());
             return;
         }
         const auto& lines = *lines_result;
-
+        const auto clear_width = std::max(width, last_echo_width);
         for (std::size_t i = 0; i < lines.size(); ++i) {
-            if (auto result = options.terminal->set_dock_cursor(options.dock_offset + i, 0); !result) {
-                if (!callback_error) callback_error = std::move(result.error());
+            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0);
+                !positioned) {
+                record_terminal_failure(positioned.error());
                 return;
             }
-            if (auto result = options.terminal->write(lines[i]); !result) {
-                if (!callback_error) callback_error = std::move(result.error());
+            if (auto written = options.terminal->write(lines[i]); !written) {
+                record_terminal_failure(written.error());
+                return;
+            }
+            if (last_echo_width > width) {
+                if (auto cleared = options.terminal->write(std::string(last_echo_width - width, ' '));
+                    !cleared) {
+                    record_terminal_failure(cleared.error());
+                    return;
+                }
+            }
+        }
+        for (std::size_t i = lines.size(); i < last_echo_line_count; ++i) {
+            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0);
+                !positioned) {
+                record_terminal_failure(positioned.error());
+                return;
+            }
+            if (auto cleared = options.terminal->write(std::string(clear_width, ' ')); !cleared) {
+                record_terminal_failure(cleared.error());
                 return;
             }
         }
+        last_echo_line_count = lines.size();
+        last_echo_width = width;
 
-        auto loc = cursor_location_internal(/*require_focused=*/false);
-        if (loc) {
-            if (auto result = options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column); !result) {
-                if (!callback_error) callback_error = std::move(result.error());
-                return;
+        if (auto loc = cursor_location_internal(/*require_focused=*/false); loc) {
+            if (auto positioned =
+                        options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column);
+                !positioned) {
+                record_terminal_failure(positioned.error());
             }
-        }
-
-        const auto current_line_count = lines.size();
-        const bool height_changed = (last_rendered_line_count > 0 && current_line_count != last_rendered_line_count);
-        last_rendered_line_count = current_line_count;
-        if (height_changed) {
-            request_render();
         }
     }
 
@@ -1015,8 +1096,8 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
                 if (const auto impl = weak_impl.lock()) impl->on_completion_wake(impl);
                 return {};
             },
-            [sink = impl_->render_request_sink]() -> support::ExpectedVoid {
-                if (*sink) return (*sink)();
+            [weak_impl]() -> support::ExpectedVoid {
+                if (const auto impl = weak_impl.lock()) impl->request_render();
                 return {};
             });
 }
@@ -1080,6 +1161,7 @@ void Editor::set_text(std::string text) {
     impl.buffer.set_text(std::move(text));
     impl.cancel_autocomplete(true);
     impl.notify_change();
+    impl.echo_local();
 }
 
 void Editor::insert_text_at_cursor(std::string text) {
@@ -1192,35 +1274,12 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
         if (!styled_border) return std::unexpected(styled_border.error());
         result.push_back(std::move(*styled_border));
     }
-    if (impl.autocomplete_menu.open && !impl.autocomplete_menu.items.empty()) {
-        constexpr std::size_t kMaxAutocompleteRows = 5;
-        const auto text_lines_count = result.size();
-        const auto remainder_height =
-                impl.available_height > text_lines_count ? impl.available_height - text_lines_count : 0;
-        const auto autocomplete_capacity = std::min(kMaxAutocompleteRows, remainder_height);
-        if (autocomplete_capacity > 0) {
-            const auto selected = impl.autocomplete_menu.selected_index;
-            const auto first_autocomplete = selected < autocomplete_capacity || autocomplete_capacity == 0
-                                                    ? 0
-                                                    : selected - autocomplete_capacity + 1;
-            const auto autocomplete_count = std::min(autocomplete_capacity,
-                    impl.autocomplete_menu.items.size() -
-                            std::min(first_autocomplete, impl.autocomplete_menu.items.size()));
-            for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
-                const auto index = first_autocomplete + offset;
-                std::string text = index == selected ? "> /" : "  /";
-                text += impl.autocomplete_menu.items[index].label;
-                if (!impl.autocomplete_menu.items[index].description.empty()) {
-                    text += " — " + impl.autocomplete_menu.items[index].description;
-                }
-                TruncatedText item{std::move(text)};
-                if (auto rendered = item.render(width); !rendered) {
-                    return std::unexpected(rendered.error());
-                } else if (!rendered->lines.empty()) {
-                    result.push_back(std::move(rendered->lines.front()));
-                }
-            }
-        }
+    if (auto appended = impl.append_autocomplete_lines(result, width); !appended) {
+        return std::unexpected(appended.error());
+    }
+    if (impl.options.terminal) {
+        impl.last_echo_line_count = result.size();
+        impl.last_echo_width = width;
     }
     return RenderResult{.lines = std::move(result)};
 }
@@ -1251,6 +1310,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         if (detail::is_printable(*event)) {
             impl.jump_to(detail::printable_text(*event), *impl.jump_direction);
             impl.jump_direction.reset();
+            impl.echo_cursor();
             return InputAdmissionOutcome::Consumed;
         }
         impl.jump_direction.reset();
@@ -1307,12 +1367,10 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.deleteCharBackward" || matches_key(*event, "shift+backspace")) {
         impl.erase_at_cursor(true);
-        impl.echo_local();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteCharForward" || matches_key(*event, "shift+delete")) {
         impl.erase_at_cursor(false);
-        impl.echo_local();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordBackward") {
@@ -1361,10 +1419,12 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.cursorWordLeft") {
         impl.move_word(false);
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordRight") {
         impl.move_word(true);
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorUp") {
@@ -1377,6 +1437,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         } else {
             impl.move_vertical(-1);
         }
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorDown") {
@@ -1387,18 +1448,21 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         } else {
             impl.move_vertical(1);
         }
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageUp") {
         for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
             impl.move_vertical(-1);
         }
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageDown") {
         for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
             impl.move_vertical(1);
         }
+        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.newLine") {
@@ -1412,7 +1476,6 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (detail::is_printable(*event)) {
         impl.insert_character(detail::printable_text(*event));
-        impl.echo_local();
         return InputAdmissionOutcome::Consumed;
     }
     return InputAdmissionOutcome::Unhandled;

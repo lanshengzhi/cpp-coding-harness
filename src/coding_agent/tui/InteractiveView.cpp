@@ -41,10 +41,11 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                       },
               },
               [this](std::string text) -> support::ExpectedVoid {
-                  // Editor submission clears before invoking its submit sink;
-                  // keep that notification on the sampled text's revision.
+                  // Direct dock echo owns local editor presentation when a
+                  // terminal is configured; a full view invalidation would
+                  // route ordinary typing back through ChatContainer::render.
                   if (!text.empty()) ++editor_revision_;
-                  invoke_invalidate();
+                  if (!editor_.has_local_echo()) invoke_invalidate();
                   return {};
               },
               [this](std::string text) -> support::ExpectedVoid {
@@ -609,7 +610,7 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
     // navigation has no change notification, but it still changes the visible
     // fake/hardware cursor and must schedule the same repaint as pi.
     if (outcome == cch::tui::InputAdmissionOutcome::Consumed && before_text == editor_.text() &&
-            before_cursor != editor_.cursor()) {
+            before_cursor != editor_.cursor() && !editor_.has_local_echo()) {
         invoke_invalidate();
     }
     return outcome;
