@@ -206,10 +206,12 @@ bool SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) 
     append_new_diagnostics(snapshot.agent_state.diagnostics, displayed_agent_diagnostics_);
     append_new_diagnostics(snapshot.session_event_diagnostics, displayed_session_event_diagnostics_);
 
-    if (snapshot.agent_state.is_running && session_status_ == SessionStatus::Idle) {
-        session_status_ = SessionStatus::Working;
-        active_view->show_status_working();
-    } else if (!snapshot.agent_state.is_running && session_status_ == SessionStatus::Working) {
+    // Status stays event-owned: shows follow the authoritative AgentStart /
+    // MessageStart broadcasts. The snapshot only confirms the clear once the
+    // run is done, and only on samples newer than the show (a stale
+    // pre-bump sample can never resurrect or falsely clear) (#597).
+    if (!snapshot.agent_state.is_running && session_status_ == SessionStatus::Working &&
+            state_version() > status_show_version_) {
         session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
     }
@@ -224,12 +226,14 @@ void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& event) {
     active_view->apply_event(event);
     if (std::holds_alternative<agent::AgentStartEvent>(event)) {
         session_status_ = SessionStatus::Working;
+        status_show_version_ = state_version();
         active_view->show_status_working();
     } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
         session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
     } else if (std::holds_alternative<agent::MessageStartEvent>(event) && prompt_active()) {
         session_status_ = SessionStatus::Working;
+        status_show_version_ = state_version();
         active_view->show_status_working();
     }
     sync_session_observations();

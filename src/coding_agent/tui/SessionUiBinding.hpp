@@ -152,6 +152,11 @@ private:
     std::vector<std::string> displayed_agent_diagnostics_;
     std::vector<std::string> displayed_session_event_diagnostics_;
     SessionStatus session_status_{SessionStatus::Idle};
+    /// Session version at the last Working show. The snapshot-confirmed clear
+    /// only fires on samples newer than this, so an event that raced ahead of
+    /// its projection bump cannot have its Working immediately cleared by a
+    /// stale pre-bump reconcile (#597).
+    std::uint64_t status_show_version_{0};
     mutable std::atomic<std::uint64_t> state_version_{1};
     mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> fallback_snapshot_{nullptr};
     std::move_only_function<void()> dirty_listener_{nullptr};
