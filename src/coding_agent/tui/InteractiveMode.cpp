@@ -20,13 +20,14 @@
 
 #include <cch/tui/ProcessTerminal.hpp>
 
-#include <any>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
+#include <any>
 #include <chrono>
 #include <memory>
 #include <optional>

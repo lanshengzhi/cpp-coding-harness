@@ -432,8 +432,9 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         chat_result = std::move(*rendered);
     }
 
-    const std::size_t dock_k = pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
-    const std::size_t viewport_height = available_rows_ > dock_k ? (available_rows_ - dock_k) : 0;
+    const std::size_t dock_line_count =
+            pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
+    const std::size_t viewport_height = available_rows_ > dock_line_count ? (available_rows_ - dock_line_count) : 0;
 
     cch::tui::RenderResult transcript_result;
     transcript_result.viewport_height = viewport_height;
@@ -451,7 +452,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         std::make_move_iterator(chat_result.lines.begin()),
         std::make_move_iterator(chat_result.lines.end()));
 
-    transcript_result.dock_lines.reserve(dock_k);
+    transcript_result.dock_lines.reserve(dock_line_count);
     transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
             std::make_move_iterator(pending_lines.begin()),
             std::make_move_iterator(pending_lines.end()));

@@ -383,6 +383,9 @@ struct ChatContainer::Impl {
     /// is compared: cancellation always settles the newest execution, and
     /// items interleave non-message entries so positional pairing beyond
     /// the tail is unreliable. Pairing keys on the command text.
+    /// debt: misses in-place mutations of an older bash entry while a newer
+    /// one runs; upgrade when the projection exposes per-message versions or
+    /// a patch stream (issue #597 snapshot/patch stream).
     void sync_committed_bash(const std::vector<ai::MessageVariant>& messages) {
         const ai::BashExecutionMessage* updated = nullptr;
         for (auto iterator = messages.rbegin(); iterator != messages.rend(); ++iterator) {
