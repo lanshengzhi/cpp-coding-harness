@@ -44,8 +44,15 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                   // Direct dock echo owns local editor presentation when a
                   // terminal is configured; a full view invalidation would
                   // route ordinary typing back through ChatContainer::render.
+                  // The one exception is crossing the bash-mode boundary: the
+                  // editor border token is applied by the full view render
+                  // (pi updateEditorBorderColor), so a `!` prefix or its
+                  // removal must repaint the dock with the new theme.
                   if (!text.empty()) ++editor_revision_;
-                  if (!editor_.has_local_echo()) invoke_invalidate();
+                  const bool bash_mode = user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
+                  const bool bash_toggled = bash_mode != presented_bash_mode_;
+                  presented_bash_mode_ = bash_mode;
+                  if (!editor_.has_local_echo() || bash_toggled) invoke_invalidate();
                   return {};
               },
               [this](std::string text) -> support::ExpectedVoid {
@@ -403,6 +410,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             editor_theme.text = theme_->editor_theme().text;
             editor_theme.border = theme_->foreground_hook(thinking_border_token);
         }
+        presented_bash_mode_ = unsubmitted_bash_mode();
         editor_.set_theme(std::move(editor_theme));
         if (auto editor = editor_.render(width); !editor) {
             return std::unexpected(editor.error());

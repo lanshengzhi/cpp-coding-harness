@@ -1034,7 +1034,11 @@ struct Editor::Impl {
 
     void echo_local(bool include_autocomplete = true) {
         if (!options.terminal) return;
-        const auto width = layout_width > 0 ? layout_width : options.terminal->dimensions().columns;
+        // The dock spans the terminal width, so the live dimensions are the
+        // echo width. Never reuse the stale layout_width after a resize: a
+        // narrowed terminal would reject the over-wide write and latch a
+        // permanent render failure (#597).
+        const auto width = options.terminal->dimensions().columns;
         if (width == 0) return;
 
         const auto record_terminal_failure = [this](support::Error error) {

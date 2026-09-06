@@ -315,6 +315,9 @@ private:
     /// source must not re-enter the view.
     std::move_only_function<FooterData()> footer_data_source_;
     bool user_bash_available_{false};
+    /// Bash-mode border state already presented on the dock; a change-sink
+    /// crossing it must repaint the full view (border token is render-owned).
+    bool presented_bash_mode_{false};
     std::optional<support::Error> callback_error_;
     // pi's main-screen containers.
     KeybindingHints header_;
