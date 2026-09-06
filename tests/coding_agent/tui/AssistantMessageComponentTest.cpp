@@ -1,8 +1,8 @@
 #include "coding_agent/tui/AssistantMessageComponent.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/RenderedScreen.hpp"
 
 #include <cch/ai/Message.hpp>
-#include <cch/tui/Component.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,43 +17,6 @@ namespace {
 [[nodiscard]] coding_agent::tui::LiveTheme test_theme() {
     return coding_agent::tui::LiveTheme(
             coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::TrueColor);
-}
-
-[[nodiscard]] std::string strip_ansi(std::string_view text) {
-    std::string stripped;
-    stripped.reserve(text.size());
-    for (std::size_t index = 0; index < text.size();) {
-        if (text[index] == '\x1b' && index + 1 < text.size() && text[index + 1] == '[') {
-            index += 2;
-            while (index < text.size() && !(text[index] >= '@' && text[index] <= '~')) {
-                ++index;
-            }
-            if (index < text.size()) ++index;
-            continue;
-        }
-        if (text[index] == '\x1b' && index + 1 < text.size() && text[index + 1] == ']') {
-            index += 2;
-            while (index < text.size() && text[index] != '\a') {
-                ++index;
-            }
-            if (index < text.size()) ++index;
-            continue;
-        }
-        stripped.push_back(text[index]);
-        ++index;
-    }
-    return stripped;
-}
-
-[[nodiscard]] std::string screen_of(cch::tui::Component& component, std::size_t width = 80) {
-    const auto rendered = component.render(width);
-    REQUIRE(rendered);
-    std::string text;
-    for (const auto& line : rendered->lines) {
-        text.append(strip_ansi(line));
-        text.push_back('\n');
-    }
-    return text;
 }
 
 } // namespace
@@ -72,7 +35,7 @@ TEST_CASE("AssistantMessageComponent renders interleaved thinking and text in ex
     message.stop_reason = ai::AssistantStopReason::Stop;
 
     component.update_content(message);
-    const std::string screen = screen_of(component);
+    const std::string screen = tests::rendered_screen(component);
 
     const auto alpha = screen.find("alpha paragraph");
     const auto first_thought = screen.find("first thought");
@@ -114,7 +77,7 @@ TEST_CASE("AssistantMessageComponent preserves content order when interleaved bl
     message.stop_reason = ai::AssistantStopReason::Stop;
     component.update_content(message);
 
-    const std::string screen = screen_of(component);
+    const std::string screen = tests::rendered_screen(component);
     const auto text = screen.find("streamed text grown");
     const auto thought = screen.find("later thought continued");
     REQUIRE(text != std::string::npos);
@@ -142,9 +105,28 @@ TEST_CASE("AssistantMessageComponent freezes closed fences and preserves followi
     component.update_content(message);
     CHECK(component.frozen_block_count() == 3);
     CHECK_FALSE(component.has_open_tail());
-    const auto screen = screen_of(component);
+    const auto screen = tests::rendered_screen(component);
     CHECK(screen.find("before") < screen.find("int value = 1;"));
     CHECK(screen.find("int value = 1;") < screen.find("after"));
+}
+
+TEST_CASE("AssistantMessageComponent renders consecutive thinking blocks as one run", "[coding_agent][tui][issue603]") {
+    auto theme = test_theme();
+    coding_agent::tui::AssistantMessageComponent split(theme);
+    ai::AssistantMessage split_message;
+    split_message.content.push_back(ai::ThinkingContent{.thinking = "thought one"});
+    split_message.content.push_back(ai::ThinkingContent{.thinking = "thought two"});
+    split_message.stop_reason = ai::AssistantStopReason::Stop;
+    split.update_content(split_message);
+    CHECK(split.frozen_block_count() == 1);
+
+    coding_agent::tui::AssistantMessageComponent joined(theme);
+    ai::AssistantMessage joined_message;
+    joined_message.content.push_back(ai::ThinkingContent{.thinking = "thought one\n\nthought two"});
+    joined_message.stop_reason = ai::AssistantStopReason::Stop;
+    joined.update_content(joined_message);
+
+    CHECK(tests::rendered_screen(split) == tests::rendered_screen(joined));
 }
 
 TEST_CASE("AssistantMessageComponent freezes settled list items without reparsing prior items",
@@ -190,25 +172,50 @@ TEST_CASE("AssistantMessageComponent streamed rendering matches one-shot renderi
     streamed_message.stop_reason = ai::AssistantStopReason::Stop;
     streamed.update_content(streamed_message);
 
-    CHECK(screen_of(streamed) == screen_of(one_shot));
+    const auto streamed_screen = tests::rendered_screen(streamed);
+    const auto one_shot_screen = tests::rendered_screen(one_shot);
+    CHECK(streamed_screen == one_shot_screen);
 }
 
 TEST_CASE("AssistantMessageComponent append processing stays bounded across a hundred chunks",
         "[coding_agent][tui][issue603][benchmark]") {
     auto theme = test_theme();
+    // Structured stream: paragraphs, a settled list run, and a closed fence
+    // recur so freeze boundaries fire throughout the chunk sequence.
+    const std::string unit =
+            "Paragraph text about streaming.\n\n- item one\n- item two\n\n```cpp\nint value = 1;\n```\n\n";
+    std::string full;
+    for (std::size_t repeat = 0; repeat < 10; ++repeat)
+        full += unit;
+
     coding_agent::tui::AssistantMessageComponent component(theme);
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::Pending;
     message.content.push_back(ai::TextContent{});
 
     constexpr std::size_t kChunks = 100;
-    const auto started = std::chrono::steady_clock::now();
+    constexpr auto kMaxChunkTime = std::chrono::milliseconds(2);
+    const std::size_t slice = (full.size() + kChunks - 1) / kChunks;
     for (std::size_t chunk = 0; chunk < kChunks; ++chunk) {
-        std::get<ai::TextContent>(message.content[0]).text += " token";
+        if (const auto pos = chunk * slice; pos < full.size()) {
+            std::get<ai::TextContent>(message.content[0]).text.append(full, pos, slice);
+        }
+        const auto started = std::chrono::steady_clock::now();
         component.update_content(message);
+        const auto elapsed = std::chrono::steady_clock::now() - started;
+        CHECK(elapsed < kMaxChunkTime);
     }
-    const auto elapsed = std::chrono::steady_clock::now() - started;
-    const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    CHECK(elapsed_us < 200'000);
-    CHECK(component.has_open_tail());
+    // Closed blocks froze mid-stream; only the trailing segment stays dynamic.
+    CHECK(component.frozen_block_count() > 0);
+
+    message.stop_reason = ai::AssistantStopReason::Stop;
+    component.update_content(message);
+    CHECK_FALSE(component.has_open_tail());
+
+    coding_agent::tui::AssistantMessageComponent one_shot(theme);
+    ai::AssistantMessage one_shot_message;
+    one_shot_message.content.push_back(ai::TextContent{.text = full});
+    one_shot_message.stop_reason = ai::AssistantStopReason::Stop;
+    one_shot.update_content(one_shot_message);
+    CHECK(tests::rendered_screen(component) == tests::rendered_screen(one_shot));
 }

@@ -32,11 +32,13 @@ namespace {
 
 [[nodiscard]] std::string safe_text(std::string text) { return bounded_redacted_presentation(std::move(text)); }
 
-[[nodiscard]] ai::AssistantMessage pending_assistant(ai::AssistantMessage message) {
+/// A MessageStart/MessageUpdate (or snapshot stream) begins/continues a stream
+/// even when a synthetic caller leaves the passive stop reason at its default
+/// value: inside a stream the assistant message is still Pending.
+[[nodiscard]] ai::AssistantMessage as_pending_stream(ai::AssistantMessage message) {
     message.stop_reason = ai::AssistantStopReason::Pending;
     return message;
 }
-
 [[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(
         const LiveTheme& theme, std::string text, std::size_t width, ThemeToken token, bool redact = true) {
     if (redact) text = safe_text(std::move(text));
@@ -754,7 +756,7 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     }
     if (snapshot.agent_state.streaming_message) {
         const auto assistant_index = impl_->items.size();
-        impl_->add_message(ai::MessageVariant{pending_assistant(*snapshot.agent_state.streaming_message)});
+        impl_->add_message(ai::MessageVariant{as_pending_stream(*snapshot.agent_state.streaming_message)});
         impl_->active_assistant_item = assistant_index;
         impl_->transcript_needs_reconcile = true;
         if (assistant_index < impl_->items.size()) {
@@ -815,7 +817,7 @@ void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
     }
 
     if (snapshot.agent_state.streaming_message) {
-        const auto streaming_message = pending_assistant(*snapshot.agent_state.streaming_message);
+        const auto streaming_message = as_pending_stream(*snapshot.agent_state.streaming_message);
         if (impl_->active_assistant_item) {
             impl_->replace_assistant(streaming_message);
         } else {
@@ -834,16 +836,12 @@ void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
 
 void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
-        if (std::holds_alternative<ai::AssistantMessage>(start->message)) {
-            // A MessageStart begins a stream even when a synthetic caller
-            // leaves the passive stop reason at its default value.
-            auto message = start->message;
-            std::get<ai::AssistantMessage>(message).stop_reason = ai::AssistantStopReason::Pending;
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&start->message)) {
             // Capture the item index before add_message: synchronize_tools
             // may append standalone tool items after it, so the streaming
             // target must not be the last deque entry.
             const auto assistant_index = impl_->items.size();
-            impl_->add_message(std::move(message));
+            impl_->add_message(ai::MessageVariant{as_pending_stream(*assistant)});
             impl_->active_assistant_item = assistant_index;
             if (assistant_index < impl_->items.size()) {
                 if (auto* msg = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
@@ -858,7 +856,7 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     }
     if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&update->message)) {
-            impl_->replace_assistant(pending_assistant(*assistant));
+            impl_->replace_assistant(as_pending_stream(*assistant));
         }
         return;
     }

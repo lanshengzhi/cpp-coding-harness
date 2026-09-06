@@ -1,6 +1,7 @@
 #include "coding_agent/tui/ChatContainer.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/RenderedScreen.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Message.hpp>
@@ -33,35 +34,6 @@ namespace {
 [[nodiscard]] coding_agent::tui::LiveTheme test_theme() {
     return coding_agent::tui::LiveTheme(
             coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::TrueColor);
-}
-
-[[nodiscard]] std::string strip_ansi(std::string_view text) {
-    std::string stripped;
-    stripped.reserve(text.size());
-    for (std::size_t index = 0; index < text.size();) {
-        if (text[index] == '\x1b' && index + 1 < text.size() && text[index + 1] == '[') {
-            index += 2;
-            while (index < text.size() && !(text[index] >= '@' && text[index] <= '~')) {
-                ++index;
-            }
-            if (index < text.size()) ++index;
-            continue;
-        }
-        stripped.push_back(text[index]);
-        ++index;
-    }
-    return stripped;
-}
-
-[[nodiscard]] std::string screen_of(cch::tui::Component& component, std::size_t width = 80) {
-    const auto rendered = component.render(width);
-    REQUIRE(rendered);
-    std::string text;
-    for (const auto& line : rendered->lines) {
-        text.append(strip_ansi(line));
-        text.push_back('\n');
-    }
-    return text;
 }
 
 } // namespace
@@ -175,6 +147,36 @@ TEST_CASE("ChatContainer completed messages transition to Committed state with c
     CHECK(chat.committed_item_count() == 3);
 }
 
+TEST_CASE("ChatContainer keeps initialized streaming assistant active for subsequent updates",
+        "[coding_agent][tui][issue603]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+
+    coding_agent::AgentSessionSnapshot snapshot;
+    ai::AssistantMessage streaming;
+    streaming.content.push_back(ai::TextContent{.text = "initialized text"});
+    snapshot.agent_state.streaming_message = streaming;
+    chat.initialize(snapshot);
+
+    REQUIRE(chat.item_count() == 1);
+    CHECK_FALSE(chat.is_item_committed(0));
+
+    streaming.content.push_back(ai::TextContent{.text = " followed by update"});
+    chat.apply_event(agent::MessageUpdateEvent{
+            .message = streaming,
+            .assistant_event = ai::TextDeltaEvent{.delta = " followed by update"},
+    });
+    const auto screen = tests::rendered_screen(chat, 80);
+    CHECK(screen.find("initialized text") != std::string::npos);
+    CHECK(screen.find("followed by update") != std::string::npos);
+
+    streaming.stop_reason = ai::AssistantStopReason::Stop;
+    chat.apply_event(agent::MessageEndEvent{
+            .message = streaming,
+    });
+    CHECK(chat.is_item_committed(0));
+}
+
 TEST_CASE("ChatContainer subsequent render passes reuse cached lines without re-parsing",
         "[coding_agent][tui][issue602]") {
     auto theme = test_theme();
@@ -191,20 +193,20 @@ TEST_CASE("ChatContainer subsequent render passes reuse cached lines without re-
     REQUIRE(chat.is_item_committed(1));
 
     // Pass 1: Cold render. Both items are rendered and cached.
-    const auto screen1 = screen_of(chat, 80);
+    const auto screen1 = tests::rendered_screen(chat, 80);
     CHECK(screen1.find("Hello from user") != std::string::npos);
     CHECK(screen1.find("Hello! I am Pike") != std::string::npos);
     CHECK(chat.cold_render_count() == 2);
     CHECK(chat.cache_hit_count() == 0);
 
     // Pass 2: Warm render. Both items must be reused directly from the line cache.
-    const auto screen2 = screen_of(chat, 80);
+    const auto screen2 = tests::rendered_screen(chat, 80);
     CHECK(screen2 == screen1);
     CHECK(chat.cold_render_count() == 2); // Unchanged!
     CHECK(chat.cache_hit_count() == 2);   // 2 hits!
 
     // Pass 3: Another warm render.
-    const auto screen3 = screen_of(chat, 80);
+    const auto screen3 = tests::rendered_screen(chat, 80);
     CHECK(screen3 == screen1);
     CHECK(chat.cold_render_count() == 2); // Still unchanged!
     CHECK(chat.cache_hit_count() == 4);   // 4 cumulative hits!

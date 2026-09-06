@@ -23,11 +23,13 @@ class LiveTheme;
 /// A/B/C prompt zones wrap the block unless the message carries tool calls.
 ///
 /// Streaming is incremental (#603, ADR 0051 Block Frozen Protocol):
-/// `update_content` consumes only appended deltas, so per-chunk work is
-/// strictly O(1) relative to the accumulated stream length. Closed syntactic
-/// blocks (paragraphs ending in a blank line, closed code fences, settled
-/// list items) freeze into committed sections that render once and cache
-/// their lines; only the open trailing segment is parsed dynamically.
+/// `update_content` consumes only appended deltas and advances a monotonic
+/// scanner; per-chunk work is strictly O(1) relative to the previously
+/// committed stream length. No committed prefix is re-scanned or copied;
+/// only the appended delta and current open trailing segment are inspected.
+/// Closed syntactic blocks (paragraphs ending in a blank line, closed code
+/// fences, settled list items) freeze into committed sections that render once
+/// and cache their lines; only the open trailing segment is parsed dynamically.
 class AssistantMessageComponent final : public cch::tui::Component {
 public:
     /// The theme must outlive this component.
@@ -84,8 +86,10 @@ private:
 
     void reset_stream_state();
     void consume_message(const ai::AssistantMessage& message);
-    void scan_open_tail();
+    void scan_open_tail(bool final_line);
     void freeze_tail_prefix(std::size_t end, bool tight_list_item);
+    void compact_active_tail();
+    void commit_frozen_block(SectionKind kind, std::string_view text, bool separator_before);
     void settle_tail();
     void update_suffix();
     [[nodiscard]] support::Expected<std::vector<std::string>> render_section_lines(
@@ -108,15 +112,15 @@ private:
     bool tight_list_run_open_{false};
     TailKind tail_kind_{TailKind::None};
     std::string active_tail_text_;
-    /// Absolute offset of the first byte not yet frozen in active_tail_text_.
+    /// Absolute offset of the first byte not yet frozen in active_tail_text_;
+    /// compacted once after each update to keep only the open suffix.
     std::size_t active_tail_begin_{0};
     bool tail_redacted_{false};
     /// Bytes of the tail's source content block already consumed.
     std::size_t consumed_block_bytes_{0};
-    /// Offset in `active_tail_text_` of the first line not yet confirmed
     /// Absolute offset of the first byte not yet confirmed by the scanner.
     std::size_t tail_line_pos_{0};
-    /// End of the byte range already searched for a newline.
+    /// Absolute end offset already searched for a terminating newline.
     std::size_t tail_probe_pos_{0};
     bool tail_in_fence_{false};
     char tail_fence_char_{'\0'};
@@ -129,6 +133,7 @@ private:
     ai::AssistantStopReason built_stop_reason_{ai::AssistantStopReason::Pending};
     std::optional<std::string> built_error_message_;
     bool built_tool_calls_{false};
+    bool suffix_cache_valid_{false};
 
     std::vector<std::string> hidden_label_lines_{};
     std::size_t hidden_label_width_{0};

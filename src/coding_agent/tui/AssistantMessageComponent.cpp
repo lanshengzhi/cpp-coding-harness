@@ -1,12 +1,11 @@
 #include "AssistantMessageComponent.hpp"
+#include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/RenderResultUtils.hpp"
+#include "coding_agent/tui/Theme.hpp"
 
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/Text.hpp>
-#include "coding_agent/BoundedText.hpp"
-#include "coding_agent/tui/Theme.hpp"
 
-#include <algorithm>
 #include <format>
 #include <optional>
 #include <string>
@@ -74,6 +73,15 @@ constexpr std::string_view kOsc133ZoneFinal = "\x1b]133;C\x07";
         std::format("\x1b[3m{}\x1b[23m", text));
 }
 
+/// The returned style stores a callback borrowing `theme`; `theme` must outlive every callback invocation.
+[[nodiscard]] auto markdown_style(const LiveTheme& theme, bool thinking) {
+    auto style = theme.markdown_style();
+    if (thinking) {
+        style.text = [theme = &theme](std::string text) { return italic_thinking_style(*theme, std::move(text)); };
+    }
+    return style;
+}
+
 [[nodiscard]] std::string_view strip_cr(std::string_view line) {
     if (line.ends_with('\r')) line.remove_suffix(1);
     return line;
@@ -124,7 +132,7 @@ struct ListMarker {
     std::size_t indent = 0;
     while (indent < line.size() && line[indent] == ' ')
         ++indent;
-    if (indent > 3 || indent >= line.size()) return std::nullopt;
+    if (indent >= line.size()) return std::nullopt;
     const char c = line[indent];
     std::size_t marker_end = 0;
     if (c == '-' || c == '+' || c == '*') {
@@ -199,8 +207,7 @@ void AssistantMessageComponent::set_hidden_thinking_label(std::string label) {
 void AssistantMessageComponent::set_output_pad(std::size_t output_pad) {
     output_pad_ = output_pad;
     active_tail_markdown_.reset();
-    built_stop_reason_ = stop_reason_ == ai::AssistantStopReason::Pending ? ai::AssistantStopReason::Stop
-                                                                          : ai::AssistantStopReason::Pending;
+    suffix_cache_valid_ = false;
     update_suffix();
     invalidate();
 }
@@ -211,13 +218,9 @@ bool AssistantMessageComponent::has_tool_calls() const {
 
 std::size_t AssistantMessageComponent::frozen_block_count() const { return frozen_blocks_.size(); }
 
-bool AssistantMessageComponent::has_open_tail() const {
-    return !trimmed(std::string_view{active_tail_text_}.substr(active_tail_begin_)).empty();
-}
+bool AssistantMessageComponent::has_open_tail() const { return !trimmed(active_tail_text_).empty(); }
 
-std::string_view AssistantMessageComponent::open_tail_text() const {
-    return std::string_view{active_tail_text_}.substr(active_tail_begin_);
-}
+std::string_view AssistantMessageComponent::open_tail_text() const { return active_tail_text_; }
 
 void AssistantMessageComponent::reset_stream_state() {
     frozen_blocks_.clear();
@@ -225,9 +228,9 @@ void AssistantMessageComponent::reset_stream_state() {
     tail_kind_ = TailKind::None;
     active_tail_text_.clear();
     active_tail_begin_ = 0;
-    tail_redacted_ = false;
     consumed_block_bytes_ = 0;
     tail_line_pos_ = 0;
+    tail_probe_pos_ = 0;
     tail_in_fence_ = false;
     tail_fence_char_ = '\0';
     tail_fence_len_ = 0;
@@ -271,7 +274,10 @@ void AssistantMessageComponent::consume_message(const ai::AssistantMessage& mess
             tail_in_fence_ = false;
             active_tail_text_.clear();
             active_tail_begin_ = 0;
+            tail_probe_pos_ = 0;
         } else if (tail_kind_ != kind || tail_redacted_ != redacted || block_text.size() < consumed_block_bytes_) {
+            // The caller's streaming contract permits append-only updates.
+            // Reprocess if a trailing block shrinks or changes kind.
             reset_stream_state();
             continue;
         }
@@ -281,41 +287,82 @@ void AssistantMessageComponent::consume_message(const ai::AssistantMessage& mess
         if (!block_text.empty()) has_visible_content_ = true;
         if (!delta.empty()) {
             active_tail_text_.append(delta);
-            scan_open_tail();
+            scan_open_tail(false);
         }
 
         const bool complete = index + 1 < content.size() || message.stop_reason != ai::AssistantStopReason::Pending;
         if (!complete) break;
+        scan_open_tail(true);
         settle_tail();
         ++settled_block_count_;
     }
+    compact_active_tail();
+}
+
+void AssistantMessageComponent::commit_frozen_block(SectionKind kind, std::string_view text, bool separator_before) {
+    const std::string cleaned = trimmed(text);
+    if (cleaned.empty()) return;
+    // Consecutive thinking blocks render as one run (pi assistant-message.ts).
+    if (kind == SectionKind::Thinking && !frozen_blocks_.empty() &&
+            frozen_blocks_.back().kind == SectionKind::Thinking) {
+        auto& run = frozen_blocks_.back();
+        run.text = trimmed(run.text) + "\n\n" + cleaned;
+        run.lines.clear();
+        run.rendered_width = 0;
+        return;
+    }
+    frozen_blocks_.push_back(FrozenBlock{
+            .kind = kind,
+            .text = cleaned,
+            .lines = {},
+            .rendered_width = 0,
+            .separator_before = separator_before,
+    });
 }
 
 void AssistantMessageComponent::freeze_tail_prefix(std::size_t end, bool tight_list_item) {
-    if (end <= active_tail_begin_) return;
+    if (end <= active_tail_begin_ || end > active_tail_text_.size()) return;
     const std::string_view segment =
             std::string_view{active_tail_text_}.substr(active_tail_begin_, end - active_tail_begin_);
     if (trimmed(segment).empty()) {
         active_tail_begin_ = end;
+        active_tail_markdown_.reset();
         return;
     }
     const bool joins_list_run = tight_list_run_open_ && list_marker(first_line(segment)).has_value();
-    frozen_blocks_.push_back(FrozenBlock{
-            .kind = tail_kind_ == TailKind::Thinking ? SectionKind::Thinking : SectionKind::Text,
-            .text = std::string{segment},
-            .lines = {},
-            .rendered_width = 0,
-            .separator_before = !joins_list_run,
-    });
+    commit_frozen_block(
+            tail_kind_ == TailKind::Thinking ? SectionKind::Thinking : SectionKind::Text, segment, !joins_list_run);
     tight_list_run_open_ = tight_list_item;
     active_tail_begin_ = end;
     active_tail_markdown_.reset();
 }
 
-void AssistantMessageComponent::scan_open_tail() {
+void AssistantMessageComponent::compact_active_tail() {
+    if (active_tail_begin_ == 0) return;
+    const auto active_begin = active_tail_begin_;
+    active_tail_text_.erase(0, active_begin);
+    tail_line_pos_ = tail_line_pos_ >= active_begin ? tail_line_pos_ - active_begin : 0;
+    tail_probe_pos_ = tail_probe_pos_ >= active_begin ? tail_probe_pos_ - active_begin : 0;
+    active_tail_begin_ = 0;
+}
+
+void AssistantMessageComponent::scan_open_tail(bool final_line) {
     while (tail_line_pos_ < active_tail_text_.size()) {
-        const auto newline = active_tail_text_.find('\n', tail_line_pos_);
-        if (newline == std::string::npos) return;
+        const auto search_start = tail_probe_pos_ > tail_line_pos_ ? tail_probe_pos_ : tail_line_pos_;
+        const auto newline = active_tail_text_.find('\n', search_start);
+        if (newline == std::string::npos) {
+            tail_probe_pos_ = active_tail_text_.size();
+            if (final_line && tail_in_fence_) {
+                const auto line = strip_cr(std::string_view{active_tail_text_}.substr(tail_line_pos_));
+                if (is_closing_fence(line, tail_fence_char_, tail_fence_len_)) {
+                    freeze_tail_prefix(active_tail_text_.size(), false);
+                    tail_in_fence_ = false;
+                    tail_line_pos_ = active_tail_text_.size();
+                }
+            }
+            return;
+        }
+        tail_probe_pos_ = newline + 1;
         const auto line =
                 strip_cr(std::string_view{active_tail_text_}.substr(tail_line_pos_, newline - tail_line_pos_));
         const auto line_end = newline + 1;
@@ -329,6 +376,7 @@ void AssistantMessageComponent::scan_open_tail() {
                         (active_tail_text_[tail_line_pos_] == '\r' || active_tail_text_[tail_line_pos_] == '\n')) {
                     ++tail_line_pos_;
                 }
+                tail_probe_pos_ = tail_line_pos_;
             } else {
                 tail_line_pos_ = line_end;
             }
@@ -340,6 +388,7 @@ void AssistantMessageComponent::scan_open_tail() {
             freeze_tail_prefix(prefix_end, false);
             tight_list_run_open_ = false;
             tail_line_pos_ = line_end;
+            tail_probe_pos_ = line_end;
             continue;
         }
 
@@ -351,10 +400,11 @@ void AssistantMessageComponent::scan_open_tail() {
             tail_fence_char_ = fence->fence_char;
             tail_fence_len_ = fence->fence_len;
             tail_line_pos_ = line_end;
+            tail_probe_pos_ = line_end;
             continue;
         }
 
-        if (const auto marker = list_marker(line); marker && tail_line_pos_ > active_tail_begin_) {
+        if (const auto marker = list_marker(line); marker && tail_line_pos_ > 0) {
             const auto pending_marker =
                     list_marker(first_line(std::string_view{active_tail_text_}.substr(active_tail_begin_)));
             if (!pending_marker || marker->indent < pending_marker->indent) {
@@ -362,10 +412,12 @@ void AssistantMessageComponent::scan_open_tail() {
                 freeze_tail_prefix(prefix_end, false);
                 tight_list_run_open_ = false;
                 tail_line_pos_ = line_end;
+                tail_probe_pos_ = line_end;
             } else if (marker->indent == pending_marker->indent) {
                 const auto prefix_end = tail_line_pos_;
                 freeze_tail_prefix(prefix_end, true);
                 tail_line_pos_ = line_end;
+                tail_probe_pos_ = line_end;
             } else {
                 tail_line_pos_ = line_end;
             }
@@ -379,13 +431,9 @@ void AssistantMessageComponent::settle_tail() {
     const std::string_view active_tail = std::string_view{active_tail_text_}.substr(active_tail_begin_);
     if (!trimmed(active_tail).empty()) {
         const bool joins_list_run = tight_list_run_open_ && list_marker(first_line(active_tail)).has_value();
-        frozen_blocks_.push_back(FrozenBlock{
-                .kind = tail_kind_ == TailKind::Thinking ? SectionKind::Thinking : SectionKind::Text,
-                .text = std::string{active_tail},
-                .lines = {},
-                .rendered_width = 0,
-                .separator_before = !joins_list_run,
-        });
+        commit_frozen_block(tail_kind_ == TailKind::Thinking ? SectionKind::Thinking : SectionKind::Text,
+                active_tail,
+                !joins_list_run);
     }
     active_tail_text_.clear();
     active_tail_begin_ = 0;
@@ -394,16 +442,17 @@ void AssistantMessageComponent::settle_tail() {
     tail_redacted_ = false;
     consumed_block_bytes_ = 0;
     tail_line_pos_ = 0;
+    tail_probe_pos_ = 0;
     tail_in_fence_ = false;
     active_tail_markdown_.reset();
     tail_markdown_kind_ = TailKind::None;
 }
-
 void AssistantMessageComponent::update_suffix() {
-    if (built_stop_reason_ == stop_reason_ && built_error_message_ == error_message_ &&
+    if (suffix_cache_valid_ && built_stop_reason_ == stop_reason_ && built_error_message_ == error_message_ &&
             built_tool_calls_ == has_tool_calls_) {
         return;
     }
+    suffix_cache_valid_ = true;
     built_stop_reason_ = stop_reason_;
     built_error_message_ = error_message_;
     built_tool_calls_ = has_tool_calls_;
@@ -439,14 +488,13 @@ support::Expected<std::vector<std::string>> AssistantMessageComponent::render_se
         const FrozenBlock& block, std::size_t width) {
     const auto cleaned = trimmed(block.text);
     if (cleaned.empty()) return std::vector<std::string>{};
-    auto style = theme_.markdown_style();
-    if (block.kind == SectionKind::Thinking) {
-        style.text = [this](std::string text) { return italic_thinking_style(theme_, std::move(text)); };
-    }
+    auto style = markdown_style(theme_, block.kind == SectionKind::Thinking);
     cch::tui::Markdown markdown(preserve_markdown_line_breaks(safe_text(cleaned)), output_pad_, 0, std::move(style));
-    auto rendered = markdown.render(width);
-    if (!rendered) return std::unexpected(rendered.error());
-    return std::move(rendered->lines);
+    if (auto rendered = markdown.render(width); !rendered) {
+        return std::unexpected(rendered.error());
+    } else {
+        return std::move(rendered->lines);
+    }
 }
 
 support::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std::size_t width) {
@@ -472,11 +520,13 @@ support::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std:
                 theme_.foreground(ThemeToken::ThinkingText, std::format("\x1b[3m{}\x1b[23m", hidden_thinking_label_)),
                 output_pad_,
                 0);
-        auto rendered = label.render(width);
-        if (!rendered) return std::unexpected(rendered.error());
-        hidden_label_lines_ = rendered->lines;
-        hidden_label_width_ = width;
-        return hidden_label_lines_;
+        if (auto rendered = label.render(width); !rendered) {
+            return std::unexpected(rendered.error());
+        } else {
+            hidden_label_lines_ = rendered->lines;
+            hidden_label_width_ = width;
+            return hidden_label_lines_;
+        }
     };
 
     if (has_visible_content_ || !frozen_blocks_.empty()) {
@@ -487,61 +537,61 @@ support::Expected<cch::tui::RenderResult> AssistantMessageComponent::render(std:
     for (auto& block : frozen_blocks_) {
         if (block.kind == SectionKind::Thinking && hide_thinking_block_) {
             if (!hidden_thinking_run) {
-                const auto label = hidden_label();
-                if (!label) return std::unexpected(label.error());
-                append_lines(*label, block.separator_before);
+                if (auto label = hidden_label(); !label) {
+                    return std::unexpected(label.error());
+                } else {
+                    append_lines(*label, block.separator_before);
+                }
             }
             hidden_thinking_run = true;
             continue;
         }
         hidden_thinking_run = false;
         if (block.rendered_width != width) {
-            auto lines = render_section_lines(block, width);
-            if (!lines) return std::unexpected(lines.error());
-            block.lines = std::move(*lines);
-            block.rendered_width = width;
+            if (auto lines = render_section_lines(block, width); !lines) {
+                return std::unexpected(lines.error());
+            } else {
+                block.lines = std::move(*lines);
+                block.rendered_width = width;
+            }
         }
         append_lines(block.lines, block.separator_before);
     }
 
-    const auto active_tail = std::string_view{active_tail_text_}.substr(active_tail_begin_);
+    const auto active_tail = std::string_view{active_tail_text_};
     const auto cleaned_tail = trimmed(active_tail);
     if (!cleaned_tail.empty()) {
         if (tail_kind_ == TailKind::Thinking && hide_thinking_block_) {
             if (!hidden_thinking_run) {
-                const auto label = hidden_label();
-                if (!label) return std::unexpected(label.error());
-                append_lines(*label, true);
+                if (auto label = hidden_label(); !label) {
+                    return std::unexpected(label.error());
+                } else {
+                    append_lines(*label, true);
+                }
             }
         } else {
-            if (tail_in_fence_) {
-                if (!active_tail_markdown_ || tail_markdown_kind_ != tail_kind_) {
-                    active_tail_markdown_ = std::make_unique<cch::tui::Text>(safe_text(cleaned_tail), output_pad_, 0);
-                    tail_markdown_kind_ = tail_kind_;
-                } else if (auto* text = dynamic_cast<cch::tui::Text*>(active_tail_markdown_.get())) {
-                    text->set_text(safe_text(cleaned_tail));
-                }
-            } else if (!active_tail_markdown_ || tail_markdown_kind_ != tail_kind_) {
-                auto style = theme_.markdown_style();
-                if (tail_kind_ == TailKind::Thinking) {
-                    style.text = [this](std::string text) { return italic_thinking_style(theme_, std::move(text)); };
-                }
+            if (!active_tail_markdown_ || tail_markdown_kind_ != tail_kind_) {
+                auto style = markdown_style(theme_, tail_kind_ == TailKind::Thinking);
                 active_tail_markdown_ = std::make_unique<cch::tui::Markdown>(
                         preserve_markdown_line_breaks(safe_text(cleaned_tail)), output_pad_, 0, std::move(style));
                 tail_markdown_kind_ = tail_kind_;
             } else if (auto* markdown = dynamic_cast<cch::tui::Markdown*>(active_tail_markdown_.get())) {
                 markdown->set_text(preserve_markdown_line_breaks(safe_text(cleaned_tail)));
             }
-            auto rendered = active_tail_markdown_->render(width);
-            if (!rendered) return std::unexpected(rendered.error());
-            const bool joins_list_run = tight_list_run_open_ && list_marker(first_line(cleaned_tail)).has_value();
-            append_lines(rendered->lines, !joins_list_run);
+            if (auto rendered = active_tail_markdown_->render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else {
+                const bool joins_list_run = tight_list_run_open_ && list_marker(first_line(cleaned_tail)).has_value();
+                append_lines(rendered->lines, !joins_list_run);
+            }
         }
     }
 
-    auto suffix_rendered = suffix_content_.render(width);
-    if (!suffix_rendered) return std::unexpected(suffix_rendered.error());
-    if (!suffix_rendered->lines.empty()) append_render_result(result, std::move(*suffix_rendered));
+    if (auto suffix_rendered = suffix_content_.render(width); !suffix_rendered) {
+        return std::unexpected(suffix_rendered.error());
+    } else if (!suffix_rendered->lines.empty()) {
+        append_render_result(result, std::move(*suffix_rendered));
+    }
 
     if (!has_tool_calls_ && !result.lines.empty()) {
         result.lines.front() = std::string{kOsc133ZoneStart} + result.lines.front();
