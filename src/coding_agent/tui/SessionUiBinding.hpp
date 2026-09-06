@@ -95,6 +95,11 @@ public:
     /// Incremental sync of the pending-input queues and newly appeared Agent
     /// diagnostics into the view (after events and prompt completions).
     void sync_session_observations();
+    /// Replace the session-backed view state from one sampled immutable
+    /// snapshot. The frame ticker calls this once before its render pass;
+    /// status indicators remain event-owned while messages, tools,
+    /// diagnostics, and queues come from the complete snapshot.
+    void reconcile_snapshot(const AgentSessionSnapshot& snapshot);
 
     /// Sync only the pending-input queue presentation.
     void sync_pending_input();
@@ -114,6 +119,8 @@ public:
     void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
 
 private:
+    enum class SessionStatus { Idle, Working, Retry, Compaction };
+
     void on_event(const agent::AgentLifecycleEvent& event);
     void on_session_event(const AgentSessionEvent& event);
 
@@ -141,6 +148,8 @@ private:
     /// `FooterDataProvider` subset).
     FooterDataProvider footer_data_provider_{std::filesystem::path{}};
     std::vector<std::string> displayed_agent_diagnostics_;
+    std::vector<std::string> displayed_session_event_diagnostics_;
+    SessionStatus session_status_{SessionStatus::Idle};
     mutable std::atomic<std::uint64_t> state_version_{1};
     mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> fallback_snapshot_{nullptr};
     std::move_only_function<void()> dirty_listener_{nullptr};

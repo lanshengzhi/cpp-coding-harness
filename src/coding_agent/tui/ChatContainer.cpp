@@ -32,6 +32,11 @@ namespace {
 
 [[nodiscard]] std::string safe_text(std::string text) { return bounded_redacted_presentation(std::move(text)); }
 
+[[nodiscard]] ai::AssistantMessage pending_assistant(ai::AssistantMessage message) {
+    message.stop_reason = ai::AssistantStopReason::Pending;
+    return message;
+}
+
 [[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(
         const LiveTheme& theme, std::string text, std::size_t width, ThemeToken token, bool redact = true) {
     if (redact) text = safe_text(std::move(text));
@@ -324,6 +329,8 @@ struct ChatContainer::Impl {
         last_rendered_width = 0;
         cache_hit_count = 0;
         cold_render_count = 0;
+        committed_message_count = 0;
+        transcript_needs_reconcile = false;
     }
 
     void invalidate_all_caches() {
@@ -400,6 +407,31 @@ struct ChatContainer::Impl {
         synchronize_tools(item, message);
         settle_provider_tools(message);
         update_item_commitment(item);
+    }
+
+    void update_latest_assistant(const ai::AssistantMessage& message) {
+        for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
+            auto* item = std::get_if<MessageItem>(&*iterator);
+            if (item == nullptr || !std::holds_alternative<ai::AssistantMessage>(item->message)) continue;
+            item->message = ai::MessageVariant{message};
+            item->cache.invalidate();
+            if (auto* assistant_comp = dynamic_cast<AssistantMessageComponent*>(item->component.get())) {
+                assistant_comp->update_content(message);
+                // A passive snapshot can arrive after a pending assistant was
+                // cached as an empty item. Rebuild that exceptional stale
+                // presentation once; normal streaming updates stay on the
+                // incremental component path above.
+                if (item->cache.valid && item->cache.lines.empty() && !message.content.empty()) {
+                    rebuild_message(*item);
+                }
+            } else {
+                rebuild_message(*item);
+            }
+            synchronize_tools(*item, message);
+            settle_provider_tools(message);
+            update_item_commitment(*item);
+            return;
+        }
     }
 
     void rebuild_message(MessageItem& item) {
@@ -699,6 +731,8 @@ struct ChatContainer::Impl {
     std::size_t last_rendered_width{0};
     std::uint64_t cache_hit_count{0};
     std::uint64_t cold_render_count{0};
+    std::size_t committed_message_count{0};
+    bool transcript_needs_reconcile{false};
 };
 
 ChatContainer::ChatContainer(const LiveTheme& theme, std::shared_ptr<const SharedKeybindings> keybindings)
@@ -712,6 +746,7 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     for (const auto& message : snapshot.agent_state.messages) {
         impl_->add_message(message);
     }
+    impl_->committed_message_count = snapshot.agent_state.messages.size();
     for (auto& item : impl_->items) {
         if (auto* msg = std::get_if<Impl::MessageItem>(&item)) {
             impl_->update_item_commitment(*msg);
@@ -719,12 +754,79 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     }
     if (snapshot.agent_state.streaming_message) {
         const auto assistant_index = impl_->items.size();
-        impl_->add_message(ai::MessageVariant{*snapshot.agent_state.streaming_message});
+        impl_->add_message(ai::MessageVariant{pending_assistant(*snapshot.agent_state.streaming_message)});
         impl_->active_assistant_item = assistant_index;
+        impl_->transcript_needs_reconcile = true;
         if (assistant_index < impl_->items.size()) {
             if (auto* msg = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
                 msg->committed = false;
                 msg->cache.invalidate();
+            }
+        }
+    }
+}
+void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
+    const auto& messages = snapshot.agent_state.messages;
+    if (!snapshot.agent_state.streaming_message && impl_->transcript_needs_reconcile) {
+        // A projection can briefly expose the newly submitted user message
+        // before the assistant's committed MessageEnd. Preserve the live
+        // component until that committed assistant arrives.
+        if (messages.empty() || std::get_if<ai::AssistantMessage>(&messages.back()) == nullptr) return;
+        initialize(snapshot);
+        return;
+    }
+    if (messages.size() < impl_->committed_message_count) {
+        initialize(snapshot);
+        return;
+    }
+
+    std::size_t next_message = impl_->committed_message_count;
+    if (impl_->active_assistant_item && !snapshot.agent_state.streaming_message && next_message < messages.size()) {
+        const auto* assistant = std::get_if<ai::AssistantMessage>(&messages[next_message]);
+        if (assistant == nullptr) {
+            initialize(snapshot);
+            return;
+        }
+        impl_->replace_assistant(*assistant);
+        const auto assistant_index = *impl_->active_assistant_item;
+        impl_->active_assistant_item.reset();
+        if (assistant_index < impl_->items.size()) {
+            if (auto* item = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
+                impl_->update_item_commitment(*item);
+            }
+        }
+        ++next_message;
+    } else if (impl_->active_assistant_item && !snapshot.agent_state.streaming_message) {
+        // The lifecycle event is authoritative while the projection catches
+        // up. Do not erase a visible live assistant just because this frame
+        // sampled the short interval between MessageEnd delivery and the
+        // committed history update.
+        return;
+    }
+
+    for (; next_message < messages.size(); ++next_message) {
+        impl_->add_message(messages[next_message]);
+    }
+    impl_->committed_message_count = messages.size();
+    if (!messages.empty()) {
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&messages.back())) {
+            impl_->update_latest_assistant(*assistant);
+        }
+    }
+
+    if (snapshot.agent_state.streaming_message) {
+        const auto streaming_message = pending_assistant(*snapshot.agent_state.streaming_message);
+        if (impl_->active_assistant_item) {
+            impl_->replace_assistant(streaming_message);
+        } else {
+            const auto assistant_index = impl_->items.size();
+            impl_->add_message(ai::MessageVariant{streaming_message});
+            impl_->active_assistant_item = assistant_index;
+            if (assistant_index < impl_->items.size()) {
+                if (auto* message = std::get_if<Impl::MessageItem>(&impl_->items[assistant_index])) {
+                    message->committed = false;
+                    message->cache.invalidate();
+                }
             }
         }
     }
@@ -756,7 +858,7 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
     }
     if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&update->message)) {
-            impl_->replace_assistant(*assistant);
+            impl_->replace_assistant(pending_assistant(*assistant));
         }
         return;
     }
@@ -776,6 +878,8 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
         } else if (const auto* result = std::get_if<ai::ToolResultMessage>(&end->message)) {
             impl_->settle_tool(*result);
         }
+        ++impl_->committed_message_count;
+        impl_->transcript_needs_reconcile = true;
         return;
     }
     if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
@@ -813,8 +917,10 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
         impl_->invalidate_and_update_tool_owner(&tool);
     }
 }
-
-void ChatContainer::append_committed_message(ai::MessageVariant message) { impl_->add_message(std::move(message)); }
+void ChatContainer::append_committed_message(ai::MessageVariant message) {
+    impl_->add_message(std::move(message));
+    ++impl_->committed_message_count;
+}
 
 void ChatContainer::clear() { impl_->clear(); }
 
@@ -891,11 +997,16 @@ support::Expected<cch::tui::RenderResult> ChatContainer::render(std::size_t widt
     for (std::size_t index = 0; index < impl_->items.size(); ++index) {
         auto& item = impl_->items[index];
         if (auto* message = std::get_if<Impl::MessageItem>(&item)) {
-            if (message->committed && message->cache.valid && message->cache.cached_width == width) {
+            const auto* assistant = std::get_if<ai::AssistantMessage>(&message->message);
+            const bool stale_empty_assistant_cache =
+                    assistant != nullptr && !assistant->content.empty() && message->cache.lines.empty();
+            if (message->committed && message->cache.valid && message->cache.cached_width == width &&
+                    !stale_empty_assistant_cache) {
                 ++impl_->cache_hit_count;
                 append_cached_lines(result, message->cache);
                 continue;
             }
+            if (stale_empty_assistant_cache) message->cache.invalidate();
         }
         auto rendered = impl_->render_item(item, width, index);
         if (!rendered) return std::unexpected(rendered.error());

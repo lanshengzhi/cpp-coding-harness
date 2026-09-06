@@ -300,7 +300,7 @@ struct Editor::Impl {
                 notify_render_request();
                 return;
             }
-            echo_local();
+            echo_local(true);
             return;
         }
         notify_render_request();
@@ -500,7 +500,11 @@ struct Editor::Impl {
         if (action == detail::EditorCompletionMenuAction::MoveUp ||
                 action == detail::EditorCompletionMenuAction::MoveDown) {
             if (previous_selected != autocomplete_menu.selected_index) {
-                request_render();
+                if (options.terminal) {
+                    echo_local();
+                } else {
+                    request_render();
+                }
             }
         }
     }
@@ -881,20 +885,17 @@ struct Editor::Impl {
         buffer.jump_to(target, direction == JumpDirection::Forward);
     }
 
-
     support::ExpectedVoid append_autocomplete_lines(std::vector<std::string>& result, std::size_t width) const {
         if (!autocomplete_menu.open || autocomplete_menu.items.empty()) return {};
         constexpr std::size_t kMaxAutocompleteRows = 5;
         const auto text_lines_count = result.size();
-        const auto remainder_height =
-                available_height > text_lines_count ? available_height - text_lines_count : 0;
+        const auto remainder_height = available_height > text_lines_count ? available_height - text_lines_count : 0;
         const auto autocomplete_capacity = std::min(kMaxAutocompleteRows, remainder_height);
         if (autocomplete_capacity == 0) return {};
         const auto selected = autocomplete_menu.selected_index;
         const auto first_autocomplete = selected < autocomplete_capacity ? 0 : selected - autocomplete_capacity + 1;
         const auto autocomplete_count = std::min(autocomplete_capacity,
-                autocomplete_menu.items.size() -
-                        std::min(first_autocomplete, autocomplete_menu.items.size()));
+                autocomplete_menu.items.size() - std::min(first_autocomplete, autocomplete_menu.items.size()));
         for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
             const auto index = first_autocomplete + offset;
             std::string text = index == selected ? "> /" : "  /";
@@ -912,7 +913,7 @@ struct Editor::Impl {
         return {};
     }
 
-    support::Expected<std::vector<std::string>> format_lines(std::size_t width) {
+    support::Expected<std::vector<std::string>> format_lines(std::size_t width, bool include_autocomplete = true) {
         if (width == 0) {
             return std::unexpected(
                     support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
@@ -973,8 +974,10 @@ struct Editor::Impl {
             if (!styled_border) return std::unexpected(styled_border.error());
             result.push_back(std::move(*styled_border));
         }
-        if (auto appended = append_autocomplete_lines(result, width); !appended) {
-            return std::unexpected(appended.error());
+        if (include_autocomplete) {
+            if (auto appended = append_autocomplete_lines(result, width); !appended) {
+                return std::unexpected(appended.error());
+            }
         }
         return result;
     }
@@ -1019,7 +1022,7 @@ struct Editor::Impl {
         return CursorPosition{.column = col, .row = display_row};
     }
 
-    void echo_local() {
+    void echo_local(bool include_autocomplete = true) {
         if (!options.terminal) return;
         const auto width = layout_width > 0 ? layout_width : options.terminal->dimensions().columns;
         if (width == 0) return;
@@ -1028,7 +1031,16 @@ struct Editor::Impl {
             record_failure(std::move(error));
             notify_render_request();
         };
-        auto lines_result = format_lines(width);
+        auto lines_result = format_lines(width, include_autocomplete);
+        const auto record_dock_position_failure = [this](support::Error error) {
+            if (error.code == support::ErrorCode::Validation &&
+                    error.message.ends_with("dock cursor position is outside its dimensions")) {
+                notify_render_request();
+                return;
+            }
+            record_failure(std::move(error));
+            notify_render_request();
+        };
         if (!lines_result) {
             record_terminal_failure(lines_result.error());
             return;
@@ -1036,9 +1048,8 @@ struct Editor::Impl {
         const auto& lines = *lines_result;
         const auto clear_width = std::max(width, last_echo_width);
         for (std::size_t i = 0; i < lines.size(); ++i) {
-            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0);
-                !positioned) {
-                record_terminal_failure(positioned.error());
+            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0); !positioned) {
+                record_dock_position_failure(positioned.error());
                 return;
             }
             if (auto written = options.terminal->write(lines[i]); !written) {
@@ -1046,17 +1057,15 @@ struct Editor::Impl {
                 return;
             }
             if (last_echo_width > width) {
-                if (auto cleared = options.terminal->write(std::string(last_echo_width - width, ' '));
-                    !cleared) {
+                if (auto cleared = options.terminal->write(std::string(last_echo_width - width, ' ')); !cleared) {
                     record_terminal_failure(cleared.error());
                     return;
                 }
             }
         }
         for (std::size_t i = lines.size(); i < last_echo_line_count; ++i) {
-            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0);
-                !positioned) {
-                record_terminal_failure(positioned.error());
+            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0); !positioned) {
+                record_dock_position_failure(positioned.error());
                 return;
             }
             if (auto cleared = options.terminal->write(std::string(clear_width, ' ')); !cleared) {
@@ -1068,10 +1077,9 @@ struct Editor::Impl {
         last_echo_width = width;
 
         if (auto loc = cursor_location_internal(/*require_focused=*/false); loc) {
-            if (auto positioned =
-                        options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column);
-                !positioned) {
-                record_terminal_failure(positioned.error());
+            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + loc->row, loc->column);
+                    !positioned) {
+                record_dock_position_failure(positioned.error());
             }
         }
     }

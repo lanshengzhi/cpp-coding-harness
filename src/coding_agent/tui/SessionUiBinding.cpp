@@ -84,17 +84,28 @@ SessionUiBinding::SessionUiBinding(
     : executor_(std::move(executor)), hooks_(std::move(hooks)) {}
 
 support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
+    if (session_ != nullptr) detach();
     session_ = &session;
     // The new session's diagnostics re-baseline: the incremental sync must
     // not re-append the diagnostics the bind-time initialize renders.
     displayed_agent_diagnostics_.clear();
+    displayed_session_event_diagnostics_.clear();
+    session_status_ = SessionStatus::Idle;
     const auto weak = weak_from_this();
+    if (dirty_listener_) {
+        session_->set_dirty_listener([weak] {
+            if (const auto self = weak.lock(); self && self->dirty_listener_) {
+                self->dirty_listener_();
+            }
+        });
+    }
     if (auto subscribed = session.subscribe(
             [weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
                 if (const auto self = weak.lock()) self->on_event(event);
                 return {};
             });
         !subscribed) {
+        detach();
         return std::unexpected(subscribed.error());
     } else {
         subscription_.emplace(std::move(*subscribed));
@@ -105,6 +116,7 @@ support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
                 return {};
             });
         !subscribed) {
+        detach();
         return std::unexpected(subscribed.error());
     } else {
         session_event_subscription_.emplace(std::move(*subscribed));
@@ -113,8 +125,14 @@ support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
 }
 
 void SessionUiBinding::detach() noexcept {
+    if (session_ != nullptr) {
+        session_->set_dirty_listener(nullptr);
+    }
+    cancel_retry_countdown();
     subscription_.reset();
     session_event_subscription_.reset();
+    session_ = nullptr;
+    session_status_ = SessionStatus::Idle;
 }
 
 void SessionUiBinding::append_snapshot_diagnostics(
@@ -161,12 +179,60 @@ void SessionUiBinding::sync_session_observations() {
     displayed_agent_diagnostics_ = std::move(current);
 }
 
-void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& /*event*/) {
+void SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
+    if (!is_live()) return;
+    auto* const active_view = view();
+    if (active_view == nullptr) return;
+
+    active_view->reconcile_snapshot(snapshot);
+    active_view->set_pending_input(snapshot.agent_state.input_queues);
+
+    const auto append_new_diagnostics = [&active_view](const auto& diagnostics, auto& displayed) {
+        std::vector<std::string> current;
+        current.reserve(diagnostics.size());
+        for (const auto& diagnostic : diagnostics) {
+            current.push_back(combined_error_text(diagnostic));
+        }
+        auto overlap = std::min(displayed.size(), current.size());
+        while (overlap > 0 &&
+                !std::equal(displayed.end() - static_cast<std::ptrdiff_t>(overlap), displayed.end(), current.begin())) {
+            --overlap;
+        }
+        for (auto index = overlap; index < current.size(); ++index) {
+            active_view->append_diagnostic(current[index]);
+        }
+        displayed = std::move(current);
+    };
+    append_new_diagnostics(snapshot.agent_state.diagnostics, displayed_agent_diagnostics_);
+    append_new_diagnostics(snapshot.session_event_diagnostics, displayed_session_event_diagnostics_);
+
+    if (snapshot.agent_state.is_running && session_status_ == SessionStatus::Idle) {
+        session_status_ = SessionStatus::Working;
+        active_view->show_status_working();
+    } else if (!snapshot.agent_state.is_running && session_status_ == SessionStatus::Working) {
+        session_status_ = SessionStatus::Idle;
+        active_view->clear_status_indicator();
+    }
+}
+
+void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& event) {
     if (!is_live()) return;
     state_version_.fetch_add(1, std::memory_order_release);
-    if (dirty_listener_) {
-        dirty_listener_();
+    auto* const active_view = view();
+    if (active_view == nullptr) return;
+    active_view->apply_event(event);
+    if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+        session_status_ = SessionStatus::Working;
+        active_view->show_status_working();
+    } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
+        session_status_ = SessionStatus::Idle;
+        active_view->clear_status_indicator();
+    } else if (std::holds_alternative<agent::MessageStartEvent>(event) && prompt_active()) {
+        session_status_ = SessionStatus::Working;
+        active_view->show_status_working();
     }
+    sync_session_observations();
+    if (hooks_.invalidate != nullptr) hooks_.invalidate();
 }
 
 /// pi's `session.on("auto_retry_start"...` / `compaction_start...`
@@ -178,6 +244,7 @@ void SessionUiBinding::on_session_event(const AgentSessionEvent& event) {
     auto* const active_view = view();
     if (active_view == nullptr) return;
     if (const auto* retry = std::get_if<AutoRetryStartEvent>(&event)) {
+        session_status_ = SessionStatus::Retry;
         cancel_retry_countdown();
         const auto seconds = static_cast<int>(std::max<std::int64_t>(
             1, (retry->delay_ms + 999) / 1000));
@@ -185,6 +252,7 @@ void SessionUiBinding::on_session_event(const AgentSessionEvent& event) {
             retry->attempt, retry->max_attempts, seconds);
         start_retry_countdown(retry->attempt, retry->max_attempts, seconds);
     } else if (const auto* retry_end = std::get_if<AutoRetryEndEvent>(&event)) {
+        session_status_ = SessionStatus::Idle;
         cancel_retry_countdown();
         active_view->clear_status_indicator();
         // pi auto_retry_end: only the final failure reports (success
@@ -196,8 +264,10 @@ void SessionUiBinding::on_session_event(const AgentSessionEvent& event) {
                 retry_end->final_error.value_or("Unknown error")));
         }
     } else if (const auto* compaction = std::get_if<CompactionStartEvent>(&event)) {
+        session_status_ = SessionStatus::Compaction;
         active_view->show_status_compaction(compaction->reason);
     } else if (const auto* compaction_end = std::get_if<CompactionEndEvent>(&event)) {
+        session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
         if (compaction_end->aborted) {
             if (compaction_end->reason == "manual") {
@@ -397,10 +467,14 @@ std::shared_ptr<const AgentSessionSnapshot> SessionUiBinding::snapshot() const {
 }
 
 void SessionUiBinding::set_dirty_listener(std::move_only_function<void()> on_dirty) {
+    dirty_listener_ = std::move(on_dirty);
     if (session_ != nullptr) {
-        session_->set_dirty_listener(std::move(on_dirty));
-    } else {
-        dirty_listener_ = std::move(on_dirty);
+        const auto weak = weak_from_this();
+        session_->set_dirty_listener([weak] {
+            if (const auto self = weak.lock(); self && self->dirty_listener_) {
+                self->dirty_listener_();
+            }
+        });
     }
 }
 

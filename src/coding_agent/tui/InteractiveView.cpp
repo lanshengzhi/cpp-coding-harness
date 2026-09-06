@@ -69,6 +69,8 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
 
 void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) { chat_.initialize(snapshot); }
 
+void InteractiveView::reconcile_snapshot(const AgentSessionSnapshot& snapshot) { chat_.reconcile_snapshot(snapshot); }
+
 void InteractiveView::apply_render_settings(bool hide_thinking_block, std::size_t output_pad) {
     chat_.set_hide_thinking_block(hide_thinking_block);
     chat_.set_output_pad(output_pad);

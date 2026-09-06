@@ -36,6 +36,10 @@ public:
     ChatContainer& operator=(const ChatContainer&) = delete;
 
     void initialize(const AgentSessionSnapshot& snapshot);
+    /// Reconcile session-backed messages without rebuilding existing
+    /// components. In particular, preserve AssistantMessageComponent's
+    /// incremental frozen-block state while a frame snapshot catches up.
+    void reconcile_snapshot(const AgentSessionSnapshot& snapshot);
     void apply_event(const agent::AgentLifecycleEvent& event);
     /// Append one runtime-confirmed passive message that has no lifecycle event.
     void append_committed_message(ai::MessageVariant message);

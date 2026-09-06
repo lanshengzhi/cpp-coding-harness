@@ -144,12 +144,11 @@ public:
     void arm_frame_ticker();
     void on_frame_tick();
 
-    void set_projection_source(std::shared_ptr<SessionProjectionSource> source) noexcept {
-        projection_source_ = std::move(source);
-    }
+    void set_projection_source(std::shared_ptr<SessionProjectionSource> source);
     [[nodiscard]] std::shared_ptr<SessionProjectionSource> projection_source() const noexcept {
         return projection_source_;
     }
+
     [[nodiscard]] std::uint64_t last_rendered_version() const noexcept { return last_rendered_version_; }
     [[nodiscard]] bool local_dock_dirty() const noexcept { return local_dock_dirty_.load(std::memory_order_acquire); }
     void set_local_dock_dirty(bool dirty = true) noexcept { local_dock_dirty_.store(dirty, std::memory_order_release); }
@@ -492,7 +491,7 @@ private:
 
     // ── Exit gating ──────────────────────────────────────────────────────
 
-    void render();
+    [[nodiscard]] bool render();
     void request_exit();
     void signal_exit();
 
@@ -619,6 +618,8 @@ private:
     std::shared_ptr<SessionProjectionSource> projection_source_{nullptr};
     std::uint64_t last_rendered_version_{0};
     std::atomic<bool> local_dock_dirty_{false};
+    std::atomic<bool> frame_render_posted_{false};
+    bool immediate_frame_render_{false};
     bool ticker_running_{false};
     std::size_t render_count_{0};
     static constexpr auto kFrameInterval = std::chrono::milliseconds(33); // ~30 FPS

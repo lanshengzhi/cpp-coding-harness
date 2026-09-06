@@ -1457,8 +1457,17 @@ support::ExpectedVoid ProcessTerminal::set_dock_cursor(std::size_t dock_row, std
     const auto dock_start = impl_->margins_active ? (impl_->margin_bottom + 1) : 0;
     const auto screen_row = dock_start + dock_row;
     if (screen_row >= impl_->dimensions.rows || column > impl_->dimensions.columns) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "Process Terminal dock cursor position is outside its dimensions"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Process Terminal dock cursor position is outside its dimensions",
+                std::format("dock_row={}, column={}, screen_row={}, rows={}, columns={}, margins_active={}, "
+                            "margin_bottom={}",
+                        dock_row,
+                        column,
+                        screen_row,
+                        impl_->dimensions.rows,
+                        impl_->dimensions.columns,
+                        impl_->margins_active,
+                        impl_->margin_bottom)));
     }
     impl_->cursor.row = screen_row;
     impl_->cursor.column = column;

@@ -206,6 +206,7 @@ public:
     InteractiveView& operator=(const InteractiveView&) = delete;
 
     void initialize(const AgentSessionSnapshot& snapshot);
+    void reconcile_snapshot(const AgentSessionSnapshot& snapshot);
 
     void apply_render_settings(bool hide_thinking_block, std::size_t output_pad);
 

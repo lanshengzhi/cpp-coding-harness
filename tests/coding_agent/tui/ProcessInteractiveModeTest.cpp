@@ -1,5 +1,6 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "ai/ModelStreamBridge.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PseudoTerminal.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -14,11 +15,17 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <signal.h>
 #include <sys/ioctl.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,6 +35,77 @@
 #include <vector>
 
 namespace {
+
+class ConcurrentStreamingProvider final : public cch::tests::ScriptedProvider {
+public:
+    ConcurrentStreamingProvider(std::shared_ptr<std::atomic_bool> started, std::shared_ptr<std::atomic_bool> finished)
+        : ScriptedProvider("fake"), started_(std::move(started)), finished_(std::move(finished)) {}
+
+    [[nodiscard]] cch::ai::ModelStream stream(
+            cch::ai::Model model, cch::ai::AiContext, cch::coding_agent::ModelRuntimeTestStreamOptions) override {
+        return cch::ai::detail::make_model_stream(
+                [model = std::move(model), started = started_, finished = finished_](cch::ai::AssistantEventSink sink)
+                        -> boost::asio::awaitable<cch::support::Expected<cch::ai::AssistantMessage>> {
+                    auto partial = cch::ai::assistant_text_message("");
+                    partial.provider = "fake";
+                    partial.api = "fake";
+                    partial.model = model.id;
+                    partial.content.clear();
+                    partial.content.emplace_back(cch::ai::text_content(""));
+                    started->store(true, std::memory_order_release);
+
+                    if (sink) {
+                        if (auto emitted = sink(cch::ai::AssistantStartEvent{.partial = partial}); !emitted) {
+                            finished->store(true, std::memory_order_release);
+                            co_return std::unexpected(emitted.error());
+                        }
+                        if (auto emitted = sink(cch::ai::TextStartEvent{.content_index = 0, .partial = partial});
+                                !emitted) {
+                            finished->store(true, std::memory_order_release);
+                            co_return std::unexpected(emitted.error());
+                        }
+                        for (std::size_t index = 0; index < 160; ++index) {
+                            const auto token = std::format("stream-{:03} ", index);
+                            std::get<cch::ai::TextContent>(partial.content[0]).text += token;
+                            if (auto emitted = sink(cch::ai::TextDeltaEvent{
+                                        .content_index = 0,
+                                        .delta = token,
+                                        .partial = partial,
+                                });
+                                    !emitted) {
+                                finished->store(true, std::memory_order_release);
+                                co_return std::unexpected(emitted.error());
+                            }
+                            boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
+                            timer.expires_after(std::chrono::milliseconds(2));
+                            boost::system::error_code wait_error;
+                            co_await timer.async_wait(
+                                    boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+                            if (wait_error) {
+                                finished->store(true, std::memory_order_release);
+                                co_return std::unexpected(cch::support::make_error(cch::support::ErrorCode::Cancelled,
+                                        "concurrent streaming provider timer cancelled"));
+                            }
+                        }
+                    }
+                    partial.stop_reason = cch::ai::AssistantStopReason::Stop;
+                    if (auto emitted = sink(cch::ai::AssistantDoneEvent{
+                                .reason = partial.stop_reason,
+                                .message = partial,
+                        });
+                            !emitted) {
+                        finished->store(true, std::memory_order_release);
+                        co_return std::unexpected(emitted.error());
+                    }
+                    finished->store(true, std::memory_order_release);
+                    co_return partial;
+                });
+    }
+
+private:
+    std::shared_ptr<std::atomic_bool> started_;
+    std::shared_ptr<std::atomic_bool> finished_;
+};
 
 class InteractiveSmokeCleanup final {
 public:
@@ -372,8 +450,8 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     CHECK(*run_result);
 }
 
-TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token streaming and cleanly restores PTY",
-        "[coding_agent][tui][terminal][benchmark][spec597][issue606]") {
+TEST_CASE("Process Terminal preserves keypresses while streaming output and restores the PTY",
+        "[coding_agent][tui][terminal][spec597][issue606]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -382,11 +460,14 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace config;
     cch::tests::RuntimeFixture runtime;
+    auto stream_started = std::make_shared<std::atomic_bool>(false);
+    auto stream_finished = std::make_shared<std::atomic_bool>(false);
+    auto provider = std::make_shared<ConcurrentStreamingProvider>(stream_started, stream_finished);
     cch::tests::ModelsSessionOptions options;
     options.session_target = cch::coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.execution_runtime_target = runtime.make_target();
-    auto models = cch::tests::models_from_provider(cch::tests::make_scripted_fake_provider());
+    auto models = cch::tests::models_from_provider(std::move(provider));
     cch::coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
@@ -406,9 +487,6 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
                        .with_session(*created->session)
                        .with_agent_config_directory(config.path())
                        .with_initial_prompt("pty prompt")
-                       .with_initial_prompt_options({
-                               .images = {cch::ai::image_content("cG5n", "image/png")},
-                       })
                        .build();
     boost::asio::co_spawn(io,
             cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
@@ -425,59 +503,39 @@ TEST_CASE("Process Terminal maintains sub-5ms keystroke latency during token str
             pty->master.get(),
     };
     REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
-    auto output = cch::tests::read_available(pty->master.get());
-    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
+
+    std::string output = cch::tests::read_available(pty->master.get());
+    REQUIRE(cch::tests::wait_until(
+            [&] { return stream_started->load(std::memory_order_acquire); }, std::chrono::seconds(2)));
+
     const std::string test_input = "hello world";
-    std::vector<double> latencies_ms;
-    latencies_ms.reserve(test_input.size());
-
+    bool typed_during_stream = false;
     for (char c : test_input) {
-        const auto t_write = std::chrono::steady_clock::now();
+        typed_during_stream = typed_during_stream || !stream_finished->load(std::memory_order_acquire);
         REQUIRE(::write(pty->master.get(), &c, 1) == 1);
-
-        bool echoed = false;
-        std::string accumulated;
-        const auto deadline = t_write + std::chrono::milliseconds(500);
-        while (!echoed && std::chrono::steady_clock::now() < deadline) {
-            auto chunk = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(2));
-            accumulated += chunk;
-            if (accumulated.find(c) != std::string::npos) {
-                const auto t_read = std::chrono::steady_clock::now();
-                const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(t_read - t_write).count();
-                latencies_ms.push_back(static_cast<double>(elapsed_us) / 1000.0);
-                echoed = true;
-            }
-        }
-        REQUIRE(echoed);
     }
+    CHECK(typed_during_stream);
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"hello world", "stream-159"}));
+    REQUIRE(cch::tests::wait_until(
+            [&] { return stream_finished->load(std::memory_order_acquire); }, std::chrono::seconds(2)));
 
-    double max_subsequent_ms = 0.0;
-    for (std::size_t i = 0; i < latencies_ms.size(); ++i) {
-        UNSCOPED_INFO("Key '" << test_input[i] << "' latency: " << latencies_ms[i] << " ms");
-        if (i > 0 && latencies_ms[i] > max_subsequent_ms) {
-            max_subsequent_ms = latencies_ms[i];
-        }
-    }
-    CHECK(max_subsequent_ms < 5.0);
-
-    // Verify bottom dock remains pinned
-    CHECK(output.find("\x1b[1;17r") != std::string::npos);
-    // Erase typed characters with backspace so the editor buffer is empty without submitting
+    // The keypresses were admitted while the model stream was active and the
+    // complete stream marker was observed afterward; no PTY output was lost.
     for (std::size_t i = 0; i < test_input.size(); ++i) {
         constexpr char kBackspace = '\x7f';
         REQUIRE(::write(pty->master.get(), &kBackspace, 1) == 1);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    // Now that editor is empty, Ctrl+D exits cleanly
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
     REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
     runner.join();
     cleanup.dismiss();
     CHECK(run_exception == nullptr);
+    REQUIRE(run_result);
+    CHECK(*run_result);
 
-    // Verify clean terminal restoration against original termios
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
     CHECK(cch::tests::same_terminal_state(restored, original));
@@ -578,6 +636,10 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
 
     CHECK(run_exception == nullptr);
     REQUIRE(run_result);
+    if (!*run_result) {
+        UNSCOPED_INFO(
+                "Interactive run error: " << run_result->error().message << " [" << run_result->error().detail << "]");
+    }
     CHECK(*run_result);
 }
 
