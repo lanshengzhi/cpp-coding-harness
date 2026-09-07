@@ -504,12 +504,12 @@ InteractiveEngine::build_autocomplete_provider() {
     const auto workspace = session_ != nullptr
         ? session_->workspace()
         : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
-    return build_editor_autocomplete_provider(
-        templates,
-        skills,
-        model_flows_->model_completion(),
-        include_skill_commands,
-        workspace);
+    // Every result must reach the editor's serialized domain on this
+    // executor: the provider contract allows worker-thread delivery, and the
+    // receiver re-enters the editor through the render request (#609).
+    return std::make_unique<ExecutorAutocompleteProvider>(executor_,
+            build_editor_autocomplete_provider(
+                    templates, skills, model_flows_->model_completion(), include_skill_commands, workspace));
 }
 
 void InteractiveEngine::rebuild_autocomplete_provider() {

@@ -123,6 +123,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
         tests/coding_agent/tui/InteractiveSessionRunTest.cpp
         tests/coding_agent/tui/InteractiveViewActionTest.cpp
+        tests/coding_agent/tui/EditorAutocompleteTest.cpp
         tests/coding_agent/tui/KeybindingsManagerTest.cpp
         tests/coding_agent/tui/LoadedResourcesTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp

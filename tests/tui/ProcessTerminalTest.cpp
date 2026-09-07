@@ -16,6 +16,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -25,6 +26,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -108,6 +110,36 @@ public:
 private:
     bool focused_{false};
 };
+/// Records key presses so boundary tests can observe forwarded input bytes.
+class KeyCapturingComponent final : public cch::tui::Component,
+                                    public cch::tui::InputHandler,
+                                    public cch::tui::Focusable {
+public:
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {}};
+    }
+
+    void invalidate() override {}
+
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& event) override {
+        const auto* key = std::get_if<cch::tui::KeyEvent>(&event);
+        if (key == nullptr || key->type != cch::tui::KeyEventType::Press) {
+            return cch::tui::InputAdmissionOutcome::Unhandled;
+        }
+        keys.push_back(key->key);
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
+
+    void set_focused(bool focused) override { focused_ = focused; }
+
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+    std::vector<std::string> keys;
+
+private:
+    bool focused_{false};
+};
+
 IoContextRunner& test_io() {
     static IoContextRunner runner;
     return runner;
@@ -233,8 +265,9 @@ TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores 
     // Drain initial startup output (bracketed paste, query, etc.)
     (void)cch::tests::read_available(pty->master.get());
 
-    // 1. Invalid margin checks
-    auto invalid1 = terminal.set_scroll_margins(10, 10);
+    // 1. Invalid margin checks; an equal top and bottom is a valid one-row
+    // scroll region (#611).
+    auto invalid1 = terminal.set_scroll_margins(11, 10);
     REQUIRE_FALSE(invalid1);
     CHECK(invalid1.error().message == "Process Terminal scroll margins are invalid");
 
@@ -274,6 +307,33 @@ TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores 
     REQUIRE(terminal.stop());
     output = cch::tests::read_available(pty->master.get());
     CHECK(output.find("\x1b[r") != std::string::npos);
+}
+
+TEST_CASE("Process Terminal one-row scroll margins park the dock below the transcript row",
+        "[tui][terminal][dock][issue611]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tests::ImageEnvironmentGuard environment;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // A one-row viewport is a one-row scroll region: DECSTBM accepts the
+    // equal top and bottom, and the dock cursor starts below the transcript
+    // row instead of overwriting it (#611).
+    REQUIRE(terminal.set_scroll_margins(0, 0));
+    auto output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[1;1r") != std::string::npos);
+
+    REQUIRE(terminal.set_dock_cursor(0, 5));
+    output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[2;6H") != std::string::npos);
+
+    REQUIRE(terminal.stop());
 }
 
 TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][terminal][issue54]") {
@@ -1516,6 +1576,130 @@ TEST_CASE("Process Terminal restores output descriptor flags on every exit", "[t
     REQUIRE(restored_flags >= 0);
     CHECK((restored_flags & O_NONBLOCK) == 0);
     CHECK((restored_flags & ~O_NONBLOCK) == (original_flags & ~O_NONBLOCK));
+}
+
+TEST_CASE("Tui delivers startup-preserved input bytes typed during terminal startup", "[tui][terminal][issue610]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    // Keystrokes typed after raw mode is acquired but while the startup
+    // capability probes are pending are preserved as startup input; they
+    // must reach the focused component, not be dropped by the Tui started
+    // guard (#610). The writer gates on the probe queries (post-TCSAFLUSH)
+    // and answers the appearance probe, then types during the probes.
+    std::thread typist([&] {
+        REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n"));
+        REQUIRE(::write(pty->master.get(), "hi", 2) == 2);
+    });
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<KeyCapturingComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+
+    // The startup input is forwarded synchronously inside start(), so the
+    // keystrokes must already be dispatched when it returns.
+    REQUIRE(tui.start());
+    typist.join();
+    CHECK(component_pointer->keys == std::vector<std::string>{"h", "i"});
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("Process Terminal keeps the startup color scheme over a late background reply", "[tui][terminal][issue613]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    // The color-scheme report arrives while the appearance probe is polling,
+    // so the startup probe establishes the appearance guard.
+    std::thread responder([&] { REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n")); });
+
+    std::mutex events_mutex;
+    std::vector<std::string> inputs;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(events_mutex);
+                inputs.push_back(std::move(input));
+                return {};
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    responder.join();
+    (void)cch::tests::read_available(pty->master.get());
+    REQUIRE(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+
+    // A late in-session background reply must not override the startup
+    // color-scheme report. Appending an in-band byte proves the decoder
+    // processed the reply (in-order demux) before the byte reaches the sink.
+    const std::string late_reply = std::string("\x1b]11;rgb:ffff/ffff/ffff\x07q");
+    REQUIRE(::write(pty->master.get(), late_reply.data(), late_reply.size()) ==
+            static_cast<ssize_t>(late_reply.size()));
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return !inputs.empty() && inputs.back() == "q";
+    }));
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[tui][terminal][issue613]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    std::mutex events_mutex;
+    std::vector<std::string> inputs;
+    const auto input_sink = [&](std::string input) -> cch::support::ExpectedVoid {
+        std::lock_guard lock(events_mutex);
+        inputs.push_back(std::move(input));
+        return {};
+    };
+    const auto resize_sink = [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; };
+
+    // The incomplete CPR fragment is buffered while the startup probes are
+    // polling, so it deterministically sits in the first session's
+    // InputState decoder after start() returns.
+    std::thread fragment_writer([&] {
+        REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n"));
+        REQUIRE(::write(pty->master.get(), "\x1b[1;", 4) == 4);
+    });
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(input_sink, resize_sink));
+    fragment_writer.join();
+
+    // The restart must begin from a fresh input state: a stale decoder would
+    // replay the held fragment as phantom input (its negotiation deadline is
+    // already in the past, so the readiness timer flushes it immediately on
+    // the next start), and stale bytes would corrupt the next session's
+    // key decoding.
+    const std::size_t before_restart = [&] {
+        std::lock_guard lock(events_mutex);
+        return inputs.size();
+    }();
+    REQUIRE(terminal.stop());
+    REQUIRE(terminal.start(input_sink, resize_sink));
+    // Fresh-session bytes prove the new session's input path is live; the
+    // stale fragment must not have been replayed around them.
+    REQUIRE(::write(pty->master.get(), "5R", 2) == 2);
+    REQUIRE(cch::tests::wait_until(
+            [&] {
+                std::lock_guard lock(events_mutex);
+                return inputs.size() > before_restart &&
+                       std::ranges::any_of(inputs | std::views::drop(before_restart),
+                               [](const std::string& input) { return input == "5R"; });
+            },
+            std::chrono::seconds(2)));
+    {
+        std::lock_guard lock(events_mutex);
+        CHECK(std::ranges::none_of(inputs | std::views::drop(before_restart),
+                [](const std::string& input) { return input.find("\x1b[1;") != std::string::npos; }));
+    }
+    REQUIRE(terminal.stop());
 }
 
 TEST_CASE("Process Terminal stops promptly after input EOF without hanging", "[tui][terminal][issue462]") {

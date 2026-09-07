@@ -13,6 +13,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <thread>
 #include <system_error>
 #include <utility>
 
@@ -211,6 +212,60 @@ void AsioAutocompleteDebounceTimer::cancel() {
         state->active_callback = nullptr;
         state->timer.cancel();
     });
+}
+
+struct ExecutorAutocompleteProvider::State {
+    explicit State(boost::asio::any_io_executor composed_executor,
+            std::unique_ptr<cch::tui::AutocompleteProvider> wrapped_provider)
+        : executor(std::move(composed_executor)), wrapped(std::move(wrapped_provider)) {}
+
+    boost::asio::any_io_executor executor;
+    std::unique_ptr<cch::tui::AutocompleteProvider> wrapped;
+};
+
+ExecutorAutocompleteProvider::ExecutorAutocompleteProvider(
+        boost::asio::any_io_executor executor, std::unique_ptr<cch::tui::AutocompleteProvider> wrapped)
+    : state_(std::make_shared<State>(std::move(executor), std::move(wrapped))) {}
+
+std::vector<std::string> ExecutorAutocompleteProvider::trigger_characters() const {
+    return state_->wrapped->trigger_characters();
+}
+
+void ExecutorAutocompleteProvider::get_suggestions(
+        const cch::tui::AutocompleteRequest& request, cch::tui::AutocompleteResultSink sink) {
+    const auto state = state_;
+    // get_suggestions runs on the serialized editor domain; delivery that
+    // stays on that thread passes through unchanged so synchronous
+    // provider flows keep their in-interaction atomicity, while
+    // worker-thread delivery is marshaled onto the domain (#609).
+    const auto domain_thread = std::this_thread::get_id();
+    state->wrapped->get_suggestions(request,
+            [domain_thread, executor = state->executor, sink = std::move(sink)](
+                    std::optional<cch::tui::AutocompleteSuggestions> result) mutable -> cch::support::ExpectedVoid {
+                if (std::this_thread::get_id() == domain_thread) {
+                    (void)sink(std::move(result));
+                    return {};
+                }
+                // Exactly-once delivery, marshaled onto the serialized editor
+                // domain (#609); the posted closure owns the sink.
+                boost::asio::post(executor, [sink = std::move(sink), result = std::move(result)]() mutable {
+                    (void)sink(std::move(result));
+                });
+                return {};
+            });
+}
+
+cch::tui::AutocompleteApplyResult ExecutorAutocompleteProvider::apply_completion(const std::vector<std::string>& lines,
+        std::size_t cursor_line,
+        std::size_t cursor_column,
+        const cch::tui::AutocompleteItem& item,
+        std::string_view prefix) {
+    return state_->wrapped->apply_completion(lines, cursor_line, cursor_column, item, prefix);
+}
+
+bool ExecutorAutocompleteProvider::should_trigger_file_completion(
+        const std::vector<std::string>& lines, std::size_t cursor_line, std::size_t cursor_column) const {
+    return state_->wrapped->should_trigger_file_completion(lines, cursor_line, cursor_column);
 }
 
 } // namespace cch::coding_agent::tui

@@ -1237,6 +1237,11 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     auto startup_input = std::move(impl_->startup_input);
     impl_->startup_input.clear();
     lock.unlock();
+    // A restart must not inherit the previous session's decoder fragment,
+    // negotiation deadline, or flush flag (#613); the startup probe's
+    // color-scheme reply stays authoritative over late background replies.
+    impl_->input_state = InputState{};
+    impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
     if (!startup_input.empty()) {
         impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
         auto decoded = impl_->input_state.decoder.feed(startup_input);
@@ -1427,7 +1432,9 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
 support::ExpectedVoid ProcessTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    if (bottom_row >= impl_->dimensions.rows || top_row >= bottom_row) {
+    // An equal top and bottom is a valid one-row scroll region; the dock
+    // cursor arithmetic depends on it for a one-row viewport (#611).
+    if (bottom_row >= impl_->dimensions.rows || top_row > bottom_row) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Process Terminal scroll margins are invalid"));
     }

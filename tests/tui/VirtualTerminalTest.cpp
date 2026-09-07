@@ -305,8 +305,9 @@ TEST_CASE("VirtualTerminal set_dock_cursor validates dimensions and positions co
     REQUIRE_FALSE(out_col);
     CHECK(out_col.error().message == "Virtual Terminal dock cursor position is outside its dimensions");
 
-    // Invalid margin parameters (top >= bottom or bottom >= rows)
-    auto invalid_margins1 = terminal.set_scroll_margins(5, 5);
+    // Invalid margin parameters (top > bottom or bottom >= rows); an equal
+    // top and bottom is a valid one-row scroll region (#611).
+    auto invalid_margins1 = terminal.set_scroll_margins(6, 5);
     REQUIRE_FALSE(invalid_margins1);
     CHECK(invalid_margins1.error().message == "Virtual Terminal scroll margins are invalid");
 

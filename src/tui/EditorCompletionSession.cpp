@@ -481,6 +481,10 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::start_r
                             }
                         }
                         if (accepted && state->render_request && state->begin_render_notification()) {
+                            // The render request re-enters the editor's serialized
+                            // domain, so delivery must already be executor-affine;
+                            // the composition root enforces that for
+                            // worker-thread providers (#609).
                             RenderNotificationFrame frame{
                                     .control = state.get(),
                                     .previous = current_render_notification,

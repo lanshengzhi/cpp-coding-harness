@@ -234,6 +234,21 @@ public:
     std::vector<std::string> dock_lines{"s1", "edit", "auto1", "auto2", "foot"};
 };
 
+/// A one-row viewport with a one-line dock: the single transcript row must
+/// stay visible above the dock instead of being overwritten by it (#611).
+class OneRowViewportDockComponent final : public cch::tui::Component {
+public:
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        cch::tui::RenderResult result;
+        result.lines = {"chat1"};
+        result.dock_lines = {"edit"};
+        result.viewport_height = 1;
+        return result;
+    }
+
+    void invalidate() override {}
+};
+
 class MutableLinesComponent final : public cch::tui::Component {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -328,6 +343,22 @@ TEST_CASE("Tui keeps a shrinking cropped dock inside the terminal rows", "[tui][
     component_pointer->dock_lines = {"s1", "edit", "foot"};
     REQUIRE(tui.render());
     CHECK(terminal.screen().size() == 6);
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("Tui places the dock below the transcript on a one-row viewport", "[tui][dock][issue611]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<OneRowViewportDockComponent>()));
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    // A one-row viewport is a one-row scroll region: the dock start is the
+    // row below the transcript row, not row 0 overwriting it.
+    CHECK(terminal.screen() == std::vector<std::string>{"chat1   ", "edit    "});
+    // A repeat render of the unchanged one-row partition stays a stable no-op.
+    REQUIRE(tui.render());
+    CHECK(terminal.screen() == std::vector<std::string>{"chat1   ", "edit    "});
     REQUIRE(tui.stop());
 }
 
