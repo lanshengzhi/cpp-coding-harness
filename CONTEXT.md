@@ -406,12 +406,28 @@ The TUI Toolkit's main-screen rendering model (pi `TuiMainScreen` parity) in whi
 _Avoid_: Viewport-clip redraw, in-place line rewrite, alt-screen scrolling
 
 **Headless Core**:
-The authoritative agent engine, session store, tool runners, and model inference loops, strictly devoid of layout, ANSI escape sequences, terminal geometries, UI components, or presentation threads. It emits only typed, versioned state patches and snapshots.
+The authoritative agent engine, session store, tool runners, and model inference loops, strictly devoid of layout, ANSI escape sequences, terminal geometries, UI components, or presentation threads. It exposes its state only through the Projection Stream.
 _Avoid_: UI-driven runtime, mixed controller-view engine
 
 **Projection**:
-A decoupled, asynchronous, read-only observer that samples versioned state snapshots from the Headless Core and renders them to a specific surface (Native TUI, Web, GUI, Spectator) without driving or delaying the Headless Core.
+A decoupled, asynchronous, read-only observer that subscribes to the Headless Core's Projection Stream and renders it to a specific surface (Native TUI, Web, GUI, Spectator) without driving or delaying the Headless Core.
 _Avoid_: Synchronous UI hook, view controller, bidirectional display binding
+
+**Projection Stream**:
+The one channel through which the Headless Core delivers all observable state change to a Projection: a Base followed by ordered Patches. It is the only authoritative source of projection-visible state.
+_Avoid_: Dirty edge, version sampling, push sink, event mirror
+
+**Base**:
+A complete immutable snapshot of the Agent Session delivered as the first stream message to a new or resynchronizing Projection; subsequent Patches apply on top of it. A mid-session Projection receives the state as it is now, never a replay from session start.
+_Avoid_: Initial snapshot, full refresh, state dump
+
+**Patch**:
+A value-bearing record of one published state change — which slice changed and its new value — that, applied in order after a Base, reproduces the later snapshot exactly.
+_Avoid_: Delta, diff, change event, op
+
+**Subscription Mailbox**:
+The bounded per-Projection queue into which the Headless Core delivers stream messages; overflow discards the backlog and the next message is a fresh Base, so a slow Projection silently degrades to snapshot consumption.
+_Avoid_: Ring buffer, patch history, subscriber version tracking
 
 **Block Frozen Protocol**:
 The transcript lifecycle where rendered blocks transition through `Active` -> `Finalized` -> `Committed`. Committed blocks permanently freeze their rasterized line cache and are never re-parsed or re-rendered across subsequent streaming chunks.
