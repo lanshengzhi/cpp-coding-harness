@@ -211,6 +211,7 @@ Sanctioned deviations are grandfathered only on untouched existing lines. Added 
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
 - **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.
+- **Native TUI immediate preview frames (ADR 0051):** the coalesced immediate preview tier in `InteractiveEngine::post_invalidate` (uncounted preview renders that consume neither the snapshot version nor the dirty state and never re-arm the ticker schedule) is a sanctioned latency-first deviation from ADR 0051's ticker-only projection pacing; the rationale and pi parity evidence live in that ADR's deviation section (#614). The ~33 ms frame ticker remains the authoritative counted frame.
 
 ## 16. Minimal implementation
 
