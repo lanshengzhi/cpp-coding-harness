@@ -112,8 +112,8 @@ private:
 };
 /// Records key presses so boundary tests can observe forwarded input bytes.
 class KeyCapturingComponent final : public cch::tui::Component,
-        public cch::tui::InputHandler,
-        public cch::tui::Focusable {
+                                    public cch::tui::InputHandler,
+                                    public cch::tui::Focusable {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {}};
@@ -1608,16 +1608,14 @@ TEST_CASE("Tui delivers startup-preserved input bytes typed during terminal star
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Process Terminal keeps the startup color scheme over a late background reply",
-        "[tui][terminal][issue613]") {
+TEST_CASE("Process Terminal keeps the startup color scheme over a late background reply", "[tui][terminal][issue613]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tests::ImageEnvironmentGuard environment;
 
     // The color-scheme report arrives while the appearance probe is polling,
     // so the startup probe establishes the appearance guard.
-    std::thread responder(
-            [&] { REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n")); });
+    std::thread responder([&] { REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n")); });
 
     std::mutex events_mutex;
     std::vector<std::string> inputs;
@@ -1688,18 +1686,18 @@ TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[t
     // Fresh-session bytes prove the new session's input path is live; the
     // stale fragment must not have been replayed around them.
     REQUIRE(::write(pty->master.get(), "5R", 2) == 2);
-    REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(events_mutex);
-        return inputs.size() > before_restart &&
-               std::ranges::any_of(inputs | std::views::drop(before_restart), [](const std::string& input) {
-                   return input == "5R";
-               });
-    }, std::chrono::seconds(2)));
+    REQUIRE(cch::tests::wait_until(
+            [&] {
+                std::lock_guard lock(events_mutex);
+                return inputs.size() > before_restart &&
+                       std::ranges::any_of(inputs | std::views::drop(before_restart),
+                               [](const std::string& input) { return input == "5R"; });
+            },
+            std::chrono::seconds(2)));
     {
         std::lock_guard lock(events_mutex);
-        CHECK(std::ranges::none_of(inputs | std::views::drop(before_restart), [](const std::string& input) {
-            return input.find("\x1b[1;") != std::string::npos;
-        }));
+        CHECK(std::ranges::none_of(inputs | std::views::drop(before_restart),
+                [](const std::string& input) { return input.find("\x1b[1;") != std::string::npos; }));
     }
     REQUIRE(terminal.stop());
 }

@@ -21,9 +21,7 @@ namespace {
 /// reach the serialized editor domain (#609).
 class WorkerThreadAutocompleteProvider final : public cch::tui::AutocompleteProvider {
 public:
-    void get_suggestions(
-            const cch::tui::AutocompleteRequest& request,
-            cch::tui::AutocompleteResultSink sink) override {
+    void get_suggestions(const cch::tui::AutocompleteRequest& request, cch::tui::AutocompleteResultSink sink) override {
         requests.push_back(request);
         std::thread worker([sink = std::move(sink)]() mutable {
             (void)sink(cch::tui::AutocompleteSuggestions{
@@ -34,8 +32,7 @@ public:
         worker.detach();
     }
 
-    [[nodiscard]] cch::tui::AutocompleteApplyResult apply_completion(
-            const std::vector<std::string>& lines,
+    [[nodiscard]] cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
             std::size_t cursor_line,
             std::size_t cursor_column,
             const cch::tui::AutocompleteItem&,
@@ -77,8 +74,8 @@ TEST_CASE("Executor-composed autocomplete delivery lands provider results on the
     std::mutex mutex;
     std::vector<std::thread::id> delivery_threads;
     std::optional<cch::tui::AutocompleteSuggestions> delivered;
-    provider.get_suggestions(request,
-            [&](std::optional<cch::tui::AutocompleteSuggestions> result) -> cch::support::ExpectedVoid {
+    provider.get_suggestions(
+            request, [&](std::optional<cch::tui::AutocompleteSuggestions> result) -> cch::support::ExpectedVoid {
                 std::lock_guard lock(mutex);
                 delivery_threads.push_back(std::this_thread::get_id());
                 delivered = std::move(result);

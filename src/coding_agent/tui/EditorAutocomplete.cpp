@@ -215,8 +215,7 @@ void AsioAutocompleteDebounceTimer::cancel() {
 }
 
 struct ExecutorAutocompleteProvider::State {
-    explicit State(
-            boost::asio::any_io_executor composed_executor,
+    explicit State(boost::asio::any_io_executor composed_executor,
             std::unique_ptr<cch::tui::AutocompleteProvider> wrapped_provider)
         : executor(std::move(composed_executor)), wrapped(std::move(wrapped_provider)) {}
 
@@ -240,11 +239,9 @@ void ExecutorAutocompleteProvider::get_suggestions(
     // provider flows keep their in-interaction atomicity, while
     // worker-thread delivery is marshaled onto the domain (#609).
     const auto domain_thread = std::this_thread::get_id();
-    state->wrapped->get_suggestions(
-            request,
+    state->wrapped->get_suggestions(request,
             [domain_thread, executor = state->executor, sink = std::move(sink)](
-                    std::optional<cch::tui::AutocompleteSuggestions> result) mutable
-                    -> cch::support::ExpectedVoid {
+                    std::optional<cch::tui::AutocompleteSuggestions> result) mutable -> cch::support::ExpectedVoid {
                 if (std::this_thread::get_id() == domain_thread) {
                     (void)sink(std::move(result));
                     return {};
@@ -258,8 +255,7 @@ void ExecutorAutocompleteProvider::get_suggestions(
             });
 }
 
-cch::tui::AutocompleteApplyResult ExecutorAutocompleteProvider::apply_completion(
-        const std::vector<std::string>& lines,
+cch::tui::AutocompleteApplyResult ExecutorAutocompleteProvider::apply_completion(const std::vector<std::string>& lines,
         std::size_t cursor_line,
         std::size_t cursor_column,
         const cch::tui::AutocompleteItem& item,
