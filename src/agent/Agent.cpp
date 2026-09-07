@@ -449,7 +449,13 @@ struct Agent::Impl {
         }
         state.diagnostics.push_back(
                 support::make_error(failure.code, "agent event observer failed", std::move(detail)));
+        // Monotonic change marker for cheap observation (ADR 0052): the
+        // bounded diagnostics vector rolls over, so its size cannot detect a
+        // new entry.
+        ++observer_diagnostic_serial_;
     }
+
+    [[nodiscard]] std::uint64_t observer_diagnostic_serial() const { return observer_diagnostic_serial_; }
 
     [[nodiscard]] support::ExpectedVoid notify(
             const AgentLifecycleEvent& event, const std::vector<std::shared_ptr<Subscriber>>& delivery_snapshot) {
@@ -562,6 +568,7 @@ struct Agent::Impl {
     bool active_run{false};
     std::optional<std::stop_source> active_stop_source;
     std::size_t invocation_message_offset{};
+    std::uint64_t observer_diagnostic_serial_{0};
     std::size_t next_subscriber_id{1};
     std::vector<std::shared_ptr<Subscriber>> subscribers;
     std::shared_ptr<AgentSubscriptionAnchor> subscription_anchor;
@@ -1171,6 +1178,24 @@ support::ExpectedVoid Agent::clear_input_queues() {
 }
 
 AgentState Agent::state() const { return impl_ ? impl_->state : AgentState{}; }
+
+AgentInputQueueCounts Agent::input_queue_counts() const {
+    if (!impl_) {
+        return {};
+    }
+    return AgentInputQueueCounts{
+            .steering = impl_->state.input_queues.steering.messages.size(),
+            .follow_up = impl_->state.input_queues.follow_up.messages.size(),
+    };
+}
+
+AgentInputQueues Agent::input_queues() const { return impl_ ? impl_->state.input_queues : AgentInputQueues{}; }
+
+std::uint64_t Agent::observer_diagnostic_serial() const { return impl_ ? impl_->observer_diagnostic_serial_ : 0; }
+
+std::vector<support::Error> Agent::observer_diagnostics() const {
+    return impl_ ? impl_->state.diagnostics : std::vector<support::Error>{};
+}
 
 support::Expected<AgentEventSubscription> Agent::subscribe(AgentEventSink sink) {
     if (!impl_) {

@@ -61,23 +61,6 @@ using interactive_view_detail::queued_editor_texts;
 
 InteractiveEngine::~InteractiveEngine() = default;
 
-void InteractiveEngine::set_projection_source(std::shared_ptr<SessionProjectionSource> source) {
-    if (projection_source_ != nullptr && projection_source_ != source) {
-        projection_source_->set_dirty_listener(nullptr);
-    }
-    projection_source_ = std::move(source);
-    last_rendered_version_ = projection_source_ != nullptr ? projection_source_->state_version() : 0;
-    if (running_) {
-        local_dock_dirty_.store(true, std::memory_order_release);
-    }
-    if (projection_source_ != nullptr) {
-        const auto weak = weak_from_this();
-        projection_source_->set_dirty_listener([weak] {
-            if (const auto self = weak.lock()) self->post_invalidate();
-        });
-    }
-}
-
 InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor)
     : session_(nullptr), terminal_(terminal), tui_(terminal), executor_(std::move(executor)), exit_wait_(executor_),
       render_retry_timer_(executor_), frame_ticker_(executor_), flows_settled_(executor_) {
@@ -137,9 +120,6 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     session_flows_ = make_session_flow_controller();
     session_ui_ = make_session_ui_binding();
     settings_flows_ = make_settings_flow_controller();
-    if (!projection_source_) {
-        set_projection_source(session_ui_);
-    }
     suspend_controller_ = make_suspend_controller();
     if (!booting) {
         model_flows_->update_model_completion();
@@ -175,7 +155,6 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
-        last_rendered_version_ = projection_source_ ? projection_source_->state_version() : 0;
         local_dock_dirty_.store(false, std::memory_order_release);
         start_frame_ticker();
         if (run.initial_prompt()) {
@@ -195,7 +174,6 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
-        last_rendered_version_ = projection_source_ ? projection_source_->state_version() : 0;
         local_dock_dirty_.store(false, std::memory_order_release);
         start_frame_ticker();
         initial_prompt_ = run.initial_prompt();
@@ -298,7 +276,6 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     if (auto rendered = tui_.render(); !rendered) {
         co_return std::unexpected(rendered.error());
     }
-    last_rendered_version_ = projection_source_ ? projection_source_->state_version() : 0;
     local_dock_dirty_.store(false, std::memory_order_release);
     if (initial_prompt_) {
         submit(
@@ -800,32 +777,28 @@ void InteractiveEngine::arm_frame_ticker() {
 
 void InteractiveEngine::on_frame_tick() {
     if (!running_ || !ticker_running_) return;
-    // Previews render the latest snapshot without consuming it: version and
-    // dirty state stay for the ticker's counted authoritative frame, and the
-    // pending ticker schedule is left undisturbed.
+    // Previews render the latest composed snapshot without consuming the
+    // counted frame: the pending counted flag stays for the ticker's
+    // authoritative render and the pending ticker schedule is left
+    // undisturbed (#597, ADR 0051/0052).
     const bool preview = immediate_frame_render_;
+    const bool counted_due = session_ui_ != nullptr && session_ui_->pending_counted_frame();
 
-    const std::uint64_t sampled_version = projection_source_ != nullptr ? projection_source_->state_version() : 0;
-    const bool core_dirty = sampled_version != last_rendered_version_;
+    // Mailbox draining (ADR 0052): apply the queued stream messages to the
+    // composed snapshot; the ticker's counted frame consumes the flag.
+    const bool core_dirty = session_ui_ != nullptr && session_ui_->drain_composed_snapshot();
     const bool dock_dirty = local_dock_dirty_.load(std::memory_order_acquire);
-    bool snapshot_applied = !core_dirty;
+    const bool frame_due = core_dirty || (counted_due && !preview);
+    bool snapshot_applied = !frame_due;
 
-    if (core_dirty && view_ != nullptr && projection_source_ != nullptr) {
-        if (const auto snapshot = projection_source_->snapshot()) {
-            if (session_ui_ != nullptr) {
-                snapshot_applied = session_ui_->reconcile_snapshot(*snapshot);
-            } else {
-                view_->initialize(*snapshot);
-                view_->set_pending_input(snapshot->agent_state.input_queues);
-                snapshot_applied = true;
-            }
-        }
+    if (frame_due && view_ != nullptr && session_ui_ != nullptr) {
+        snapshot_applied = session_ui_->reconcile_snapshot(session_ui_->composed_snapshot());
     }
 
-    if ((core_dirty && snapshot_applied) || dock_dirty) {
+    if ((frame_due && snapshot_applied) || dock_dirty) {
         if (render()) {
             if (!preview) {
-                if (core_dirty) last_rendered_version_ = sampled_version;
+                if (session_ui_ != nullptr) session_ui_->clear_pending_counted_frame();
                 local_dock_dirty_.store(false, std::memory_order_release);
             }
         }
@@ -858,14 +831,11 @@ void InteractiveEngine::signal_exit() {
 
 void InteractiveEngine::paint_final_snapshot() {
     if (!running_ || view_ == nullptr || session_ == nullptr || session_ui_ == nullptr) return;
-    if (projection_source_ == nullptr) return;
-    const auto sampled_version = projection_source_->state_version();
-    if (sampled_version != last_rendered_version_) {
-        if (const auto snapshot = projection_source_->snapshot()) {
-            if (!session_ui_->reconcile_snapshot(*snapshot)) return;
-            last_rendered_version_ = sampled_version;
-        }
-    }
+    // The Close final paint consumes any pending Projection Stream state
+    // (ADR 0052 mailbox draining); the reconcile cursor and the Tui
+    // differential absorb repeat calls.
+    const bool core_dirty = session_ui_->drain_composed_snapshot();
+    if (core_dirty && !session_ui_->reconcile_snapshot(session_ui_->composed_snapshot())) return;
     local_dock_dirty_.store(true, std::memory_order_release);
     if (render()) {
         local_dock_dirty_.store(false, std::memory_order_release);

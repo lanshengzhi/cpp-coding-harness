@@ -192,9 +192,7 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // Expose the live session facts to the model Bash Tool (pi
     // `resolveSpawnContext`); the Agent's clamped state is authoritative.
     refresh_bash_session_environment();
-    current_snapshot_.store(std::make_shared<const AgentSessionSnapshot>(create_snapshot()), std::memory_order_release);
     state_version_.store(1, std::memory_order_release);
-    current_snapshot_version_.store(1, std::memory_order_release);
     // `agent_event_subscription_` is destroyed before `agent_` and the
     // enclosing Impl, so this callback cannot outlive its `this` target.
     if (auto sub = agent_->subscribe([this](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
@@ -393,6 +391,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     // context only after every completed Bash committed.
     flush_pending_user_bash();
     prompt_active_ = false;
+    // Publish the settled run state (ADR 0052): the Agent flips its running
+    // flag after the final event delivery, so the Projection Stream learns
+    // the settled value — drained queues included — through the degenerate
+    // whole-snapshot patch published here.
+    update_projection();
     if (prompt_settled_signal_) {
         (void)prompt_settled_signal_->cancel();
         // Release the host-executor timer with the run. cancel() completes
@@ -533,7 +536,8 @@ void AgentSession::Impl::emit_session_event(const AgentSessionEvent& event) {
                 // in the session's bounded, redacted diagnostics channel.
                 detail::record_session_observer_diagnostic(session_event_diagnostics_, observed.error());
                 // The new diagnostic is snapshot-visible state: publish it so
-                // the ticker re-samples instead of serving the cached value.
+                // Projection subscribers receive the updated value (ADR 0052
+                // degenerate whole-snapshot patch).
                 update_projection();
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
@@ -697,11 +701,10 @@ void AgentSession::Impl::close() noexcept {
 
 std::shared_ptr<harness::AsyncFileSystem> AgentSession::Impl::release_close_resources() noexcept {
     // Close releases the live Agent below. Preserve the terminal immutable
-    // publication first so projection consumers can still sample after Close.
+    // publication first so Projection attach (ADR 0052) and snapshot
+    // introspection keep answering the final state after Close.
     if (agent_) {
-        auto terminal = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
-        current_snapshot_.store(std::move(terminal), std::memory_order_release);
-        current_snapshot_version_.store(state_version_.load(std::memory_order_acquire), std::memory_order_release);
+        terminal_snapshot_ = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
         agent_->clear_subscriptions();
     }
     agent_.reset();

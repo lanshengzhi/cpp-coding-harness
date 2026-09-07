@@ -140,6 +140,24 @@ public:
     /// Return an independent passive snapshot of current live Agent state.
     [[nodiscard]] AgentState state() const;
 
+    /// Message counts of both pending input queues without copying message
+    /// content (ADR 0052 projection publication change detection).
+    [[nodiscard]] AgentInputQueueCounts input_queue_counts() const;
+
+    /// Independent copy of both pending input queues (ADR 0052 projection
+    /// publication: the value behind a changed count).
+    [[nodiscard]] AgentInputQueues input_queues() const;
+
+    /// Serial of the bounded observer-failure diagnostics channel (ADR 0052
+    /// projection change detection): incremented once per recorded
+    /// diagnostic. Rollover-safe — the vector's size cannot detect a new
+    /// entry.
+    [[nodiscard]] std::uint64_t observer_diagnostic_serial() const;
+
+    /// Independent copy of the bounded observer-failure diagnostics channel
+    /// (ADR 0052 projection publication: the value behind a changed serial).
+    [[nodiscard]] std::vector<support::Error> observer_diagnostics() const;
+
     /// Subscribe a move-only weak observer. State is reduced before delivery.
     /// Reported observer failures deactivate that observer without vetoing
     /// Agent progress.

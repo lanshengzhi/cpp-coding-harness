@@ -10,7 +10,7 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
-#include <cch/coding_agent/SessionProjectionSource.hpp>
+#include <cch/coding_agent/ProjectionStream.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
@@ -458,21 +458,26 @@ public:
 
     // ── State accessors ──────────────────────────────────────────────────
 
-    // ── SessionProjectionSource & State accessors ─────────────────────────
-
-    [[nodiscard]] std::uint64_t state_version() const noexcept;
-
-    [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> projection_snapshot() const;
+    // ── Projection Stream (ADR 0052) & State accessors ────────────────────
 
     /// Copy one independent snapshot of authoritative Agent state plus Session
-    /// metadata and active-path topology.
+    /// metadata and active-path topology (session introspection, outside the
+    /// Projection Stream; ADR 0052). After Close the final immutable
+    /// publication answers.
     [[nodiscard]] AgentSessionSnapshot snapshot() const;
 
-    void set_dirty_listener(std::move_only_function<void()> on_dirty);
-
-    /// Expose the SessionProjectionSource interface for read-only projection consumers.
-    [[nodiscard]] SessionProjectionSource& projection_source() noexcept;
-    [[nodiscard]] std::shared_ptr<SessionProjectionSource> shared_projection_source() noexcept;
+    /// Subscribe one Projection to the Headless Core's Projection Stream
+    /// (ADR 0052): the subscriber's listener receives a Base — the complete
+    /// immutable snapshot as it is now — followed by ordered PatchMsg
+    /// batches through its bounded Subscription Mailbox. Overflow discards
+    /// the backlog and resynchronizes with a fresh Base; publication never
+    /// errors or blocks the Core's serialized domain. A second projection
+    /// attaches by calling this alone.
+    ///
+    /// Attach captures the Base on the Core's serialized execution domain
+    /// (the executor driving prompt()), like the projection sampling it
+    /// replaces.
+    [[nodiscard]] ProjectionSubscription attach_projection(ProjectionStreamSink sink);
 
     /// Number of messages in live history.
     [[nodiscard]] std::size_t message_count() const;

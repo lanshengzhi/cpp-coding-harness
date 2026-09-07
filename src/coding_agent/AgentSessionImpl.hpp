@@ -23,16 +23,32 @@
 
 #include <cstddef>
 #include <atomic>
+#include <deque>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <vector>
 
 namespace cch::coding_agent {
+
+/// One Projection Stream subscriber node (ADR 0052): the listener plus its
+/// bounded Subscription Mailbox — the only retention. Publication (the
+/// Core's serialized domain) enqueues; `ProjectionSubscription::drain()` (the
+/// subscriber's domain) delivers to the listener outside the mailbox lock.
+/// Overflow discards the backlog; the Core then enqueues a fresh Base. The
+/// node is shared between the Core's registry and every outstanding
+/// ProjectionSubscription handle, so it outlives the session.
+struct ProjectionSubscription::Impl final {
+    std::mutex mutex;
+    std::deque<std::shared_ptr<const ProjectionStreamMessageVariant>> mailbox{};
+    ProjectionStreamSink sink{nullptr};
+    bool active{true};
+};
 
 /// Resolved turn auto-retry settings (pi `settings-manager.ts`
 /// `getRetrySettings`): `settings.retry` fields with pi's defaults applied
@@ -49,7 +65,7 @@ struct RetrySettings {
 /// construction), resources, and session presentation. Owned through the
 /// AgentSession handle's shared_ptr so a lazy coroutine admitted before the
 /// public handle moves or is destroyed keeps the implementation alive.
-struct AgentSession::Impl final : public SessionProjectionSource {
+struct AgentSession::Impl final {
     explicit Impl(runtime::AgentSessionAssembly assembly);
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
@@ -222,14 +238,28 @@ struct AgentSession::Impl final : public SessionProjectionSource {
     [[nodiscard]] boost::asio::awaitable<AutoCompactionOutcome> check_auto_compaction(
             const ai::AssistantMessage& assistant_message, bool skip_aborted_check);
 
-    // ── State accessors & projection ───────────────────────────────────────
+    // ── State accessors & Projection Stream (ADR 0052) ───────────────────
 
-    [[nodiscard]] std::shared_ptr<const AgentSessionSnapshot> snapshot() const override;
-    [[nodiscard]] std::uint64_t state_version() const noexcept override;
-    void set_dirty_listener(std::move_only_function<void()> on_dirty) override;
+    /// Copy one independent snapshot of authoritative Agent state plus
+    /// Session metadata and active-path topology. After Close the terminal
+    /// immutable publication answers.
+    [[nodiscard]] AgentSessionSnapshot snapshot() const;
+    [[nodiscard]] std::shared_ptr<ProjectionSubscription::Impl> attach_projection(ProjectionStreamSink sink);
     void update_projection();
-    void update_projection(const agent::AgentLifecycleEvent&);
-    void notify_dirty() noexcept;
+    void update_projection(const agent::AgentLifecycleEvent& event);
+    /// Deliver one already-versioned stream message to every subscriber's
+    /// bounded mailbox, pruning inactive subscribers (ADR 0052). Core
+    /// serialized domain; never errors or blocks on a slow subscriber —
+    /// overflow discards that mailbox's backlog and enqueues a fresh Base.
+    void deliver_projection_message(const std::shared_ptr<const ProjectionStreamMessageVariant>& message);
+    /// Append an InputQueuesPatch when a queue's message count changed since
+    /// the last publication (queued messages are append- and remove-only).
+    void publish_input_queues_if_changed(std::vector<ProjectionStreamPatchVariant>& patches);
+    /// Append an AgentDiagnosticsPatch when the Agent's bounded
+    /// observer-failure diagnostics channel changed since the last
+    /// publication (serial change detection; the vector rolls over).
+    void publish_agent_diagnostics_if_changed(std::vector<ProjectionStreamPatchVariant>& patches);
+    void publish_projection_patch_msg(std::vector<ProjectionStreamPatchVariant> patches);
     [[nodiscard]] AgentSessionSnapshot create_snapshot() const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
@@ -501,20 +531,38 @@ struct AgentSession::Impl final : public SessionProjectionSource {
     /// manual compaction awaits it after requesting run cancellation.
     std::optional<boost::asio::steady_timer> prompt_settled_signal_;
     mutable std::atomic<std::uint64_t> state_version_{1};
-    /// The immutable snapshot returned for the most recently sampled version.
-    /// Sampling is performed on the Core's serialized execution domain; the
-    /// returned value is immutable and may then be read without a mutex.
-    mutable std::atomic<std::uint64_t> current_snapshot_version_{0};
-    mutable std::atomic<std::shared_ptr<const AgentSessionSnapshot>> current_snapshot_{nullptr};
-    std::move_only_function<void()> dirty_listener_{nullptr};
+    /// Private ADR 0052 publication bookkeeping (no Owner Interface surface):
+    /// the last-published input-queue message counts (queued messages are
+    /// append- and remove-only, so equal counts mean equal content) and the
+    /// last-published pending tool-call ids the event-mapped patches compose
+    /// against. Both re-baseline from each subscriber's Base at attach.
+    agent::AgentInputQueueCounts published_input_queue_counts_{0, 0};
+    /// Mirror of the Agent's pending tool-call ids the event-mapped patches
+    /// compose against. Linear find/erase mirrors the Agent reducer's own
+    /// operations on the same bounded state (one turn's pending tool calls,
+    /// cleared at TurnEnd/MessageEnd); // debt: O(pending²) per turn is
+    /// bounded by that reducer shape — upgrade only if pending ids ever
+    /// survive turn boundaries.
+    std::vector<std::string> published_pending_tool_calls_{};
+    /// The last-published serial of the Agent's bounded observer-failure
+    /// diagnostics channel (rollover-safe change detection).
+    std::uint64_t published_observer_diagnostic_serial_{0};
+    /// The Projection Stream subscriber registry. Attach runs on the Core's
+    /// serialized domain; unsubscribe from any domain only deactivates the
+    /// node (under its mailbox mutex), and publication prunes inactive nodes
+    /// here on the Core's serialized domain.
+    std::vector<std::shared_ptr<ProjectionSubscription::Impl>> projection_subscribers_{};
+    /// The immutable terminal publication preserved through Close so a
+    /// post-Close attach receives the final state (issue #600 behavior).
+    std::shared_ptr<const AgentSessionSnapshot> terminal_snapshot_{nullptr};
     std::optional<agent::AgentEventSubscription> agent_event_subscription_{std::nullopt};
 };
 namespace detail {
 
 /// Bounded, redacted observer-failure diagnostic (ADR 0017): the
 /// session-assembly mirror of the Agent's weak-observer diagnostics channel.
-/// Shared by the session-event delivery path and the projection dirty edge
-/// (defined in AgentSessionExecution.cpp).
+/// Shared by the session-event delivery path and projection publication
+/// diagnostics (defined in AgentSessionExecution.cpp).
 void record_session_observer_diagnostic(std::vector<support::Error>& diagnostics, const support::Error& failure);
 
 // ── Lazy-coroutine session entries ──────────────────────────────────────────

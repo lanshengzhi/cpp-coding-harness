@@ -65,6 +65,14 @@ struct AgentInputQueue {
     std::vector<ai::MessageVariant> messages;
 };
 
+/// Cheap per-queue message-count observation that copies no message content
+/// (ADR 0052 projection publication change detection: queued messages are
+/// append- and remove-only, so equal counts mean equal content).
+struct AgentInputQueueCounts {
+    std::size_t steering{0};
+    std::size_t follow_up{0};
+};
+
 /// Passive observation of both Agent-owned input queues and their shared
 /// per-queue admission limits.
 struct AgentInputQueues {

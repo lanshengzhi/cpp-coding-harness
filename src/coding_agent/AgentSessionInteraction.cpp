@@ -929,64 +929,248 @@ AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
     };
 }
 
-std::shared_ptr<const AgentSessionSnapshot> AgentSession::Impl::snapshot() const {
-    auto current = current_snapshot_.load(std::memory_order_acquire);
-    const auto version = state_version_.load(std::memory_order_acquire);
-    const auto published_version = current_snapshot_version_.load(std::memory_order_acquire);
-    if (current && published_version == version) {
-        return current;
+AgentSessionSnapshot AgentSession::Impl::snapshot() const {
+    // After Close the terminal immutable publication answers (issue #600
+    // behavior carried into ADR 0052: the live Agent is gone, the final
+    // state is not).
+    if (!agent_ && terminal_snapshot_) {
+        return *terminal_snapshot_;
     }
-
-    // Sampling is deliberately the only operation that copies Agent state.
-    // The Core's serialized execution domain keeps this read coherent while
-    // publication and dirty notification remain O(1) per lifecycle event.
-    auto materialized = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
-    current_snapshot_.store(materialized, std::memory_order_release);
-    current_snapshot_version_.store(version, std::memory_order_release);
-    return materialized;
+    return create_snapshot();
 }
 
-std::uint64_t AgentSession::Impl::state_version() const noexcept {
-    return state_version_.load(std::memory_order_acquire);
+std::shared_ptr<ProjectionSubscription::Impl> AgentSession::Impl::attach_projection(ProjectionStreamSink sink) {
+    auto node = std::make_shared<ProjectionSubscription::Impl>();
+    node->sink = std::move(sink);
+    // Base first (ADR 0052): the subscriber's starting picture, captured
+    // now — the state as it is, never a replay from session start.
+    const auto version = state_version_.load(std::memory_order_acquire);
+    auto base = snapshot();
+    {
+        std::scoped_lock lock(node->mutex);
+        node->mailbox.push_back(std::make_shared<const ProjectionStreamMessageVariant>(
+                ProjectionStreamBase{.version = version, .snapshot = std::move(base)}));
+    }
+    // Re-baseline the published-value mirrors to the Base so subsequent
+    // event-mapped patches compose on top of it for every subscriber.
+    published_input_queue_counts_ = agent::AgentInputQueueCounts{
+            .steering = base.agent_state.input_queues.steering.messages.size(),
+            .follow_up = base.agent_state.input_queues.follow_up.messages.size(),
+    };
+    published_pending_tool_calls_ = base.agent_state.pending_tool_call_ids;
+    published_observer_diagnostic_serial_ = agent_ ? agent_->observer_diagnostic_serial() : 0;
+    auto handle = node;
+    projection_subscribers_.push_back(std::move(node));
+    return handle;
 }
 
-void AgentSession::Impl::set_dirty_listener(std::move_only_function<void()> on_dirty) {
-    dirty_listener_ = std::move(on_dirty);
-}
-
-void AgentSession::Impl::notify_dirty() noexcept {
-    if (!dirty_listener_) {
+void AgentSession::Impl::publish_input_queues_if_changed(std::vector<ProjectionStreamPatchVariant>& patches) {
+    const auto counts = agent_ ? agent_->input_queue_counts() : agent::AgentInputQueueCounts{};
+    if (counts.steering == published_input_queue_counts_.steering &&
+            counts.follow_up == published_input_queue_counts_.follow_up) {
         return;
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        dirty_listener_();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Weak-observer contract (ADR 0017; §5.4): diagnose boundedly, then
-        // deactivate. Best-effort inside this noexcept edge: if diagnosis
-        // itself fails, the listener is still dropped. The current event
-        // already bumped the version, so the diagnostic is published with it.
-        try {
-            detail::record_session_observer_diagnostic(session_event_diagnostics_,
-                    support::make_error(support::ErrorCode::Unknown, "projection dirty listener failed"));
-        } catch (...) {
-        }
-        dirty_listener_ = nullptr;
+    published_input_queue_counts_ = counts;
+    patches.emplace_back(InputQueuesPatch{
+            .input_queues = agent_ ? agent_->input_queues() : agent::AgentInputQueues{},
+    });
+}
+
+void AgentSession::Impl::publish_agent_diagnostics_if_changed(std::vector<ProjectionStreamPatchVariant>& patches) {
+    const auto serial = agent_ ? agent_->observer_diagnostic_serial() : 0;
+    if (serial == published_observer_diagnostic_serial_) {
+        return;
     }
-#endif
+    published_observer_diagnostic_serial_ = serial;
+    patches.emplace_back(AgentDiagnosticsPatch{
+            .diagnostics = agent_ ? agent_->observer_diagnostics() : std::vector<support::Error>{},
+    });
+}
+
+void AgentSession::Impl::publish_projection_patch_msg(std::vector<ProjectionStreamPatchVariant> patches) {
+    if (patches.empty()) {
+        return;
+    }
+    deliver_projection_message(std::make_shared<const ProjectionStreamMessageVariant>(ProjectionStreamPatchMsg{
+            .version = state_version_.load(std::memory_order_acquire), .patches = std::move(patches)}));
+}
+
+void AgentSession::Impl::deliver_projection_message(
+        const std::shared_ptr<const ProjectionStreamMessageVariant>& message) {
+    // Prune inactive subscribers first (the mark-only unsubscribe pattern:
+    // an unsubscribe from any domain only deactivates the node, and the
+    // Core serialized domain removes it here). The node itself stays alive
+    // through any outstanding ProjectionSubscription handle.
+    std::erase_if(projection_subscribers_, [](const std::shared_ptr<ProjectionSubscription::Impl>& node) {
+        std::scoped_lock lock(node->mutex);
+        if (!node->active) {
+            node->sink = nullptr;
+            return true;
+        }
+        return false;
+    });
+    for (const auto& node : projection_subscribers_) {
+        {
+            std::scoped_lock lock(node->mutex);
+            if (!node->active) {
+                continue;
+            }
+            if (node->mailbox.size() < kProjectionMailboxCapacity) {
+                node->mailbox.push_back(message);
+                continue;
+            }
+        }
+        // Overflow (ADR 0052): the Core discards the backlog and the next
+        // message is a fresh Base — a slow subscriber silently degrades to
+        // a snapshot consumer. Materialize outside the mailbox lock; the
+        // Base is captured at this publication, so it already includes this
+        // bump's changes and resynchronization is indistinguishable from
+        // attaching.
+        auto resync = std::make_shared<const ProjectionStreamMessageVariant>(ProjectionStreamBase{
+                .version = state_version_.load(std::memory_order_acquire), .snapshot = snapshot()});
+        std::scoped_lock lock(node->mutex);
+        if (node->active) {
+            node->mailbox.clear();
+            node->mailbox.push_back(std::move(resync));
+        }
+    }
 }
 
 void AgentSession::Impl::update_projection() {
     state_version_.fetch_add(1, std::memory_order_release);
-    notify_dirty();
+    if (projection_subscribers_.empty()) {
+        return;
+    }
+    // Coarse mutation (ADR 0052): one degenerate Patch carrying the whole
+    // snapshot value. Used for whole-value mutations (model/thinking
+    // switches, reload, compaction rebuilds, tree navigation, run settle,
+    // retry history pop, User Bash commitment, Close) where no finer slice
+    // applies; full copies stay confined to these rare bumps, attach, and
+    // resync.
+    auto coarse = create_snapshot();
+    const auto& queues = coarse.agent_state.input_queues;
+    published_input_queue_counts_ = agent::AgentInputQueueCounts{
+            .steering = queues.steering.messages.size(),
+            .follow_up = queues.follow_up.messages.size(),
+    };
+    published_pending_tool_calls_ = coarse.agent_state.pending_tool_call_ids;
+    published_observer_diagnostic_serial_ = agent_ ? agent_->observer_diagnostic_serial() : 0;
+    deliver_projection_message(std::make_shared<const ProjectionStreamMessageVariant>(
+            ProjectionStreamPatchMsg{.version = state_version_.load(std::memory_order_acquire),
+                    .patches = std::vector<ProjectionStreamPatchVariant>{
+                            SessionSnapshotPatch{.snapshot = std::move(coarse)}}}));
 }
 
-void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent&) {
-    // Lifecycle events carry no projection payload by design: publication is
-    // a version bump plus the dirty edge; sampling materializes state lazily.
-    update_projection();
+void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& event) {
+    state_version_.fetch_add(1, std::memory_order_release);
+    if (projection_subscribers_.empty()) {
+        return;
+    }
+    // This observer runs after the Agent reduced the event into live state
+    // (ADR 0052): each patch names the changed slice and carries the slice's
+    // new value, mirroring the reducer's slice effects so that applying the
+    // batches in order to a Base reproduces the later snapshot exactly.
+    std::vector<ProjectionStreamPatchVariant> patches;
+
+    // Push-only tool facts ride the one stream (ADR 0052); the Native TUI's
+    // direct event sinks remain a private fast path for the first
+    // projection, not a second authoritative channel.
+    if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+        patches.emplace_back(ToolStartedPatch{
+                .tool_call_id = start->tool_call_id,
+                .tool_name = start->tool_name,
+                .args = start->args,
+        });
+    }
+    if (const auto* partial = std::get_if<agent::ToolExecutionUpdateEvent>(&event)) {
+        patches.emplace_back(ToolPartialPatch{
+                .tool_call_id = partial->tool_call_id,
+                .tool_name = partial->tool_name,
+                .args = partial->args,
+                .partial_result = partial->partial_result,
+        });
+    }
+    if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+        patches.emplace_back(ToolFinishedPatch{
+                .tool_call_id = finished->tool_call_id,
+                .tool_name = finished->tool_name,
+                .result = finished->result,
+                .is_error = finished->is_error,
+        });
+    }
+
+    if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+        // run_loop raised the flag, cleared the partial, and cleared the
+        // pending ids before the first delivery, so the live state this
+        // version stamps already agrees with the composed patches.
+        patches.emplace_back(IsRunningPatch{.is_running = true});
+        patches.emplace_back(StreamingMessagePatch{});
+        if (!published_pending_tool_calls_.empty()) {
+            published_pending_tool_calls_.clear();
+            patches.emplace_back(PendingToolCallsPatch{});
+        }
+    } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
+        // The reducer clears the streaming partial; the running flag settles
+        // after this delivery and reaches the stream through the whole-
+        // snapshot patch published at the run's settle point.
+        patches.emplace_back(StreamingMessagePatch{});
+    } else if (std::holds_alternative<agent::TurnEndEvent>(event)) {
+        if (!published_pending_tool_calls_.empty()) {
+            published_pending_tool_calls_.clear();
+            patches.emplace_back(PendingToolCallsPatch{});
+        }
+    } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&start->message)) {
+            patches.emplace_back(StreamingMessagePatch{.streaming_message = *assistant});
+        }
+    } else if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&update->message)) {
+            patches.emplace_back(StreamingMessagePatch{.streaming_message = *assistant});
+            if (const auto* tool_end = std::get_if<ai::ToolCallEndEvent>(&update->assistant_event);
+                    tool_end != nullptr && !tool_end->tool_call.id.empty() &&
+                    std::find(published_pending_tool_calls_.begin(),
+                            published_pending_tool_calls_.end(),
+                            tool_end->tool_call.id) == published_pending_tool_calls_.end()) {
+                published_pending_tool_calls_.push_back(tool_end->tool_call.id);
+                patches.emplace_back(PendingToolCallsPatch{
+                        .pending_tool_call_ids = published_pending_tool_calls_,
+                });
+            }
+        }
+    } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+        patches.emplace_back(MessageAppendedPatch{.message = end->message});
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
+            patches.emplace_back(StreamingMessagePatch{});
+            published_pending_tool_calls_.clear();
+            for (const auto& block : assistant->content) {
+                if (const auto* call = std::get_if<ai::ToolCallContent>(&block); call != nullptr && !call->id.empty()) {
+                    published_pending_tool_calls_.push_back(call->id);
+                }
+            }
+            patches.emplace_back(PendingToolCallsPatch{
+                    .pending_tool_call_ids = published_pending_tool_calls_,
+            });
+        }
+    } else if (const auto* tool_start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+        if (std::find(published_pending_tool_calls_.begin(),
+                    published_pending_tool_calls_.end(),
+                    tool_start->tool_call_id) == published_pending_tool_calls_.end()) {
+            published_pending_tool_calls_.push_back(tool_start->tool_call_id);
+            patches.emplace_back(PendingToolCallsPatch{
+                    .pending_tool_call_ids = published_pending_tool_calls_,
+            });
+        }
+    } else if (const auto* tool_end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+        if (std::erase(published_pending_tool_calls_, tool_end->tool_call_id) > 0) {
+            patches.emplace_back(PendingToolCallsPatch{
+                    .pending_tool_call_ids = published_pending_tool_calls_,
+            });
+        }
+    }
+
+    publish_input_queues_if_changed(patches);
+    publish_agent_diagnostics_if_changed(patches);
+    publish_projection_patch_msg(std::move(patches));
 }
 
 std::size_t AgentSession::Impl::message_count() const { return agent_ ? agent_->state().messages.size() : 0; }

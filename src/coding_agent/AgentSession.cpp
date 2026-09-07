@@ -7,6 +7,7 @@
 
 #include <boost/asio/io_context.hpp>
 
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -129,6 +130,87 @@ SessionEventSubscription::operator bool() const {
         }
     }
     return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ProjectionSubscription implementation (ADR 0052)
+// ─────────────────────────────────────────────────────────────────────────────
+
+ProjectionSubscription::ProjectionSubscription(ProjectionSubscription&& other) noexcept = default;
+
+ProjectionSubscription& ProjectionSubscription::operator=(ProjectionSubscription&& other) noexcept {
+    if (this != &other) {
+        unsubscribe();
+        impl_ = std::move(other.impl_);
+    }
+    return *this;
+}
+
+ProjectionSubscription::~ProjectionSubscription() { unsubscribe(); }
+
+ProjectionSubscription::ProjectionSubscription(std::shared_ptr<Impl> state) : impl_(std::move(state)) {}
+
+void ProjectionSubscription::unsubscribe() {
+    if (!impl_) {
+        return;
+    }
+    {
+        // Mark-only deactivation (the session-event observer pattern): the
+        // Core prunes the inactive node at its next publication on its own
+        // serialized domain, so an unsubscribe from any domain — including
+        // from inside a drain's listener — never touches the registry.
+        std::scoped_lock lock(impl_->mutex);
+        impl_->active = false;
+        impl_->sink = nullptr;
+    }
+    impl_.reset();
+}
+
+std::size_t ProjectionSubscription::drain() {
+    if (!impl_) {
+        return 0;
+    }
+    // The node outlives this call even if the handle is destroyed
+    // concurrently (the sink may hold the only other reference).
+    const auto node = impl_;
+    std::deque<std::shared_ptr<const ProjectionStreamMessageVariant>> batch;
+    // Take the listener out under the mailbox mutex and invoke it unlocked:
+    // the invocation must not block the Core's publication, and moving it
+    // out removes the race against an unsubscribe or a Core prune resetting
+    // the stored sink under the same mutex. The listener is restored
+    // afterwards unless the node was deactivated in the meantime. Drains are
+    // consumer-domain: one drain at a time per subscription.
+    auto listener = std::move_only_function<void(const ProjectionStreamMessageVariant&)>{nullptr};
+    {
+        std::scoped_lock lock(node->mutex);
+        if (!node->active) {
+            return 0;
+        }
+        batch.swap(node->mailbox);
+        listener = std::move(node->sink);
+    }
+    std::size_t delivered = 0;
+    for (const auto& message : batch) {
+        if (listener) {
+            listener(*message);
+        }
+        ++delivered;
+    }
+    {
+        std::scoped_lock lock(node->mutex);
+        if (node->active && !node->sink) {
+            node->sink = std::move(listener);
+        }
+    }
+    return delivered;
+}
+
+ProjectionSubscription::operator bool() const {
+    if (!impl_) {
+        return false;
+    }
+    std::scoped_lock lock(impl_->mutex);
+    return impl_->active;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -435,32 +517,19 @@ support::Expected<SessionEventSubscription> AgentSession::subscribe_session(
     return subscription;
 }
 
-std::uint64_t AgentSession::state_version() const noexcept { return impl_ ? impl_->state_version() : 0; }
-
-std::shared_ptr<const AgentSessionSnapshot> AgentSession::projection_snapshot() const {
+ProjectionSubscription AgentSession::attach_projection(ProjectionStreamSink sink) {
     if (!impl_) {
-        return nullptr;
+        return {};
     }
-    return impl_->snapshot();
+    return ProjectionSubscription{impl_->attach_projection(std::move(sink))};
 }
 
 AgentSessionSnapshot AgentSession::snapshot() const {
     if (!impl_) {
         return {};
     }
-    auto snap = impl_->snapshot();
-    return snap ? *snap : AgentSessionSnapshot{};
+    return impl_->snapshot();
 }
-
-void AgentSession::set_dirty_listener(std::move_only_function<void()> on_dirty) {
-    if (impl_) {
-        impl_->set_dirty_listener(std::move(on_dirty));
-    }
-}
-
-SessionProjectionSource& AgentSession::projection_source() noexcept { return *impl_; }
-
-std::shared_ptr<SessionProjectionSource> AgentSession::shared_projection_source() noexcept { return impl_; }
 
 std::size_t AgentSession::message_count() const { return impl_ ? impl_->message_count() : 0; }
 

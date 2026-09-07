@@ -79,6 +79,14 @@ The following tests pin the chosen values and the properties they protect. They 
 - `persistence control work is admitted while the ordinary runtime budget is saturated` — `[coding_agent][runtime][commitment][issue465]`: a real Session Event Commitment append is admitted on the reserved lane while the ordinary budget is full. Pins persistence (control) admission end to end.
 - `RuntimeRoot close drains admitted worker completions before teardown` — `[harness][runtime][issue459]`: `close()` stops admission and joins workers while every admitted terminal reaches its mailbox. This test also covers the lost-wakeup fix in `stop_admission_and_drain_workers` (the `stopping` flag is written under the same `worker_mutex` the workers wait on), which is the Close-progress regression that issue #465 surfaced.
 
+## Projection Stream mailbox capacity (ADR 0052, issue #617)
+
+Separate from the `RuntimeRoot` admission limits above, the Headless Core's Projection Stream retains one bounded Subscription Mailbox per subscriber (`kProjectionMailboxCapacity = 64` messages, `src/coding_agent/include/cch/coding_agent/ProjectionStream.hpp`). The selection reasoning:
+
+- **Buffering need.** The measured streaming publication rate is ~50–100 Core publications/s (issue #600 cost contract). The one production subscriber — the Native TUI frame ticker — drains at ~30 frames/s, so steady state accumulates 2–4 messages between frames. 64 messages buffers well over half a second of saturated Core activity, an order of magnitude above the steady-state need, so a single delayed frame can never overflow.
+- **Bounded retention.** A subscriber that stops draining keeps at most 64 messages; overflow discards the backlog and the Core enqueues a fresh Base (ADR 0052: a slow subscriber silently degrades to snapshot consumption), so no queue grows without bound and publication never blocks the Core's serialized domain.
+- **Regression property.** `Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core` (`[coding_agent][projection][issue617]`) pins the bound: more than 64 publications with no drain still complete the prompt, leave a bounded mailbox, and resynchronize with a fresh Base that converges with the Core snapshot.
+
 ## Update procedure
 
 A limit changes only through the same evidence path: record the representative workload and environment, repeated samples and variance, the selection rule, the chosen value, and the regression property that protects it. When a limit changes, update this table, the `harness::RuntimeLimits` defaults, and — if the production value is no longer the default — the explicit set in `AsyncCliRuntime.cpp`. The regression tests above must pass at the new values before the change is accepted.

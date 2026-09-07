@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <format>
 #include <set>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -91,14 +92,17 @@ support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
     displayed_agent_diagnostics_.clear();
     displayed_session_event_diagnostics_.clear();
     session_status_ = SessionStatus::Idle;
+    // ADR 0052: attach the Projection Stream subscription. The Base seeds
+    // the composed snapshot immediately (drained here, executor-confined
+    // like the Core's serialized domain); the frame ticker drains the rest.
     const auto weak = weak_from_this();
-    if (dirty_listener_) {
-        session_->set_dirty_listener([weak] {
-            if (const auto self = weak.lock(); self && self->dirty_listener_) {
-                self->dirty_listener_();
-            }
-        });
-    }
+    projection_subscription_ = session.attach_projection([weak](const ProjectionStreamMessageVariant& message) {
+        if (const auto self = weak.lock()) self->on_projection_message(message);
+    });
+    (void)projection_subscription_.drain();
+    // The Base seeded the composed snapshot; the engine's bind flow renders
+    // the initial view itself, so this drain consumes no counted frame.
+    pending_counted_frame_ = false;
     if (auto subscribed = session.subscribe(
             [weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
                 if (const auto self = weak.lock()) self->on_event(event);
@@ -125,9 +129,9 @@ support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
 }
 
 void SessionUiBinding::detach() noexcept {
-    if (session_ != nullptr) {
-        session_->set_dirty_listener(nullptr);
-    }
+    projection_subscription_.unsubscribe();
+    composed_ = AgentSessionSnapshot{};
+    pending_counted_frame_ = false;
     cancel_retry_countdown();
     subscription_.reset();
     session_event_subscription_.reset();
@@ -179,6 +183,29 @@ void SessionUiBinding::sync_session_observations() {
     displayed_agent_diagnostics_ = std::move(current);
 }
 
+void SessionUiBinding::on_projection_message(const ProjectionStreamMessageVariant& message) {
+    std::visit(
+            [this](const auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, ProjectionStreamBase>) {
+                    // Attach and mailbox-overflow resync: the Base replaces
+                    // the composed value wholesale (ADR 0052).
+                    composed_ = value.snapshot;
+                } else {
+                    apply_projection_patches(composed_, value.patches);
+                }
+            },
+            message);
+    pending_counted_frame_ = true;
+}
+
+bool SessionUiBinding::drain_composed_snapshot() {
+    if (!projection_subscription_) {
+        return false;
+    }
+    return projection_subscription_.drain() > 0;
+}
+
 bool SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
     if (!is_live()) return false;
     auto* const active_view = view();
@@ -207,11 +234,10 @@ bool SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) 
     append_new_diagnostics(snapshot.session_event_diagnostics, displayed_session_event_diagnostics_);
 
     // Status stays event-owned: shows follow the authoritative AgentStart /
-    // MessageStart broadcasts. The snapshot only confirms the clear once the
-    // run is done, and only on samples newer than the show (a stale
-    // pre-bump sample can never resurrect or falsely clear) (#597).
-    if (!snapshot.agent_state.is_running && session_status_ == SessionStatus::Working &&
-            state_version() > status_show_version_) {
+    // MessageStart broadcasts. The composed snapshot only confirms the clear
+    // once the settled run published its post-settle state (ADR 0052: the
+    // settled whole-snapshot patch carries is_running=false).
+    if (!snapshot.agent_state.is_running && session_status_ == SessionStatus::Working) {
         session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
     }
@@ -220,20 +246,17 @@ bool SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) 
 
 void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& event) {
     if (!is_live()) return;
-    state_version_.fetch_add(1, std::memory_order_release);
     auto* const active_view = view();
     if (active_view == nullptr) return;
     active_view->apply_event(event);
     if (std::holds_alternative<agent::AgentStartEvent>(event)) {
         session_status_ = SessionStatus::Working;
-        status_show_version_ = state_version();
         active_view->show_status_working();
     } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
         session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
     } else if (std::holds_alternative<agent::MessageStartEvent>(event) && prompt_active()) {
         session_status_ = SessionStatus::Working;
-        status_show_version_ = state_version();
         active_view->show_status_working();
     }
     sync_session_observations();
@@ -457,30 +480,6 @@ InteractiveView* SessionUiBinding::view() {
     return hooks_.view != nullptr ? hooks_.view() : nullptr;
 }
 
-bool SessionUiBinding::prompt_active() {
-    return hooks_.prompt_active != nullptr && hooks_.prompt_active();
-}
-std::uint64_t SessionUiBinding::state_version() const noexcept {
-    return session_ ? session_->state_version() : state_version_.load(std::memory_order_acquire);
-}
-
-std::shared_ptr<const AgentSessionSnapshot> SessionUiBinding::snapshot() const {
-    if (session_ != nullptr) {
-        return session_->projection_snapshot();
-    }
-    return fallback_snapshot_.load(std::memory_order_acquire);
-}
-
-void SessionUiBinding::set_dirty_listener(std::move_only_function<void()> on_dirty) {
-    dirty_listener_ = std::move(on_dirty);
-    if (session_ != nullptr) {
-        const auto weak = weak_from_this();
-        session_->set_dirty_listener([weak] {
-            if (const auto self = weak.lock(); self && self->dirty_listener_) {
-                self->dirty_listener_();
-            }
-        });
-    }
-}
+bool SessionUiBinding::prompt_active() { return hooks_.prompt_active != nullptr && hooks_.prompt_active(); }
 
 } // namespace cch::coding_agent::tui

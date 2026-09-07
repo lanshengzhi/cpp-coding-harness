@@ -62,7 +62,7 @@ include_guard(GLOBAL)
         tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/SessionDiscoveryTest.cpp
         tests/coding_agent/SessionPathPolicyTest.cpp
-        tests/coding_agent/SessionProjectionSourceTest.cpp
+        tests/coding_agent/ProjectionStreamTest.cpp
         tests/coding_agent/SetModelTest.cpp
         tests/coding_agent/SettingsManagerTest.cpp
         tests/coding_agent/SkillFormattingTest.cpp
