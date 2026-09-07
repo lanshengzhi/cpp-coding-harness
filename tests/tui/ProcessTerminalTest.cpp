@@ -26,12 +26,46 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+#include <new>
+#endif
 #include <ranges>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <variant>
 #include <vector>
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+namespace {
+
+std::atomic<std::size_t> g_allocation_count{0};
+std::atomic<std::size_t> g_fail_allocation{0};
+
+[[nodiscard]] void* allocate_test_memory(std::size_t size) {
+    if (void* memory = std::malloc(size == 0 ? 1 : size)) return memory;
+    throw std::bad_alloc{};
+}
+
+[[nodiscard]] void* maybe_fail_test_allocation(std::size_t size) {
+    const auto allocation = g_allocation_count.fetch_add(1, std::memory_order_relaxed) + 1;
+    auto failure = g_fail_allocation.load(std::memory_order_relaxed);
+    if (failure == allocation && g_fail_allocation.compare_exchange_strong(failure, 0, std::memory_order_relaxed)) {
+        throw std::bad_alloc{};
+    }
+    return allocate_test_memory(size);
+}
+
+} // namespace
+
+void* operator new(std::size_t size) { return maybe_fail_test_allocation(size); }
+void* operator new[](std::size_t size) { return maybe_fail_test_allocation(size); }
+
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete[](void* memory) noexcept { std::free(memory); }
+void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
+#endif
 
 namespace {
 
@@ -187,6 +221,60 @@ IoContextRunner& test_io() {
     }
     return false;
 }
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+void answer_startup_queries(int descriptor, std::atomic_bool& ready) {
+    constexpr std::string_view kAppearanceQuery = "\x1b[?996n";
+    constexpr std::string_view kBackgroundQuery = "\x1b]11;?\x07";
+    constexpr std::string_view kCursorQuery = "\x1b[6n";
+    constexpr std::string_view kAppearanceResponse = "\x1b[?997;1nq";
+    constexpr std::string_view kCursorResponse = "\x1b[1;1R";
+    constexpr std::size_t kObservedBytes = 128;
+
+    ready.store(true, std::memory_order_release);
+    std::array<char, 4096> buffer{};
+    std::array<char, kObservedBytes> observed{};
+    std::size_t observed_size = 0;
+    bool answered_appearance = false;
+    bool answered_cursor = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    while (std::chrono::steady_clock::now() < deadline && (!answered_appearance || !answered_cursor)) {
+        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
+        const auto ready_result = ::poll(&item, 1, 10);
+        if (ready_result <= 0) continue;
+        const auto count = ::read(descriptor, buffer.data(), buffer.size());
+        if (count <= 0) return;
+        const auto bytes = static_cast<std::size_t>(count);
+        if (bytes >= observed.size()) {
+            std::memcpy(observed.data(), buffer.data() + bytes - observed.size(), observed.size());
+            observed_size = observed.size();
+        } else {
+            const auto retained = std::min(observed_size, observed.size() - bytes);
+            if (retained != observed_size) {
+                std::memmove(observed.data(), observed.data() + observed_size - retained, retained);
+            }
+            std::memcpy(observed.data() + retained, buffer.data(), bytes);
+            observed_size = retained + bytes;
+        }
+        const std::string_view output(observed.data(), observed_size);
+        if (!answered_appearance && output.find(kAppearanceQuery) != std::string_view::npos &&
+                output.find(kBackgroundQuery) != std::string_view::npos) {
+            if (::write(descriptor, kAppearanceResponse.data(), kAppearanceResponse.size()) !=
+                    static_cast<ssize_t>(kAppearanceResponse.size())) {
+                return;
+            }
+            answered_appearance = true;
+        }
+        if (!answered_cursor && output.find(kCursorQuery) != std::string_view::npos) {
+            if (::write(descriptor, kCursorResponse.data(), kCursorResponse.size()) !=
+                    static_cast<ssize_t>(kCursorResponse.size())) {
+                return;
+            }
+            answered_cursor = true;
+        }
+    }
+}
+#endif
 
 } // namespace
 
@@ -500,6 +588,63 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+TEST_CASE(
+        "Process Terminal rolls back post-start allocation failures and retries cleanly", "[tui][terminal][issue612]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    const int original_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    REQUIRE(original_flags >= 0);
+
+    auto responder_ready = std::make_shared<std::atomic_bool>(false);
+    std::jthread responder([descriptor = pty->master.get(), responder_ready] {
+        answer_startup_queries(descriptor, *responder_ready);
+    });
+    REQUIRE(cch::tests::wait_until([responder_ready] { return responder_ready->load(std::memory_order_acquire); }));
+
+    auto observed_started = std::make_shared<std::atomic_bool>(false);
+    cch::support::ExpectedVoid result;
+    bool threw_after_initiation = false;
+    try {
+        result = terminal.start(
+                [observed_started](std::string) -> cch::support::ExpectedVoid {
+                    observed_started->store(true);
+                    // The next allocation is in prepare_async_io(), after the
+                    // terminal has started but before async initiation.
+                    g_fail_allocation.store(
+                            g_allocation_count.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+                    return {};
+                },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+    } catch (const std::bad_alloc&) {
+        threw_after_initiation = true;
+    }
+    g_fail_allocation.store(0, std::memory_order_relaxed);
+    responder.join();
+    (void)cch::tests::read_available(pty->master.get());
+
+    CHECK_FALSE(threw_after_initiation);
+    REQUIRE(observed_started->load());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == cch::support::ErrorCode::Process);
+    CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+
+    const int failed_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    REQUIRE(failed_flags >= 0);
+    CHECK((failed_flags & O_NONBLOCK) == 0);
+    CHECK((failed_flags & ~O_NONBLOCK) == (original_flags & ~O_NONBLOCK));
+
+    // The rollback discarded the decoder, deadline, and session-alive state,
+    // so a fresh startup can complete on the same descriptors.
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    CHECK(terminal.modes().started);
+    REQUIRE(terminal.stop());
+}
+
 // The staged build's defensive sink boundary still isolates a throwing
 // interaction callback and reports it with the restoration failure; the
 // no-exception build enforces non-throwing callbacks by construction.

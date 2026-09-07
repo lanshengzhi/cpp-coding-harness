@@ -945,16 +945,19 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
     return std::nullopt;
 }
 
-template <typename T> void start_async_io(T& impl) {
+/// Allocate and configure all readiness objects before the first asynchronous
+/// operation is initiated. Throwable allocation failures in this phase remain
+/// recoverable by ProcessTerminal::start().
+template <typename T> void prepare_async_io(T& impl) {
     if (!impl.modes.started) return;
     const auto executor = normalized_executor(impl.options.executor);
     if (!executor) return;
-    bool start_read = false;
     if (!impl.input_stream) {
         impl.input_stream.emplace(*executor);
         boost::system::error_code error;
         impl.input_stream->assign(impl.options.input_fd, error);
         if (error) {
+            impl.input_stream->release();
             impl.input_stream.reset();
             if (!impl.worker_error) {
                 impl.worker_error = support::make_error(
@@ -962,13 +965,13 @@ template <typename T> void start_async_io(T& impl) {
             }
             return;
         }
-        start_read = true;
     }
     if (impl.options.output_fd != impl.options.input_fd && !impl.output_stream) {
         impl.output_stream.emplace(*executor);
         boost::system::error_code error;
         impl.output_stream->assign(impl.options.output_fd, error);
         if (error) {
+            impl.output_stream->release();
             impl.output_stream.reset();
             if (!impl.worker_error) {
                 impl.worker_error = support::make_error(
@@ -978,7 +981,14 @@ template <typename T> void start_async_io(T& impl) {
     }
     if (!impl.keepalive_timer) impl.keepalive_timer.emplace(*executor);
     if (!impl.readiness_timer) impl.readiness_timer.emplace(*executor);
-    if (start_read) start_async_read(impl);
+}
+
+/// Initiate readiness operations only after prepare_async_io() has completed.
+/// No exception boundary belongs around this function: once the first async
+/// operation is initiated, startup has crossed into the post-initiation phase.
+template <typename T> void start_async_io(T& impl) noexcept {
+    if (!impl.modes.started) return;
+    if (impl.input_stream) start_async_read(impl);
     arm_output_wait_locked(impl);
     arm_keepalive_timer_locked(impl);
     arm_readiness_timer_locked(impl);
@@ -1065,6 +1075,56 @@ template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes
     return first_error;
 }
 
+template <typename T> void release_unstarted_async_io(T& impl) {
+    // prepare_async_io() may have assigned the non-owning descriptors before
+    // a later readiness object allocation failed. Release those handles before
+    // destroying the Asio wrappers so rollback never closes caller-owned fds.
+    if (impl.input_stream) {
+        impl.input_stream->release();
+        impl.input_stream.reset();
+    }
+    if (impl.output_stream) {
+        impl.output_stream->release();
+        impl.output_stream.reset();
+    }
+    impl.keepalive_timer.reset();
+    impl.readiness_timer.reset();
+    impl.output_wait_armed = false;
+}
+
+template <typename T> void abandon_startup(T& impl) {
+    impl.modes.started = false;
+    if (impl.session_alive) {
+        impl.session_alive->store(false);
+        impl.session_alive.reset();
+    }
+    impl.input_sink.reset();
+    impl.resize_sink.reset();
+    release_unstarted_async_io(impl);
+    impl.input_state.decoder.reset();
+    impl.input_state.color_scheme_reported = false;
+    impl.input_state.needs_input_flush = false;
+    impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
+    impl.startup_input.clear();
+    impl.startup_color_scheme_reported = false;
+    impl.output_queue.clear();
+    impl.output_queued_bytes = 0;
+    impl.output_draining = false;
+    impl.synchronized_output.clear();
+    impl.synchronized_output_state.reset();
+    impl.worker_error.reset();
+}
+
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+[[nodiscard]] support::Error startup_exception_error(const std::exception& exception) {
+    return support::make_error(support::ErrorCode::Process, "Process Terminal startup failed", exception.what());
+}
+
+[[nodiscard]] support::Error startup_unknown_exception_error() {
+    return support::make_error(support::ErrorCode::Process, "Process Terminal startup failed", "unknown exception");
+}
+#endif
+
 } // namespace
 
 ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::make_shared<Impl>(options)) {
@@ -1109,14 +1169,30 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
             .color = detect_color_capability(),
             .appearance = environment_appearance,
     };
-    auto owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
-    auto owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
     // One startup-failure path: roll back acquired terminal state and combine
-    // the acquisition error with any incomplete rollback (issue #462).
-    const auto fail_startup = [this](support::Error acquisition_error) -> support::ExpectedVoid {
+    // the acquisition error with any incomplete rollback (issue #462). The
+    // same path is used after `started` is set, before asynchronous initiation.
+    const auto fail_startup = [this, &lock](support::Error acquisition_error) -> support::ExpectedVoid {
+        if (!lock.owns_lock()) lock.lock();
+        abandon_startup(*impl_);
         auto rollback = restore_terminal_modes(*impl_);
         return std::unexpected(startup_failure(std::move(acquisition_error), rollback));
     };
+
+    std::shared_ptr<TerminalInputSink> owned_input_sink;
+    std::shared_ptr<TerminalResizeSink> owned_resize_sink;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
+        owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& exception) {
+        return fail_startup(startup_exception_error(exception));
+    } catch (...) {
+        return fail_startup(startup_unknown_exception_error());
+    }
+#endif
 
     auto raw = original;
     ::cfmakeraw(&raw);
@@ -1232,7 +1308,17 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     impl_->resize_sink = std::move(owned_resize_sink);
     impl_->dimensions = *dimensions;
     impl_->modes.started = true;
-    impl_->session_alive = std::make_shared<std::atomic_bool>(true);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        impl_->session_alive = std::make_shared<std::atomic_bool>(true);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& exception) {
+        return fail_startup(startup_exception_error(exception));
+    } catch (...) {
+        return fail_startup(startup_unknown_exception_error());
+    }
+#endif
 
     auto startup_input = std::move(impl_->startup_input);
     impl_->startup_input.clear();
@@ -1240,18 +1326,32 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     // A restart must not inherit the previous session's decoder fragment,
     // negotiation deadline, or flush flag (#613); the startup probe's
     // color-scheme reply stays authoritative over late background replies.
-    impl_->input_state = InputState{};
-    impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
-    if (!startup_input.empty()) {
-        impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
-        auto decoded = impl_->input_state.decoder.feed(startup_input);
-        apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
-        if (!decoded.forwarded_input.empty()) {
-            invoke_input(*impl_, std::move(decoded.forwarded_input));
-            impl_->input_state.needs_input_flush = true;
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    try {
+#endif
+        impl_->input_state = InputState{};
+        impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
+        if (!startup_input.empty()) {
+            impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
+            auto decoded = impl_->input_state.decoder.feed(startup_input);
+            apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
+            if (!decoded.forwarded_input.empty()) {
+                invoke_input(*impl_, std::move(decoded.forwarded_input));
+                impl_->input_state.needs_input_flush = true;
+            }
         }
+        lock.lock();
+        prepare_async_io(*impl_);
+#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
+    } catch (const std::exception& exception) {
+        return fail_startup(startup_exception_error(exception));
+    } catch (...) {
+        return fail_startup(startup_unknown_exception_error());
     }
-    lock.lock();
+#endif
+    // The preparation phase above has no outstanding asynchronous operations.
+    // From this call onward initiation is in progress; exceptions intentionally
+    // follow the post-initiation contract rather than rolling state back.
     start_async_io(*impl_);
     return {};
 }
