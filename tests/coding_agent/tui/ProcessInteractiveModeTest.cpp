@@ -198,11 +198,12 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
-    cch::tui::ProcessTerminal terminal({
-        .input_fd = pty->slave.get(),
-        .output_fd = pty->slave.get(),
-    });
     boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
+    });
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
@@ -284,11 +285,12 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
+    boost::asio::io_context io;
     cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
     });
-    boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
 
@@ -375,11 +377,12 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
+    boost::asio::io_context io;
     cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
     });
-    boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
 
@@ -476,11 +479,12 @@ TEST_CASE("Process Terminal preserves keypresses while streaming output and rest
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
+    boost::asio::io_context io;
     cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
     });
-    boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
@@ -565,11 +569,12 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
+    boost::asio::io_context io;
     cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
     });
-    boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}
@@ -667,11 +672,12 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
+    boost::asio::io_context io;
     cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
     });
-    boost::asio::io_context io;
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
     auto run = cch::coding_agent::tui::InteractiveSessionRunBuilder{}

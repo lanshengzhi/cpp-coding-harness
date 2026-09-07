@@ -1256,14 +1256,6 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     return {};
 }
 
-void ProcessTerminal::attach_io_executor(std::any executor) {
-    const auto normalized = normalized_executor(executor);
-    if (!normalized) return;
-    std::lock_guard lock(impl_->mutex);
-    impl_->options.executor = *normalized;
-    if (impl_->modes.started) start_async_io(*impl_);
-}
-
 support::ExpectedVoid ProcessTerminal::stop() {
     std::lock_guard lock(impl_->mutex);
     if (!impl_->modes.started) {

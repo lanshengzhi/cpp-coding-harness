@@ -54,10 +54,8 @@ public:
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view title) override;
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
-    [[nodiscard]] support::ExpectedVoid drain_input(
-        std::chrono::milliseconds max_ms = kDrainInputMaxMs,
-        std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
-    void attach_io_executor(std::any executor);
+    [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
+            std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
 
 private:
     struct Impl;
