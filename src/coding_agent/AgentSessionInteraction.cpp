@@ -104,6 +104,23 @@ constexpr std::size_t kMaxArtifactReferenceBytes = 1024;
     return bounded_redacted_presentation(std::move(text));
 }
 
+void merge_projection_tool_execution(
+        ToolExecutionSnapshot& execution, const ToolExecutionSnapshot& prior, bool preserve_error) {
+    if (execution.output_tail.empty()) {
+        execution.output_tail = prior.output_tail;
+        execution.output_truncated = prior.output_truncated;
+    } else {
+        execution.output_truncated = execution.output_truncated || prior.output_truncated;
+    }
+    if (!execution.artifact_reference) {
+        execution.artifact_reference = prior.artifact_reference;
+    }
+    if (preserve_error && !execution.error) {
+        execution.error = prior.error;
+    }
+    execution.arguments_json = prior.arguments_json;
+}
+
 [[nodiscard]] ToolExecutionSnapshot make_projection_tool_execution(std::string tool_call_id,
         std::string tool_name,
         ToolExecutionStatus status,
@@ -1283,19 +1300,8 @@ void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& eve
                 &partial->partial_result,
                 false);
         if (const auto* prior = previous_tool(partial->tool_call_id); prior != nullptr) {
-            if (execution.output_tail.empty()) {
-                execution.output_tail = prior->output_tail;
-                execution.output_truncated = prior->output_truncated;
-            } else {
-                execution.output_truncated = execution.output_truncated || prior->output_truncated;
-            }
-            if (!execution.artifact_reference) {
-                execution.artifact_reference = prior->artifact_reference;
-            }
+            merge_projection_tool_execution(execution, *prior, false);
         }
-        execution.arguments_json = previous_tool(partial->tool_call_id) != nullptr
-                                           ? previous_tool(partial->tool_call_id)->arguments_json
-                                           : std::string{};
         upsert_tool(execution);
         patches.emplace_back(ToolPartialPatch{.execution = std::move(execution)});
     }
@@ -1308,19 +1314,7 @@ void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& eve
                 &finished->result,
                 finished->is_error);
         if (const auto* prior = previous_tool(finished->tool_call_id); prior != nullptr) {
-            if (execution.output_tail.empty()) {
-                execution.output_tail = prior->output_tail;
-                execution.output_truncated = prior->output_truncated;
-            } else {
-                execution.output_truncated = execution.output_truncated || prior->output_truncated;
-            }
-            if (!execution.artifact_reference) {
-                execution.artifact_reference = prior->artifact_reference;
-            }
-            if (!execution.error) {
-                execution.error = prior->error;
-            }
-            execution.arguments_json = prior->arguments_json;
+            merge_projection_tool_execution(execution, *prior, true);
         }
         upsert_tool(execution);
         patches.emplace_back(ToolFinishedPatch{.execution = std::move(execution)});
