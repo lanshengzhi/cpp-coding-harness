@@ -407,7 +407,29 @@ TEST_CASE("WorkspaceFileSystem absolutePath and joinPath", "[harness][filesystem
     CHECK(*joined == (workspace.path() / "sub" / "file.txt").string());
 }
 
-TEST_CASE("WorkspaceFileSystem rejects absolute paths", "[harness][filesystem][u2][spec]") {
+TEST_CASE("WorkspaceFileSystem accepts absolute paths inside the workspace",
+        "[harness][filesystem][u2][spec][issue618]") {
+    tests::TempWorkspace workspace;
+    workspace.write("sub/file.txt", "content");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    const auto inside = (workspace.path() / "sub" / "file.txt").string();
+    auto abs = fs->absolutePath(inside);
+    REQUIRE(abs);
+    CHECK(*abs == inside);
+
+    auto read = fs->readTextFile(inside);
+    REQUIRE(read);
+    CHECK(*read == "content");
+
+    auto missing = fs->readTextFile((workspace.path() / "nope.txt").string());
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().code == harness::FileErrorCode::NotFound);
+}
+
+TEST_CASE("WorkspaceFileSystem rejects absolute paths outside the workspace",
+        "[harness][filesystem][u2][spec][issue618]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -417,6 +439,11 @@ TEST_CASE("WorkspaceFileSystem rejects absolute paths", "[harness][filesystem][u
 
     auto read = fs->readTextFile("/etc/passwd");
     REQUIRE_FALSE(read);
+    CHECK(read.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto escaped = fs->readTextFile((workspace.path() / ".." / "outside.txt").string());
+    REQUIRE_FALSE(escaped);
+    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
 }
 
 TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2][spec]") {
