@@ -65,7 +65,7 @@ struct RetrySettings {
 /// construction), resources, and session presentation. Owned through the
 /// AgentSession handle's shared_ptr so a lazy coroutine admitted before the
 /// public handle moves or is destroyed keeps the implementation alive.
-struct AgentSession::Impl final {
+struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Impl> {
     explicit Impl(runtime::AgentSessionAssembly assembly);
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
@@ -445,8 +445,8 @@ struct AgentSession::Impl final {
     /// the agent; an aborted sleep emits `auto_retry_end` with pi's
     /// "Retry cancelled" and returns false (exactly one terminal outcome).
     [[nodiscard]] boost::asio::awaitable<bool> prepare_retry(
-            const ai::AssistantMessage& message,
-            const std::optional<ai::InferenceFailure>& inference_failure,
+            ai::AssistantMessage message,
+            std::optional<ai::InferenceFailure> inference_failure,
             std::stop_token stop_token);
     /// Deliver one session-assembly event to every registered observer.
     void emit_session_event(const AgentSessionEvent& event);

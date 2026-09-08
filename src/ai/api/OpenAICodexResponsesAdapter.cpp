@@ -670,6 +670,8 @@ void append_transport_diagnostic(
 
 struct WsAttemptOutcome {
     bool completed{false};
+    bool output_started{false};
+    bool websocket_started{false};
     support::Error error{};
     CodexFailureKind failure_kind{CodexFailureKind::Transport};
     std::string api_code{};
@@ -686,12 +688,12 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
     std::string_view account_id,
     CodexWebSocketCache& cache,
     AssistantMessage& assistant,
-    bool& started,
-    bool& websocket_started,
+    bool started,
     AssistantEventSink& sink) {
-    websocket_started = false;
+    const auto started_state = std::make_shared<bool>(started);
+    const auto websocket_started_state = std::make_shared<bool>(false);
 
-    const auto finish_failed = [&started](
+    const auto finish_failed = [started_state, websocket_started_state](
             support::Error error,
             CodexFailureKind kind,
             std::string api_code = {},
@@ -703,16 +705,18 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
                         : kind == CodexFailureKind::Transport
                             ? InferenceFailureKind::TransientTransportFailure
                             : InferenceFailureKind::InvalidRequest,
-                    .output_started = started,
+                    .output_started = *started_state,
                     .provider_code = api_code.empty()
                         ? std::nullopt
                         : std::optional<std::string>{api_code},
             };
         } else {
-            inference_failure->output_started = started;
+            inference_failure->output_started = *started_state;
         }
         return WsAttemptOutcome{
                 .completed = false,
+                .output_started = *started_state,
+                .websocket_started = *websocket_started_state,
                 .error = std::move(error),
                 .failure_kind = kind,
                 .api_code = std::move(api_code),
@@ -816,10 +820,10 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         const auto* frame_type = type_found != event->end() ? type_found->second.get_if<std::string>() : nullptr;
         const bool api_error_event = frame_type &&
             (*frame_type == "error" || *frame_type == "response.failed");
-        if (!api_error_event && !websocket_started) {
-            websocket_started = true;
-            if (!started) {
-                if (auto emitted = emit_start(sink, assistant, started); !emitted) {
+        if (!api_error_event && !*websocket_started_state) {
+            *websocket_started_state = true;
+            if (!*started_state) {
+                if (auto emitted = emit_start(sink, assistant, *started_state); !emitted) {
                     release_socket(false);
                     co_return std::unexpected(emitted.error());
                 }
@@ -860,7 +864,11 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         }
     }
     release_socket(true);
-    co_return WsAttemptOutcome{.completed = true};
+    co_return WsAttemptOutcome{
+            .completed = true,
+            .output_started = *started_state,
+            .websocket_started = *websocket_started_state,
+    };
 }
 
 } // namespace
@@ -959,7 +967,6 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
         bool retried_previous_response = false;
         bool retried_connection_limit = false;
         while (true) {
-            bool websocket_started = false;
             auto outcome = co_await run_ws_attempt(
                 ws_transport_,
                 model,
@@ -971,11 +978,12 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
                 cache,
                 assistant,
                 started,
-                websocket_started,
                 guarded_sink);
             if (!outcome) {
                 co_return std::unexpected(outcome.error());
             }
+            started = outcome->output_started;
+            const bool websocket_started = outcome->websocket_started;
             if (outcome->completed) {
                 if (options.stop_token.stop_requested()) {
                     co_return complete_failure(
