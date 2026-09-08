@@ -1,6 +1,40 @@
 {
-  "schema_version": 2,
-  "baseline_commit": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+  "schema_version": 3,
+  "architecture_contract": {
+    "schema_version": 1,
+    "name": "Product Architecture Contract",
+    "rules": [
+      {
+        "id": "headless-no-frontend-dependencies",
+        "source_prefixes": [
+          "src/agent/",
+          "src/coding_agent/"
+        ],
+        "excluded_source_prefixes": [
+          "src/coding_agent/tui/"
+        ],
+        "forbidden_include_prefixes": [
+          "cch/tui/",
+          "coding_agent/tui/",
+          "tui/",
+          "src/tui/",
+          "cli/",
+          "src/cli/"
+        ]
+      }
+    ],
+    "exceptions": [
+      {
+        "id": "async-cli-runtime-frontend-coupling",
+        "rule_id": "headless-no-frontend-dependencies",
+        "source": "src/coding_agent/runtime/AsyncCliRuntime.cpp",
+        "owner": "architecture-maintainers",
+        "removal_ticket": "#623",
+        "expires": "2026-12-31",
+        "reason": "The CLI runtime still hosts the interactive frontend until the frontend targets are split."
+      }
+    ]
+  },
   "exception_policy": {
     "schema_version": 1,
     "required_compile_flags": ["-fno-exceptions"],

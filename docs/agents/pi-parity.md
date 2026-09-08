@@ -1,12 +1,61 @@
-# pi C++ parity
+# Product Architecture Contract
 
-Read this when a task changes a Supported Capability, evaluates parity, interprets a `pi:` reference, or proposes a new parity ticket.
+Read this when changing a module boundary, an Owner Package, a frontend seam, or a
+rule enforced by the architecture gate. ADR 0053 replaced pi parity as this
+repository's architecture authority: this product now makes its own decisions.
 
-- The [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2) is the planning authority for open parity decisions.
-- The local pi source checkout is `../pi`; a `pi:` reference resolves from that root.
-- Inspect the relevant current pi source or documentation before deciding or changing behavior. Matching supported pi semantics is the default; record an Intentional Divergence in the map or an accepted ADR.
-- Preserve this repository's C++ idioms and [architecture guardrails](architecture.md) rather than mechanically translating TypeScript.
-- Approved work leaves the map and follows `/to-spec` → `/to-tickets` → `/implement`.
-- Prefer the clean pi-aligned end state over migrations, fallback reads, deprecation shims, or compatibility-only flags unless a current contract explicitly requires them.
+## Authority
 
-The Parity Baseline and supported capability set remain authoritative until explicitly advanced (ADR 0024); current upstream behavior is evidence, not an automatic scope expansion. Semantic Parity is pinned to the frozen pi authority commit `83114817c68f5413e4d7ba6d7003ddc511cd31d2`. Architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) with [ADR 0039](../adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md) and [ADR 0040](../adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md) records the change authority for the Capability Owner Package graph, the Parity Architecture Gate, the serialized Runtime, the Supported Platform and toolchain floors, and the Runtime-only release boundary; it neither advances the baseline nor adds a Supported Capability.
+- The machine-readable contract is `cmake/parity/manifest.json`.
+- The validator is `cmake/parity/parity_gate.py`; the `parity` path and stable
+  `PARITY-*` diagnostic IDs are implementation names retained to avoid churn.
+  They do **not** mean that pi compatibility is required.
+- Product decisions are recorded in accepted ADRs. Start with [ADR
+  0053](../adr/0053-replace-pi-parity-authority-with-the-product-architecture-contract.md)
+  and [ADR 0039](../adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md).
+- Run the architecture selection with `ctest --preset vcpkg -L architecture`.
+  The required gate checks the Product Architecture Contract only; it does not
+  compare the repository with pi or consult a pi checkout.
+
+## Current contract
+
+The first contract rules establish these boundaries:
+
+- Headless Session and Runtime sources cannot include frontend headers from the
+  TUI, terminal, or CLI surfaces.
+- Cross-Owner dependencies must follow the declared Owner graph and use
+  authoritative Owner targets.
+- Owner Interface headers remain canonical and private implementation roots do
+  not leak across Owners.
+- Strict builds keep their no-exception and evidence requirements.
+
+The contract is intentionally machine-readable and fail-closed. A rule change
+must update the manifest, its validator, and the architecture tests in one
+change. A temporary exception is acceptable only when it names the exact source
+and rule, an accountable owner, a removal issue, an ISO expiry date, and the
+reason. Exceptions are migration records, not a second policy source; remove
+them when the migration lands.
+
+## pi compatibility
+
+Upstream pi is optional reference material, not a specification. A pi session or
+configuration format is supported only at an explicit product compatibility
+edge, such as `compat/pi`, and only when an issue or ADR says so. Compatibility
+code is not part of the required architecture gate. The de-pi migration uses
+one-time import rather than runtime fallback reads or dual-format loading.
+
+When a user-visible behavior is intentionally retained because it is useful —
+for example familiar TUI keybindings or slash commands — record it as a product
+choice. Do not turn that retained behavior into an architecture dependency.
+
+## Change workflow
+
+1. Describe the boundary change and its non-goals in an issue or ADR.
+2. Update the manifest contract and focused architecture tests.
+3. Run the owning build and `ctest --preset vcpkg -L architecture`.
+4. Remove any migration exception in the same change that eliminates its
+   violation.
+
+The Owner Package graph remains a repository implementation boundary, not a
+promise that package shapes must mirror another project. See
+`docs/agents/architecture.md` for capability, ownership, and security rules.

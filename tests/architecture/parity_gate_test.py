@@ -29,8 +29,27 @@ sys.path.insert(0, str(REPO_ROOT / "cmake" / "parity"))
 import parity_gate as pg  # noqa: E402
 
 VALID_MANIFEST = {
-    "schema_version": 2,
-    "baseline_commit": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+    "schema_version": 3,
+    "architecture_contract": {
+        "schema_version": 1,
+        "name": "Product Architecture Contract",
+        "rules": [
+            {
+                "id": "headless-no-frontend-dependencies",
+                "source_prefixes": ["src/agent/", "src/coding_agent/"],
+                "excluded_source_prefixes": ["src/coding_agent/tui/"],
+                "forbidden_include_prefixes": [
+                    "cch/tui/",
+                    "coding_agent/tui/",
+                    "tui/",
+                    "src/tui/",
+                    "cli/",
+                    "src/cli/",
+                ],
+            },
+        ],
+        "exceptions": [],
+    },
     "exception_policy": {
         "schema_version": 1,
         "required_compile_flags": ["-fno-exceptions"],
@@ -199,8 +218,33 @@ class ManifestSchemaTest(unittest.TestCase):
 
     def test_valid_manifest_parses(self):
         manifest = valid_manifest()
-        self.assertEqual(manifest.schema_version, 2)
+        self.assertEqual(manifest.schema_version, 3)
+        self.assertEqual(manifest.architecture_contract.name, "Product Architecture Contract")
         self.assertEqual(manifest.owners["cch_agent_core"].legal_owner_dependencies, ("cch_ai",))
+
+    def test_missing_architecture_contract_fails_closed(self):
+        data = deep_copy(VALID_MANIFEST)
+        del data["architecture_contract"]
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_manifest(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_MISSING_MANIFEST_FIELD)
+
+    def test_expired_architecture_exception_is_rejected_by_the_gate(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["architecture_contract"]["exceptions"] = [
+            {
+                "id": "expired",
+                "rule_id": "headless-no-frontend-dependencies",
+                "source": "src/coding_agent/compose.cpp",
+                "owner": "architecture-maintainers",
+                "removal_ticket": "#623",
+                "expires": "2020-01-01",
+                "reason": "test exception",
+            }
+        ]
+        manifest = pg.parse_manifest(data)
+        diagnostics = pg.check(manifest, valid_index(), VALID_INDEX["manifest_digest"])
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_EXPIRED_ARCHITECTURE_EXCEPTION])
 
     def test_unknown_schema_version_fails_closed(self):
         data = deep_copy(VALID_MANIFEST)
@@ -500,7 +544,9 @@ class CliTest(unittest.TestCase):
 
             # Mutating the manifest after the index was produced must make the
             # evidence stale and fail closed.
-            manifest_path.write_text(json.dumps({**VALID_MANIFEST, "baseline_commit": "0" * 40}))
+            changed_manifest = deep_copy(VALID_MANIFEST)
+            changed_manifest["architecture_contract"]["name"] = "Changed Contract"
+            manifest_path.write_text(json.dumps(changed_manifest))
             failed = subprocess.run(
                 [sys.executable, script, "--manifest", str(manifest_path),
                  "--index", str(index_path), "--format", "json"],
@@ -574,7 +620,9 @@ def make_project_tree(root):
     return root
 
 
-def run_include_case(root, from_owner, source_name, include_path, spelling="angle", macro=False):
+def run_include_case(
+    root, from_owner, source_name, include_path, spelling="angle", macro=False, manifest=None
+):
     project_root = make_project_tree(root)
     source = project_root / "src" / source_name
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -600,7 +648,8 @@ def run_include_case(root, from_owner, source_name, include_path, spelling="angl
             }
         ]
     )
-    manifest = valid_manifest()
+    if manifest is None:
+        manifest = valid_manifest()
     return pg.check(
         manifest,
         index,
@@ -828,6 +877,46 @@ class IncludeResolutionTest(unittest.TestCase):
                 valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
             )
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_INCLUDE_EVIDENCE])
+
+
+class ArchitectureContractTest(unittest.TestCase):
+    def test_headless_source_cannot_include_frontend_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/compose.cpp",
+                "cch/tui/Render.hpp",
+            )
+        self.assertEqual(
+            rule_ids(diagnostics), [pg.RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE]
+        )
+        self.assertEqual(diagnostics[0].target, "cch_coding_agent")
+        self.assertEqual(diagnostics[0].dependency, "cch/tui/Render.hpp")
+
+    def test_dated_exception_allows_one_known_migration_source(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["architecture_contract"]["exceptions"] = [
+            {
+                "id": "known-migration",
+                "rule_id": "headless-no-frontend-dependencies",
+                "source": "src/coding_agent/compose.cpp",
+                "owner": "architecture-maintainers",
+                "removal_ticket": "#623",
+                "expires": "2099-12-31",
+                "reason": "test migration exception",
+            }
+        ]
+        manifest = pg.parse_manifest(data)
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/compose.cpp",
+                "cch/tui/Render.hpp",
+                manifest=manifest,
+            )
+        self.assertEqual(diagnostics, [])
 
 
 class CompileContextTest(unittest.TestCase):

@@ -35,6 +35,7 @@ It uses only the Python standard library and requires Python 3.12 or newer.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -43,7 +44,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
-MANIFEST_SCHEMA_VERSION = 2
+MANIFEST_SCHEMA_VERSION = 3
 
 # The closed role vocabulary. The manifest's ``roles`` list must be exactly
 # this set; a target may declare only one of these roles.
@@ -111,6 +112,8 @@ RULE_FORBIDDEN_EXCEPTION_FLAG = "PARITY-7001"
 RULE_EXCEPTION_ENABLED_TARGET = "PARITY-7002"
 RULE_EXCEPTION_POINTER_NOT_ALLOWLISTED = "PARITY-7003"
 RULE_EXCEPTION_RETHROW_FORBIDDEN = "PARITY-7004"
+RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE = "PARITY-8001"
+RULE_EXPIRED_ARCHITECTURE_EXCEPTION = "PARITY-8002"
 
 
 class SchemaViolation(Exception):
@@ -159,9 +162,36 @@ class ExceptionPolicy:
 
 
 @dataclass(frozen=True)
+class ArchitectureRule:
+    rule_id: str
+    source_prefixes: tuple[str, ...]
+    excluded_source_prefixes: tuple[str, ...]
+    forbidden_include_prefixes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ArchitectureException:
+    exception_id: str
+    rule_id: str
+    source: str
+    owner: str
+    removal_ticket: str
+    expires: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class ArchitectureContract:
+    schema_version: int
+    name: str
+    rules: tuple[ArchitectureRule, ...]
+    exceptions: tuple[ArchitectureException, ...]
+
+
+@dataclass(frozen=True)
 class Manifest:
     schema_version: int
-    baseline_commit: str
+    architecture_contract: ArchitectureContract
     owners: dict[str, Owner]
     roles: frozenset[str]
     external_families: frozenset[str]
@@ -302,7 +332,15 @@ def parse_manifest(data: Any) -> Manifest:
     _check_unknown_keys(
         data,
         frozenset(
-            {"schema_version", "baseline_commit", "owners", "roles", "external_families", "evidence", "exception_policy"}
+            {
+                "schema_version",
+                "architecture_contract",
+                "owners",
+                "roles",
+                "external_families",
+                "evidence",
+                "exception_policy",
+            }
         ),
         "manifest",
         RULE_UNKNOWN_MANIFEST_FIELD,
@@ -321,11 +359,295 @@ def parse_manifest(data: Any) -> Manifest:
             f"{MANIFEST_SCHEMA_VERSION}",
         )
 
-    baseline_commit = _require_string(
-        _require_member(data, "baseline_commit", "manifest", RULE_MISSING_MANIFEST_FIELD),
-        "baseline_commit",
-        "manifest",
+    architecture_contract_raw = _require_member(
+        data, "architecture_contract", "manifest", RULE_MISSING_MANIFEST_FIELD
+    )
+    _require_object(
+        architecture_contract_raw,
+        "manifest.architecture_contract",
         RULE_INVALID_MANIFEST_VALUE,
+    )
+    architecture_contract_context = "manifest.architecture_contract"
+    _check_unknown_keys(
+        architecture_contract_raw,
+        frozenset({"schema_version", "name", "rules", "exceptions"}),
+        architecture_contract_context,
+        RULE_UNKNOWN_MANIFEST_FIELD,
+    )
+    architecture_contract_schema = _require_int(
+        _require_member(
+            architecture_contract_raw,
+            "schema_version",
+            architecture_contract_context,
+            RULE_MISSING_MANIFEST_FIELD,
+        ),
+        "schema_version",
+        architecture_contract_context,
+        RULE_INVALID_MANIFEST_VALUE,
+    )
+    if architecture_contract_schema != 1:
+        _fail(
+            RULE_INVALID_MANIFEST_VALUE,
+            f"unknown architecture contract schema_version {architecture_contract_schema}; "
+            "supported version is 1",
+        )
+    architecture_contract_name = _require_string(
+        _require_member(
+            architecture_contract_raw,
+            "name",
+            architecture_contract_context,
+            RULE_MISSING_MANIFEST_FIELD,
+        ),
+        "name",
+        architecture_contract_context,
+        RULE_INVALID_MANIFEST_VALUE,
+    )
+
+    def _contract_paths(entry: dict[str, Any], field: str, context: str) -> tuple[str, ...]:
+        values = _require_member(entry, field, context, RULE_MISSING_MANIFEST_FIELD)
+        if not isinstance(values, list) or not values or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field '{field}' at {context} must be a non-empty list of strings",
+            )
+        result: list[str] = []
+        for value in values:
+            normalized = value.replace("\\", "/")
+            if os.path.isabs(value) or ".." in normalized.split("/"):
+                _fail(
+                    RULE_INVALID_MANIFEST_VALUE,
+                    f"contract path '{value}' at {context} must be repository-relative and "
+                    "must not escape the project root",
+                )
+            result.append(normalized)
+        if len(result) != len(set(result)):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field '{field}' at {context} contains duplicate entries",
+            )
+        return tuple(result)
+
+    rules_raw = _require_member(
+        architecture_contract_raw,
+        "rules",
+        architecture_contract_context,
+        RULE_MISSING_MANIFEST_FIELD,
+    )
+    if not isinstance(rules_raw, list) or not rules_raw:
+        _fail(
+            RULE_INVALID_MANIFEST_VALUE,
+            f"field 'rules' at {architecture_contract_context} must be a non-empty list",
+        )
+    architecture_rules: list[ArchitectureRule] = []
+    rule_ids: set[str] = set()
+    for position, entry in enumerate(rules_raw):
+        rule_context = f"{architecture_contract_context}.rules[{position}]"
+        _require_object(entry, rule_context, RULE_INVALID_MANIFEST_VALUE)
+        _check_unknown_keys(
+            entry,
+            frozenset(
+                {
+                    "id",
+                    "source_prefixes",
+                    "excluded_source_prefixes",
+                    "forbidden_include_prefixes",
+                }
+            ),
+            rule_context,
+            RULE_UNKNOWN_MANIFEST_FIELD,
+        )
+        rule_id = _require_string(
+            _require_member(entry, "id", rule_context, RULE_MISSING_MANIFEST_FIELD),
+            "id",
+            rule_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        if rule_id in rule_ids:
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture rule id '{rule_id}' is declared more than once",
+            )
+        rule_ids.add(rule_id)
+        source_prefixes = _contract_paths(entry, "source_prefixes", rule_context)
+        excluded_value = _require_member(
+            entry, "excluded_source_prefixes", rule_context, RULE_MISSING_MANIFEST_FIELD
+        )
+        if not isinstance(excluded_value, list) or any(
+            not isinstance(value, str) or not value for value in excluded_value
+        ):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field 'excluded_source_prefixes' at {rule_context} must be a list of strings",
+            )
+        excluded_source_prefixes = tuple(
+            value.replace("\\", "/") for value in excluded_value
+        )
+        if len(excluded_source_prefixes) != len(set(excluded_source_prefixes)):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field 'excluded_source_prefixes' at {rule_context} contains duplicate entries",
+            )
+        for prefix in excluded_source_prefixes:
+            if os.path.isabs(prefix) or ".." in prefix.split("/"):
+                _fail(
+                    RULE_INVALID_MANIFEST_VALUE,
+                    f"contract path '{prefix}' at {rule_context} must be repository-relative and "
+                    "must not escape the project root",
+                )
+        forbidden_include_prefixes = _contract_paths(
+            entry, "forbidden_include_prefixes", rule_context
+        )
+        architecture_rules.append(
+            ArchitectureRule(
+                rule_id,
+                source_prefixes,
+                excluded_source_prefixes,
+                forbidden_include_prefixes,
+            )
+        )
+
+    exceptions_raw = _require_member(
+        architecture_contract_raw,
+        "exceptions",
+        architecture_contract_context,
+        RULE_MISSING_MANIFEST_FIELD,
+    )
+    if not isinstance(exceptions_raw, list):
+        _fail(
+            RULE_INVALID_MANIFEST_VALUE,
+            f"field 'exceptions' at {architecture_contract_context} must be a list",
+        )
+    architecture_exceptions: list[ArchitectureException] = []
+    exception_ids: set[str] = set()
+    for position, entry in enumerate(exceptions_raw):
+        exception_context = f"{architecture_contract_context}.exceptions[{position}]"
+        _require_object(entry, exception_context, RULE_INVALID_MANIFEST_VALUE)
+        _check_unknown_keys(
+            entry,
+            frozenset(
+                {
+                    "id",
+                    "rule_id",
+                    "source",
+                    "owner",
+                    "removal_ticket",
+                    "expires",
+                    "reason",
+                }
+            ),
+            exception_context,
+            RULE_UNKNOWN_MANIFEST_FIELD,
+        )
+        exception_id = _require_string(
+            _require_member(entry, "id", exception_context, RULE_MISSING_MANIFEST_FIELD),
+            "id",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        if exception_id in exception_ids:
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception id '{exception_id}' is declared more than once",
+            )
+        exception_ids.add(exception_id)
+        exception_rule_id = _require_string(
+            _require_member(entry, "rule_id", exception_context, RULE_MISSING_MANIFEST_FIELD),
+            "rule_id",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        if exception_rule_id not in rule_ids:
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception '{exception_id}' references unknown rule "
+                f"'{exception_rule_id}'",
+            )
+        exception_source = _require_string(
+            _require_member(entry, "source", exception_context, RULE_MISSING_MANIFEST_FIELD),
+            "source",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        ).replace("\\", "/")
+        if os.path.isabs(exception_source) or ".." in exception_source.split("/"):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception source '{exception_source}' must be repository-relative "
+                "and must not escape the project root",
+            )
+        matching_rule = next(rule for rule in architecture_rules if rule.rule_id == exception_rule_id)
+        if not any(
+            exception_source == prefix.rstrip("/")
+            or exception_source.startswith(prefix.rstrip("/") + "/")
+            for prefix in matching_rule.source_prefixes
+        ):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception '{exception_id}' source '{exception_source}' is outside "
+                f"rule '{exception_rule_id}' source_prefixes",
+            )
+        exception_owner = _require_string(
+            _require_member(entry, "owner", exception_context, RULE_MISSING_MANIFEST_FIELD),
+            "owner",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        removal_ticket = _require_string(
+            _require_member(
+                entry, "removal_ticket", exception_context, RULE_MISSING_MANIFEST_FIELD
+            ),
+            "removal_ticket",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        if not removal_ticket.startswith("#") or not removal_ticket[1:].isdigit():
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception '{exception_id}' removal_ticket must be a GitHub "
+                "issue reference such as '#623'",
+            )
+        expires = _require_string(
+            _require_member(entry, "expires", exception_context, RULE_MISSING_MANIFEST_FIELD),
+            "expires",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        try:
+            parsed_expires = datetime.date.fromisoformat(expires)
+        except ValueError:
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception '{exception_id}' expires must be an ISO date",
+            )
+        if parsed_expires.isoformat() != expires:
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"architecture exception '{exception_id}' expires must use YYYY-MM-DD",
+            )
+        reason = _require_string(
+            _require_member(entry, "reason", exception_context, RULE_MISSING_MANIFEST_FIELD),
+            "reason",
+            exception_context,
+            RULE_INVALID_MANIFEST_VALUE,
+        )
+        architecture_exceptions.append(
+            ArchitectureException(
+                exception_id,
+                exception_rule_id,
+                exception_source,
+                exception_owner,
+                removal_ticket,
+                expires,
+                reason,
+            )
+        )
+
+    architecture_contract = ArchitectureContract(
+        architecture_contract_schema,
+        architecture_contract_name,
+        tuple(architecture_rules),
+        tuple(architecture_exceptions),
     )
 
     exception_policy_raw = _require_member(
@@ -630,7 +952,7 @@ def parse_manifest(data: Any) -> Manifest:
 
     return Manifest(
         schema_version,
-        baseline_commit,
+        architecture_contract,
         owners,
         roles,
         frozenset(families),
@@ -1432,6 +1754,88 @@ def _check_evidence_reference(
         )
 
 
+def _path_matches_prefix(path: str, prefix: str) -> bool:
+    normalized_path = path.replace("\\", "/")
+    normalized_prefix = prefix.replace("\\", "/").rstrip("/")
+    return normalized_path == normalized_prefix or normalized_path.startswith(normalized_prefix + "/")
+
+
+def _relative_project_path(path: str, project_root: Optional[str]) -> str:
+    if project_root is None:
+        return path.replace("\\", "/")
+    candidate = path if os.path.isabs(path) else os.path.join(project_root, path)
+    return os.path.relpath(candidate, project_root).replace(os.sep, "/")
+
+
+def _architecture_exception_matches(
+    contract: ArchitectureContract,
+    rule_id: str,
+    source: str,
+) -> bool:
+    return any(
+        exception.rule_id == rule_id and exception.source == source
+        for exception in contract.exceptions
+    )
+
+
+def _architecture_include_diagnostic(
+    manifest: Manifest,
+    source: str,
+    include_path: str,
+    include_line: int,
+    target_name: str,
+    project_root: Optional[str],
+) -> Optional[Diagnostic]:
+    relative_source = _relative_project_path(source, project_root)
+    normalized_include = include_path.replace("\\", "/")
+    for rule in manifest.architecture_contract.rules:
+        if not any(
+            _path_matches_prefix(relative_source, prefix)
+            for prefix in rule.source_prefixes
+        ):
+            continue
+        if any(
+            _path_matches_prefix(relative_source, prefix)
+            for prefix in rule.excluded_source_prefixes
+        ):
+            continue
+        if not any(
+            _path_matches_prefix(normalized_include, prefix)
+            for prefix in rule.forbidden_include_prefixes
+        ):
+            continue
+        if _architecture_exception_matches(
+            manifest.architecture_contract, rule.rule_id, relative_source
+        ):
+            continue
+        return Diagnostic(
+            RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE,
+            f"Product Architecture Contract rule '{rule.rule_id}' forbids headless source "
+            f"'{relative_source}' from including frontend header '{include_path}'",
+            target=target_name,
+            dependency=include_path,
+            path=f"{source}:{include_line}",
+        )
+    return None
+
+
+def _check_architecture_exception_dates(
+    manifest: Manifest,
+    diagnostics: list[Diagnostic],
+) -> None:
+    today = datetime.date.today()
+    for exception in manifest.architecture_contract.exceptions:
+        if datetime.date.fromisoformat(exception.expires) < today:
+            diagnostics.append(
+                Diagnostic(
+                    RULE_EXPIRED_ARCHITECTURE_EXCEPTION,
+                    f"architecture exception '{exception.exception_id}' expired on "
+                    f"{exception.expires}; remove it or renew it with an owner and removal ticket",
+                    path=exception.source,
+                )
+            )
+
+
 def _check_includes(
     manifest: Manifest,
     index: Index,
@@ -1443,6 +1847,7 @@ def _check_includes(
         return
 
     source_owner: dict[str, str] = {}
+    source_target: dict[str, str] = {}
     forced_owner: dict[str, str] = {}
     pch_owner: dict[str, str] = {}
     compiled_sources: set[str] = set()
@@ -1451,7 +1856,9 @@ def _check_includes(
             continue
         owner = target.owner or ""
         for source in target.sources:
-            source_owner[_norm_path(source)] = owner
+            normalized_source = _norm_path(source)
+            source_owner[normalized_source] = owner
+            source_target[normalized_source] = target.name
             if _is_compiled_source(source):
                 compiled_sources.add(_norm_path(source))
         for forced in target.forced_includes:
@@ -1500,10 +1907,13 @@ def _check_includes(
         spath = _norm_path(scanned.path)
         if spath in source_owner:
             from_owner = source_owner[spath]
+            from_target = source_target[spath]
         elif spath in forced_owner:
             from_owner = forced_owner[spath]
+            from_target = from_owner
         elif spath in pch_owner:
             from_owner = pch_owner[spath]
+            from_target = from_owner
         else:
             diagnostics.append(
                 Diagnostic(
@@ -1539,14 +1949,23 @@ def _check_includes(
                         path=f"{scanned.path}:{include.line}",
                     )
                 )
-                continue
-            if to_owner is None:
-                continue
-            edge = _include_edge_diagnostic(
-                from_owner, to_owner, manifest, scanned.path, include.path, include.line
-            )
-            if edge is not None:
-                diagnostics.append(edge)
+            else:
+                architecture_diag = _architecture_include_diagnostic(
+                    manifest,
+                    scanned.path,
+                    include.path,
+                    include.line,
+                    from_target,
+                    project_root,
+                )
+                if architecture_diag is not None:
+                    diagnostics.append(architecture_diag)
+                if to_owner is not None:
+                    edge = _include_edge_diagnostic(
+                        from_owner, to_owner, manifest, scanned.path, include.path, include.line
+                    )
+                    if edge is not None:
+                        diagnostics.append(edge)
 
 
 def _check_exception_sources(
@@ -1781,6 +2200,7 @@ def check(
     """Compare the resolved evidence against the strict manifest and return all findings."""
     diagnostics: list[Diagnostic] = []
 
+    _check_architecture_exception_dates(manifest, diagnostics)
     _check_evidence_reference(manifest, index.producer, index.schema_version, diagnostics)
 
     if index.manifest_digest != manifest_digest:
