@@ -732,9 +732,7 @@ TEST_CASE("disabled compaction settings suppress both automatic triggers",
     paths.workspace.write(
         "agent/settings.json",
         R"({"compaction": {"enabled": false}})");
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR",
-        (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
 
     auto under_test = make_trigger_session(paths, runtime, {overflow_terminal()});
     auto* session = under_test.session.get();

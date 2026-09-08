@@ -44,7 +44,7 @@ mkdir -p "$work/home" "$work/agent"
 
 # Scrubbed environment: no inherited credentials, proxies, or config.
 run_relocated() {
-	env -i PATH=/usr/bin:/bin HOME="$work/home" PI_CODING_AGENT_DIR="$work/agent" \
+	env -i PATH=/usr/bin:/bin HOME="$work/home" PIKE_CODING_AGENT_DIR="$work/agent" \
 		"$relocated_binary" "$@"
 }
 

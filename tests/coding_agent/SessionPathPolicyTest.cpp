@@ -132,7 +132,7 @@ TEST_CASE("automatic session target calculation is side effect free", "[coding_a
 TEST_CASE("automatic session publication correlates path header and identity",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     config_dir.set((temp.path() / "agent").string());
     const auto sessions_root = temp.path() / "agent" / "sessions";
     const auto workspace = temp.path() / "workspace";
@@ -171,7 +171,7 @@ TEST_CASE("automatic session publication correlates path header and identity",
 TEST_CASE("automatic publication makes default directories and file private",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     config_dir.set((temp.path() / "agent").string());
     const auto sessions_root = temp.path() / "agent" / "sessions";
     const auto workspace = temp.path() / "workspace";
@@ -363,7 +363,7 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
 TEST_CASE("automatic publication rejects symbolic link directories",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
     std::filesystem::create_directory(config_root);
     config_dir.set(config_root.string());
@@ -392,7 +392,7 @@ TEST_CASE("automatic publication rejects symbolic link directories",
 TEST_CASE("automatic publication failures include attempted target and reason",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
     std::filesystem::create_directory(config_root);
     config_dir.set(config_root.string());
@@ -421,7 +421,7 @@ TEST_CASE("automatic publication failures include attempted target and reason",
 TEST_CASE("automatic publication rejects a relative sessions root",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     config_dir.set("relative-agent");
 
     auto published = runtime::publish_session(
@@ -443,7 +443,7 @@ TEST_CASE("automatic publication rejects a relative sessions root",
 TEST_CASE("automatic publication fails when the user sessions root is unresolved",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home{"HOME"};
     tests::EnvVarGuard user_profile{"USERPROFILE"};
     config_dir.set("");

@@ -124,14 +124,14 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
 }
 
 /// One isolated assembly: a temp workspace for the session file and a temp
-/// Agent Config Directory (`PI_CODING_AGENT_DIR`) whose models.json and
+/// Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json and
 /// settings.json drive runtime creation deterministically, plus the host
 /// hooks wired to the fixture's io_context like the interactive host's
 /// executor.
 struct ModelFlowFixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
 

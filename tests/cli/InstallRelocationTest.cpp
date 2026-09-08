@@ -178,7 +178,7 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
     std::error_code home_error;
     fs::create_directories(home, home_error);
     const std::string clean_env = "env -i PATH=/usr/bin:/bin HOME=" + shell_quote(home) +
-        " PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " ";
+                                  " PIKE_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " ";
     const std::string relocated_run =
         "cd " + shell_quote(root.path()) + " && " + clean_env + shell_quote(relocated_binary);
 
@@ -207,11 +207,11 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
 
     // ── Offline fake-provider smoke outside the build tree (in-process seam) ──
     auto smoke = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--print", "hello"},
-        .cwd = root.path(),
-        .env = {{"HOME", home.string()}, {"PI_CODING_AGENT_DIR", agent_dir.string()}},
-        .stdin_text = "",
-        .models = nullptr,
+            .args = {"--print", "hello"},
+            .cwd = root.path(),
+            .env = {{"HOME", home.string()}, {"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .stdin_text = "",
+            .models = nullptr,
     });
     INFO(smoke.stdout_text + smoke.stderr_text);
     REQUIRE(smoke.exit_code == 0);

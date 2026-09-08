@@ -24,6 +24,26 @@ std::vector<char*> argv_from_strings(std::vector<std::string>& args) {
 
 } // namespace
 
+TEST_CASE("parse_args records the explicit pi import command", "[cli][parse][compat-pi][issue626]") {
+    std::vector<std::string> args{"pike", "import", "--from", "/tmp/pi-agent", "--to=/tmp/pike-agent"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(parsed->import_command);
+    REQUIRE(parsed->import_source.has_value());
+    REQUIRE(parsed->import_destination.has_value());
+    CHECK(*parsed->import_source == "/tmp/pi-agent");
+    CHECK(*parsed->import_destination == "/tmp/pike-agent");
+}
+
+TEST_CASE("parse_args rejects malformed pi import options", "[cli][parse][compat-pi][issue626]") {
+    std::vector<std::string> args{"pike", "import", "--from"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("required PATH missing") != std::string::npos);
+}
+
 TEST_CASE("parse_args leaves model selection empty when model flags omitted", "[cli][parse][spec]") {
     std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
@@ -527,7 +547,7 @@ TEST_CASE("parse_args help text advertises the session-directory override preced
     REQUIRE(parsed);
     REQUIRE(parsed->help);
     CHECK(parsed->help_text.find("--session-dir") != std::string::npos);
-    CHECK(parsed->help_text.find("PI_CODING_AGENT_SESSION_DIR") != std::string::npos);
+    CHECK(parsed->help_text.find("PIKE_CODING_AGENT_SESSION_DIR") != std::string::npos);
     CHECK(parsed->help_text.find("sessionDir") != std::string::npos);
 }
 

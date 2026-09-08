@@ -347,22 +347,25 @@ TEST_CASE("available_theme_names lists builtins custom directory and registered 
 TEST_CASE("discover_themes parses documents and dedupes with pi collision diagnostics",
         "[coding_agent][theme][controller][issue415][spec]") {
     std::vector<coding_agent::LoadedThemeResource> documents{{
-        .path = ".pi/themes/project.json",
-        .json = tests::fixture_theme("shared", "#111111"),
-        .scope = coding_agent::SourceScope::Project,
-    }, {
-        .path = "/home/user/.pi/agent/themes/user.json",
-        .json = tests::fixture_theme("user-theme", "#222222"),
-        .scope = coding_agent::SourceScope::User,
-    }, {
-        .path = "shared.json",
-        .json = tests::fixture_theme("shared", "#333333"),
-        .scope = coding_agent::SourceScope::Temporary,
-    }, {
-        .path = "broken.json",
-        .json = "{not json",
-        .scope = coding_agent::SourceScope::Temporary,
-    }};
+                                                                     .path = ".pi/themes/project.json",
+                                                                     .json = tests::fixture_theme("shared", "#111111"),
+                                                                     .scope = coding_agent::SourceScope::Project,
+                                                             },
+            {
+                    .path = "/home/user/.pike/agent/themes/user.json",
+                    .json = tests::fixture_theme("user-theme", "#222222"),
+                    .scope = coding_agent::SourceScope::User,
+            },
+            {
+                    .path = "shared.json",
+                    .json = tests::fixture_theme("shared", "#333333"),
+                    .scope = coding_agent::SourceScope::Temporary,
+            },
+            {
+                    .path = "broken.json",
+                    .json = "{not json",
+                    .scope = coding_agent::SourceScope::Temporary,
+            }};
 
     auto discovery = coding_agent::tui::discover_themes(std::move(documents));
 
@@ -375,8 +378,7 @@ TEST_CASE("discover_themes parses documents and dedupes with pi collision diagno
     const coding_agent::tui::RgbThemeColor project_accent{.red = 0x11, .green = 0x11, .blue = 0x11};
     CHECK(accent_of(discovery.themes[0].theme) == project_accent);
     CHECK(discovery.themes[1].theme.name == "user-theme");
-    CHECK(discovery.themes[1].source_path ==
-        std::filesystem::path{"/home/user/.pi/agent/themes/user.json"});
+    CHECK(discovery.themes[1].source_path == std::filesystem::path{"/home/user/.pike/agent/themes/user.json"});
 
     const auto collision = std::find_if(
         discovery.diagnostics.begin(),

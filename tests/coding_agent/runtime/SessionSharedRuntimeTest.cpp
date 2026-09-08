@@ -33,7 +33,7 @@ namespace {
 struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::RuntimeFixture runtime;
 
     Fixture() { agent_dir_guard.set(agent_dir.path().string()); }

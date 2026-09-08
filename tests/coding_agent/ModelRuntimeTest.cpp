@@ -174,13 +174,13 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
-    CHECK((*runtime)->agent_dir() == (home.path() / ".pi" / "agent"));
-    CHECK((*runtime)->models_path() == (home.path() / ".pi" / "agent" / "models.json"));
+    CHECK((*runtime)->agent_dir() == (home.path() / ".pike" / "agent"));
+    CHECK((*runtime)->models_path() == (home.path() / ".pike" / "agent" / "models.json"));
     CHECK_FALSE((*runtime)->get_error().has_value());
     CHECK((*runtime)->model("openai-codex", "gpt-5.5").has_value());
     CHECK((*runtime)->model("kimi-coding", "kimi-for-coding").has_value());
@@ -198,13 +198,26 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
     CHECK_FALSE((*runtime)->provider("missing-provider").has_value());
 }
 
+TEST_CASE("ModelRuntime never reads a legacy pi config tree", "[coding_agent][model-runtime][issue626][spec]") {
+    tests::TempWorkspace home;
+    tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
+    home_guard.set(home.path().string());
+    home.write(".pi/agent/models.json", "{not valid json");
+
+    auto runtime = coding_agent::ModelRuntime::create({});
+    REQUIRE(runtime);
+    CHECK((*runtime)->agent_dir() == home.path() / ".pike" / "agent");
+    CHECK_FALSE((*runtime)->get_error().has_value());
+}
+
 TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics",
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", "{not valid json");
+    home.write(".pike/agent/models.json", "{not valid json");
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
@@ -218,9 +231,9 @@ TEST_CASE("ModelRuntime per-provider composition failure falls back to the built
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {"kimi-coding": {"name": "Broken Kimi"}}
     })");
 
@@ -237,14 +250,14 @@ TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers",
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
     CHECK_FALSE((*runtime)->model("deepseek", "deepseek-v4-flash").has_value());
 
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -273,11 +286,11 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
 
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     const auto models_json = read_fixture_text("models/models.json");
     REQUIRE_FALSE(models_json.empty());
-    home.write(".pi/agent/models.json", models_json);
+    home.write(".pike/agent/models.json", models_json);
 
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
             coding_agent::ModelRuntimeTransportTestOptions{
@@ -342,11 +355,11 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     // Invalid models.json makes the post-login refresh fail, which must not
     // fail the login call.
-    home.write(".pi/agent/models.json", "{not valid json");
+    home.write(".pike/agent/models.json", "{not valid json");
 
     auto store = std::make_shared<MemoryCredentialStore>();
     auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
@@ -378,7 +391,7 @@ TEST_CASE(
         "ModelRuntime logout removes the credential and recomposes", "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
 
     auto store = std::make_shared<MemoryCredentialStore>();
@@ -401,7 +414,7 @@ TEST_CASE(
 TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     tests::EnvVarGuard kimi_key{"KIMI_API_KEY"};
     home_guard.set(home.path().string());
     kimi_key.unset();
@@ -422,9 +435,9 @@ TEST_CASE("ModelRuntime default-model table selects the runtime default",
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -446,9 +459,9 @@ TEST_CASE("ModelRuntime configured apiKey env templates surface for secret filte
         "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -474,11 +487,11 @@ TEST_CASE(
     });
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     tests::EnvVarGuard secret_guard{"DEEPSEEK_SECRET"};
     home_guard.set(home.path().string());
     secret_guard.set("dummy-env-key");
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -515,11 +528,11 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain",
         "[coding_agent][model-runtime][issue346][precedence][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     tests::EnvVarGuard secret{"DEEPSEEK_SECRET"};
     tests::EnvVarGuard kimi{"KIMI_API_KEY"};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -530,8 +543,7 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain",
       }
     })");
 
-    auto storage = std::make_shared<coding_agent::AuthStorage>(
-        home.path() / ".pi" / "agent" / "auth.json");
+    auto storage = std::make_shared<coding_agent::AuthStorage>(home.path() / ".pike" / "agent" / "auth.json");
     auto runtime = coding_agent::ModelRuntime::create(
         coding_agent::ModelRuntimeOptions{.credentials = storage});
     REQUIRE(runtime);
@@ -623,9 +635,9 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     });
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", R"({
+    home.write(".pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -662,7 +674,7 @@ TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not confi
         "[coding_agent][model-runtime][issue406][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     kimi_guard.unset();

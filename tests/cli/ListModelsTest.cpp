@@ -140,7 +140,7 @@ TEST_CASE("list-models with no fuzzy matches prints pi's no-match message", "[cl
 }
 
 TEST_CASE("list-models with no models prints the no-models message and exits 0",
-        "[cli][list-models][issue404][diverge][issue626]") {
+        "[cli][list-models][issue404][spec][issue626]") {
     // The default scripted fake providers have empty catalogs, so the
     // available snapshot is empty.
     auto result = run_list_models({"--list-models"}, {});
@@ -156,7 +156,7 @@ TEST_CASE("list-models runs in-memory: no session file is created and help/versi
         "[cli][list-models][issue404][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     dir_guard.set(agent_dir.path().string());
 
     auto result = tests::run_cli(tests::CliRunOptions{
@@ -178,15 +178,15 @@ TEST_CASE("list-models runs in-memory: no session file is created and help/versi
 }
 
 TEST_CASE("list-models reports the models.json load error as a stderr warning",
-        "[cli][list-models][issue404][diverge][issue626]") {
+        "[cli][list-models][issue404][spec][issue626]") {
     // A real runtime over a broken models.json carries the config diagnostic;
     // the CLI surface prints it as pi's yellow warning (colorless here). The
     // built-in providers still compose structurally, so the table prints too.
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", "{not valid json");
+    home.write(".pike/agent/models.json", "{not valid json");
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);

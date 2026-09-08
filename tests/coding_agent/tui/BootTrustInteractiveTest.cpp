@@ -54,7 +54,7 @@ namespace {
     return text;
 }
 
-/// A TempWorkspace pointed to by PI_CODING_AGENT_DIR so the trust store and
+/// A TempWorkspace pointed to by PIKE_CODING_AGENT_DIR so the trust store and
 /// the interactive host's agent config directory are one deterministic
 /// location (the boot prompt and SessionFactory share
 /// `coding_agent::trust_store_file_path()`).
@@ -192,7 +192,7 @@ struct BootTrustRun {
 
 TEST_CASE("boot trust prompt shows getProjectTrustOptions choices as a main-TUI overlay",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -215,7 +215,7 @@ TEST_CASE("boot trust prompt shows getProjectTrustOptions choices as a main-TUI 
 
 TEST_CASE("boot trust prompt selection saves the decision and binds a trusted session",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -247,7 +247,7 @@ TEST_CASE("boot trust prompt selection saves the decision and binds a trusted se
 
 TEST_CASE("boot trust prompt cancel leaves the project untrusted with the chat warning",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -272,7 +272,7 @@ TEST_CASE("boot trust prompt cancel leaves the project untrusted with the chat w
 
 TEST_CASE(
         "approve flag overrides the boot trust prompt for the run", "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -293,7 +293,7 @@ TEST_CASE(
 
 TEST_CASE("no-approve flag overrides the boot trust prompt to untrusted",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -313,7 +313,7 @@ TEST_CASE("no-approve flag overrides the boot trust prompt to untrusted",
 
 TEST_CASE("async trust detection failure aborts boot before session creation",
         "[coding_agent][tui][boot-trust][issue560][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
 
@@ -337,7 +337,7 @@ TEST_CASE("async trust detection failure aborts boot before session creation",
 
 TEST_CASE("explicit trust override bypasses a failing async detection",
         "[coding_agent][tui][boot-trust][issue560][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -363,7 +363,7 @@ TEST_CASE("explicit trust override bypasses a failing async detection",
 }
 
 TEST_CASE("a saved trust decision skips the boot prompt", "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -387,7 +387,7 @@ TEST_CASE("a saved trust decision skips the boot prompt", "[coding_agent][tui][b
 
 TEST_CASE("boot session-only trust survives an in-session session replacement",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -449,7 +449,7 @@ TEST_CASE("CLI --approve and --no-approve override non-interactive ask to untrus
 
 TEST_CASE("default project trust always skips the boot prompt and trusts",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -469,7 +469,7 @@ TEST_CASE("default project trust always skips the boot prompt and trusts",
 
 TEST_CASE("default project trust never skips the boot prompt and warns",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
@@ -489,7 +489,7 @@ TEST_CASE("default project trust never skips the boot prompt and warns",
 
 TEST_CASE("boot session creation failure prints pi-style and stops the TUI",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
 
@@ -543,7 +543,7 @@ TEST_CASE("boot session creation failure prints pi-style and stops the TUI",
 
 TEST_CASE("boot registers discovered themes and the settings Theme submenu commits one",
         "[coding_agent][tui][boot-trust][issue415][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     // All three pi sources: trust-gated project `.pi/themes`, the user
@@ -608,7 +608,7 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
 
 TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback message",
         "[coding_agent][tui][boot-trust][issue425][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
     // An explicit `--theme` document that fails validation (missing required
@@ -667,7 +667,7 @@ TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback
 
 TEST_CASE("/reload persists the implicit project trust decision when resources appear",
         "[coding_agent][tui][boot-trust][reload][issue418][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
 
@@ -708,7 +708,7 @@ TEST_CASE("/reload persists the implicit project trust decision when resources a
 
 TEST_CASE("/reload does not persist implicit trust when detection fails",
         "[coding_agent][tui][boot-trust][reload][issue560][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
 
@@ -741,7 +741,7 @@ TEST_CASE("/reload does not persist implicit trust when detection fails",
 
 TEST_CASE("/reload without the implicit-trust condition keeps the plain pi status",
         "[coding_agent][tui][boot-trust][reload][issue418][spec]") {
-    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
     agent_dir.set(fixture.agent_dir.string());
 

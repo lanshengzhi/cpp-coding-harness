@@ -52,13 +52,13 @@ constexpr std::string_view kKeyedModels = R"({
 })";
 
 /// One isolated assembly fixture: a temp workspace for the session files and
-/// a temp Agent Config Directory (`PI_CODING_AGENT_DIR`) whose models.json
+/// a temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json
 /// and keybindings.json drive runtime creation and the unbound
 /// `app.session.*` triggers deterministically.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;

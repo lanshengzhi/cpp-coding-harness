@@ -78,7 +78,7 @@ struct AutomaticSessionTarget {
     const std::filesystem::path& workspace,
     const std::filesystem::path& home_dir);
 
-/// The pi sessionDir chain: `--session-dir`, then PI_CODING_AGENT_SESSION_DIR,
+/// The pi sessionDir chain: `--session-dir`, then PIKE_CODING_AGENT_SESSION_DIR,
 /// then the settings `sessionDir` value; the first non-empty value resolves to
 /// an absolute directory (empty values are skipped). The caller supplies the
 /// environment value so the helper stays pure. A nullopt result means no

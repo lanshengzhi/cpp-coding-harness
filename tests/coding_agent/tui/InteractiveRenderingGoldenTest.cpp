@@ -250,7 +250,7 @@ struct ModelFixture {
     std::filesystem::path workspace;
     tests::TempWorkspace agent_dir;
     tests::RuntimeFixture runtime;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
@@ -459,7 +459,7 @@ TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
         "[coding_agent][tui][rendering][issue422][compat-pi]") {
     auto workspace = rendering_workspace_path("fork");
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     dir_guard.set(agent_dir.path().string());

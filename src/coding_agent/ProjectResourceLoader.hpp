@@ -60,7 +60,7 @@ struct LoadedProjectResources {
 /// trust-deferred loading at session creation and on `/reload`.
 struct ProjectResourceLoadingRequest {
     std::filesystem::path workspace;
-    /// User-level resource root (`~/.pi/agent`). User skills load from
+    /// User-level resource root (`~/.pike/agent`). User skills load from
     /// `<agent_config_directory>/skills` (pi discovery mode, root-level `.md`
     /// included) and user prompt templates from
     /// `<agent_config_directory>/prompts`; an empty path skips them.

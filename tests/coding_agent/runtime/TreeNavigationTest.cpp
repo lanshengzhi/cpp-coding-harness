@@ -46,7 +46,7 @@ namespace {
 struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     std::filesystem::path session_file;
     tests::RuntimeFixture runtime;

@@ -110,6 +110,7 @@ struct NormalizedArgv {
                        "\n"
                        "Usage:\n"
                        "  pike [options] [@files...] [messages...]\n"
+                       "  pike import [<pi-agent-dir>] [<pike-agent-dir>]\n"
                        "\n"
                        "Options:\n"
                        "  --provider <name>              Provider name\n"
@@ -154,11 +155,15 @@ struct NormalizedArgv {
                        "  --help, -h                     Show this help\n"
                        "  --version, -v                  Show version number\n"
                        "\n"
+                       "Import: `pike import` copies pi config and sessions once into the product\n"
+                       "namespace. It never reads pi state during normal runtime and never\n"
+                       "overwrites an existing destination. Use `pike import --help` for options.\n"
+                       "\n"
                        "Sessions: without --session/--resume/--continue/--fork/--no-session, a new\n"
                        "session persists under the agent config directory's workspace-keyed sessions\n"
-                       "root (~/.pi/agent/sessions/<workspace-key>/, root override:\n"
-                       "PI_CODING_AGENT_DIR). Automatic-directory overrides (highest first):\n"
-                       "--session-dir, PI_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
+                       "root (~/.pike/agent/sessions/<workspace-key>/, root override:\n"
+                       "PIKE_CODING_AGENT_DIR). Automatic-directory overrides (highest first):\n"
+                       "--session-dir, PIKE_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
                        "relative values resolve against the workspace. Explicit paths may live\n"
                        "anywhere; --no-session runs in memory without a transcript.\n"
                        "Frontend: --mode text keeps automatic frontend selection (interactive TUI on\n"
@@ -173,6 +178,84 @@ struct NormalizedArgv {
         cch::support::ErrorCode::Validation,
         message,
         message + "\n\n" + help_text());
+}
+
+[[nodiscard]] std::string import_help_text() {
+    return std::string{"pike import [<pi-agent-dir>] [<pike-agent-dir>]\n"
+                       "\n"
+                       "Copy pi configuration and session history into the product namespace.\n"
+                       "The source defaults to ~/.pi/agent and the destination defaults to\n"
+                       "~/.pike/agent. Import never overwrites an existing destination or\n"
+                       "modifies the source. Equivalent options are --from and --to.\n"
+                       "\n"
+                       "Options:\n"
+                       "  --from <dir>                  Pi state directory to read\n"
+                       "  --to <dir>                    Product state directory to create\n"
+                       "  --help, -h                    Show this help\n"};
+}
+
+[[nodiscard]] cch::support::Error import_parse_error(std::string message) {
+    return cch::support::make_error(
+            cch::support::ErrorCode::Validation, message, message + "\n\n" + import_help_text());
+}
+
+[[nodiscard]] cch::support::Expected<CliConfig> parse_import_args(int argc, char** argv) {
+    CliConfig config;
+    config.import_command = true;
+    for (int index = 2; index < argc; ++index) {
+        const std::string_view token{argv[index]};
+        if (token == "--help" || token == "-h") {
+            config.help = true;
+            config.help_text = import_help_text();
+            return config;
+        }
+
+        std::string_view option_name;
+        std::optional<std::string_view> inline_value;
+        if (token == "--from" || token.starts_with("--from=")) {
+            option_name = "--from";
+            if (token.size() > option_name.size() && token[option_name.size()] == '=') {
+                inline_value = token.substr(option_name.size() + 1);
+            }
+        } else if (token == "--to" || token.starts_with("--to=")) {
+            option_name = "--to";
+            if (token.size() > option_name.size() && token[option_name.size()] == '=') {
+                inline_value = token.substr(option_name.size() + 1);
+            }
+        }
+
+        if (!option_name.empty()) {
+            std::string value;
+            if (inline_value) {
+                value = std::string{*inline_value};
+            } else if (index + 1 < argc) {
+                value = argv[++index];
+            } else {
+                return std::unexpected(import_parse_error(std::string{option_name} + ": 1 required PATH missing"));
+            }
+            if (value.empty()) {
+                return std::unexpected(import_parse_error(std::string{option_name} + " cannot be empty"));
+            }
+            auto& target = option_name == "--from" ? config.import_source : config.import_destination;
+            if (target) {
+                return std::unexpected(import_parse_error(std::string{option_name} + " was specified more than once"));
+            }
+            target = std::filesystem::path{std::move(value)};
+            continue;
+        }
+
+        if (token.starts_with('-')) {
+            return std::unexpected(import_parse_error("unknown import option: " + std::string{token}));
+        }
+        if (!config.import_source) {
+            config.import_source = std::filesystem::path{token};
+        } else if (!config.import_destination) {
+            config.import_destination = std::filesystem::path{token};
+        } else {
+            return std::unexpected(import_parse_error("too many import paths; use at most a source and destination"));
+        }
+    }
+    return config;
 }
 
 struct OptionToken {
@@ -309,6 +392,10 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     for (int index = 1; index < argc; ++index) {
         raw_args.emplace_back(argv[index]);
     }
+    if (raw_args.size() > 1 && raw_args[1] == "import") {
+        return parse_import_args(argc, argv);
+    }
+
     auto normalized = normalize_argv(raw_args);
 
     std::string session_text;

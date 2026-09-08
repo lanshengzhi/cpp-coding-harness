@@ -123,7 +123,7 @@ struct LoadedThemeResource {
     std::string path;
     std::string json;
     /// pi `SourceInfo.scope` of the discovering source: `Project` (the
-    /// trust-gated `.pi/themes` directory), `User` (`~/.pi/agent/themes`),
+    /// trust-gated `.pi/themes` directory), `User` (`~/.pike/agent/themes`),
     /// or `Temporary` (an explicit `--theme` path).
     SourceScope scope{SourceScope::Project};
 };

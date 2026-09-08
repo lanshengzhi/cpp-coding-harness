@@ -33,7 +33,7 @@ struct SessionFixture {
     std::vector<std::pair<std::string, std::optional<std::string>>> env;
 
     explicit SessionFixture(std::string name = "agent") : agent_dir(workspace.path() / name) {
-        env.emplace_back("PI_CODING_AGENT_DIR", agent_dir.string());
+        env.emplace_back("PIKE_CODING_AGENT_DIR", agent_dir.string());
     }
 
     /// Run the CLI in the fixture workspace with the isolated agent dir.
@@ -786,7 +786,7 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
     TempWorkspace vanished_launch;
     // The direct assembly calls below resolve the sessions root from the
     // process environment; point it at the continue-session agent dir.
-    EnvVarGuard agent_guard{"PI_CODING_AGENT_DIR"};
+    EnvVarGuard agent_guard{"PIKE_CODING_AGENT_DIR"};
     agent_guard.set(continue_agent.path().string());
 
     // A resume-shaped session whose header cwd (the fixture workspace) is
@@ -812,11 +812,11 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
     const auto continue_session =
         storage_default_dir / "continue-session.jsonl";
     auto launched = run_cli(CliRunOptions{
-        .args = {"--session", continue_session.string(), "from-elsewhere"},
-        .cwd = vanished_launch.path(),
-        .env = {{"PI_CODING_AGENT_DIR", continue_agent.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", continue_session.string(), "from-elsewhere"},
+            .cwd = vanished_launch.path(),
+            .env = {{"PIKE_CODING_AGENT_DIR", continue_agent.path().string()}},
+            .stdin_text = {},
+            .models = {},
     });
     REQUIRE(launched.exit_code == 0);
     REQUIRE(std::filesystem::exists(continue_session));

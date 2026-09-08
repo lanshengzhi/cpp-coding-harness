@@ -130,10 +130,9 @@ support::Expected<std::filesystem::path> resolve_session_dir_value(
     const std::filesystem::path& canonical_workspace,
     const std::filesystem::path& home_dir) {
     if (value.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session directory override is empty",
-            "supply a non-empty --session-dir, PI_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "session directory override is empty",
+                "supply a non-empty --session-dir, PIKE_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
     }
 
     std::filesystem::path resolved;

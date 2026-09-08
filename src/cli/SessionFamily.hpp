@@ -62,7 +62,7 @@ struct SessionFamilyAssembly {
 
 /// pi main.ts `createSessionManager`: assemble the pi session target from the
 /// raw session-family flags. Resolves the session directory chain
-/// (--session-dir, then PI_CODING_AGENT_SESSION_DIR, then the settings
+/// (--session-dir, then PIKE_CODING_AGENT_SESSION_DIR, then the settings
 /// sessionDir value supplied by the caller), resolves `--session`/`--fork`
 /// arguments against the local and global session spaces, prints the
 /// warn-create warning to `error`, and runs the cross-project fork prompt on

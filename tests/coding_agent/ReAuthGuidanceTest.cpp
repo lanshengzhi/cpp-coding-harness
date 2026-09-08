@@ -51,14 +51,14 @@ using namespace cch;
 namespace {
 
 /// One isolated assembly fixture for the preflight tests: a temp workspace
-/// for the session file and a temp Agent Config Directory (`PI_CODING_AGENT_DIR`)
+/// for the session file and a temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`)
 /// whose models.json drives resolution deterministically. Ambient
 /// KIMI_API_KEY is unset so the built-in kimi-coding provider never resolves
 /// as configured unless the test says so.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;

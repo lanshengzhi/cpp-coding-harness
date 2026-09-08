@@ -595,7 +595,7 @@ TEST_CASE("Projection patches converge with the Core snapshot for a streaming to
 }
 
 TEST_CASE("Projection observers converge on tool and run state after a stalled mailbox resync",
-        "[coding_agent][projection][issue622]") {
+        "[coding_agent][projection][issue622][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto partial_count = std::make_shared<std::size_t>(0);

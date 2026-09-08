@@ -183,11 +183,10 @@ TEST_CASE("image_fallback shortens home-prefixed absolute paths without hyperlin
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = false});
     cch::tests::EnvVarGuard home("HOME", std::string{"/tmp/home"});
 
-    const auto result = cch::tui::image_fallback(
-        "image/png",
-        cch::tui::ImagePixelSize{.width = 1280, .height = 720},
-        std::string_view{"/tmp/home/.pi/agent/shot.png"});
-    CHECK(result == "[Image: ~/.pi/agent/shot.png [image/png] 1280x720]");
+    const auto result = cch::tui::image_fallback("image/png",
+            cch::tui::ImagePixelSize{.width = 1280, .height = 720},
+            std::string_view{"/tmp/home/.pike/agent/shot.png"});
+    CHECK(result == "[Image: ~/.pike/agent/shot.png [image/png] 1280x720]");
     CHECK(result.find("\x1b]8;") == std::string::npos);
 }
 
@@ -196,14 +195,13 @@ TEST_CASE("image_fallback wraps shortened absolute paths in OSC 8 file links",
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = true});
     cch::tests::EnvVarGuard home("HOME", std::string{"/tmp/home"});
 
-    const auto result = cch::tui::image_fallback(
-        "image/png",
-        cch::tui::ImagePixelSize{.width = 10, .height = 10},
-        std::string_view{"/tmp/home/.pi/agent/shot.png"});
-    CHECK(result.find("\x1b]8;;file:///tmp/home/.pi/agent/shot.png\x1b\\") != std::string::npos);
+    const auto result = cch::tui::image_fallback("image/png",
+            cch::tui::ImagePixelSize{.width = 10, .height = 10},
+            std::string_view{"/tmp/home/.pike/agent/shot.png"});
+    CHECK(result.find("\x1b]8;;file:///tmp/home/.pike/agent/shot.png\x1b\\") != std::string::npos);
     // Visible text must use ~/... not the expanded home path.
     CHECK(cch::tui::visible_width(result) ==
-        cch::tui::visible_width("[Image: ~/.pi/agent/shot.png [image/png] 10x10]"));
+            cch::tui::visible_width("[Image: ~/.pike/agent/shot.png [image/png] 10x10]"));
 }
 
 TEST_CASE("image_fallback percent-encodes file URLs like node pathToFileURL",

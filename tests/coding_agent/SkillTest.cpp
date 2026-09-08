@@ -8,26 +8,27 @@ namespace {
 
 TEST_CASE("Skill aggregate construction and field access", "[coding_agent][skill][u1][spec]") {
     coding_agent::Skill skill{
-        .name = "my-skill",
-        .description = "Does useful things.",
-        .filePath = "/home/user/.pi/agent/skills/my-skill/SKILL.md",
-        .baseDir = "/home/user/.pi/agent/skills/my-skill",
-        .sourceInfo = coding_agent::SourceInfo{
-            .path = "/home/user/.pi/agent/skills/my-skill/SKILL.md",
-            .source = "auto",
-            .scope = coding_agent::SourceScope::User,
-            .origin = coding_agent::SourceOrigin::TopLevel,
-            .base_dir = "/home/user/.pi/agent",
-        },
+            .name = "my-skill",
+            .description = "Does useful things.",
+            .filePath = "/home/user/.pike/agent/skills/my-skill/SKILL.md",
+            .baseDir = "/home/user/.pike/agent/skills/my-skill",
+            .sourceInfo =
+                    coding_agent::SourceInfo{
+                            .path = "/home/user/.pike/agent/skills/my-skill/SKILL.md",
+                            .source = "auto",
+                            .scope = coding_agent::SourceScope::User,
+                            .origin = coding_agent::SourceOrigin::TopLevel,
+                            .base_dir = "/home/user/.pike/agent",
+                    },
     };
 
     CHECK(skill.name == "my-skill");
     CHECK(skill.description == "Does useful things.");
-    CHECK(skill.filePath == "/home/user/.pi/agent/skills/my-skill/SKILL.md");
-    CHECK(skill.baseDir == "/home/user/.pi/agent/skills/my-skill");
+    CHECK(skill.filePath == "/home/user/.pike/agent/skills/my-skill/SKILL.md");
+    CHECK(skill.baseDir == "/home/user/.pike/agent/skills/my-skill");
     CHECK(skill.sourceInfo.scope == coding_agent::SourceScope::User);
     CHECK(skill.sourceInfo.source == "auto");
-    CHECK(skill.sourceInfo.base_dir == "/home/user/.pi/agent");
+    CHECK(skill.sourceInfo.base_dir == "/home/user/.pike/agent");
     CHECK(skill.disableModelInvocation == false);
 }
 

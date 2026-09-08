@@ -4142,12 +4142,12 @@ TEST_CASE("Native TUI exit during an admitted manual compaction waits for the co
     tests::TempWorkspace config;
     // Compaction requires a persisted session file and history above the
     // keep-recent budget: pin the budget to one token through the global
-    // settings the Session factory loads (PI_CODING_AGENT_DIR) so the small
+    // settings the Session factory loads (PIKE_CODING_AGENT_DIR) so the small
     // history below compacts. A genuinely big history would keep the loop
     // busy re-rendering it on every Compaction indicator animation tick in
     // a Debug build, so the loop would never drain.
     config.write("settings.json", R"({"compaction": {"keepRecentTokens": 1}})");
-    const tests::EnvVarGuard agent_dir{"PI_CODING_AGENT_DIR", config.path().string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", config.path().string()};
     auto client = std::make_shared<GatedCompactionChatProvider>();
     auto* gated = client.get();
     tests::ModelsSessionOptions options;

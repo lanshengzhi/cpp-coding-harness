@@ -37,12 +37,13 @@ selects the behavior that owns each corpus.
 ## `diverge`
 
 There are no standalone fixture files whose behavior changes in this audit.
-The two current divergence markers are test cases, not fixture contents:
+The current divergence marker is a test case, not fixture contents:
 
-- `AgentConfigDirTest` — the default `~/.pi/agent` expectation is owned by
-  migration #626.
 - `ProjectionStreamTest` — streaming tool-partial recovery is owned by
   migration #622.
+
+The former #626 agent-config/project-resource differences are now Pike
+product behavior and are classified as `spec`.
 
 A future ticket that changes a fixture must move it here and record its owning
 migration ticket in the test's CTest labels.

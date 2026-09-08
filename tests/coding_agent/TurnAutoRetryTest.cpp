@@ -246,9 +246,7 @@ struct RetrySessionUnderTest {
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
     // creation, when the SettingsManager snapshot is read.
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR",
-        (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
     if (!settings_json.empty()) {
         paths.write_settings(settings_json);
     }

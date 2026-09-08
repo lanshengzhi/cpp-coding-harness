@@ -146,11 +146,10 @@ support::Expected<SessionFamilyAssembly> assemble_session_target(
     std::ostream& output,
     std::ostream& error,
     ResumePickerSink resume_picker) {
-    // pi main.ts sessionDir chain: --session-dir, then
-    // PI_CODING_AGENT_SESSION_DIR, then the settings sessionDir value.
+    // Session directory chain: --session-dir, then
+    // PIKE_CODING_AGENT_SESSION_DIR, then the settings sessionDir value.
     std::optional<std::string> env_value;
-    if (const char* env = std::getenv("PI_CODING_AGENT_SESSION_DIR");
-        env != nullptr && env[0] != '\0') {
+    if (const char* env = std::getenv("PIKE_CODING_AGENT_SESSION_DIR"); env != nullptr && env[0] != '\0') {
         env_value = std::string{env};
     }
     auto effective = coding_agent::session_paths::resolve_effective_session_dir(

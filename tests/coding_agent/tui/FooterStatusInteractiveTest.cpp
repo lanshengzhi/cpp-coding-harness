@@ -286,8 +286,7 @@ TEST_CASE("Native TUI retry indicator counts down pi's backoff and clears on suc
         "[coding_agent][tui][status][retry][issue411][spec]") {
     ResumedSessionFixture fixture;
     // The session reads its settings from the Agent Config Directory.
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
     fixture.create();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
     fixture.config.write(
@@ -350,8 +349,7 @@ TEST_CASE("Native TUI shows the overflow Compaction indicator and rebuilds the c
     // summarizable (pi's findCutPoint keeps the recent budget), so the
     // overflow auto-compaction runs without a huge transcript (which would
     // make every spinner frame's re-render too slow for the test loop).
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
     fixture.create();
     fixture.config.write(
         "settings.json",
@@ -431,8 +429,7 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
     // summarizable so the overflow auto-compaction runs (same shape as the
     // overflow Compaction indicator test).
     ResumedSessionFixture fixture;
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
     fixture.create();
     fixture.config.write(
         "settings.json",
@@ -507,8 +504,7 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
 TEST_CASE("Native TUI /reload refuses during a manual compaction with pi's compaction warning",
         "[coding_agent][tui][reload][compaction][issue418][spec]") {
     ResumedSessionFixture fixture;
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
     fixture.create();
     // A tiny keepRecentTokens budget makes the small resumed session
     // summarizable (pi's findCutPoint keeps the recent budget), so the manual

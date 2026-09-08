@@ -80,42 +80,38 @@ namespace {
     data.home = "/home/user";
     // Context: SYSTEM source, APPEND sources, and Project Context Files.
     data.context_paths = {
-        "/work/proj/.pi/SYSTEM.md",
-        "/work/proj/AGENTS.md",
-        "/home/user/.pi/agent/AGENTS.md",
+            "/work/proj/.pi/SYSTEM.md",
+            "/work/proj/AGENTS.md",
+            "/home/user/.pike/agent/AGENTS.md",
     };
     data.skills = {
-        {
-            .name = "proj-skill",
-            .path = "/work/proj/.pi/skills/proj-skill/SKILL.md",
-            .source_info = source_info(
-                coding_agent::SourceScope::Project, "auto", "/work/proj/.pi"),
-        },
-        {
-            .name = "user-skill",
-            .path = "/home/user/.pi/agent/skills/user-skill/SKILL.md",
-            .source_info = source_info(
-                coding_agent::SourceScope::User, "auto", "/home/user/.pi/agent"),
-        },
-        {
-            .name = "cli-skill",
-            .path = "/work/cli-skill/SKILL.md",
-            .source_info = source_info(coding_agent::SourceScope::Temporary, "cli"),
-        },
+            {
+                    .name = "proj-skill",
+                    .path = "/work/proj/.pi/skills/proj-skill/SKILL.md",
+                    .source_info = source_info(coding_agent::SourceScope::Project, "auto", "/work/proj/.pi"),
+            },
+            {
+                    .name = "user-skill",
+                    .path = "/home/user/.pike/agent/skills/user-skill/SKILL.md",
+                    .source_info = source_info(coding_agent::SourceScope::User, "auto", "/home/user/.pike/agent"),
+            },
+            {
+                    .name = "cli-skill",
+                    .path = "/work/cli-skill/SKILL.md",
+                    .source_info = source_info(coding_agent::SourceScope::Temporary, "cli"),
+            },
     };
     data.templates = {
-        {
-            .name = "proj-prompt",
-            .path = "/work/proj/.pi/prompts/proj-prompt.md",
-            .source_info = source_info(
-                coding_agent::SourceScope::Project, "auto", "/work/proj/.pi"),
-        },
-        {
-            .name = "user-prompt",
-            .path = "/home/user/.pi/agent/prompts/user-prompt.md",
-            .source_info = source_info(
-                coding_agent::SourceScope::User, "auto", "/home/user/.pi/agent"),
-        },
+            {
+                    .name = "proj-prompt",
+                    .path = "/work/proj/.pi/prompts/proj-prompt.md",
+                    .source_info = source_info(coding_agent::SourceScope::Project, "auto", "/work/proj/.pi"),
+            },
+            {
+                    .name = "user-prompt",
+                    .path = "/home/user/.pike/agent/prompts/user-prompt.md",
+                    .source_info = source_info(coding_agent::SourceScope::User, "auto", "/home/user/.pike/agent"),
+            },
     };
     data.themes = {
         {
@@ -166,7 +162,7 @@ TEST_CASE("LoadedResources renders compact sections with sorted names and cwd-re
 
     // Context compact: cwd-relative when possible, else `~`-home display,
     // UNSORTED in source order.
-    CHECK(screen.find(".pi/SYSTEM.md, AGENTS.md, ~/.pi/agent/AGENTS.md") != std::string::npos);
+    CHECK(screen.find(".pi/SYSTEM.md, AGENTS.md, ~/.pike/agent/AGENTS.md") != std::string::npos);
 
     // Skills/Prompts/Themes compact: sorted name lists (dim `  a, b, c`).
     CHECK(screen.find("cli-skill, proj-skill, user-skill") != std::string::npos);
@@ -198,7 +194,7 @@ TEST_CASE("LoadedResources expands into scope groups with project, user, and pat
     // Context expanded: flat display paths in source order (no groups).
     CHECK(screen.find("/work/proj/.pi/SYSTEM.md") != std::string::npos);
     CHECK(screen.find("/work/proj/AGENTS.md") != std::string::npos);
-    CHECK(screen.find("~/.pi/agent/AGENTS.md") != std::string::npos);
+    CHECK(screen.find("~/.pike/agent/AGENTS.md") != std::string::npos);
 
     // Skills expanded: project → user → path group labels with 4-space dim
     // paths.
@@ -208,7 +204,7 @@ TEST_CASE("LoadedResources expands into scope groups with project, user, and pat
     const auto user = screen.find("user", project);
     CHECK(screen.find("path", user) != std::string::npos);
     CHECK(screen.find("/work/proj/.pi/skills/proj-skill/SKILL.md") != std::string::npos);
-    CHECK(screen.find("~/.pi/agent/skills/user-skill/SKILL.md") != std::string::npos);
+    CHECK(screen.find("~/.pike/agent/skills/user-skill/SKILL.md") != std::string::npos);
     CHECK(screen.find("/work/cli-skill/SKILL.md") != std::string::npos);
 
     // Prompts expanded: `/<name>` labels inside their scope groups.

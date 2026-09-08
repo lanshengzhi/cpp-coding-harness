@@ -162,12 +162,12 @@ private:
 
 /// One isolated login fixture: a temp Agent Config Directory shared by the
 /// runtime's credential store and the interactive settings scope, plus a temp
-/// workspace. `PI_CODING_AGENT_DIR` isolates the runtime's agent dir; `HOME`
+/// workspace. `PIKE_CODING_AGENT_DIR` isolates the runtime's agent dir; `HOME`
 /// isolates ambient user state.
 struct LoginFixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     tests::RuntimeFixture runtime;

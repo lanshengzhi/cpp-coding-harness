@@ -42,7 +42,7 @@ TEST_CASE("Keybindings manager reads only the Agent Config Directory and skips u
     tests::TempWorkspace config;
     tests::TempWorkspace decoy;
     config.write("keybindings.json", fixture_text("pi-864b35c.json"));
-    decoy.write(".pi/agent/keybindings.json", R"({"tui.input.submit":"f12"})");
+    decoy.write(".pike/agent/keybindings.json", R"({"tui.input.submit":"f12"})");
 
     coding_agent::tui::KeybindingsManagerRequest request;
     request.agent_config_directory = config.path();

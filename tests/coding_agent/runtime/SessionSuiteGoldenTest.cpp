@@ -129,7 +129,7 @@ private:
 /// Deterministic agent config directory with a settings.json override.
 struct SettingsFixture {
   tests::TempWorkspace agent_dir;
-  tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+  tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
 
   explicit SettingsFixture(std::string_view json) {
     dir_guard.set(agent_dir.path().string());
