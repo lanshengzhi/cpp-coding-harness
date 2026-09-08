@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <chrono>
 #include <cctype>
 #include <cstdint>
@@ -95,7 +96,97 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
     return delay;
 }
 
+[[nodiscard]] std::optional<std::uint64_t> non_negative_delay_ms(double value, double multiplier) {
+    if (!std::isfinite(value) || value < 0) {
+        return std::nullopt;
+    }
+    const auto scaled = value * multiplier;
+    if (scaled >= static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+        return std::numeric_limits<std::uint64_t>::max();
+    }
+    return static_cast<std::uint64_t>(scaled);
+}
+
+[[nodiscard]] std::optional<double> numeric_value(const support::JsonValue& value) {
+    if (const auto* number = value.get_if<double>()) {
+        return *number;
+    }
+    if (const auto* text = value.get_if<std::string>()) {
+        return parse_number(*text);
+    }
+    return std::nullopt;
+}
+
 } // namespace
+
+std::optional<std::uint64_t> provider_backoff_hint_ms(const ProviderFailure& failure, std::int64_t now_epoch_ms) {
+    if (const auto retry_after_ms = header(failure.headers, "retry-after-ms")) {
+        if (const auto parsed = parse_number(*retry_after_ms)) {
+            if (const auto delay = non_negative_delay_ms(*parsed, 1.0)) {
+                return delay;
+            }
+        }
+    }
+    if (const auto retry_after = header(failure.headers, "retry-after")) {
+        if (const auto seconds = parse_number(*retry_after)) {
+            if (const auto delay = non_negative_delay_ms(*seconds, 1000.0)) {
+                return delay;
+            }
+        }
+        if (const auto date_ms = parse_http_date_ms(*retry_after)) {
+            return non_negative_delay_ms(static_cast<double>(*date_ms - now_epoch_ms), 1.0);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::uint64_t> provider_backoff_hint_ms(
+        const support::JsonValue::object_t& payload, std::int64_t now_epoch_ms) {
+    const auto find_hint = [](const support::JsonValue::object_t& object,
+                                   std::string_view key,
+                                   double multiplier) -> std::optional<std::uint64_t> {
+        const auto found = object.find(std::string{key});
+        if (found == object.end()) {
+            return std::nullopt;
+        }
+        const auto number = numeric_value(found->second);
+        return number ? non_negative_delay_ms(*number, multiplier) : std::nullopt;
+    };
+    const auto find_in = [&find_hint](const support::JsonValue::object_t& object) -> std::optional<std::uint64_t> {
+        for (const auto key : {"retry_after_ms", "retry-after-ms", "retryAfterMs"}) {
+            if (const auto hint = find_hint(object, key, 1.0)) {
+                return hint;
+            }
+        }
+        for (const auto key : {"retry_after", "retry-after", "retryAfter"}) {
+            if (const auto hint = find_hint(object, key, 1000.0)) {
+                return hint;
+            }
+        }
+        return std::nullopt;
+    };
+    if (const auto hint = find_in(payload)) {
+        return hint;
+    }
+    if (const auto error = payload.find("error"); error != payload.end()) {
+        if (const auto* object = error->second.get_if<support::JsonValue::object_t>()) {
+            if (const auto hint = find_in(*object)) {
+                return hint;
+            }
+        }
+    }
+    (void)now_epoch_ms;
+    return std::nullopt;
+}
+
+std::optional<std::uint64_t> provider_backoff_hint_ms(std::string_view payload, std::int64_t now_epoch_ms) {
+    const auto parsed = support::read_json(payload);
+    if (!parsed) {
+        return std::nullopt;
+    }
+    const auto* object = parsed->get_if<support::JsonValue::object_t>();
+    return object ? provider_backoff_hint_ms(*object, now_epoch_ms) : std::nullopt;
+}
 
 InferenceFailureKind inference_failure_kind_from_provider_code(
     std::string_view provider_code) noexcept {
@@ -238,21 +329,8 @@ support::Expected<std::uint64_t> provider_retry_delay_ms(
     std::uint32_t retry_index,
     std::optional<std::uint64_t> max_retry_delay_ms,
     std::int64_t now_epoch_ms) {
-    if (const auto retry_after_ms = header(failure.headers, "retry-after-ms")) {
-        if (const auto parsed = parse_number(*retry_after_ms)) {
-            return validate_delay(*parsed, max_retry_delay_ms, failure.message);
-        }
-    }
-    if (const auto retry_after = header(failure.headers, "retry-after")) {
-        if (const auto seconds = parse_number(*retry_after)) {
-            return validate_delay(*seconds * 1000, max_retry_delay_ms, failure.message);
-        }
-        if (const auto date_ms = parse_http_date_ms(*retry_after)) {
-            return validate_delay(
-                static_cast<double>(*date_ms - now_epoch_ms),
-                max_retry_delay_ms,
-                failure.message);
-        }
+    if (const auto hint = provider_backoff_hint_ms(failure, now_epoch_ms)) {
+        return validate_delay(static_cast<double>(*hint), max_retry_delay_ms, failure.message);
     }
     const auto shift = std::min<std::uint32_t>(retry_index, 3);
     return std::uint64_t{1000} << shift;

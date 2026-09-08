@@ -3,10 +3,12 @@
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/Termination.hpp"
 #include "ai/api/UsageNormalization.hpp"
+#include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -423,9 +425,13 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
     if (!message && nested) {
         message = string_member(*nested, "message");
     }
+    const auto now =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
     return ResponsesProviderError{
             .code = code ? std::optional<std::string>{std::string{*code}} : std::nullopt,
             .message = message ? std::optional<std::string>{std::string{*message}} : std::nullopt,
+            .suggested_backoff_ms = providers::provider_backoff_hint_ms(event, now),
     };
 }
 
@@ -606,6 +612,9 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
                 }
                 if (!failure.message) {
                     failure.message = std::move(response_failure.message);
+                }
+                if (!failure.suggested_backoff_ms) {
+                    failure.suggested_backoff_ms = std::move(response_failure.suggested_backoff_ms);
                 }
             }
         }

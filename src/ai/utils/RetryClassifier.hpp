@@ -11,4 +11,8 @@ namespace cch::ai {
 [[nodiscard]] bool is_retryable_inference_failure(
     const InferenceFailure& failure) noexcept;
 
+/// Unauthorized is terminal for the current request and requires the session
+/// to surface its re-authentication guidance instead of retrying blindly.
+[[nodiscard]] bool requires_reauthentication(const InferenceFailure& failure) noexcept;
+
 } // namespace cch::ai

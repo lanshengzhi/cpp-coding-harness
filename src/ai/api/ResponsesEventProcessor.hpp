@@ -6,6 +6,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,6 +28,7 @@ enum class ResponsesDelivery {
 struct ResponsesProviderError {
     std::optional<std::string> code{std::nullopt};
     std::optional<std::string> message{std::nullopt};
+    std::optional<std::uint64_t> suggested_backoff_ms{std::nullopt};
 };
 
 struct ResponsesProcessOutcome {

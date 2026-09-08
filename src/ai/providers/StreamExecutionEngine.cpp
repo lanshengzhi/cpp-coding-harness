@@ -2,6 +2,7 @@
 
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
+#include "ai/utils/RetryClassifier.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -85,7 +86,10 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
             diagnostic += failure.detail;
         }
         assistant.error_message = bounded_provider_error_detail(std::move(diagnostic));
-        failure = support::make_error(support::ErrorCode::Stream, *assistant.error_message);
+        failure = support::make_error(inference_failure && requires_reauthentication(*inference_failure)
+                                              ? support::ErrorCode::Auth
+                                              : support::ErrorCode::Stream,
+                *assistant.error_message);
     }
     if (!inference_failure) {
         inference_failure = InferenceFailure{
@@ -111,20 +115,22 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
     ProviderHeaders headers;
     headers.insert(response.head.headers.begin(), response.head.headers.end());
     const auto provider_code = provider_error_code_from_payload(response.body);
-    return ProviderFailure{
-        .network_error = false,
-        .status = response.head.status_code,
-        .headers = std::move(headers),
-        .message = response.body,
-        .inference_failure = InferenceFailure{
-            .kind = provider_code
-                ? inference_failure_kind_from_provider_code(*provider_code)
-                : inference_failure_kind_from_http_status(response.head.status_code),
-            .output_started = false,
-            .suggested_backoff_ms = std::nullopt,
-            .provider_code = provider_code,
-        },
+    auto failure = ProviderFailure{
+            .network_error = false,
+            .status = response.head.status_code,
+            .headers = std::move(headers),
+            .message = response.body,
+            .inference_failure =
+                    InferenceFailure{
+                            .kind = provider_code ? inference_failure_kind_from_provider_code(*provider_code)
+                                                  : inference_failure_kind_from_http_status(response.head.status_code),
+                            .output_started = false,
+                            .suggested_backoff_ms = std::nullopt,
+                            .provider_code = provider_code,
+                    },
     };
+    failure.inference_failure->suggested_backoff_ms = provider_backoff_hint_ms(failure, current_timestamp_ms());
+    return failure;
 }
 
 [[nodiscard]] ProviderFailure transport_failure(const support::Error& error) {

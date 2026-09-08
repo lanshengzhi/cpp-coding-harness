@@ -122,12 +122,11 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
 
     const auto& provider_error = *processed->provider_error;
     inference_failure = InferenceFailure{
-        .kind = provider_error.code
-            ? providers::inference_failure_kind_from_provider_code(*provider_error.code)
-            : InferenceFailureKind::InvalidRequest,
-        .output_started = false,
-        .suggested_backoff_ms = std::nullopt,
-        .provider_code = provider_error.code,
+            .kind = provider_error.code ? providers::inference_failure_kind_from_provider_code(*provider_error.code)
+                                        : InferenceFailureKind::InvalidRequest,
+            .output_started = false,
+            .suggested_backoff_ms = provider_error.suggested_backoff_ms,
+            .provider_code = provider_error.code,
     };
     if (response_failed) {
         std::string detail = provider_error.code.value_or("unknown");
@@ -152,12 +151,11 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
     if (event.event == "error") {
         const auto provider_code = providers::provider_error_code_from_payload(event.data);
         inference_failure = InferenceFailure{
-            .kind = provider_code
-                ? providers::inference_failure_kind_from_provider_code(*provider_code)
-                : InferenceFailureKind::InvalidRequest,
-            .output_started = false,
-            .suggested_backoff_ms = std::nullopt,
-            .provider_code = provider_code,
+                .kind = provider_code ? providers::inference_failure_kind_from_provider_code(*provider_code)
+                                      : InferenceFailureKind::InvalidRequest,
+                .output_started = false,
+                .suggested_backoff_ms = providers::provider_backoff_hint_ms(event.data, current_timestamp_ms()),
+                .provider_code = provider_code,
         };
         return std::unexpected(stream_error(event.data));
     }

@@ -123,6 +123,9 @@ TEST_CASE("Provider retry policy classifies transient failures and bounds server
     CHECK(ai::providers::provider_error_code_from_payload(
                   R"({"error":{"type":"rate_limit_error"}})") ==
           std::optional<std::string>{"rate_limit_error"});
+    CHECK(ai::providers::provider_backoff_hint_ms(R"({"error":{"type":"rate_limit_error","retry_after_ms":2500}})",
+                  0) == std::optional<std::uint64_t>{2500});
+    CHECK(ai::providers::provider_backoff_hint_ms(R"({"retry_after":2.5})", 0) == std::optional<std::uint64_t>{2500});
 
     const auto exponential = ai::providers::provider_retry_delay_ms(
         ai::providers::ProviderFailure{}, 2, std::nullopt, 0);

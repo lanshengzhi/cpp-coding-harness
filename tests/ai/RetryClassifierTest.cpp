@@ -57,6 +57,8 @@ TEST_CASE(
          }) {
         CHECK_FALSE(ai::is_retryable_inference_failure(failure(kind)));
     }
+    CHECK(ai::requires_reauthentication(failure(ai::InferenceFailureKind::Unauthorized)));
+    CHECK_FALSE(ai::requires_reauthentication(failure(ai::InferenceFailureKind::Unauthorized, true)));
 }
 
 TEST_CASE(
