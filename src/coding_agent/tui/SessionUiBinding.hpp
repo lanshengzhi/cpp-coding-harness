@@ -1,13 +1,12 @@
 #pragma once
 
 // The Native TUI session synchronization adapter (#501 spec; extraction
-// #505): owns the Agent Session event subscriptions, translates Agent
-// lifecycle/streaming and session-assembly events into view updates, runs
-// the turn auto-retry countdown (pi `CountdownTimer`), and computes the
-// footer render inputs (pi footer.ts) from the bound session. The host
-// wires running/view gates and presentation channels through
-// SessionUiBindingHooks so the adapter never sees a Terminal or the
-// interactive state.
+// #505): owns the Agent Session Projection Stream subscription, translates
+// the complete read model into view updates, runs the turn auto-retry
+// countdown (pi `CountdownTimer`), and computes the footer render inputs
+// (pi footer.ts) from the bound session. The host wires running/view gates
+// and presentation channels through SessionUiBindingHooks so the adapter
+// never sees a Terminal or the interactive state.
 //
 // Repository-private `cch_coding_agent` implementation header: not part of
 // an Owner Interface, not installed, never exported.
@@ -43,13 +42,8 @@ struct SessionUiBindingHooks {
     std::move_only_function<bool()> is_live{nullptr};
     /// Resolve the composed main-screen view (null before composition).
     std::move_only_function<InteractiveView*()> view{nullptr};
-    /// Whether an Agent prompt is in flight (pi's message_start working
-    /// indicator gate).
-    std::move_only_function<bool()> prompt_active{nullptr};
     /// Mark the current frame dirty (the host's TUI invalidate).
     std::move_only_function<void()> invalidate{nullptr};
-    /// pi `showStatus`: one dim status line in the chat.
-    std::move_only_function<void(std::string)> show_status{nullptr};
     /// pi `showError`: one diagnostic line in the chat.
     std::move_only_function<void(std::string)> show_error{nullptr};
     /// Boot path: the pending boot session's workspace while no session is
@@ -61,18 +55,17 @@ struct SessionUiBindingHooks {
 };
 
 /// Session synchronization adapter (#505). One Agent Session is bound at a
-/// time: `bind()` attaches the Projection Stream subscription (ADR 0052) and
-/// both event sinks (pi `agent.subscribe` + `session.on(...)`), and
-/// `detach()` releases them for session replacement and final Close.
+/// time: `bind()` attaches only the Projection Stream subscription (ADR 0052)
+/// and `detach()` releases it for session replacement and final Close.
 /// Executor-confined like the host it serves; the footer data computation is
 /// polled by the view's footer on every render.
 ///
-/// The Projection Stream is the authoritative state channel: the binding
+/// The Projection Stream is the only business-state channel: the binding
 /// composes its snapshot from the Base and every applied PatchMsg batch, and
-/// the frame ticker drains the mailbox and reconciles from the composed
-/// value. The direct Agent Session event sinks survive as the private fast
-/// path for this first projection (ADR 0052), not a second authoritative
-/// channel.
+/// the frame ticker drains the mailbox and reconciles from the composed value.
+/// The two legacy event subscriptions remain notification-only: their
+/// payloads are ignored and only request a projection drain/render, so
+/// attach and mailbox-overflow resync have identical business state.
 class SessionUiBinding final : public std::enable_shared_from_this<SessionUiBinding> {
 public:
     SessionUiBinding(
@@ -84,14 +77,13 @@ public:
     SessionUiBinding(const SessionUiBinding&) = delete;
     SessionUiBinding& operator=(const SessionUiBinding&) = delete;
 
-    /// Attach the Agent lifecycle/streaming and session-assembly
-    /// (auto-retry, compaction) sinks to the session and re-baseline the
+    /// Attach the Projection Stream to the session and re-baseline the
     /// displayed-diagnostics sync for the new binding. The session must
     /// outlive the binding or be detached first.
     [[nodiscard]] support::ExpectedVoid bind(AgentSession& session);
 
-    /// Release both subscriptions (session replacement and final Close);
-    /// idempotent.
+    /// Release the projection subscription (session replacement and final
+    /// Close); idempotent.
     void detach() noexcept;
 
     /// pi `renderInitialMessages` diagnostic lines: render every snapshot
@@ -100,13 +92,14 @@ public:
     void append_snapshot_diagnostics(
         const std::vector<support::Error>& diagnostics);
 
-    /// Incremental sync of the pending-input queues and newly appeared Agent
-    /// diagnostics into the view (after events and prompt completions).
+    /// Drain and reconcile the composed projection at prompt completion,
+    /// including pending-input queues, transcript, tools, statuses, and newly
+    /// appeared diagnostics.
     void sync_session_observations();
     /// Replace the session-backed view state from the composed projection
     /// snapshot. The frame ticker calls this once before its render pass;
-    /// status indicators remain event-owned while messages, tools,
-    /// diagnostics, and queues come from the complete snapshot. Returns
+    /// status indicators, messages, tools, diagnostics, and queues come from
+    /// the complete snapshot. Returns
     /// false when there is no live view to apply to so the ticker keeps the
     /// pending counted frame for the next frame (#597).
     [[nodiscard]] bool reconcile_snapshot(const AgentSessionSnapshot& snapshot);
@@ -150,8 +143,10 @@ private:
     /// applies on top (ADR 0052).
     void on_projection_message(const ProjectionStreamMessageVariant& message);
 
-    void on_event(const agent::AgentLifecycleEvent& event);
-    void on_session_event(const AgentSessionEvent& event);
+    /// Request a frame after a Core publication. The event payload is
+    /// intentionally ignored; business state is read only from the projection
+    /// mailbox.
+    void request_projection_frame();
 
     /// pi `CountdownTimer` for the retry indicator: one-second ticks rewrite
     /// the `Retrying (n/m) in Ns...` message until the delay elapses.
@@ -161,15 +156,14 @@ private:
 
     [[nodiscard]] bool is_live();
     [[nodiscard]] InteractiveView* view();
-    [[nodiscard]] bool prompt_active();
 
     boost::asio::any_io_executor executor_;
     SessionUiBindingHooks hooks_;
     AgentSession* session_{nullptr}; // must outlive the binding or be detached first.
-    std::optional<EventSubscription> subscription_;
-    /// Session-assembly event subscription (pi's `session.on(...)` for
-    /// auto-retry and compaction events).
-    std::optional<SessionEventSubscription> session_event_subscription_;
+    /// Notification-only subscriptions keep the projection mailbox responsive;
+    /// they never read or translate their event payloads into business state.
+    std::optional<EventSubscription> projection_activity_subscription_;
+    std::optional<SessionEventSubscription> projection_recovery_subscription_;
     /// The active retry countdown (pi `CountdownTimer`); null while no retry
     /// backoff is pending.
     std::shared_ptr<RetryCountdown> retry_countdown_;
@@ -178,6 +172,10 @@ private:
     FooterDataProvider footer_data_provider_{std::filesystem::path{}};
     std::vector<std::string> displayed_agent_diagnostics_;
     std::vector<std::string> displayed_session_event_diagnostics_;
+    std::optional<std::string> displayed_run_error_;
+    std::optional<std::string> displayed_retry_error_;
+    std::optional<std::string> displayed_compaction_error_;
+    CompactionState displayed_compaction_state_{CompactionState::Idle};
     SessionStatus session_status_{SessionStatus::Idle};
     /// The Projection Stream subscription (ADR 0052) and the snapshot the
     /// mailbox drains compose: the attach-time Base with every applied

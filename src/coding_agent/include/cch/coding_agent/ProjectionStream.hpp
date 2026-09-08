@@ -4,12 +4,14 @@
 
 #include <cch/ai/Message.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -82,39 +84,41 @@ struct AgentDiagnosticsPatch {
     std::vector<support::Error> diagnostics{};
 };
 
-/// Push-only tool fact (ADR 0052): a tool execution started. Presentation
-/// vocabulary with no `AgentSessionSnapshot` slice; applying it to a
-/// composed snapshot is a no-op and a projection tracks it in its own
-/// presentation state.
+/// Tool fact (ADR 0052): a tool execution started. The value-bearing
+/// `execution` field is the recoverable read-model slice; it contains the
+/// bounded arguments and output presentation needed by a late observer.
 struct ToolStartedPatch {
-    std::string tool_call_id{};
-    std::string tool_name{};
-    support::JsonValue args{};
+    ToolExecutionSnapshot execution{};
 };
 
-/// Push-only tool fact (ADR 0052): a cumulative partial tool result
-/// streamed while the tool executes.
+/// Tool fact (ADR 0052): a cumulative partial tool result streamed while the
+/// tool executes. The patch carries only the bounded read-model value, never
+/// the unbounded cumulative result that used to make this push-only.
 struct ToolPartialPatch {
-    std::string tool_call_id{};
-    std::string tool_name{};
-    support::JsonValue args{};
-    agent::AsyncToolExecutionResult partial_result{};
+    ToolExecutionSnapshot execution{};
 };
 
-/// Push-only tool fact (ADR 0052): a tool execution reached its terminal
-/// outcome (the result message itself is appended to the history through a
+/// Tool fact (ADR 0052): a tool execution reached its terminal outcome (the
+/// result message itself is appended to the history through a
 /// `MessageAppendedPatch`).
 struct ToolFinishedPatch {
-    std::string tool_call_id{};
-    std::string tool_name{};
-    agent::AsyncToolExecutionResult result{};
-    bool is_error{false};
+    ToolExecutionSnapshot execution{};
+};
+
+/// New value of the current prompt/run read-model state.
+struct RunStatePatch {
+    RunState run_state{};
+};
+
+/// New value of retry and compaction recovery state.
+struct RecoveryStatePatch {
+    RecoveryState recovery_state{};
 };
 
 /// Patch (ADR 0052): a value-bearing record of one published state change —
-/// which slice changed and its new value. Tool facts carry presentation
-/// vocabulary beyond the snapshot slices; applying them to a composed
-/// snapshot is a documented no-op.
+/// which slice changed and its new value. Tool and recovery facts are
+/// snapshot-backed read-model slices, so a Base followed by patches is
+/// sufficient to rebuild the state shown by a frontend.
 using ProjectionStreamPatchVariant = std::variant<SessionSnapshotPatch,
         MessageAppendedPatch,
         StreamingMessagePatch,
@@ -124,7 +128,9 @@ using ProjectionStreamPatchVariant = std::variant<SessionSnapshotPatch,
         AgentDiagnosticsPatch,
         ToolStartedPatch,
         ToolPartialPatch,
-        ToolFinishedPatch>;
+        ToolFinishedPatch,
+        RunStatePatch,
+        RecoveryStatePatch>;
 
 /// An ordered batch of value-bearing Patches published at one version.
 /// Applying every batch in order to a Base reproduces the later snapshot
@@ -147,10 +153,25 @@ using ProjectionStreamMessageVariant = std::variant<ProjectionStreamBase, Projec
 using ProjectionStreamSink = std::move_only_function<void(const ProjectionStreamMessageVariant&)>;
 
 /// Apply one ordered patch batch onto a Base-composed snapshot (ADR 0052
-/// convergence application). Tool-fact patches are presentation vocabulary
-/// with no snapshot slice and apply as a no-op.
+/// convergence application). Every projection-relevant fact, including tool
+/// progress and recovery state, updates a read-model slice; no projection
+/// needs to remember a push-only event.
 inline void apply_projection_patches(
         AgentSessionSnapshot& composed, const std::vector<ProjectionStreamPatchVariant>& patches) {
+    const auto apply_tool = [&composed](ToolExecutionSnapshot execution) {
+        if (execution.tool_call_id.empty()) return;
+        const auto found = std::find_if(composed.tool_executions.begin(),
+                composed.tool_executions.end(),
+                [&execution](const ToolExecutionSnapshot& current) {
+                    return current.tool_call_id == execution.tool_call_id;
+                });
+        if (found == composed.tool_executions.end()) {
+            composed.tool_executions.push_back(std::move(execution));
+        } else {
+            *found = std::move(execution);
+        }
+    };
+
     for (const auto& patch : patches) {
         if (const auto* value = std::get_if<SessionSnapshotPatch>(&patch)) {
             composed = value->snapshot;
@@ -166,9 +187,17 @@ inline void apply_projection_patches(
             composed.agent_state.input_queues = value->input_queues;
         } else if (const auto* value = std::get_if<AgentDiagnosticsPatch>(&patch)) {
             composed.agent_state.diagnostics = value->diagnostics;
+        } else if (const auto* value = std::get_if<ToolStartedPatch>(&patch)) {
+            apply_tool(value->execution);
+        } else if (const auto* value = std::get_if<ToolPartialPatch>(&patch)) {
+            apply_tool(value->execution);
+        } else if (const auto* value = std::get_if<ToolFinishedPatch>(&patch)) {
+            apply_tool(value->execution);
+        } else if (const auto* value = std::get_if<RunStatePatch>(&patch)) {
+            composed.run_state = value->run_state;
+        } else if (const auto* value = std::get_if<RecoveryStatePatch>(&patch)) {
+            composed.recovery_state = value->recovery_state;
         }
-        // Tool facts (ToolStartedPatch, ToolPartialPatch, ToolFinishedPatch):
-        // no snapshot slice to apply.
     }
 }
 

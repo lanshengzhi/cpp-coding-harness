@@ -8,8 +8,10 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
+#include "agent/harness/OutputLimiter.hpp"
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/Json.hpp"
 #include "ai/ModelThinkingLevel.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
@@ -27,6 +29,7 @@
 #include <exception>
 #include <format>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent {
@@ -44,6 +47,79 @@ namespace {
 [[nodiscard]] ai::TimestampMs completion_timestamp_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
             .count();
+}
+
+[[nodiscard]] std::string serialize_projection_tool_arguments(const support::JsonValue& arguments) {
+    auto serialized = support::write_json(arguments);
+    if (!serialized) {
+        return {};
+    }
+    return bounded_redacted_presentation(std::move(*serialized), kMaxPresentationPayloadBytes);
+}
+
+[[nodiscard]] std::optional<std::string> projection_artifact_reference(
+        const std::optional<support::JsonValue>& details) {
+    if (!details) {
+        return std::nullopt;
+    }
+    const auto* object = details->get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    for (const std::string_view key : {"artifact_reference", "artifact", "full_output_path"}) {
+        const auto found = object->find(std::string{key});
+        if (found == object->end()) {
+            continue;
+        }
+        if (const auto* value = found->second.get_if<std::string>(); value != nullptr) {
+            return bounded_redacted_presentation(*value, 1024);
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::string projection_tool_output_tail(const agent::AsyncToolExecutionResult& result, bool& truncated) {
+    const auto text = ai::text_from_content(result.content);
+    auto limited = harness::limit_output_tail_redacted(text,
+            harness::OutputLimit{
+                    .max_bytes = kProjectionToolOutputTailBytes,
+                    .max_lines = kProjectionToolOutputTailLines,
+            });
+    truncated = limited.truncated;
+    return std::move(limited.text);
+}
+
+[[nodiscard]] std::optional<std::string> projection_tool_error(
+        const agent::AsyncToolExecutionResult& result, bool is_error) {
+    if (!is_error && !result.is_error) {
+        return std::nullopt;
+    }
+    auto text = ai::text_from_content(result.content);
+    if (text.empty()) {
+        text = "Tool execution failed";
+    }
+    return bounded_redacted_presentation(std::move(text));
+}
+
+[[nodiscard]] ToolExecutionSnapshot make_projection_tool_execution(std::string tool_call_id,
+        std::string tool_name,
+        ToolExecutionStatus status,
+        const support::JsonValue* arguments,
+        const agent::AsyncToolExecutionResult* result,
+        bool is_error) {
+    ToolExecutionSnapshot execution;
+    execution.tool_call_id = std::move(tool_call_id);
+    execution.tool_name = std::move(tool_name);
+    execution.status = status;
+    if (arguments != nullptr) {
+        execution.arguments_json = serialize_projection_tool_arguments(*arguments);
+    }
+    if (result != nullptr) {
+        execution.output_tail = projection_tool_output_tail(*result, execution.output_truncated);
+        execution.artifact_reference = projection_artifact_reference(result->details);
+        execution.error = projection_tool_error(*result, is_error);
+    }
+    return execution;
 }
 
 [[nodiscard]] ai::BashExecutionMessage make_bash_execution_message(const runtime::UserShellResult& result,
@@ -892,6 +968,11 @@ support::Expected<TreeNavigationResult> AgentSession::Impl::navigate_tree(std::s
     if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, context.messages); !replaced) {
         return std::unexpected(replaced.error());
     }
+    // Tree navigation replaces the active context; old tool and terminal-run
+    // facts belong to the abandoned path and must not reappear in a rebuild.
+    tool_executions_.clear();
+    run_state_ = RunState{};
+    recovery_state_ = RecoveryState{};
     update_projection();
     return TreeNavigationResult{
             .editor_text = decision.editor_text,
@@ -925,6 +1006,9 @@ AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
             .metadata = session_.metadata,
             .topology = session_.topology,
             .session_path = session_path_,
+            .tool_executions = tool_executions_,
+            .run_state = run_state_,
+            .recovery_state = recovery_state_,
             .session_event_diagnostics = session_event_diagnostics_,
     };
 }
@@ -946,18 +1030,19 @@ std::shared_ptr<ProjectionSubscription::Impl> AgentSession::Impl::attach_project
     // now — the state as it is, never a replay from session start.
     const auto version = state_version_.load(std::memory_order_acquire);
     auto base = snapshot();
-    {
-        std::scoped_lock lock(node->mutex);
-        node->mailbox.push_back(std::make_shared<const ProjectionStreamMessageVariant>(
-                ProjectionStreamBase{.version = version, .snapshot = std::move(base)}));
-    }
-    // Re-baseline the published-value mirrors to the Base so subsequent
-    // event-mapped patches compose on top of it for every subscriber.
+    // Re-baseline the published-value mirrors to the Base before moving it
+    // into the subscriber mailbox. The mirrors are Core-owned and describe the
+    // latest live state, not the moved-from local snapshot.
     published_input_queue_counts_ = agent::AgentInputQueueCounts{
             .steering = base.agent_state.input_queues.steering.messages.size(),
             .follow_up = base.agent_state.input_queues.follow_up.messages.size(),
     };
     published_pending_tool_calls_ = base.agent_state.pending_tool_call_ids;
+    {
+        std::scoped_lock lock(node->mutex);
+        node->mailbox.push_back(std::make_shared<const ProjectionStreamMessageVariant>(
+                ProjectionStreamBase{.version = version, .snapshot = std::move(base)}));
+    }
     published_observer_diagnostic_serial_ = agent_ ? agent_->observer_diagnostic_serial() : 0;
     auto handle = node;
     projection_subscribers_.push_back(std::move(node));
@@ -1061,48 +1146,179 @@ void AgentSession::Impl::update_projection() {
                             SessionSnapshotPatch{.snapshot = std::move(coarse)}}}));
 }
 
-void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& event) {
+void AgentSession::Impl::settle_run_projection(const support::ExpectedVoid& result) {
+    run_state_.phase = RunPhase::Idle;
+    run_state_.terminal = result ? RunTerminalState::Succeeded
+                                 : (result.error().code == support::ErrorCode::Cancelled ? RunTerminalState::Cancelled
+                                                                                         : RunTerminalState::Failed);
+    if (result) {
+        run_state_.error.reset();
+        if (agent_) {
+            const auto state = agent_->state();
+            if (!state.messages.empty()) {
+                if (const auto* assistant = std::get_if<ai::AssistantMessage>(&state.messages.back())) {
+                    if (assistant->stop_reason == ai::AssistantStopReason::Error) {
+                        run_state_.terminal = RunTerminalState::Failed;
+                    } else if (assistant->stop_reason == ai::AssistantStopReason::Aborted) {
+                        run_state_.terminal = RunTerminalState::Cancelled;
+                    }
+                }
+            }
+        }
+    } else {
+        run_state_.error = bounded_redacted_presentation(result.error().message);
+    }
+    recovery_state_.next_retry_at_ms.reset();
+}
+
+void AgentSession::Impl::update_projection(const AgentSessionEvent& event) {
     state_version_.fetch_add(1, std::memory_order_release);
+    if (const auto* retry = std::get_if<AutoRetryStartEvent>(&event)) {
+        run_state_.phase = RunPhase::Retrying;
+        recovery_state_.retry_count = retry->attempt > 0 ? static_cast<std::size_t>(retry->attempt) : 0;
+        recovery_state_.max_retry_count = retry->max_attempts > 0 ? static_cast<std::size_t>(retry->max_attempts) : 0;
+        recovery_state_.next_retry_at_ms = completion_timestamp_ms() + retry->delay_ms;
+        recovery_state_.retry_error = bounded_redacted_presentation(retry->error_message);
+    } else if (const auto* retry = std::get_if<AutoRetryEndEvent>(&event)) {
+        recovery_state_.next_retry_at_ms.reset();
+        if (retry->final_error) {
+            recovery_state_.retry_error = bounded_redacted_presentation(*retry->final_error);
+        } else if (retry->success) {
+            recovery_state_.retry_error.reset();
+        }
+        if (prompt_active_) {
+            run_state_.phase = RunPhase::Running;
+        } else {
+            run_state_.phase = RunPhase::Idle;
+        }
+    } else if (const auto* compaction = std::get_if<CompactionStartEvent>(&event)) {
+        run_state_.phase = RunPhase::Compacting;
+        recovery_state_.compaction = CompactionState::Running;
+        recovery_state_.compaction_reason = bounded_redacted_presentation(compaction->reason);
+        recovery_state_.compaction_error.reset();
+    } else if (const auto* compaction = std::get_if<CompactionEndEvent>(&event)) {
+        recovery_state_.compaction = compaction->aborted         ? CompactionState::Cancelled
+                                     : compaction->error_message ? CompactionState::Failed
+                                                                 : CompactionState::Succeeded;
+        recovery_state_.compaction_reason = bounded_redacted_presentation(compaction->reason);
+        recovery_state_.compaction_error =
+                compaction->error_message
+                        ? std::optional<std::string>{bounded_redacted_presentation(*compaction->error_message)}
+                        : std::nullopt;
+        run_state_.phase = prompt_active_ ? RunPhase::Running : RunPhase::Idle;
+    }
     if (projection_subscribers_.empty()) {
         return;
     }
+    std::vector<ProjectionStreamPatchVariant> patches;
+    patches.emplace_back(RunStatePatch{.run_state = run_state_});
+    patches.emplace_back(RecoveryStatePatch{.recovery_state = recovery_state_});
+    publish_projection_patch_msg(std::move(patches));
+}
+
+void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& event) {
+    state_version_.fetch_add(1, std::memory_order_release);
     // This observer runs after the Agent reduced the event into live state
     // (ADR 0052): each patch names the changed slice and carries the slice's
     // new value, mirroring the reducer's slice effects so that applying the
     // batches in order to a Base reproduces the later snapshot exactly.
     std::vector<ProjectionStreamPatchVariant> patches;
 
-    // Push-only tool facts ride the one stream (ADR 0052); the Native TUI's
-    // direct event sinks remain a private fast path for the first
-    // projection, not a second authoritative channel.
+    const auto upsert_tool = [this](ToolExecutionSnapshot execution) {
+        const auto found = std::find_if(
+                tool_executions_.begin(), tool_executions_.end(), [&execution](const ToolExecutionSnapshot& current) {
+                    return current.tool_call_id == execution.tool_call_id;
+                });
+        if (found == tool_executions_.end()) {
+            tool_executions_.push_back(std::move(execution));
+        } else {
+            *found = std::move(execution);
+        }
+    };
+    const auto previous_tool = [this](std::string_view call_id) -> const ToolExecutionSnapshot* {
+        const auto found = std::find_if(tool_executions_.begin(),
+                tool_executions_.end(),
+                [call_id](const ToolExecutionSnapshot& current) { return current.tool_call_id == call_id; });
+        return found == tool_executions_.end() ? nullptr : &*found;
+    };
+
+    // Tool facts are now read-model patches rather than push-only presentation
+    // events. A late or overflow-resynced projection receives the same bounded
+    // current value from Base and can apply each patch without event memory.
     if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
-        patches.emplace_back(ToolStartedPatch{
-                .tool_call_id = start->tool_call_id,
-                .tool_name = start->tool_name,
-                .args = start->args,
-        });
+        auto execution = make_projection_tool_execution(
+                start->tool_call_id, start->tool_name, ToolExecutionStatus::Running, &start->args, nullptr, false);
+        upsert_tool(execution);
+        patches.emplace_back(ToolStartedPatch{.execution = std::move(execution)});
     }
     if (const auto* partial = std::get_if<agent::ToolExecutionUpdateEvent>(&event)) {
-        patches.emplace_back(ToolPartialPatch{
-                .tool_call_id = partial->tool_call_id,
-                .tool_name = partial->tool_name,
-                .args = partial->args,
-                .partial_result = partial->partial_result,
-        });
+        auto execution = make_projection_tool_execution(partial->tool_call_id,
+                partial->tool_name,
+                ToolExecutionStatus::Running,
+                nullptr,
+                &partial->partial_result,
+                false);
+        if (const auto* prior = previous_tool(partial->tool_call_id); prior != nullptr) {
+            if (execution.output_tail.empty()) {
+                execution.output_tail = prior->output_tail;
+                execution.output_truncated = prior->output_truncated;
+            } else {
+                execution.output_truncated = execution.output_truncated || prior->output_truncated;
+            }
+            if (!execution.artifact_reference) {
+                execution.artifact_reference = prior->artifact_reference;
+            }
+        }
+        execution.arguments_json = previous_tool(partial->tool_call_id) != nullptr
+                                           ? previous_tool(partial->tool_call_id)->arguments_json
+                                           : std::string{};
+        upsert_tool(execution);
+        patches.emplace_back(ToolPartialPatch{.execution = std::move(execution)});
     }
     if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
-        patches.emplace_back(ToolFinishedPatch{
-                .tool_call_id = finished->tool_call_id,
-                .tool_name = finished->tool_name,
-                .result = finished->result,
-                .is_error = finished->is_error,
-        });
+        auto execution = make_projection_tool_execution(finished->tool_call_id,
+                finished->tool_name,
+                finished->is_error || finished->result.is_error ? ToolExecutionStatus::Failed
+                                                                : ToolExecutionStatus::Succeeded,
+                nullptr,
+                &finished->result,
+                finished->is_error);
+        if (const auto* prior = previous_tool(finished->tool_call_id); prior != nullptr) {
+            if (execution.output_tail.empty()) {
+                execution.output_tail = prior->output_tail;
+                execution.output_truncated = prior->output_truncated;
+            } else {
+                execution.output_truncated = execution.output_truncated || prior->output_truncated;
+            }
+            if (!execution.artifact_reference) {
+                execution.artifact_reference = prior->artifact_reference;
+            }
+            if (!execution.error) {
+                execution.error = prior->error;
+            }
+            execution.arguments_json = prior->arguments_json;
+        }
+        upsert_tool(execution);
+        patches.emplace_back(ToolFinishedPatch{.execution = std::move(execution)});
     }
 
     if (std::holds_alternative<agent::AgentStartEvent>(event)) {
         // run_loop raised the flag, cleared the partial, and cleared the
         // pending ids before the first delivery, so the live state this
         // version stamps already agrees with the composed patches.
+        run_state_ = RunState{
+                .phase = RunPhase::Running,
+                .terminal = RunTerminalState::None,
+                .error = std::nullopt,
+        };
+        if (retry_attempt_ == 0) {
+            recovery_state_.retry_count = 0;
+            recovery_state_.max_retry_count = 0;
+            recovery_state_.retry_error.reset();
+        }
+        recovery_state_.next_retry_at_ms.reset();
+        patches.emplace_back(RunStatePatch{.run_state = run_state_});
+        patches.emplace_back(RecoveryStatePatch{.recovery_state = recovery_state_});
         patches.emplace_back(IsRunningPatch{.is_running = true});
         patches.emplace_back(StreamingMessagePatch{});
         if (!published_pending_tool_calls_.empty()) {
@@ -1168,6 +1384,9 @@ void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& eve
         }
     }
 
+    if (projection_subscribers_.empty()) {
+        return;
+    }
     publish_input_queues_if_changed(patches);
     publish_agent_diagnostics_if_changed(patches);
     publish_projection_patch_msg(std::move(patches));

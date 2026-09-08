@@ -541,9 +541,9 @@ private:
     /// The settings selector + thinking/render-settings flows (#506).
     std::shared_ptr<SettingsFlowController> settings_flows_;
     /// The session synchronization adapter (#505): owns the Agent Session
-    /// event subscriptions, the streaming/retry/compaction event
-    /// translation, and the footer data computation. Created with the flow
-    /// controllers; `bind()`/`detach()` follow the session lifecycle.
+    /// Projection Stream subscription, read-model reconciliation, and footer
+    /// data computation. Created with the flow controllers; `bind()`/`detach()`
+    /// follow the session lifecycle.
     std::shared_ptr<SessionUiBinding> session_ui_;
     std::unique_ptr<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;

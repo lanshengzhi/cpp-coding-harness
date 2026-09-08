@@ -391,6 +391,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     // context only after every completed Bash committed.
     flush_pending_user_bash();
     prompt_active_ = false;
+    settle_run_projection(result);
     // Publish the settled run state (ADR 0052): the Agent flips its running
     // flag after the final event delivery, so the Projection Stream learns
     // the settled value — drained queues included — through the degenerate
@@ -514,6 +515,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
 }
 
 void AgentSession::Impl::emit_session_event(const AgentSessionEvent& event) {
+    // Session retry and compaction facts are part of the projection read
+    // model. Publish them before notifying the legacy weak observers so a
+    // frontend that consumes only the Projection Stream never depends on
+    // event delivery or event history.
+    update_projection(event);
     if (session_event_observers_.empty()) {
         return;
     }
