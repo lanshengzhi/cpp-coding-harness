@@ -450,8 +450,14 @@ struct ChatContainer::Impl {
         auto& item = std::get<MessageItem>(items[*active_assistant_item]);
         item.message = ai::MessageVariant{message};
         item.cache.invalidate();
-        auto* const assistant_comp = dynamic_cast<AssistantMessageComponent*>(item.component.get());
-        if (assistant_comp != nullptr) {
+        // A settled assistant may replace an append-only streaming partial
+        // with same-length text (for example a provider's final rewrite).
+        // Rebuild that terminal component instead of asking the incremental
+        // consumer to infer a replacement from a byte offset.
+        if (message.stop_reason != ai::AssistantStopReason::Pending) {
+            rebuild_message(item);
+        } else if (auto* const assistant_comp = dynamic_cast<AssistantMessageComponent*>(item.component.get());
+                assistant_comp != nullptr) {
             assistant_comp->update_content(message);
         } else {
             rebuild_message(item);
@@ -614,6 +620,57 @@ struct ChatContainer::Impl {
         tool.result = result;
         tool.component->update_result(result);
         invalidate_and_update_tool_owner(&tool);
+    }
+
+    [[nodiscard]] ai::ToolResultMessage result_from_projection(const ToolExecutionSnapshot& execution) const {
+        ai::ToolResultMessage result;
+        result.tool_call_id = execution.tool_call_id;
+        result.tool_name = execution.tool_name;
+        result.is_error = execution.status == ToolExecutionStatus::Failed;
+        if (!execution.output_tail.empty()) {
+            result.content.emplace_back(ai::text_content(execution.output_tail));
+        }
+        if (execution.error && execution.output_tail.empty()) {
+            result.content.emplace_back(ai::text_content(*execution.error));
+        }
+        if (execution.artifact_reference) {
+            result.details = support::JsonValue::object_t{{"artifact_reference", *execution.artifact_reference}};
+        }
+        return result;
+    }
+
+    /// Rebuild tool execution presentation entirely from the projection read
+    /// model. This is the recovery path for attach and mailbox overflow; it
+    /// must not depend on an earlier Agent lifecycle event being remembered by
+    /// this frontend.
+    void reconcile_tool_executions(const std::vector<ToolExecutionSnapshot>& executions) {
+        for (const auto& execution : executions) {
+            auto& tool = ensure_tool(execution.tool_call_id,
+                    execution.tool_name,
+                    execution.arguments_json,
+                    execution.status == ToolExecutionStatus::Running);
+            const auto result = result_from_projection(execution);
+            if (execution.status == ToolExecutionStatus::Running) {
+                tool.in_flight = true;
+                tool.status = ToolStatus::Pending;
+                tool.result = result;
+                tool.component->update_result(result, true);
+            } else {
+                tool.in_flight = false;
+                tool.status =
+                        execution.status == ToolExecutionStatus::Failed ? ToolStatus::Failure : ToolStatus::Success;
+                // Snapshot history may carry image blocks or other structured
+                // result content that the bounded projection tail cannot
+                // represent. Keep that authoritative transcript result when
+                // it is already present; use the read-model value only while
+                // no committed result has arrived yet.
+                if (tool.result.tool_call_id.empty()) {
+                    tool.result = result;
+                    tool.component->update_result(result);
+                }
+            }
+            invalidate_and_update_tool_owner(&tool);
+        }
     }
 
     [[nodiscard]] ToolItem& ensure_tool(const std::string& call_id,
@@ -812,12 +869,11 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
             host_notices.push_back(std::move(item));
         }
     }
-    // In-flight tool executions outlive transcript rebuilds: their partial
-    // results live only in the view (snapshots carry no partials), so a
-    // rebuild that drops them loses live output forever. Preserve Pending
-    // entries across the clear below; the add loop re-claims them by call
-    // id into the rebuilt transcript (#597). Settled entries rebuild from
-    // the snapshot instead, so stale outcomes cannot survive a rewind.
+    // In-flight tool executions outlive transcript rebuilds: preserve Pending
+    // entries across the clear below so a transient rebuild cannot lose live
+    // output before the projection read model is reconciled. Settled entries
+    // rebuild from the snapshot instead, so stale outcomes cannot survive a
+    // rewind (#597).
     std::unordered_map<std::string, std::unique_ptr<Impl::ToolItem>> pending_tools;
     for (auto& entry : impl_->owned_tools) {
         if (entry.second != nullptr && entry.second->status == Impl::ToolStatus::Pending) {
@@ -852,6 +908,7 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     for (auto& notice : host_notices) {
         impl_->items.push_back(std::move(notice));
     }
+    impl_->reconcile_tool_executions(snapshot.tool_executions);
 }
 void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
     const auto& messages = snapshot.agent_state.messages;
@@ -925,6 +982,7 @@ void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
             }
         }
     }
+    impl_->reconcile_tool_executions(snapshot.tool_executions);
 }
 
 void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
