@@ -28,19 +28,34 @@ support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::fi
 support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_path(
         const std::string& requested) const {
     if (requested.empty()) {
-        return std::unexpected(workspace_error("path is required"));
+        return std::unexpected(workspace_error(
+                "path is required; use a workspace-relative path, or an absolute path under " + root_.string()));
     }
     if (requested.find('\0') != std::string::npos) {
         return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
     }
-    std::filesystem::path relative(requested);
-    if (relative.is_absolute()) {
-        return std::unexpected(workspace_error("absolute paths are not allowed: " + requested));
+    std::filesystem::path queried(requested);
+    if (queried.is_absolute()) {
+        // Absolute paths are accepted when they normalize to a location inside
+        // the workspace root. Anything else stays rejected: the open-time
+        // symlink guards below still apply to accepted paths.
+        auto target = queried.lexically_normal();
+        if (target != root_ && target.filename().empty()) {
+            target = target.parent_path();
+        }
+        if (!inside_lexically(target)) {
+            return std::unexpected(
+                    workspace_error("path is outside the workspace: " + requested +
+                                    "; use a workspace-relative path, or an absolute path under " + root_.string()));
+        }
+        return target;
     }
-    auto normalized = relative.lexically_normal();
+    auto normalized = queried.lexically_normal();
     for (const auto& part : normalized) {
         if (part == "..") {
-            return std::unexpected(workspace_error("path escapes workspace: " + requested));
+            return std::unexpected(
+                    workspace_error("path escapes workspace: " + requested +
+                                    "; use a workspace-relative path, or an absolute path under " + root_.string()));
         }
     }
     if (normalized == ".") {
@@ -51,7 +66,9 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_
         target = target.parent_path();
     }
     if (!inside_lexically(target)) {
-        return std::unexpected(workspace_error("path escapes workspace: " + requested));
+        return std::unexpected(
+                workspace_error("path escapes workspace: " + requested +
+                                "; use a workspace-relative path, or an absolute path under " + root_.string()));
     }
     return target;
 }
