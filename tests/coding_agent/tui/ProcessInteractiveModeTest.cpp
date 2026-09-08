@@ -672,11 +672,14 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
-    boost::asio::io_context io;
+    // The io_context is heap-owned so the test can destroy it (and the
+    // suspended run coroutine / InteractiveEngine / Tui it owns) explicitly
+    // before this ProcessTerminal goes out of scope (issue #628).
+    auto io = std::make_shared<boost::asio::io_context>();
     cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
-            .executor = io.get_executor(),
+            .executor = io->get_executor(),
     });
     std::optional<cch::support::ExpectedVoid> run_result;
     std::exception_ptr run_exception;
@@ -684,17 +687,17 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
                        .with_session(*created->session)
                        .with_agent_config_directory(config.path())
                        .build();
-    boost::asio::co_spawn(io,
+    boost::asio::co_spawn(*io,
             cch::coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
             [&](std::exception_ptr exception, cch::support::ExpectedVoid result) {
                 run_exception = exception;
                 run_result.emplace(std::move(result));
             });
-    std::jthread runner([&] { io.run(); });
+    std::jthread runner([&] { io->run(); });
     InteractiveSmokeCleanup cleanup{
             *created->session,
             terminal,
-            io,
+            *io,
             runner,
             pty->master.get(),
     };
@@ -741,11 +744,19 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     UNSCOPED_INFO("Dialog resize test output:\n" << output.substr(before_resize));
     CHECK(footer_redocked);
     CHECK(terminal.modes().started);
-    // The dialog owns Escape and Ctrl+D while it is open; stop the PTY after
-    // the liveness assertion so teardown cannot turn selector cancellation
-    // timing into a test failure.
+    // The dialog owns Escape and Ctrl+D while it is open, so the run coroutine
+    // cannot be asked to exit from here; stop the PTY out-of-band after the
+    // liveness assertion so selector-cancellation timing cannot turn into a
+    // test failure (issue #628). Because stopping the PTY leaves the run
+    // coroutine suspended on exit_wait, destroy the io_context (which owns the
+    // InteractiveEngine/Tui frame) here, while this ProcessTerminal is still
+    // alive: otherwise the io_context's destructor would tear the Tui down at
+    // scope exit, after this terminal was destroyed, and Tui::~Tui would
+    // dispatch a pure virtual through the dangling Terminal& (SIGABRT).
     REQUIRE(terminal.stop());
-    io.stop();
+    io->stop();
     runner.join();
     CHECK(terminal.modes().started == false);
+    cleanup.dismiss();
+    io.reset();
 }
