@@ -2,6 +2,7 @@
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 
+#include "coding_agent/LoaderPath.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -41,14 +42,7 @@ struct ImportEntry {
 }
 
 [[nodiscard]] bool path_is_within(const std::filesystem::path& child, const std::filesystem::path& parent) {
-    auto child_it = child.begin();
-    auto parent_it = parent.begin();
-    for (; parent_it != parent.end(); ++parent_it, ++child_it) {
-        if (child_it == child.end() || *child_it != *parent_it) {
-            return false;
-        }
-    }
-    return child_it != child.end();
+    return strip_workspace_root(parent, child.string()).has_value();
 }
 
 [[nodiscard]] support::ExpectedVoid validate_pi_session_file(const std::filesystem::path& path) {

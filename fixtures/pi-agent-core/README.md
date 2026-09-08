@@ -279,7 +279,7 @@ keeps its ordinary "Unknown provider: unknown" streaming failure), and the reque
 a session-layer stream decorator (`src/coding_agent/runtime/AuthGuidanceStream.hpp`) that
 wraps an AI-owned `ModelStream` for the Agent's stream and the summarization seam — the pi-ai
 `ModelRuntime`/`getAuth` surface is consumed unchanged. The session-level tests drive both `auth`/`oauth` branches through scripted Providers.
-The docs-path lines use the deterministic default `~/.pi/docs` (see the divergences below).
+The docs-path lines use the deterministic default `~/.pike/docs` (see the divergences below).
 
 ### Tool scheduling golden (`tool-scheduling.json`)
 
@@ -401,7 +401,7 @@ surface, and the committed evidence. Resolution records: [#326]
   Provider wire messages never carry the timestamp, so this is not observable on the wire.
 - The manual-trigger no-model error omits pi's `getProviderLoginHelp()` tail (`/login` guidance is
   Native TUI presentation, ADR 0032; the auth-guidance capability is a separate ticket).
-- The no-key guidance's login-help docs lines use the deterministic default `~/.pi/docs`
+- The no-key guidance's login-help docs lines use the deterministic default `~/.pike/docs`
   (`kDefaultAuthGuidanceDocsPath`) instead of pi's `getDocsPath()` (`<packageDir>/docs`): the
   harness cannot discover a pi install, and the committed goldens must be byte-stable. The
   message structure stays pi's verbatim `formatNoApiKeyFoundMessage`; hosts may override the

@@ -198,7 +198,7 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
     CHECK_FALSE((*runtime)->provider("missing-provider").has_value());
 }
 
-TEST_CASE("ModelRuntime never reads a legacy pi config tree", "[coding_agent][model-runtime][issue626][spec]") {
+TEST_CASE("ModelRuntime never reads a legacy pi config tree", "[coding_agent][model-runtime][issue626][diverge]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};

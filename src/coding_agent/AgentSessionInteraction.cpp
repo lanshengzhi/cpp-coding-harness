@@ -36,6 +36,8 @@
 namespace cch::coding_agent {
 namespace {
 
+constexpr std::size_t kMaxArtifactReferenceBytes = 1024;
+
 [[nodiscard]] std::optional<std::string> last_assistant_text_from(const std::vector<ai::MessageVariant>& history) {
     for (auto it = history.rbegin(); it != history.rend(); ++it) {
         if (const auto* am = std::get_if<ai::AssistantMessage>(&*it)) {
@@ -73,7 +75,7 @@ namespace {
             continue;
         }
         if (const auto* value = found->second.get_if<std::string>(); value != nullptr) {
-            return bounded_redacted_presentation(*value, 1024);
+            return bounded_redacted_presentation(*value, kMaxArtifactReferenceBytes);
         }
     }
     return std::nullopt;

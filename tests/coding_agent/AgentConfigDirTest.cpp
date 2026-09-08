@@ -65,8 +65,8 @@ TEST_CASE("legacy pi and harness agent directory inputs are ignored",
     CHECK(cch::coding_agent::agent_config_dir() == "/tmp/pi-home/.pike/agent");
 }
 
-TEST_CASE(
-        "fresh installs do not fall back to an existing pi tree", "[coding_agent][agent-config-dir][issue626][spec]") {
+TEST_CASE("fresh installs do not fall back to an existing pi tree",
+        "[coding_agent][agent-config-dir][issue626][diverge]") {
     cch::tests::TempWorkspace temp;
     std::filesystem::create_directories(temp.path() / ".pi" / "agent");
     const cch::tests::EnvVarGuard no_product_override{"PIKE_CODING_AGENT_DIR", std::nullopt};

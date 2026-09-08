@@ -2,8 +2,8 @@
 
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
-#include "ai/utils/RetryClassifier.hpp"
 #include "ai/providers/StreamEmit.hpp"
+#include "ai/utils/RetryClassifier.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/redirect_error.hpp>

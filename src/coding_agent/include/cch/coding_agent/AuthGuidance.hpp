@@ -13,10 +13,10 @@ inline constexpr std::string_view kUnknownProvider = "unknown";
 
 /// Default docs path for the login-help lines of the no-key guidance. pi's
 /// `getDocsPath()` resolves `<packageDir>/docs` inside the pi package; the
-/// C++ harness cannot discover a pi install, so the session layer formats the
-/// guidance with this deterministic user-level root (under the shared
-/// `~/.pi` state) instead. The committed re-auth goldens pin this default.
-inline constexpr std::string_view kDefaultAuthGuidanceDocsPath = "~/.pi/docs";
+/// C++ harness cannot discover an installed documentation tree, so the
+/// session layer formats the guidance with this deterministic Pike path.
+/// The committed re-auth goldens pin this default.
+inline constexpr std::string_view kDefaultAuthGuidanceDocsPath = "~/.pike/docs";
 
 /// pi `getProviderLoginHelp` (`auth-guidance.ts`): the verbatim "Use /login"
 /// help block, with the two docs-path lines resolved from `docs_path`.

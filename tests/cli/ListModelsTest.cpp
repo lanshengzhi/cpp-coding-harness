@@ -146,10 +146,9 @@ TEST_CASE("list-models with no models prints the no-models message and exits 0",
     auto result = run_list_models({"--list-models"}, {});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text ==
-          "No models available. Use /login to log into a provider via OAuth or API key. See:\n"
-          "  ~/.pi/docs/providers.md\n"
-          "  ~/.pi/docs/models.md\n");
+    CHECK(result.stdout_text == "No models available. Use /login to log into a provider via OAuth or API key. See:\n"
+                                "  ~/.pike/docs/providers.md\n"
+                                "  ~/.pike/docs/models.md\n");
 }
 
 TEST_CASE("list-models runs in-memory: no session file is created and help/version keep precedence",
