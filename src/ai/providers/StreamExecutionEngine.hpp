@@ -19,7 +19,8 @@ using SseEventHook = std::move_only_function<
     support::ExpectedVoid(
         const SseEvent& event,
         AssistantMessage& assistant,
-        AssistantEventSink& sink)>;
+        AssistantEventSink& sink,
+        std::optional<InferenceFailure>& inference_failure)>;
 
 /// Factory producing a fresh event hook (and resetting attempt slot state) per attempt.
 using SseAttemptHook = std::move_only_function<

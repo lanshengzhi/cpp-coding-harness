@@ -6,6 +6,7 @@
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "ai/providers/ComposedProvider.hpp"
 #include "ai/providers/ProviderTestAccess.hpp"
+#include "ai/providers/RetryPolicy.hpp"
 #include "SimpleOptions.hpp"
 #include "support/BoundedText.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -108,6 +109,19 @@ invoke_async_operation(Operation operation) {
         diagnostic += error.detail;
     }
     return support::bounded_redacted_text(std::move(diagnostic), kMaxPublicErrorBytes, "...");
+}
+
+[[nodiscard]] InferenceFailure inference_failure_for(
+    const support::Error& failure,
+    AssistantStopReason reason = AssistantStopReason::Error) {
+    return InferenceFailure{
+        .kind = reason == AssistantStopReason::Aborted
+            ? InferenceFailureKind::Cancelled
+            : providers::inference_failure_kind_from_transport(failure.code),
+        .output_started = false,
+        .suggested_backoff_ms = std::nullopt,
+        .provider_code = std::nullopt,
+    };
 }
 
 [[nodiscard]] AssistantMessage safe_terminal_message(
@@ -378,6 +392,7 @@ struct PreparedProviderRequest {
             .reason = reason,
             .error = message,
             .failure = failure,
+            .inference_failure = inference_failure_for(failure, reason),
         }));
     co_return message;
 }
@@ -394,6 +409,7 @@ struct PreparedProviderRequest {
             .reason = message.stop_reason,
             .error = message,
             .failure = failure,
+            .inference_failure = inference_failure_for(failure, message.stop_reason),
         }));
     co_return message;
 }
@@ -953,6 +969,7 @@ namespace {
                     .reason = error->reason,
                     .error = *terminal_message,
                     .failure = std::move(failure),
+                    .inference_failure = error->inference_failure,
                 };
             }
             const auto& forwarded = safe_terminal ? *safe_terminal : event;

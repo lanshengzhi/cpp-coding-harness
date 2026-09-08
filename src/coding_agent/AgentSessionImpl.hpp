@@ -427,11 +427,12 @@ struct AgentSession::Impl final {
     /// Resolve the effective retry settings from the merged settings
     /// scope with pi's defaults applied to missing fields.
     [[nodiscard]] RetrySettings effective_retry_settings() const;
-    /// Whether the failed assistant message is retryable by the turn
-    /// auto-retry policy (pi `_isRetryableError`): context overflow is never
-    /// retryable (compaction owns it, T10), otherwise pi's
-    /// `isRetryableAssistantError` classification applies.
-    [[nodiscard]] bool is_retryable_error(const ai::AssistantMessage& message) const;
+    /// Whether the Provider's structured failure is retryable by the turn
+    /// RecoveryPolicy. Diagnostic assistant text is deliberately absent from
+    /// this decision; ContextOverflow belongs to compaction, while RateLimited
+    /// and TransientTransportFailure may be retried.
+    [[nodiscard]] bool is_retryable_error(
+            const std::optional<ai::InferenceFailure>& inference_failure) const;
     /// pi `_prepareRetry`: increment the attempt budget, emit
     /// `auto_retry_start`, remove the failed assistant message from live
     /// state (it stays in session history), and wait an abort-interruptible
@@ -439,7 +440,9 @@ struct AgentSession::Impl final {
     /// the agent; an aborted sleep emits `auto_retry_end` with pi's
     /// "Retry cancelled" and returns false (exactly one terminal outcome).
     [[nodiscard]] boost::asio::awaitable<bool> prepare_retry(
-            const ai::AssistantMessage& message, std::stop_token stop_token);
+            const ai::AssistantMessage& message,
+            const std::optional<ai::InferenceFailure>& inference_failure,
+            std::stop_token stop_token);
     /// Deliver one session-assembly event to every registered observer.
     void emit_session_event(const AgentSessionEvent& event);
     /// Timestamp of the latest `compaction` entry on the active branch, or

@@ -4,6 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
+
 using namespace cch;
 
 TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done events", "[ai][provider][engine]") {
@@ -41,7 +43,8 @@ TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done event
         return [](
             const ai::providers::SseEvent& event,
             ai::AssistantMessage& assistant,
-            ai::AssistantEventSink&) -> support::ExpectedVoid {
+            ai::AssistantEventSink&,
+            std::optional<ai::InferenceFailure>&) -> support::ExpectedVoid {
             if (event.event == "delta") {
                 assistant.content.emplace_back(ai::TextContent{.text = event.data});
             }
@@ -121,7 +124,8 @@ TEST_CASE("StreamExecutionEngine retries on 429 and resets state via factory", "
         return [](
             const ai::providers::SseEvent& event,
             ai::AssistantMessage& assistant,
-            ai::AssistantEventSink&) -> support::ExpectedVoid {
+            ai::AssistantEventSink&,
+            std::optional<ai::InferenceFailure>&) -> support::ExpectedVoid {
             if (event.event == "data") {
                 assistant.content.emplace_back(ai::TextContent{.text = event.data});
             }
@@ -180,7 +184,8 @@ TEST_CASE("StreamExecutionEngine isolates sink failure and halts immediately", "
         return [](
             const ai::providers::SseEvent&,
             ai::AssistantMessage&,
-            ai::AssistantEventSink&) -> support::ExpectedVoid {
+            ai::AssistantEventSink&,
+            std::optional<ai::InferenceFailure>&) -> support::ExpectedVoid {
             return {};
         };
     };

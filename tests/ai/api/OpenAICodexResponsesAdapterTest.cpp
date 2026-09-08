@@ -1078,7 +1078,7 @@ TEST_CASE(
             .status_code = 429,
             .headers = {{"retry-after-ms", "0"}},
         },
-        .chunks = {"insufficient quota"},
+        .chunks = {R"({"error":{"code":"insufficient_quota","message":"insufficient quota"}})"},
     });
     ai::SimpleStreamOptions quota_options;
     quota_options.api_key = std::string{kCodexToken};

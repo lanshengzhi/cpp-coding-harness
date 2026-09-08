@@ -7,6 +7,7 @@
 #include <cch/support/JsonValue.hpp>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -37,6 +38,9 @@ struct MessageUpdateEvent {
 
 struct MessageEndEvent {
     ai::MessageVariant message;
+    /// Structured Provider/transport outcome for an assistant error. This is
+    /// event metadata, not part of the persisted/model-facing message.
+    std::optional<ai::InferenceFailure> inference_failure{std::nullopt};
 };
 
 struct ToolExecutionStartEvent {

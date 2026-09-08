@@ -7,6 +7,7 @@
 
 #include <array>
 #include <optional>
+#include <string>
 #include <string_view>
 
 using namespace cch;
@@ -86,13 +87,19 @@ TEST_CASE(
     CHECK_FALSE(ai::providers::is_retryable_provider_failure(
         ai::providers::ProviderFailure{
             .status = 429,
-            .message = "insufficient quota: update billing",
+            .message = "provider wording may change",
+            .inference_failure = ai::InferenceFailure{
+                .kind = ai::InferenceFailureKind::InvalidRequest,
+                .provider_code = std::string{"quota_exhausted"},
+            },
         }));
     CHECK_FALSE(ai::providers::is_retryable_provider_failure(
         ai::providers::ProviderFailure{
             .status = 500,
             .headers = {{"x-should-retry", "true"}},
-            .terminal_quota_or_billing = true,
+            .inference_failure = ai::InferenceFailure{
+                .kind = ai::InferenceFailureKind::InvalidRequest,
+            },
         }));
     CHECK(ai::providers::is_retryable_provider_failure(
         ai::providers::ProviderFailure{
@@ -104,6 +111,20 @@ TEST_CASE(
             .status = 500,
             .headers = {{"x-should-retry", "false"}},
         }));
+
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "rate_limit_exceeded") == ai::InferenceFailureKind::RateLimited);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "context_length_exceeded") == ai::InferenceFailureKind::ContextOverflow);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "authentication_error") == ai::InferenceFailureKind::Unauthorized);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "provider_wording_changed") == ai::InferenceFailureKind::InvalidRequest);
+    CHECK(ai::providers::inference_failure_kind_from_http_status(413) ==
+          ai::InferenceFailureKind::ContextOverflow);
+    CHECK(ai::providers::provider_error_code_from_payload(
+                  R"({"error":{"type":"rate_limit_error"}})") ==
+          std::optional<std::string>{"rate_limit_error"});
 
     const auto exponential = ai::providers::provider_retry_delay_ms(
         ai::providers::ProviderFailure{}, 2, std::nullopt, 0);

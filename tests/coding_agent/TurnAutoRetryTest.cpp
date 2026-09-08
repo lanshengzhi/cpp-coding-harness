@@ -125,6 +125,10 @@ public:
                     .error = terminal,
                     .failure = support::make_error(
                         support::ErrorCode::Cancelled, "Request was aborted"),
+                    .inference_failure = ai::InferenceFailure{
+                        .kind = ai::InferenceFailureKind::Cancelled,
+                        .output_started = false,
+                    },
                 }));
             }
             co_return terminal;
@@ -134,6 +138,24 @@ public:
         }
         auto response = std::move(responses.front());
         responses.pop_front();
+        std::optional<ai::InferenceFailure> inference_failure;
+        if (response.stop_reason == ai::AssistantStopReason::Error ||
+                response.stop_reason == ai::AssistantStopReason::Aborted) {
+            const auto kind = failure_kinds.empty()
+                ? response.stop_reason == ai::AssistantStopReason::Aborted
+                    ? ai::InferenceFailureKind::Cancelled
+                    : ai::InferenceFailureKind::TransientTransportFailure
+                : failure_kinds.front();
+            if (!failure_kinds.empty()) {
+                failure_kinds.pop_front();
+            }
+            inference_failure = ai::InferenceFailure{
+                    .kind = kind,
+                    .output_started = false,
+                    .suggested_backoff_ms = std::nullopt,
+                    .provider_code = std::nullopt,
+            };
+        }
         response.provider = "sdk-host";
         response.api = "fake";
         response.model = model.id;
@@ -149,6 +171,7 @@ public:
                     .failure = support::make_error(
                         support::ErrorCode::Stream,
                         response.error_message.value_or("terminal error")),
+                    .inference_failure = std::move(inference_failure),
                 }));
             } else {
                 CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
@@ -161,10 +184,13 @@ public:
     int request_count{0};
     std::vector<tests::RecordedProviderRequest> requests;
     std::deque<ai::AssistantMessage> responses;
+    /// Scripted failures are transient by default; tests that model an
+    /// authorization/overflow/invalid outcome provide an explicit category.
+    std::deque<ai::InferenceFailureKind> failure_kinds;
 };
 
-/// An `error` terminal with the given provider message (the classification
-/// input for `isRetryableAssistantError`).
+/// An `error` terminal with the given provider diagnostic. The scripted
+/// Provider supplies its structured failure category separately.
 [[nodiscard]] ai::AssistantMessage error_terminal(std::string message) {
     auto terminal = ai::assistant_text_message("");
     terminal.stop_reason = ai::AssistantStopReason::Error;
@@ -214,7 +240,8 @@ struct RetrySessionUnderTest {
 [[nodiscard]] RetrySessionUnderTest make_retry_session(TestPaths& paths,
         std::deque<ai::AssistantMessage> responses,
         std::string settings_json = {},
-        std::vector<agent::Tool> custom_tools = {}) {
+        std::vector<agent::Tool> custom_tools = {},
+        std::deque<ai::InferenceFailureKind> failure_kinds = {}) {
     // Every retry test isolates its settings scope under a fresh agent
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
@@ -228,6 +255,7 @@ struct RetrySessionUnderTest {
     auto client = std::make_shared<RetryScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses = std::move(responses);
+    client_ptr->failure_kinds = std::move(failure_kinds);
 
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
@@ -582,7 +610,9 @@ TEST_CASE(
         auto under_test = make_retry_session(
             paths,
             {error_terminal(message)},
-            R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})");
+            R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})",
+            {},
+            {ai::InferenceFailureKind::InvalidRequest});
         auto* session = under_test.session.get();
         auto* client = under_test.client;
         RecordedSessionEvents events;
@@ -593,6 +623,28 @@ TEST_CASE(
         CHECK(session->message_count() == 2);
         session->close();
     }
+}
+
+TEST_CASE(
+    "turn auto-retry follows structured failure kind despite diagnostic wording",
+    "[coding_agent][retry][issue624]") {
+    TestPaths paths;
+    auto under_test = make_retry_session(
+            paths,
+            {
+                    error_terminal("the provider changed this diagnostic wording"),
+                    success_message("recovered"),
+            },
+            R"({"retry": {"enabled": true, "maxRetries": 1, "baseDelayMs": 1}})",
+            {},
+            {ai::InferenceFailureKind::TransientTransportFailure});
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    REQUIRE(session->prompt_blocking("Test").has_value());
+    CHECK(client->request_count == 2);
+    CHECK(session->last_assistant_text() == std::optional<std::string>{"recovered"});
+    session->close();
 }
 
 TEST_CASE(
@@ -610,7 +662,9 @@ TEST_CASE(
             // returning undefined).
             error_terminal("overloaded_error"),
         },
-        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})");
+        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})",
+        {},
+        {ai::InferenceFailureKind::ContextOverflow});
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 

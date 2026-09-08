@@ -429,14 +429,18 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
     // The commitment sink also observes assistant message endings so the turn
     // auto-retry success event fires at the first non-error assistant message
     // (pi `_handleAgentEvent` message_end handler resets `_retryAttempt` and
-    // emits `auto_retry_end success`). Rebuilt per call because the wrapped
-    // sink is move-only and each prompt/continue takes it by value.
-    const auto make_retry_observing_sink = [&]() {
+    // emits `auto_retry_end success`). It retains the Provider's structured
+    // failure metadata for the RecoveryPolicy; that metadata is event-scoped,
+    // not part of the persisted AssistantMessage. Rebuilt per call because the
+    // wrapped sink is move-only and each prompt/continue takes it by value.
+    std::optional<ai::InferenceFailure> last_inference_failure;
+    const auto make_retry_observing_sink = [&commitment, this, &last_inference_failure]() {
         return agent::AgentEventCommitter{
-                [this, inner = commitment.sink()](
+                [this, &last_inference_failure, inner = commitment.sink()](
                         const agent::AgentLifecycleEvent& event) mutable -> support::ExpectedVoid {
-                    if (retry_attempt_ > 0) {
-                        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                    if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                        last_inference_failure = end->inference_failure;
+                        if (retry_attempt_ > 0) {
                             const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message);
                             if (assistant != nullptr && assistant->stop_reason != ai::AssistantStopReason::Error) {
                                 emit_session_event(AutoRetryEndEvent{
@@ -470,8 +474,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
             break;
         }
 
-        if (is_retryable_error(*last_assistant)) {
-            if (co_await prepare_retry(*last_assistant, stop_source.get_token())) {
+        if (is_retryable_error(last_inference_failure)) {
+            if (co_await prepare_retry(
+                        *last_assistant,
+                        last_inference_failure,
+                        stop_source.get_token())) {
                 result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::continue_run(
                         *agent_, make_retry_observing_sink(), stop_source));
                 if (!result) {
@@ -585,20 +592,21 @@ RetrySettings AgentSession::Impl::effective_retry_settings() const {
     return settings;
 }
 
-bool AgentSession::Impl::is_retryable_error(const ai::AssistantMessage& message) const {
-    // Context overflow is handled by compaction, never by retry (pi
-    // `_isRetryableError`); the two recovery paths never interfere (T10's
-    // boundary).
-    const auto& model = agent_->state().model;
-    const std::size_t context_window = static_cast<std::size_t>(model.context_window);
-    if (harness::session::is_context_overflow(message, context_window)) {
+bool AgentSession::Impl::is_retryable_error(
+        const std::optional<ai::InferenceFailure>& inference_failure) const {
+    if (!inference_failure) {
         return false;
     }
-    return ai::is_retryable_assistant_error(message);
+    // Context overflow is handled by compaction, never by turn retry. The
+    // structured category keeps the two RecoveryPolicy paths independent
+    // without inspecting the assistant's diagnostic wording.
+    return ai::is_retryable_inference_failure(*inference_failure);
 }
 
 boost::asio::awaitable<bool> AgentSession::Impl::prepare_retry(
-        const ai::AssistantMessage& message, std::stop_token stop_token) {
+        const ai::AssistantMessage& message,
+        const std::optional<ai::InferenceFailure>& inference_failure,
+        std::stop_token stop_token) {
     const auto settings = effective_retry_settings();
     if (!settings.enabled) {
         co_return false;
@@ -612,7 +620,11 @@ boost::asio::awaitable<bool> AgentSession::Impl::prepare_retry(
         co_return false;
     }
 
-    const auto delay_ms = settings.base_delay_ms * (static_cast<std::size_t>(1) << (retry_attempt_ - 1));
+    const auto exponential_delay_ms =
+            settings.base_delay_ms * (static_cast<std::size_t>(1) << (retry_attempt_ - 1));
+    const auto delay_ms = inference_failure && inference_failure->suggested_backoff_ms
+        ? static_cast<std::size_t>(*inference_failure->suggested_backoff_ms)
+        : exponential_delay_ms;
     emit_session_event(AutoRetryStartEvent{
             .attempt = retry_attempt_,
             .max_attempts = static_cast<int>(settings.max_retries),
