@@ -89,13 +89,13 @@ struct ShellRun {
 
 } // namespace
 
-TEST_CASE("Local User Shell is an independently owned final capability", "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell is an independently owned final capability",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     static_assert(std::is_final_v<runtime::LocalUserShell>);
     static_assert(std::is_base_of_v<runtime::AsyncUserShell, runtime::LocalUserShell>);
 }
 
-
-TEST_CASE("Local User Shell streams output and reports exit zero", "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell streams output and reports exit zero", "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 
@@ -106,7 +106,8 @@ TEST_CASE("Local User Shell streams output and reports exit zero", "[coding_agen
     CHECK(run.updates.find("user-bash-output") != std::string::npos);
 }
 
-TEST_CASE("Local User Shell merges stdout and stderr in emission order", "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell merges stdout and stderr in emission order",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 
@@ -118,9 +119,8 @@ TEST_CASE("Local User Shell merges stdout and stderr in emission order", "[codin
     CHECK(run.updates == "out-one\nerr-one\nout-two\n");
 }
 
-TEST_CASE(
-    "Local User Shell records a non-zero exit as a completed outcome",
-    "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell records a non-zero exit as a completed outcome",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 
@@ -131,9 +131,8 @@ TEST_CASE(
     CHECK(run.updates.find("before-exit") != std::string::npos);
 }
 
-TEST_CASE(
-    "Local User Shell cancellation stops the process and retains streamed output",
-    "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell cancellation stops the process and retains streamed output",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 
@@ -147,7 +146,7 @@ TEST_CASE(
     CHECK(run.updates.find("partial") != std::string::npos);
 }
 
-TEST_CASE("Local User Shell filters secret environment variables", "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell filters secret environment variables", "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard heuristic_secret{"CCH_LOCAL_USER_SHELL_TEST_API_KEY"};
     tests::EnvVarGuard explicit_secret{"CCH_LOCAL_USER_SHELL_PLAIN"};
@@ -173,9 +172,8 @@ TEST_CASE("Local User Shell filters secret environment variables", "[coding_agen
     CHECK(run.updates.find("explicit-value") == std::string::npos);
 }
 
-TEST_CASE(
-    "Local User Shell starts every command in the Session workspace",
-    "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell starts every command in the Session workspace",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 
@@ -190,7 +188,8 @@ TEST_CASE(
     CHECK(second.updates.find("/\n") == std::string::npos);
 }
 
-TEST_CASE("Local User Shell applies the configured command prefix as setup only", "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell applies the configured command prefix as setup only",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{
         workspace.path(),
@@ -203,9 +202,8 @@ TEST_CASE("Local User Shell applies the configured command prefix as setup only"
     CHECK(run.updates.find("from-prefix") != std::string::npos);
 }
 
-TEST_CASE(
-    "Local User Shell honors a configured shell path and defers stale paths to execution",
-    "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell honors a configured shell path and defers stale paths to execution",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
 
     runtime::LocalUserShell stale_shell{
@@ -227,9 +225,8 @@ TEST_CASE(
     CHECK(run.updates.find("via-sh") != std::string::npos);
 }
 
-TEST_CASE(
-    "Local User Shell reports update-sink failure as an infrastructure error",
-    "[coding_agent][runtime][shell][issue90]") {
+TEST_CASE("Local User Shell reports update-sink failure as an infrastructure error",
+        "[coding_agent][runtime][shell][issue90][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 
@@ -238,9 +235,8 @@ TEST_CASE(
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE(
-    "Local User Shell contains a throwing update sink and stops the process",
-    "[coding_agent][runtime][shell][issue484]") {
+TEST_CASE("Local User Shell contains a throwing update sink and stops the process",
+        "[coding_agent][runtime][shell][issue484][spec]") {
     tests::TempWorkspace workspace;
     runtime::LocalUserShell shell{workspace.path(), {}, {}};
 

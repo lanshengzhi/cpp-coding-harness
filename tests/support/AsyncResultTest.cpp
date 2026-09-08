@@ -96,7 +96,7 @@ bool dies_from_abort(F&& body) {
 
 } // namespace
 
-TEST_CASE("a ready AsyncResult delivers its value to a completion callback inline", "[support][issue451]") {
+TEST_CASE("a ready AsyncResult delivers its value to a completion callback inline", "[support][issue451][spec]") {
     AsyncResult<int> result(std::expected<int, Error>{42});
     int observed = 0;
     result.start([&observed](std::expected<int, Error> value) noexcept {
@@ -105,7 +105,7 @@ TEST_CASE("a ready AsyncResult delivers its value to a completion callback inlin
     CHECK(observed == 42);
 }
 
-TEST_CASE("a ready AsyncResult delivers a terminal error inline", "[support][issue451]") {
+TEST_CASE("a ready AsyncResult delivers a terminal error inline", "[support][issue451][spec]") {
     AsyncResult<int> result(
         std::expected<int, Error>{std::unexpect, make_error(ErrorCode::Process, "boom")});
     std::optional<std::expected<int, Error>> outcome;
@@ -118,7 +118,7 @@ TEST_CASE("a ready AsyncResult delivers a terminal error inline", "[support][iss
     CHECK(outcome->error().message == "boom");
 }
 
-TEST_CASE("the ready path completes without allocation", "[support][issue451]") {
+TEST_CASE("the ready path completes without allocation", "[support][issue451][spec]") {
     // Build the completion first so the measured region isolates AsyncResult's
     // own ready path, not the callback's move-only-function construction.
     int observed = 0;
@@ -136,7 +136,7 @@ TEST_CASE("the ready path completes without allocation", "[support][issue451]") 
     CHECK(observed == 42);
 }
 
-TEST_CASE("co_await on a ready AsyncResult completes without suspending", "[support][issue451]") {
+TEST_CASE("co_await on a ready AsyncResult completes without suspending", "[support][issue451][spec]") {
     std::optional<std::expected<int, Error>> slot;
     auto task = co_await_into(AsyncResult<int>(std::expected<int, Error>{7}), slot);
 
@@ -150,7 +150,7 @@ TEST_CASE("co_await on a ready AsyncResult completes without suspending", "[supp
     task.handle.destroy();
 }
 
-TEST_CASE("a pending AsyncResult initiates its producer exactly once and delivers once", "[support][issue451]") {
+TEST_CASE("a pending AsyncResult initiates its producer exactly once and delivers once", "[support][issue451][spec]") {
     int initiations = 0;
     int observed = 0;
     AsyncCompletion<int, Error> held;
@@ -170,7 +170,7 @@ TEST_CASE("a pending AsyncResult initiates its producer exactly once and deliver
     CHECK(observed == 23);
 }
 
-TEST_CASE("a pending operation owns its inputs after initiation returns", "[support][issue451]") {
+TEST_CASE("a pending operation owns its inputs after initiation returns", "[support][issue451][spec]") {
     int observed = 0;
     AsyncCompletion<int, Error> held;
 
@@ -192,7 +192,8 @@ TEST_CASE("a pending operation owns its inputs after initiation returns", "[supp
     CHECK(observed == 42);
 }
 
-TEST_CASE("co_await on a pending AsyncResult suspends and resumes with the terminal outcome", "[support][issue451]") {
+TEST_CASE("co_await on a pending AsyncResult suspends and resumes with the terminal outcome",
+        "[support][issue451][spec]") {
     AsyncCompletion<int, Error> held;
     AsyncResult<int> result([&](AsyncCompletion<int, Error> done) noexcept {
         held = std::move(done);
@@ -213,7 +214,7 @@ TEST_CASE("co_await on a pending AsyncResult suspends and resumes with the termi
     task.handle.destroy();
 }
 
-TEST_CASE("co_await on a pending void AsyncResult resumes with the terminal outcome", "[support][issue451]") {
+TEST_CASE("co_await on a pending void AsyncResult resumes with the terminal outcome", "[support][issue451][spec]") {
     AsyncCompletion<void, Error> held;
     AsyncResult<void> result([&](AsyncCompletion<void, Error> done) noexcept {
         held = std::move(done);
@@ -233,7 +234,7 @@ TEST_CASE("co_await on a pending void AsyncResult resumes with the terminal outc
     task.handle.destroy();
 }
 
-TEST_CASE("an explicit stop token resolves cancellation into the terminal outcome", "[support][issue451]") {
+TEST_CASE("an explicit stop token resolves cancellation into the terminal outcome", "[support][issue451][spec]") {
     std::stop_source source;
     const auto token = source.get_token();
 
@@ -259,7 +260,7 @@ TEST_CASE("an explicit stop token resolves cancellation into the terminal outcom
     CHECK(outcome->error().code == ErrorCode::Cancelled);
 }
 
-TEST_CASE("abandoning a suspended co_await discards a late completion safely", "[support][issue451]") {
+TEST_CASE("abandoning a suspended co_await discards a late completion safely", "[support][issue451][spec]") {
     AsyncCompletion<int, Error> held;
     AsyncResult<int> result([&](AsyncCompletion<int, Error> done) noexcept {
         held = std::move(done);
@@ -287,7 +288,8 @@ TEST_CASE("abandoning a suspended co_await discards a late completion safely", "
     CHECK_FALSE(resumed);
 }
 
-TEST_CASE("a late completion after the result handle is gone still reaches its owned callback", "[support][issue451]") {
+TEST_CASE("a late completion after the result handle is gone still reaches its owned callback",
+        "[support][issue451][spec]") {
     AsyncCompletion<int, Error> held;
     int observed = 0;
 
@@ -305,7 +307,7 @@ TEST_CASE("a late completion after the result handle is gone still reaches its o
     CHECK(observed == 6);
 }
 
-TEST_CASE("AsyncResult preserves typed outcomes with a custom error type", "[support][issue451]") {
+TEST_CASE("AsyncResult preserves typed outcomes with a custom error type", "[support][issue451][spec]") {
     enum class MyError { Bad };
     AsyncResult<int, MyError> result(
         std::expected<int, MyError>{std::unexpect, MyError::Bad});
@@ -322,7 +324,7 @@ TEST_CASE("AsyncResult preserves typed outcomes with a custom error type", "[sup
     CHECK(saw_error == 1);
 }
 
-TEST_CASE("AsyncResult is move-only and names the shared error default", "[support][issue451]") {
+TEST_CASE("AsyncResult is move-only and names the shared error default", "[support][issue451][spec]") {
     static_assert(!std::is_copy_constructible_v<AsyncResult<int>>);
     static_assert(!std::is_copy_assignable_v<AsyncResult<int>>);
     static_assert(std::is_move_constructible_v<AsyncResult<int>>);
@@ -336,7 +338,7 @@ TEST_CASE("AsyncResult is move-only and names the shared error default", "[suppo
                   AsyncProducer<int, Error>>);
 }
 
-TEST_CASE("AsyncResult exposes no executor, event bus, polymorphic box, or Boost.Asio", "[support][issue451]") {
+TEST_CASE("AsyncResult exposes no executor, event bus, polymorphic box, or Boost.Asio", "[support][issue451][spec]") {
     const auto path = std::filesystem::path(CCH_SOURCE_DIR) /
         "src" / "support" / "include" / "cch" / "support" / "AsyncResult.hpp";
     REQUIRE(std::filesystem::exists(path));
@@ -355,7 +357,7 @@ TEST_CASE("AsyncResult exposes no executor, event bus, polymorphic box, or Boost
     CHECK(text.find("virtual") == std::string::npos);
 }
 
-TEST_CASE("starting an AsyncResult twice terminates the process", "[support][fatal][issue451]") {
+TEST_CASE("starting an AsyncResult twice terminates the process", "[support][fatal][issue451][spec]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result(std::expected<int, Error>{1});
         result.start([](std::expected<int, Error>) noexcept {});
@@ -364,7 +366,7 @@ TEST_CASE("starting an AsyncResult twice terminates the process", "[support][fat
     CHECK(aborted);
 }
 
-TEST_CASE("starting a moved-from AsyncResult terminates the process", "[support][fatal][issue451]") {
+TEST_CASE("starting a moved-from AsyncResult terminates the process", "[support][fatal][issue451][spec]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> source(std::expected<int, Error>{1});
         AsyncResult<int> moved(std::move(source));
@@ -373,7 +375,7 @@ TEST_CASE("starting a moved-from AsyncResult terminates the process", "[support]
     CHECK(aborted);
 }
 
-TEST_CASE("a producer that completes twice terminates the process", "[support][fatal][issue451]") {
+TEST_CASE("a producer that completes twice terminates the process", "[support][fatal][issue451][spec]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result([&](AsyncCompletion<int, Error> done) noexcept {
             done(std::expected<int, Error>{1});
@@ -384,7 +386,7 @@ TEST_CASE("a producer that completes twice terminates the process", "[support][f
     CHECK(aborted);
 }
 
-TEST_CASE("an empty producer terminates the process", "[support][fatal][issue451]") {
+TEST_CASE("an empty producer terminates the process", "[support][fatal][issue451][spec]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result(AsyncProducer<int, Error>{});
         result.start([](std::expected<int, Error>) noexcept {});

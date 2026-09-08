@@ -40,14 +40,14 @@ include_guard(GLOBAL)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/parity_gate_test.py
     )
     set_tests_properties(cch_parity_gate_unit PROPERTIES
-        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480")
+        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;spec")
 
     add_test(
         NAME cch_warning_gate_unit
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/WarningGateTest.py
     )
     set_tests_properties(cch_warning_gate_unit PROPERTIES
-        LABELS "architecture;parity-gate;issue499")
+        LABELS "architecture;parity-gate;issue499;spec")
 
     add_test(
         NAME cch_parity_gate_fixture
@@ -57,7 +57,7 @@ include_guard(GLOBAL)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/ParityGateTest.cmake
     )
     set_tests_properties(cch_parity_gate_fixture PROPERTIES
-        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480")
+        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;spec")
 
     # Production build-phase Gate self-check (ADR 0039; issue #470): run the
     # same fail-closed build-phase Gate against the production evidence
@@ -83,7 +83,7 @@ include_guard(GLOBAL)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/run-build-gate.cmake
     )
     set_tests_properties(cch_parity_gate_production_build PROPERTIES
-        LABELS "architecture;parity-gate;issue470;issue480")
+        LABELS "architecture;parity-gate;issue470;issue480;spec")
 
     # Owner Interface standalone compile (ADR 0039; #469): every Owner
     # Interface header compiles alone with the include path restricted to its
@@ -99,7 +99,7 @@ include_guard(GLOBAL)
             --manifest ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json
             --project-root ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469")
+    set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469;spec")
 
     # Zero-compiler-warning gate (issue #492): recompiles every project-owned
     # compile command from the generated compile_commands.json with the
@@ -133,6 +133,6 @@ include_guard(GLOBAL)
             --jobs ${CCH_WARNING_GATE_JOBS}
     )
     set_tests_properties(cch_warning_gate PROPERTIES
-        LABELS "architecture;build;issue492"
+        LABELS "architecture;build;issue492;spec"
         PROCESSORS ${CCH_WARNING_GATE_JOBS}
         TIMEOUT 900)

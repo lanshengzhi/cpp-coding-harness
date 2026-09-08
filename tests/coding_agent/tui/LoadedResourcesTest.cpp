@@ -149,9 +149,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "LoadedResources renders compact sections with sorted names and cwd-relative Context",
-    "[coding_agent][tui][loaded-resources][issue418]") {
+TEST_CASE("LoadedResources renders compact sections with sorted names and cwd-relative Context",
+        "[coding_agent][tui][loaded-resources][issue418][spec]") {
     auto theme = test_theme();
     coding_agent::tui::LoadedResources resources(theme);
     resources.set_data(sample_data());
@@ -186,9 +185,8 @@ TEST_CASE(
     CHECK(screen.find("(skipped)") != std::string::npos);
 }
 
-TEST_CASE(
-    "LoadedResources expands into scope groups with project, user, and path",
-    "[coding_agent][tui][loaded-resources][issue418]") {
+TEST_CASE("LoadedResources expands into scope groups with project, user, and path",
+        "[coding_agent][tui][loaded-resources][issue418][spec]") {
     auto theme = test_theme();
     coding_agent::tui::LoadedResources resources(theme);
     resources.set_data(sample_data());
@@ -225,9 +223,8 @@ TEST_CASE(
     CHECK(screen.find("cli-skill, proj-skill, user-skill") == std::string::npos);
 }
 
-TEST_CASE(
-    "LoadedResources renders prompt/theme conflicts and omits empty sections",
-    "[coding_agent][tui][loaded-resources][issue418]") {
+TEST_CASE("LoadedResources renders prompt/theme conflicts and omits empty sections",
+        "[coding_agent][tui][loaded-resources][issue418][spec]") {
     auto theme = test_theme();
     coding_agent::tui::LoadedResources resources(theme);
 
@@ -267,9 +264,7 @@ TEST_CASE(
     CHECK(screen.find("/work/missing-theme.json") != std::string::npos);
 }
 
-TEST_CASE(
-    "reload box renders the pi-trimmed message with borders",
-    "[coding_agent][tui][reload][issue418]") {
+TEST_CASE("reload box renders the pi-trimmed message with borders", "[coding_agent][tui][reload][issue418][spec]") {
     auto theme = test_theme();
     auto box = coding_agent::tui::make_reload_box(theme);
     const auto rendered = box->render(100);

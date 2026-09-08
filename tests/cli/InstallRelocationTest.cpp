@@ -101,9 +101,8 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
 // Issue #472: a clean-prefix staging install produces only the relocatable
 // Runtime and its required notices, passes the dependency-closure audit, and
 // keeps working after relocation without network credentials.
-TEST_CASE(
-    "staged install contains only the relocatable Runtime and behaves after relocation",
-    "[cli][install][issue472]") {
+TEST_CASE("staged install contains only the relocatable Runtime and behaves after relocation",
+        "[cli][install][issue472][spec]") {
 #ifdef CCH_SANITIZER_BUILD
     // A sanitizer build links libasan/libubsan into every binary, so the
     // dependency-closure audit correctly refuses it: sanitizers gate the

@@ -213,7 +213,7 @@ void check_message_golden(
 
 TEST_CASE("system prompt default message golden: pi structure, Pike identity "
           "line and docs block swapped",
-        "[coding_agent][prompt][golden][issue422]") {
+        "[coding_agent][prompt][golden][issue422][compat-pi]") {
     auto options = session_shape_options();
     options.skills = {dummy_skill()};
     check_message_golden("default", options);
@@ -221,7 +221,7 @@ TEST_CASE("system prompt default message golden: pi structure, Pike identity "
 
 TEST_CASE("system prompt custom message golden: byte-identical to pi with no "
           "identity delta",
-          "[coding_agent][prompt][golden][issue422]") {
+        "[coding_agent][prompt][golden][issue422][compat-pi]") {
     auto options = session_shape_options();
     // pi truthy customPrompt: the custom branch, no selectedTools (mirrors
     // the TS side, which passes none).
@@ -240,7 +240,7 @@ TEST_CASE("system prompt custom message golden: byte-identical to pi with no "
 
 TEST_CASE("system prompt empty-tools message golden: default branch with the "
           "empty tool set and the identity delta",
-          "[coding_agent][prompt][golden][issue422]") {
+        "[coding_agent][prompt][golden][issue422][compat-pi]") {
     auto options = session_shape_options();
     options.selectedTools = std::vector<std::string>{};
     options.toolSnippets.clear();

@@ -287,7 +287,7 @@ struct BrowserLoginHarness {
 
 } // namespace
 
-TEST_CASE("PKCE S256 challenge is the base64url SHA-256 of the verifier", "[ai][auth][issue343]") {
+TEST_CASE("PKCE S256 challenge is the base64url SHA-256 of the verifier", "[ai][auth][issue343][compat-pi]") {
     auto pkce = ai::auth::generate_pkce();
     REQUIRE(pkce);
     CHECK(pkce->verifier.size() == 43); // 32 bytes -> 43 base64url chars
@@ -311,7 +311,7 @@ TEST_CASE("PKCE S256 challenge is the base64url SHA-256 of the verifier", "[ai][
     CHECK(pkce->verifier.find('=') == std::string::npos);
 }
 
-TEST_CASE("OAuth state is 16 random bytes as 32 hex characters", "[ai][auth][issue343]") {
+TEST_CASE("OAuth state is 16 random bytes as 32 hex characters", "[ai][auth][issue343][compat-pi]") {
     auto first = ai::auth::create_oauth_state();
     auto second = ai::auth::create_oauth_state();
     REQUIRE(first);
@@ -325,7 +325,7 @@ TEST_CASE("OAuth state is 16 random bytes as 32 hex characters", "[ai][auth][iss
     CHECK(std::all_of(first->begin(), first->end(), hex));
 }
 
-TEST_CASE("parseAuthorizationInput accepts URL, code#state, query and bare code", "[ai][auth][issue343]") {
+TEST_CASE("parseAuthorizationInput accepts URL, code#state, query and bare code", "[ai][auth][issue343][compat-pi]") {
     const auto url = ai::auth::parse_authorization_input(
         "http://localhost:1455/auth/callback?code=a%20b&state=s1");
     CHECK(url.code == std::string{"a b"});
@@ -352,14 +352,14 @@ TEST_CASE("parseAuthorizationInput accepts URL, code#state, query and bare code"
     CHECK(url_without_code.state == std::string{"s"});
 }
 
-TEST_CASE("extractAccountId reads the unverified JWT chatgpt_account_id claim", "[ai][auth][issue343]") {
+TEST_CASE("extractAccountId reads the unverified JWT chatgpt_account_id claim", "[ai][auth][issue343][compat-pi]") {
     const auto token = access_token_for("account-123");
     const auto account_id = ai::auth::extract_account_id(token);
     REQUIRE(account_id);
     CHECK(*account_id == "account-123");
 }
 
-TEST_CASE("extractAccountId fails on malformed or claim-less JWTs", "[ai][auth][issue343]") {
+TEST_CASE("extractAccountId fails on malformed or claim-less JWTs", "[ai][auth][issue343][compat-pi]") {
     CHECK(!ai::auth::extract_account_id("not-a-jwt").has_value());
     CHECK(!ai::auth::extract_account_id("a.b").has_value());
     const auto no_claim = ai::auth::base64url_encode(R"({"sub":"x"})");
@@ -369,7 +369,7 @@ TEST_CASE("extractAccountId fails on malformed or claim-less JWTs", "[ai][auth][
     CHECK(!ai::auth::extract_account_id("a." + empty_id + ".c").has_value());
 }
 
-TEST_CASE("OAuth HTML pages match the frozen pi output verbatim", "[ai][auth][issue343]") {
+TEST_CASE("OAuth HTML pages match the frozen pi output verbatim", "[ai][auth][issue343][compat-pi]") {
     const auto success = tests::read_pi_fixture_text("auth/oauth-success-callback.html");
     const auto not_found = tests::read_pi_fixture_text("auth/oauth-error-route-not-found.html");
     const auto state = tests::read_pi_fixture_text("auth/oauth-error-state-mismatch.html");
@@ -389,7 +389,8 @@ TEST_CASE("OAuth HTML pages match the frozen pi output verbatim", "[ai][auth][is
               "Internal error while processing OAuth callback.") == *internal);
 }
 
-TEST_CASE("browser login succeeds through the callback server and cancels the prompt", "[ai][auth][issue343]") {
+TEST_CASE("browser login succeeds through the callback server and cancels the prompt",
+        "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.options.callback_host = "127.0.0.1";
     harness.options.callback_port = free_port();
@@ -511,7 +512,7 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
     CHECK(content_type->second == "application/x-www-form-urlencoded");
 }
 
-TEST_CASE("PI_OAUTH_CALLBACK_HOST overrides the callback server bind host", "[ai][auth][issue343]") {
+TEST_CASE("PI_OAUTH_CALLBACK_HOST overrides the callback server bind host", "[ai][auth][issue343][compat-pi]") {
     tests::EnvVarGuard callback_host("PI_OAUTH_CALLBACK_HOST", "127.0.0.2");
 
     BrowserLoginHarness harness;
@@ -569,7 +570,7 @@ TEST_CASE("PI_OAUTH_CALLBACK_HOST overrides the callback server bind host", "[ai
     CHECK(query_param(harness.http->requests[0].body, "code") == "env-host-code");
 }
 
-TEST_CASE("manual code wins the race and closes the callback wait", "[ai][auth][issue343]") {
+TEST_CASE("manual code wins the race and closes the callback wait", "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.options.callback_host = "127.0.0.1";
     harness.options.callback_port = free_port();
@@ -599,7 +600,7 @@ TEST_CASE("manual code wins the race and closes the callback wait", "[ai][auth][
     CHECK(query_param(harness.http->requests[0].body, "code") == "manual-code");
 }
 
-TEST_CASE("manual code accepts a bare code with no state", "[ai][auth][issue343]") {
+TEST_CASE("manual code accepts a bare code with no state", "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.options.callback_host = "127.0.0.1";
     harness.options.callback_port = free_port();
@@ -625,7 +626,7 @@ TEST_CASE("manual code accepts a bare code with no state", "[ai][auth][issue343]
     CHECK(query_param(harness.http->requests[0].body, "code") == "bare-code");
 }
 
-TEST_CASE("manual code with a mismatched state fails with State mismatch", "[ai][auth][issue343]") {
+TEST_CASE("manual code with a mismatched state fails with State mismatch", "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.options.callback_host = "127.0.0.1";
     harness.options.callback_port = free_port();
@@ -647,7 +648,8 @@ TEST_CASE("manual code with a mismatched state fails with State mismatch", "[ai]
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE("callback server rejects wrong path, state, and missing code in pi order", "[ai][auth][issue343]") {
+TEST_CASE(
+        "callback server rejects wrong path, state, and missing code in pi order", "[ai][auth][issue343][compat-pi]") {
     boost::asio::io_context io;
     boost::asio::co_spawn(
         io,
@@ -691,7 +693,7 @@ TEST_CASE("callback server rejects wrong path, state, and missing code in pi ord
     io.run();
 }
 
-TEST_CASE("callback server settles the wait only for a valid callback", "[ai][auth][issue343]") {
+TEST_CASE("callback server settles the wait only for a valid callback", "[ai][auth][issue343][compat-pi]") {
     boost::asio::io_context io;
     boost::asio::co_spawn(
         io,
@@ -740,7 +742,7 @@ TEST_CASE("callback server settles the wait only for a valid callback", "[ai][au
     io.run();
 }
 
-TEST_CASE("listen failure degrades to manual code entry only", "[ai][auth][issue343]") {
+TEST_CASE("listen failure degrades to manual code entry only", "[ai][auth][issue343][compat-pi]") {
     // Occupy a port so the callback server cannot bind it.
     boost::asio::io_context blocker_io;
     boost::asio::ip::tcp::acceptor blocker(blocker_io);
@@ -776,7 +778,7 @@ TEST_CASE("listen failure degrades to manual code entry only", "[ai][auth][issue
     CHECK(query_param(harness.http->requests[0].body, "code") == "manual-only-code");
 }
 
-TEST_CASE("browser login cancellation normalizes to Login cancelled", "[ai][auth][issue343]") {
+TEST_CASE("browser login cancellation normalizes to Login cancelled", "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.options.callback_host = "127.0.0.1";
     harness.options.callback_port = free_port();
@@ -804,7 +806,7 @@ TEST_CASE("browser login cancellation normalizes to Login cancelled", "[ai][auth
     CHECK(result.error().message == "Login cancelled");
 }
 
-TEST_CASE("unknown Codex login method fails", "[ai][auth][issue343]") {
+TEST_CASE("unknown Codex login method fails", "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.make_prompt_hook = [&harness](boost::asio::any_io_executor)
         -> ai::AuthPromptHook {
@@ -821,7 +823,7 @@ TEST_CASE("unknown Codex login method fails", "[ai][auth][issue343]") {
     CHECK(result.error().message == "Unknown OpenAI Codex login method: telepathy");
 }
 
-TEST_CASE("device code login offers frozen content and completes", "[ai][auth][issue343]") {
+TEST_CASE("device code login offers frozen content and completes", "[ai][auth][issue343][compat-pi]") {
     BrowserLoginHarness harness;
     harness.http->responses["https://auth.openai.com/api/accounts/deviceauth/usercode"] = {
         {200, R"({"device_auth_id":"device-auth-id","user_code":"ABCD-1234","interval":"5"})"},
@@ -872,7 +874,7 @@ TEST_CASE("device code login offers frozen content and completes", "[ai][auth][i
           "https://auth.openai.com/deviceauth/callback");
 }
 
-TEST_CASE("Codex refresh succeeds and rotates the credential", "[ai][auth][issue343]") {
+TEST_CASE("Codex refresh succeeds and rotates the credential", "[ai][auth][issue343][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.openai.com/oauth/token"] = {
         {200, token_response_json("account-refreshed")},
@@ -894,7 +896,8 @@ TEST_CASE("Codex refresh succeeds and rotates the credential", "[ai][auth][issue
           "app_EMoamEEZ73f0CkXaXp7hrann");
 }
 
-TEST_CASE("Codex refresh failure carries the status and body without stderr output", "[ai][auth][issue343]") {
+TEST_CASE(
+        "Codex refresh failure carries the status and body without stderr output", "[ai][auth][issue343][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.openai.com/oauth/token"] = {
         {401,
@@ -914,7 +917,7 @@ TEST_CASE("Codex refresh failure carries the status and body without stderr outp
           std::string::npos);
 }
 
-TEST_CASE("Codex toAuth derives the access token as the API key", "[ai][auth][issue343]") {
+TEST_CASE("Codex toAuth derives the access token as the API key", "[ai][auth][issue343][compat-pi]") {
     auto auth = ai::auth::make_openai_codex_oauth_auth(nullptr);
     auto result = run_async_result(auth.to_auth(ai::OAuthCredential{
         .refresh = "r",
@@ -926,7 +929,7 @@ TEST_CASE("Codex toAuth derives the access token as the API key", "[ai][auth][is
     CHECK(result->api_key == std::string{"access-token-value"});
 }
 
-TEST_CASE("device poll helper honors pending, complete, and cancellation", "[ai][auth][issue343]") {
+TEST_CASE("device poll helper honors pending, complete, and cancellation", "[ai][auth][issue343][compat-pi]") {
     std::stop_source cancel;
 
     auto pending_then_complete = [&]() -> boost::asio::awaitable<void> {

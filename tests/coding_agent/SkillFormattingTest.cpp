@@ -8,13 +8,13 @@ namespace {
 
 // ── U1: formatSkillsForPrompt ──
 
-TEST_CASE("formatSkillsForPrompt empty skills returns empty", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt empty skills returns empty", "[coding_agent][skill-formatting][u1][spec]") {
     std::vector<coding_agent::Skill> skills;
     auto result = coding_agent::formatSkillsForPrompt(skills);
     CHECK(result.empty());
 }
 
-TEST_CASE("formatSkillsForPrompt all disabled returns empty", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt all disabled returns empty", "[coding_agent][skill-formatting][u1][spec]") {
     std::vector<coding_agent::Skill> skills = {
         {.name = "test-skill",
          .description = "Does something.",
@@ -27,7 +27,7 @@ TEST_CASE("formatSkillsForPrompt all disabled returns empty", "[coding_agent][sk
     CHECK(result.empty());
 }
 
-TEST_CASE("formatSkillsForPrompt one visible skill", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt one visible skill", "[coding_agent][skill-formatting][u1][spec]") {
     std::vector<coding_agent::Skill> skills = {
         {.name = "my-skill",
          .description = "Does things.",
@@ -53,7 +53,7 @@ TEST_CASE("formatSkillsForPrompt one visible skill", "[coding_agent][skill-forma
           != std::string::npos);
 }
 
-TEST_CASE("formatSkillsForPrompt mixed visible and disabled", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt mixed visible and disabled", "[coding_agent][skill-formatting][u1][spec]") {
     std::vector<coding_agent::Skill> skills = {
         {.name = "visible-skill",
          .description = "Visible.",
@@ -82,7 +82,7 @@ TEST_CASE("formatSkillsForPrompt mixed visible and disabled", "[coding_agent][sk
     CHECK(result.find("hidden-skill") == std::string::npos);
 }
 
-TEST_CASE("formatSkillsForPrompt xml escaping", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt xml escaping", "[coding_agent][skill-formatting][u1][spec]") {
     std::vector<coding_agent::Skill> skills = {
         {.name = "test&skill",
          .description = "Does <things> & \"stuff\" with 'quotes'.",
@@ -105,7 +105,7 @@ TEST_CASE("formatSkillsForPrompt xml escaping", "[coding_agent][skill-formatting
     CHECK(result.find("with&amp;ampersand") != std::string::npos);
 }
 
-TEST_CASE("formatSkillsForPrompt multiline description", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt multiline description", "[coding_agent][skill-formatting][u1][spec]") {
     std::vector<coding_agent::Skill> skills = {
         {.name = "multi-line",
          .description = "Line one.\nLine two.\nLine three.",
@@ -119,7 +119,7 @@ TEST_CASE("formatSkillsForPrompt multiline description", "[coding_agent][skill-f
     CHECK(result.find("Line one.\nLine two.\nLine three.") != std::string::npos);
 }
 
-TEST_CASE("formatSkillsForPrompt long description included", "[coding_agent][skill-formatting][u1]") {
+TEST_CASE("formatSkillsForPrompt long description included", "[coding_agent][skill-formatting][u1][spec]") {
     // Description > 1024 chars is a validation warning, not a rejection
     std::string long_desc(1050, 'x');
     std::vector<coding_agent::Skill> skills = {
@@ -136,7 +136,7 @@ TEST_CASE("formatSkillsForPrompt long description included", "[coding_agent][ski
 
 // ── U2: formatSkillInvocation ──
 
-TEST_CASE("formatSkillInvocation basic", "[coding_agent][skill-formatting][u2]") {
+TEST_CASE("formatSkillInvocation basic", "[coding_agent][skill-formatting][u2][spec]") {
     coding_agent::Skill skill{.name = "my-skill",
                               .description = "Does things.",
                               .filePath = "/home/user/skills/my-skill/SKILL.md",
@@ -151,7 +151,7 @@ TEST_CASE("formatSkillInvocation basic", "[coding_agent][skill-formatting][u2]")
     CHECK(result.find("</skill>") != std::string::npos);
 }
 
-TEST_CASE("formatSkillInvocation with additional instructions", "[coding_agent][skill-formatting][u2]") {
+TEST_CASE("formatSkillInvocation with additional instructions", "[coding_agent][skill-formatting][u2][spec]") {
     coding_agent::Skill skill{.name = "my-skill",
                               .description = "Does things.",
                               .filePath = "/home/user/skills/my-skill/SKILL.md",
@@ -161,7 +161,7 @@ TEST_CASE("formatSkillInvocation with additional instructions", "[coding_agent][
     CHECK(result.find("</skill>\n\nextra args here") != std::string::npos);
 }
 
-TEST_CASE("formatSkillInvocation empty content", "[coding_agent][skill-formatting][u2]") {
+TEST_CASE("formatSkillInvocation empty content", "[coding_agent][skill-formatting][u2][spec]") {
     coding_agent::Skill skill{.name = "empty-body",
                               .description = {},
                               .filePath = "/root/skill.md",
@@ -172,7 +172,8 @@ TEST_CASE("formatSkillInvocation empty content", "[coding_agent][skill-formattin
     CHECK(result.find("\n\n</skill>") != std::string::npos);
 }
 
-TEST_CASE("formatSkillInvocation content with xml special chars not escaped", "[coding_agent][skill-formatting][u2]") {
+TEST_CASE("formatSkillInvocation content with xml special chars not escaped",
+        "[coding_agent][skill-formatting][u2][spec]") {
     // Content inside <skill> is raw body — NOT XML-escaped
     coding_agent::Skill skill{.name = "raw-body",
                               .description = {},
@@ -183,7 +184,7 @@ TEST_CASE("formatSkillInvocation content with xml special chars not escaped", "[
     CHECK(result.find("<tag>&amp;content&quot;") != std::string::npos);
 }
 
-TEST_CASE("formatSkillInvocation root directory", "[coding_agent][skill-formatting][u2]") {
+TEST_CASE("formatSkillInvocation root directory", "[coding_agent][skill-formatting][u2][spec]") {
     coding_agent::Skill skill{.name = "root-skill",
                               .description = {},
                               .filePath = "/SKILL.md",
@@ -193,7 +194,7 @@ TEST_CASE("formatSkillInvocation root directory", "[coding_agent][skill-formatti
     CHECK(result.find("References are relative to /") != std::string::npos);
 }
 
-TEST_CASE("formatSkillInvocation additional instructions whitespace", "[coding_agent][skill-formatting][u2]") {
+TEST_CASE("formatSkillInvocation additional instructions whitespace", "[coding_agent][skill-formatting][u2][spec]") {
     coding_agent::Skill skill{.name = "ws-skill",
                               .description = {},
                               .filePath = "/path/SKILL.md",

@@ -51,9 +51,8 @@ SpawnResult<T> run_awaitable(boost::asio::awaitable<T> operation) {
 
 } // namespace
 
-TEST_CASE(
-    "the no-exception ModelStream bridge forwards events and its terminal message",
-    "[ai][bridge][issue482]") {
+TEST_CASE("the no-exception ModelStream bridge forwards events and its terminal message",
+        "[ai][bridge][issue482][spec]") {
     auto stream = cch::ai::detail::make_model_stream(
         [](cch::ai::AssistantEventSink sink)
             -> boost::asio::awaitable<cch::support::Expected<cch::ai::AssistantMessage>> {

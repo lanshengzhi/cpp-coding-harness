@@ -41,7 +41,8 @@ std::filesystem::file_time_type at_hours(int hours) {
 
 } // namespace
 
-TEST_CASE("session search filters by quoted phrase with whitespace normalization", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search filters by quoted phrase with whitespace normalization",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("a", at_hours(-1), "node\n\n   cve was discussed"),
         make_session("b", at_hours(-2), "node something else"),
@@ -53,7 +54,8 @@ TEST_CASE("session search filters by quoted phrase with whitespace normalization
     CHECK(result[0].id == "a");
 }
 
-TEST_CASE("session search filters by regex and is case-insensitive", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search filters by regex and is case-insensitive",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("a", at_hours(-1), "Brave is great"),
         make_session("b", at_hours(-2), "bravery is not the same"),
@@ -65,7 +67,8 @@ TEST_CASE("session search filters by regex and is case-insensitive", "[coding_ag
     CHECK(result[0].id == "a");
 }
 
-TEST_CASE("session search recent sort preserves input order", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search recent sort preserves input order",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("newer", at_hours(-1), "brave"),
         make_session("older", at_hours(-2), "brave"),
@@ -79,7 +82,8 @@ TEST_CASE("session search recent sort preserves input order", "[coding_agent][tu
     CHECK(result[1].id == "older");
 }
 
-TEST_CASE("session search relevance sort orders by score and tie-breaks by modified desc", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search relevance sort orders by score and tie-breaks by modified desc",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("late", at_hours(-1), "xxxx brave"),
         make_session("early", at_hours(-2), "brave xxxx"),
@@ -103,7 +107,8 @@ TEST_CASE("session search relevance sort orders by score and tie-breaks by modif
     CHECK(result2[1].id == "older");
 }
 
-TEST_CASE("session search returns empty for invalid regex and empty for unclosed quotes", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search returns empty for invalid regex and empty for unclosed quotes",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("a", at_hours(-1), "brave"),
     };
@@ -113,7 +118,8 @@ TEST_CASE("session search returns empty for invalid regex and empty for unclosed
     CHECK(invalid.empty());
 }
 
-TEST_CASE("session search fuzzy tokens match and unclosed quotes fall back to tokens", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search fuzzy tokens match and unclosed quotes fall back to tokens",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("a", at_hours(-1), "node cve discussion"),
         make_session("b", at_hours(-2), "unrelated"),
@@ -148,7 +154,8 @@ TEST_CASE("session search fuzzy tokens match and unclosed quotes fall back to to
     CHECK(quote_only.empty());
 }
 
-TEST_CASE("session search named filter keeps only named sessions", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search named filter keeps only named sessions",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("named", at_hours(-1), "hello", std::string{"My Session"}),
         make_session("blank-name", at_hours(-2), "hello", std::string{"   "}),
@@ -165,7 +172,8 @@ TEST_CASE("session search named filter keeps only named sessions", "[coding_agen
     CHECK(named[0].id == "named");
 }
 
-TEST_CASE("session search matches across id, name, messages, and cwd", "[coding_agent][tui][session-selector-search][issue409]") {
+TEST_CASE("session search matches across id, name, messages, and cwd",
+        "[coding_agent][tui][session-selector-search][issue409][spec]") {
     std::vector<cch::coding_agent::session_discovery::SessionInfo> sessions{
         make_session("abc-123", at_hours(-1), "message text", std::nullopt, "/work/project-x"),
     };

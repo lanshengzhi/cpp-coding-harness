@@ -28,7 +28,8 @@ namespace {
 // ModelConfig: models.json parsing and validation (pi ModelConfig subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("ModelConfig missing file resolves to empty user config without diagnostics", "[coding_agent][model-config][issue345]") {
+TEST_CASE("ModelConfig missing file resolves to empty user config without diagnostics",
+        "[coding_agent][model-config][issue345][spec]") {
     tests::TempWorkspace workspace;
     auto config = coding_agent::ModelConfig::load(workspace.path() / "missing.json");
     CHECK(config.empty());
@@ -36,7 +37,8 @@ TEST_CASE("ModelConfig missing file resolves to empty user config without diagno
     CHECK(config.provider_ids().empty());
 }
 
-TEST_CASE("ModelConfig invalid JSON records a parse diagnostic with an empty config", "[coding_agent][model-config][issue345]") {
+TEST_CASE("ModelConfig invalid JSON records a parse diagnostic with an empty config",
+        "[coding_agent][model-config][issue345][spec]") {
     tests::TempWorkspace workspace;
     auto config = load_models_json(workspace, "{not valid json");
     CHECK(config.empty());
@@ -44,7 +46,8 @@ TEST_CASE("ModelConfig invalid JSON records a parse diagnostic with an empty con
     CHECK(config.error()->find("Failed to parse models.json") != std::string::npos);
 }
 
-TEST_CASE("ModelConfig schema violation records an invalid-schema diagnostic", "[coding_agent][model-config][issue345]") {
+TEST_CASE("ModelConfig schema violation records an invalid-schema diagnostic",
+        "[coding_agent][model-config][issue345][spec]") {
     tests::TempWorkspace workspace;
     // Model definition without the required "id".
     auto config = load_models_json(workspace, R"({
@@ -62,7 +65,8 @@ TEST_CASE("ModelConfig schema violation records an invalid-schema diagnostic", "
     CHECK(config.error()->find("models[0].id") != std::string::npos);
 }
 
-TEST_CASE("ModelConfig parses a config-only provider with a custom model", "[coding_agent][model-config][issue345]") {
+TEST_CASE("ModelConfig parses a config-only provider with a custom model",
+        "[coding_agent][model-config][issue345][spec]") {
     tests::TempWorkspace workspace;
     auto config = load_models_json(workspace, R"({
       "providers": {
@@ -124,7 +128,8 @@ TEST_CASE("ModelConfig parses a config-only provider with a custom model", "[cod
     CHECK(*override->second.max_tokens == 65536);
 }
 
-TEST_CASE("ModelConfig parses thinking level maps preserving null-unsupported semantics", "[coding_agent][model-config][issue345]") {
+TEST_CASE("ModelConfig parses thinking level maps preserving null-unsupported semantics",
+        "[coding_agent][model-config][issue345][spec]") {
     tests::TempWorkspace workspace;
     auto config = load_models_json(workspace, R"({
       "providers": {
@@ -152,7 +157,8 @@ TEST_CASE("ModelConfig parses thinking level maps preserving null-unsupported se
     CHECK(*high->second == "max");
 }
 
-TEST_CASE("ModelConfig unknown provider fields are ignored (no compat surface)", "[coding_agent][model-config][issue345]") {
+TEST_CASE("ModelConfig unknown provider fields are ignored (no compat surface)",
+        "[coding_agent][model-config][issue345][spec]") {
     tests::TempWorkspace workspace;
     auto config = load_models_json(workspace, R"({
       "providers": {

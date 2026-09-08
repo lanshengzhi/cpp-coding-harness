@@ -321,9 +321,8 @@ struct InteractiveRun {
 
 } // namespace
 
-TEST_CASE(
-    "login picks the auth type, provider, runs the Codex OAuth branch, and auto-selects the default model",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and auto-selects the default model",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto submitted_code = std::make_shared<std::optional<std::string>>();
     auto codex = std::make_shared<ScriptedOAuthProvider>(
@@ -407,9 +406,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login runs the Kimi device-code OAuth branch and renders the waiting view",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login runs the Kimi device-code OAuth branch and renders the waiting view",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto kimi = std::make_shared<ScriptedOAuthProvider>(
         "kimi-coding",
@@ -458,9 +456,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login takes the DeepSeek API-key dialog branch through real models.json composition",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login takes the DeepSeek API-key dialog branch through real models.json composition",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     std::ofstream(fixture.agent_dir.path() / "models.json", std::ios::binary) << R"({
   "providers": {
@@ -510,9 +507,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login cancellation suppresses the failure UI on the stable cancelled kind",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login cancellation suppresses the failure UI on the stable cancelled kind",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto codex = std::make_shared<ScriptedOAuthProvider>(
         "openai-codex",
@@ -548,9 +544,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login failure renders pi's failure message through the chat surface",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login failure renders pi's failure message through the chat surface",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto codex = std::make_shared<ScriptedOAuthProvider>(
         "openai-codex",
@@ -588,9 +583,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login with an unmatched provider reference opens the searched provider selector",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login with an unmatched provider reference opens the searched provider selector",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto codex = std::make_shared<ScriptedOAuthProvider>(
         "openai-codex",
@@ -618,9 +612,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login select-type AuthPrompt resolves through the generic string-list selector",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login select-type AuthPrompt resolves through the generic string-list selector",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto selected_id = std::make_shared<std::optional<std::string>>();
     auto codex = std::make_shared<ScriptedOAuthProvider>(
@@ -667,9 +660,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "login api-key ambient method shows the configured-outside info dialog",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("login api-key ambient method shows the configured-outside info dialog",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     auto kimi = std::make_shared<ScriptedOAuthProvider>(
         "kimi-coding",
@@ -716,8 +708,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "logout lists stored credentials and removes the selected one",
-    "[coding_agent][tui][login][issue406]") {
+        "logout lists stored credentials and removes the selected one", "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     std::ofstream(fixture.auth_path(), std::ios::binary) << R"({
   "openai-codex": {
@@ -769,9 +760,8 @@ TEST_CASE(
     run.exit();
 }
 
-TEST_CASE(
-    "request-time re-auth guidance renders through the chat surface",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("request-time re-auth guidance renders through the chat surface",
+        "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
     // A stored-but-expired OAuth credential whose request-time refresh fails:
     // pi's `_getRequiredRequestAuth` OAuth branch maps the dead credential to

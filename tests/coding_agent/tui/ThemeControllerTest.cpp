@@ -84,9 +84,8 @@ struct ControllerHarness {
 
 } // namespace
 
-TEST_CASE(
-    "COLORFGBG detection classifies the background index by luminance",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("COLORFGBG detection classifies the background index by luminance",
+        "[coding_agent][theme][controller][issue415][spec]") {
     using coding_agent::tui::TerminalTheme;
     const auto light = coding_agent::tui::terminal_theme_from_colorfgbg("0;15");
     CHECK(light.theme == TerminalTheme::Light);
@@ -107,9 +106,8 @@ TEST_CASE(
     CHECK(coding_agent::tui::terminal_theme_from_colorfgbg("abc").high_confidence == false);
 }
 
-TEST_CASE(
-    "resolve_theme_setting reads slash automatic-pair values as unset",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("resolve_theme_setting reads slash automatic-pair values as unset",
+        "[coding_agent][theme][controller][issue415][spec]") {
     using coding_agent::tui::TerminalTheme;
     using coding_agent::tui::resolve_theme_setting;
 
@@ -126,9 +124,8 @@ TEST_CASE(
         std::optional<std::string>{}, TerminalTheme::Dark).has_value());
 }
 
-TEST_CASE(
-    "init_boot_theme resolves the setting or the env default with silent dark fallback",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("init_boot_theme resolves the setting or the env default with silent dark fallback",
+        "[coding_agent][theme][controller][issue415][spec]") {
     using coding_agent::tui::init_boot_theme;
     tests::TempWorkspace config;
     config.write("themes/solarized.json", tests::fixture_theme("solarized", "#abcdef"));
@@ -154,9 +151,8 @@ TEST_CASE(
         coding_agent::tui::builtin_dark_theme());
 }
 
-TEST_CASE(
-    "theme controller boots from the settings theme or the env default",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("theme controller boots from the settings theme or the env default",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
 
     {
@@ -183,9 +179,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "theme controller registered themes apply by name and re-register on set_registered_themes",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("theme controller registered themes apply by name and re-register on set_registered_themes",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
     tests::EnvVarGuard env("COLORFGBG", std::nullopt);
     std::vector<coding_agent::tui::RegisteredTheme> registered{{
@@ -208,9 +203,8 @@ TEST_CASE(
     CHECK(harness.changed == 2);
 }
 
-TEST_CASE(
-    "apply_theme_name failure falls back to dark with the verbatim message",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("apply_theme_name failure falls back to dark with the verbatim message",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
     tests::EnvVarGuard env("COLORFGBG", std::nullopt);
     auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"dark"});
@@ -232,9 +226,8 @@ TEST_CASE(
     CHECK(harness.errors.empty());
 }
 
-TEST_CASE(
-    "apply_from_settings applies a defined setting and persists a confident default",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("apply_from_settings applies a defined setting and persists a confident default",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
 
     {
@@ -300,9 +293,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "preview applies in memory without committing or changing the active name",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("preview applies in memory without committing or changing the active name",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
     tests::EnvVarGuard env("COLORFGBG", std::nullopt);
     std::vector<coding_agent::tui::RegisteredTheme> registered{{
@@ -329,9 +321,8 @@ TEST_CASE(
     CHECK(controller.active_theme_name() == "dark");
 }
 
-TEST_CASE(
-    "available_theme_names lists builtins custom directory and registered sorted",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("available_theme_names lists builtins custom directory and registered sorted",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
     tests::TempWorkspace config;
     config.write("themes/solarized.json", tests::fixture_theme("solarized", "#abcdef"));
@@ -353,9 +344,8 @@ TEST_CASE(
     CHECK(names[3] == "solarized");
 }
 
-TEST_CASE(
-    "discover_themes parses documents and dedupes with pi collision diagnostics",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("discover_themes parses documents and dedupes with pi collision diagnostics",
+        "[coding_agent][theme][controller][issue415][spec]") {
     std::vector<coding_agent::LoadedThemeResource> documents{{
         .path = ".pi/themes/project.json",
         .json = tests::fixture_theme("shared", "#111111"),
@@ -414,9 +404,8 @@ TEST_CASE(
     CHECK(parse_warning->path == std::optional<std::string>{"broken.json"});
 }
 
-TEST_CASE(
-    "theme controller preview failure falls back to dark without invalidating",
-    "[coding_agent][theme][controller][issue415]") {
+TEST_CASE("theme controller preview failure falls back to dark without invalidating",
+        "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
     tests::EnvVarGuard env("COLORFGBG", std::nullopt);
     auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"dark"});

@@ -297,9 +297,8 @@ struct ChildReapGuard {
 
 } // namespace
 
-TEST_CASE(
-    "CLI initial image arguments persist text before image with or without positional text",
-    "[cli][smoke][issue63]") {
+TEST_CASE("CLI initial image arguments persist text before image with or without positional text",
+        "[cli][smoke][issue63][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto image = workspace.path() / "misleading.data";
     write_tiny_gif(image);
@@ -340,7 +339,7 @@ TEST_CASE(
     CHECK_FALSE(exists_error);
 }
 
-TEST_CASE("CLI print mode prints only the final assistant text and writes the session", "[cli][u6]") {
+TEST_CASE("CLI print mode prints only the final assistant text and writes the session", "[cli][u6][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "hello"});
@@ -351,7 +350,7 @@ TEST_CASE("CLI print mode prints only the final assistant text and writes the se
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI print mode has no slash commands and sends /help to the model", "[cli][commands]") {
+TEST_CASE("CLI print mode has no slash commands and sends /help to the model", "[cli][commands][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "help-one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/help"});
@@ -361,7 +360,7 @@ TEST_CASE("CLI print mode has no slash commands and sends /help to the model", "
     CHECK(result.stderr_text.empty());
 }
 
-TEST_CASE("CLI print mode passes unknown slash text through as an ordinary prompt", "[cli][commands]") {
+TEST_CASE("CLI print mode passes unknown slash text through as an ordinary prompt", "[cli][commands][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "help-unknown.jsonl";
     auto result = run_in_workspace(
@@ -371,7 +370,7 @@ TEST_CASE("CLI print mode passes unknown slash text through as an ordinary promp
     CHECK(result.stdout_text == "fake: /help missing\n");
 }
 
-TEST_CASE("CLI print mode sends /commands to the model like any prompt", "[cli][commands][issue64]") {
+TEST_CASE("CLI print mode sends /commands to the model like any prompt", "[cli][commands][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "commands.jsonl";
     auto result = run_in_workspace(
@@ -381,7 +380,7 @@ TEST_CASE("CLI print mode sends /commands to the model like any prompt", "[cli][
     CHECK(result.stdout_text == "fake: /commands\n");
 }
 
-TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][commands]") {
+TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][commands][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "unknown-slash.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/missing"});
@@ -390,7 +389,8 @@ TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][c
     CHECK(result.stdout_text == "fake: /missing\n");
 }
 
-TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt", "[cli][commands][user-bash][issue64]") {
+TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt",
+        "[cli][commands][user-bash][issue64][spec]") {
     cch::tests::TempWorkspace one_shot_workspace;
     auto one_shot_session = one_shot_workspace.path() / "oneshot-user-bash.jsonl";
     auto one_shot = run_in_workspace(
@@ -408,7 +408,7 @@ TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt", "[c
     CHECK(double_bang.stdout_text.find("fake: !!echo hidden") != std::string::npos);
 }
 
-TEST_CASE("CLI print mode sends /clear to the model", "[cli][commands][issue64]") {
+TEST_CASE("CLI print mode sends /clear to the model", "[cli][commands][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "clear-one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/clear"});
@@ -418,7 +418,7 @@ TEST_CASE("CLI print mode sends /clear to the model", "[cli][commands][issue64]"
     CHECK(result.stdout_text == "fake: /clear\n");
 }
 
-TEST_CASE("CLI print mode sends /exit to the model", "[cli][commands]") {
+TEST_CASE("CLI print mode sends /exit to the model", "[cli][commands][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exit-one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/exit"});
@@ -427,7 +427,7 @@ TEST_CASE("CLI print mode sends /exit to the model", "[cli][commands]") {
     CHECK(result.stdout_text == "fake: /exit\n");
 }
 
-TEST_CASE("CLI print mode outputs only the final text after a tool flow", "[cli][presentation]") {
+TEST_CASE("CLI print mode outputs only the final text after a tool flow", "[cli][presentation][spec]") {
     cch::tests::TempWorkspace workspace;
     std::ofstream(workspace.path() / "note.txt") << "subscription text";
     auto session = workspace.path() / "text-tool-flow.jsonl";
@@ -440,7 +440,7 @@ TEST_CASE("CLI print mode outputs only the final text after a tool flow", "[cli]
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI bash tool is always available under the fixed tool set", "[cli][u6]") {
+TEST_CASE("CLI bash tool is always available under the fixed tool set", "[cli][u6][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "bash.jsonl";
     auto result = run_in_workspace(
@@ -455,7 +455,7 @@ TEST_CASE("CLI bash tool is always available under the fixed tool set", "[cli][u
     CHECK(result.stdout_text.find("exit_code=0") != std::string::npos);
 }
 
-TEST_CASE("CLI rejects removed compatibility flags before model request", "[cli][u8]") {
+TEST_CASE("CLI rejects removed compatibility flags before model request", "[cli][u8][spec]") {
     {
         cch::tests::TempWorkspace workspace;
         auto result = run_in_workspace(workspace, {"--async", "hello"});
@@ -472,7 +472,7 @@ TEST_CASE("CLI rejects removed compatibility flags before model request", "[cli]
     }
 }
 
-TEST_CASE("CLI rejects the deleted C++-only flags before model request", "[cli][u8]") {
+TEST_CASE("CLI rejects the deleted C++-only flags before model request", "[cli][u8][spec]") {
     cch::tests::TempWorkspace workspace;
     auto fake_result = run_in_workspace(workspace, {"--fake", "hello"});
     REQUIRE(fake_result.exit_code != 0);
@@ -493,7 +493,7 @@ TEST_CASE("CLI rejects the deleted C++-only flags before model request", "[cli][
     CHECK(workspace_result.stderr_text.find("unknown option: --workspace") != std::string::npos);
 }
 
-TEST_CASE("CLI rejects the removed json and rpc modes with an explicit error", "[cli][modes]") {
+TEST_CASE("CLI rejects the removed json and rpc modes with an explicit error", "[cli][modes][spec]") {
     {
         cch::tests::TempWorkspace workspace;
         auto result = run_in_workspace(workspace, {"--mode", "json", "hello"});
@@ -513,7 +513,7 @@ TEST_CASE("CLI rejects the removed json and rpc modes with an explicit error", "
     }
 }
 
-TEST_CASE("CLI --version prints the binary's own CMake project version", "[cli][identity]") {
+TEST_CASE("CLI --version prints the binary's own CMake project version", "[cli][identity][spec]") {
     auto result = run_command(bin() + " --version");
     REQUIRE(result.exit_code == 0);
     const auto expected = std::string{cch::cli::project_version()} + "\n";
@@ -524,7 +524,7 @@ TEST_CASE("CLI --version prints the binary's own CMake project version", "[cli][
     CHECK(short_result.output == expected);
 }
 
-TEST_CASE("CLI help documents the pi-aligned surface and omits deleted flags", "[cli][u8]") {
+TEST_CASE("CLI help documents the pi-aligned surface and omits deleted flags", "[cli][u8][spec]") {
     auto result = run_command(bin() + " --help");
 
     REQUIRE(result.exit_code == 0);
@@ -539,7 +539,7 @@ TEST_CASE("CLI help documents the pi-aligned surface and omits deleted flags", "
     CHECK(result.output.find("--version, -v") != std::string::npos);
 }
 
-TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue64]") {
+TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "piped.jsonl";
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
@@ -554,7 +554,7 @@ TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue6
     CHECK(result.stdout_text == "fake: one\ntwo\n");
 }
 
-TEST_CASE("CLI --session open resumes and appends to an existing redacted session", "[cli][u6]") {
+TEST_CASE("CLI --session open resumes and appends to an existing redacted session", "[cli][u6][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "resume.jsonl";
     auto first = run_in_workspace(
@@ -569,7 +569,8 @@ TEST_CASE("CLI --session open resumes and appends to an existing redacted sessio
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd", "[cli][startup-tui][issue417][issue528]") {
+TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
+        "[cli][startup-tui][issue417][issue528][diverge][issue626]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace storage;
     cch::tests::TempWorkspace home;
@@ -649,7 +650,8 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd", "[cli
     CHECK(WEXITSTATUS(status) == 0);
 }
 
-TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal", "[cli][startup-tui][issue417][issue528]") {
+TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
+        "[cli][startup-tui][issue417][issue528][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     home.write(".pi/agent/models.json", R"({
@@ -714,7 +716,7 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal", "[cli]
     CHECK(WEXITSTATUS(status) == 0);
 }
 
-TEST_CASE("CLI --session open uses session workspace when the launch directory differs", "[cli][u6]") {
+TEST_CASE("CLI --session open uses session workspace when the launch directory differs", "[cli][u6][spec]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace other;
     original.write("note.txt", "from-session-workspace");
@@ -735,7 +737,7 @@ TEST_CASE("CLI --session open uses session workspace when the launch directory d
     CHECK(resumed.stdout_text.find("from-session-workspace") != std::string::npos);
 }
 
-TEST_CASE("CLI --session wins over --resume without a conflict error", "[cli][u6]") {
+TEST_CASE("CLI --session wins over --resume without a conflict error", "[cli][u6][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exclusive.jsonl";
     auto other = workspace.path() / "other.jsonl";
@@ -753,7 +755,7 @@ TEST_CASE("CLI --session wins over --resume without a conflict error", "[cli][u6
     CHECK_FALSE(std::filesystem::exists(other));
 }
 
-TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][selection][issue64]") {
+TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][selection][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "empty-print.jsonl";
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
@@ -772,7 +774,7 @@ TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][sel
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6]") {
+TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exists.jsonl";
 
@@ -792,7 +794,7 @@ TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6]") {
     CHECK(content.find("\"text\":\"second\"") != std::string::npos);
 }
 
-TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth outcome", "[cli][u6][issue338]") {
+TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth outcome", "[cli][u6][issue338][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "real.jsonl";
@@ -810,7 +812,8 @@ TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth out
     CHECK(result.stderr_text.find("Unknown provider: unknown") != std::string::npos);
 }
 
-TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-auth guidance", "[cli][kimi][u3][issue338][issue360]") {
+TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-auth guidance",
+        "[cli][kimi][u3][issue338][issue360][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "kimi-missing-key.jsonl";
@@ -831,7 +834,8 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-a
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning visible", "[cli][settings][issue338]") {
+TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning visible",
+        "[cli][settings][issue338][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -856,7 +860,8 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI skips project skills by default when project trust is unknown", "[cli][project-trust]") {
+TEST_CASE("CLI skips project skills by default when project trust is unknown",
+        "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -880,7 +885,8 @@ TEST_CASE("CLI skips project skills by default when project trust is unknown", "
         CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI project-controlled default trust store cannot authorize project skills", "[cli][project-trust]") {
+TEST_CASE("CLI project-controlled default trust store cannot authorize project skills",
+        "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
@@ -910,7 +916,7 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
     CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]") {
+TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -936,7 +942,7 @@ TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]"
     CHECK(result.stdout_text.find("Do demo.") != std::string::npos);
 }
 
-TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trust]") {
+TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -960,7 +966,7 @@ TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trus
         CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI -na short carries pi's no-approve semantics", "[cli][project-trust]") {
+TEST_CASE("CLI -na short carries pi's no-approve semantics", "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -984,7 +990,7 @@ TEST_CASE("CLI -na short carries pi's no-approve semantics", "[cli][project-trus
         CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][project-resources]") {
+TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][project-resources][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/prompts/greet.md",
@@ -1007,7 +1013,7 @@ TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][proje
     CHECK(result.stdout_text.find("Project hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][project-trust]") {
+TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -1031,7 +1037,7 @@ TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][pro
         CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI -ns short disables project skills even when approved", "[cli][project-trust]") {
+TEST_CASE("CLI -ns short disables project skills even when approved", "[cli][project-trust][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -1055,7 +1061,7 @@ TEST_CASE("CLI -ns short disables project skills even when approved", "[cli][pro
         CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI no-skills keeps project prompt templates", "[cli][project-resources][issue405]") {
+TEST_CASE("CLI no-skills keeps project prompt templates", "[cli][project-resources][issue405][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/prompts/greet.md",
@@ -1080,7 +1086,7 @@ TEST_CASE("CLI no-skills keeps project prompt templates", "[cli][project-resourc
     CHECK(result.stdout_text.find("Project hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[cli][project-resources]") {
+TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[cli][project-resources][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("custom.md",
@@ -1103,7 +1109,7 @@ TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[c
     CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI no-prompt-templates keeps explicit prompt template files", "[cli][project-resources][issue405]") {
+TEST_CASE("CLI no-prompt-templates keeps explicit prompt template files", "[cli][project-resources][issue405][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("custom.md",
@@ -1128,7 +1134,7 @@ TEST_CASE("CLI no-prompt-templates keeps explicit prompt template files", "[cli]
     CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI -np short keeps explicit prompt template files", "[cli][project-resources][issue405]") {
+TEST_CASE("CLI -np short keeps explicit prompt template files", "[cli][project-resources][issue405][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("custom.md",
@@ -1151,7 +1157,8 @@ TEST_CASE("CLI -np short keeps explicit prompt template files", "[cli][project-r
     CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr", "[cli][project-resources]") {
+TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr",
+        "[cli][project-resources][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/bad/SKILL.md",
@@ -1182,7 +1189,7 @@ TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr"
     CHECK(result.stdout_text == "fake: hello\n");
 }
 
-TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings]") {
+TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     home.write(".pi/agent/settings.json", R"({"defaultModel":"config-model-name"})");
@@ -1204,7 +1211,8 @@ TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][setti
     CHECK(json_string_at(object, "model") == "config-model-name");
 }
 
-TEST_CASE("CLI invalid explicit prompt template fails before session creation", "[cli][project-resources][assembly]") {
+TEST_CASE("CLI invalid explicit prompt template fails before session creation",
+        "[cli][project-resources][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "explicit-fail.jsonl";
@@ -1224,7 +1232,8 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation", 
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI rejects an explicit prompt template with an unsupported file type", "[cli][project-resources][assembly]") {
+TEST_CASE("CLI rejects an explicit prompt template with an unsupported file type",
+        "[cli][project-resources][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("not-a-template.txt", "plain text\n");
@@ -1244,7 +1253,8 @@ TEST_CASE("CLI rejects an explicit prompt template with an unsupported file type
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI rejects each explicit prompt template input that has no loadable templates", "[cli][project-resources][assembly]") {
+TEST_CASE("CLI rejects each explicit prompt template input that has no loadable templates",
+        "[cli][project-resources][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("valid.md", "Valid template.\n");
@@ -1266,7 +1276,8 @@ TEST_CASE("CLI rejects each explicit prompt template input that has no loadable 
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI --session open with explicit model override reports diagnostic and uses override", "[cli][provider-resolution]") {
+TEST_CASE("CLI --session open with explicit model override reports diagnostic and uses override",
+        "[cli][provider-resolution][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "resume-override.jsonl";
@@ -1293,7 +1304,7 @@ TEST_CASE("CLI --session open with explicit model override reports diagnostic an
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE("CLI --session open without override retains stored provider and model", "[cli][provider-resolution]") {
+TEST_CASE("CLI --session open without override retains stored provider and model", "[cli][provider-resolution][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "resume-retain.jsonl";
@@ -1320,7 +1331,8 @@ TEST_CASE("CLI --session open without override retains stored provider and model
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE("CLI resume falls back with a diagnostic when the stored model no longer resolves", "[cli][resume][issue346]") {
+TEST_CASE("CLI resume falls back with a diagnostic when the stored model no longer resolves",
+        "[cli][resume][issue346][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     const auto models_path = home.path() / ".pi" / "agent" / "models.json";
@@ -1357,7 +1369,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     CHECK(second.stderr_text.find("Could not restore model") == std::string::npos);
 }
 
-TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli][api-key][issue346]") {
+TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli][api-key][issue346][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "api-key-session.jsonl";
@@ -1378,7 +1390,7 @@ TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli]
     CHECK(content.find("sk-runtime-hello") == std::string::npos);
 }
 
-TEST_CASE("CLI rejects --api-key without an explicit model", "[cli][api-key][issue346]") {
+TEST_CASE("CLI rejects --api-key without an explicit model", "[cli][api-key][issue346][spec]") {
     cch::tests::TempWorkspace workspace;
     auto result = run_command_split(
         "cd " + shell_quote(workspace.path()) + " && " + bin() + " --api-key sk-nomodel hello");
@@ -1387,7 +1399,7 @@ TEST_CASE("CLI rejects --api-key without an explicit model", "[cli][api-key][iss
         result.stderr_text.find("--api-key requires a model") != std::string::npos);
 }
 
-TEST_CASE("CLI print mode slash text reaches AgentSession and the session file", "[cli][commands]") {
+TEST_CASE("CLI print mode slash text reaches AgentSession and the session file", "[cli][commands][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "command-adapter.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/help"});
@@ -1413,7 +1425,8 @@ TEST_CASE("CLI print mode slash text reaches AgentSession and the session file",
     CHECK(saw_message);
 }
 
-TEST_CASE("CLI default creation stores the session under the workspace-keyed agent config directory", "[cli][default-session]") {
+TEST_CASE("CLI default creation stores the session under the workspace-keyed agent config directory",
+        "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1435,7 +1448,8 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE("CLI default creation shares storage across symbolic-link workspace aliases", "[cli][default-session]") {
+TEST_CASE(
+        "CLI default creation shares storage across symbolic-link workspace aliases", "[cli][default-session][spec]") {
     cch::tests::TempWorkspace real;
     cch::tests::TempWorkspace alias_root;
     cch::tests::TempWorkspace agent_root;
@@ -1484,7 +1498,7 @@ TEST_CASE("CLI default creation shares storage across symbolic-link workspace al
     }
 }
 
-TEST_CASE("CLI piped print propagates the same default persisted target", "[cli][default-session][issue64]") {
+TEST_CASE("CLI piped print propagates the same default persisted target", "[cli][default-session][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1503,7 +1517,8 @@ TEST_CASE("CLI piped print propagates the same default persisted target", "[cli]
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
-TEST_CASE("CLI explicit session targets keep their exact paths outside the default root", "[cli][default-session]") {
+TEST_CASE("CLI explicit session targets keep their exact paths outside the default root",
+        "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1532,7 +1547,8 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 }
 
-TEST_CASE("CLI default creation ignores the old project-local sessions directory", "[cli][default-session][legacy]") {
+TEST_CASE("CLI default creation ignores the old project-local sessions directory",
+        "[cli][default-session][legacy][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1577,7 +1593,7 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     CHECK(jsonl_files_under(agent_dir / "sessions").size() == 1);
 }
 
-TEST_CASE("CLI default creation fails explicitly when default storage is unsafe", "[cli][default-session]") {
+TEST_CASE("CLI default creation fails explicitly when default storage is unsafe", "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace blocker_root;
     const auto blocker = blocker_root.path() / "not-a-directory";
@@ -1597,7 +1613,8 @@ TEST_CASE("CLI default creation fails explicitly when default storage is unsafe"
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE("CLI default creation fails explicitly when no user-level root can be resolved", "[cli][default-session]") {
+TEST_CASE("CLI default creation fails explicitly when no user-level root can be resolved",
+        "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
 
     auto result = run_command_split(
@@ -1610,7 +1627,7 @@ TEST_CASE("CLI default creation fails explicitly when no user-level root can be 
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE("CLI help describes automatic user-level session storage", "[cli][default-session]") {
+TEST_CASE("CLI help describes automatic user-level session storage", "[cli][default-session][spec]") {
     auto result = run_command(bin() + " --help");
 
     REQUIRE(result.exit_code == 0);
@@ -1619,7 +1636,7 @@ TEST_CASE("CLI help describes automatic user-level session storage", "[cli][defa
     CHECK(result.output.find("--session-id") != std::string::npos);
 }
 
-TEST_CASE("CLI failed assembly publishes no default session file", "[cli][default-session][assembly]") {
+TEST_CASE("CLI failed assembly publishes no default session file", "[cli][default-session][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1651,7 +1668,7 @@ void require_no_session_filesystem_state(
     CHECK(jsonl_files_under(workspace).empty());
 }
 
-TEST_CASE("CLI --no-session runs a text prompt without publishing session state", "[cli][no-session]") {
+TEST_CASE("CLI --no-session runs a text prompt without publishing session state", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1670,7 +1687,7 @@ TEST_CASE("CLI --no-session runs a text prompt without publishing session state"
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", "[cli][no-session][issue64]") {
+TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", "[cli][no-session][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1688,7 +1705,7 @@ TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", 
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI print mode sends /session to the model under default session storage", "[cli][no-session]") {
+TEST_CASE("CLI print mode sends /session to the model under default session storage", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1707,7 +1724,7 @@ TEST_CASE("CLI print mode sends /session to the model under default session stor
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
-TEST_CASE("CLI --no-session short-circuits silently over explicit create and resume", "[cli][no-session]") {
+TEST_CASE("CLI --no-session short-circuits silently over explicit create and resume", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1741,7 +1758,7 @@ TEST_CASE("CLI --no-session short-circuits silently over explicit create and res
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session]") {
+TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace blocker_root;
     const auto blocker = blocker_root.path() / "not-a-directory";
@@ -1765,7 +1782,7 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-session]") {
+TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1786,7 +1803,8 @@ TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-sess
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI --no-session publishes no filesystem state after a startup failure", "[cli][no-session][assembly]") {
+TEST_CASE(
+        "CLI --no-session publishes no filesystem state after a startup failure", "[cli][no-session][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1804,7 +1822,7 @@ TEST_CASE("CLI --no-session publishes no filesystem state after a startup failur
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][session-dir]") {
+TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace override_root;
@@ -1829,7 +1847,7 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE("CLI session directory precedence is flag over environment over settings", "[cli][session-dir]") {
+TEST_CASE("CLI session directory precedence is flag over environment over settings", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace flag_root;
@@ -1882,7 +1900,7 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 }
 
-TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[cli][session-dir]") {
+TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1912,7 +1930,7 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
     CHECK(jsonl_files_under(canonical_workspace / "my-sessions").size() == 2);
 }
 
-TEST_CASE("CLI session directory override expands a leading home marker", "[cli][session-dir]") {
+TEST_CASE("CLI session directory override expands a leading home marker", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace home_root;
@@ -1934,7 +1952,7 @@ TEST_CASE("CLI session directory override expands a leading home marker", "[cli]
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 }
 
-TEST_CASE("CLI explicit create and resume targets ignore session directory overrides", "[cli][session-dir]") {
+TEST_CASE("CLI explicit create and resume targets ignore session directory overrides", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace override_root;
@@ -1967,7 +1985,7 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 }
 
-TEST_CASE("CLI --no-session ignores session directory overrides and publishes nothing", "[cli][session-dir]") {
+TEST_CASE("CLI --no-session ignores session directory overrides and publishes nothing", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace override_root;
@@ -1989,7 +2007,7 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
     CHECK(jsonl_files_under(workspace.path()).empty());
 }
 
-TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default root", "[cli][session-dir]") {
+TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default root", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -2012,7 +2030,7 @@ TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default roo
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
-TEST_CASE("CLI malformed settings keep default session storage with a warning", "[cli][session-dir]") {
+TEST_CASE("CLI malformed settings keep default session storage with a warning", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -2036,7 +2054,7 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
-TEST_CASE("CLI unavailable session directory override fails explicitly without fallback", "[cli][session-dir]") {
+TEST_CASE("CLI unavailable session directory override fails explicitly without fallback", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace blocker_root;
@@ -2064,9 +2082,8 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE(
-    "CLI non-interactive resume of a session with a vanished cwd prints pi's error and exits 1",
-    "[cli][session-family][issue404]") {
+TEST_CASE("CLI non-interactive resume of a session with a vanished cwd prints pi's error and exits 1",
+        "[cli][session-family][issue404][spec]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace other;
     cch::tests::TempWorkspace storage;
@@ -2095,9 +2112,8 @@ TEST_CASE(
     CHECK_FALSE(std::filesystem::exists(session.parent_path() / "sessions"));
 }
 
-TEST_CASE(
-    "CLI --session open of a session with a vanished cwd fails identically",
-    "[cli][session-family][issue404]") {
+TEST_CASE("CLI --session open of a session with a vanished cwd fails identically",
+        "[cli][session-family][issue404][spec]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace other;
     cch::tests::TempWorkspace storage;
@@ -2125,7 +2141,7 @@ TEST_CASE(
         original.path(), session, other.path()));
 }
 
-TEST_CASE("CLI --skill explicit paths load and survive --no-skills", "[cli][skill][issue412]") {
+TEST_CASE("CLI --skill explicit paths load and survive --no-skills", "[cli][skill][issue412][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("explicit-skill.md",
@@ -2152,7 +2168,7 @@ TEST_CASE("CLI --skill explicit paths load and survive --no-skills", "[cli][skil
     CHECK(result.stdout_text.find("Do explicit.") != std::string::npos);
 }
 
-TEST_CASE("CLI --no-skills drops discovered skills but keeps the prompt", "[cli][skill][issue412]") {
+TEST_CASE("CLI --no-skills drops discovered skills but keeps the prompt", "[cli][skill][issue412][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write(".pi/skills/demo/SKILL.md",
@@ -2177,7 +2193,8 @@ TEST_CASE("CLI --no-skills drops discovered skills but keeps the prompt", "[cli]
     CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI loads user skills from ~/.pi/agent/skills with root-level .md inclusion", "[cli][skill][issue412]") {
+TEST_CASE("CLI loads user skills from ~/.pi/agent/skills with root-level .md inclusion",
+        "[cli][skill][issue412][diverge][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     home.write(".pi/agent/skills/user-skill/SKILL.md",

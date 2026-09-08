@@ -108,7 +108,7 @@ void write_resume_fixture(
 }
 } // namespace
 
-TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "new.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -126,7 +126,8 @@ TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harne
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Message);
 }
 
-TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence boundary", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence boundary",
+        "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "redacted.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -199,9 +200,8 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     CHECK(text_from_message(loaded->messages[1]).find("[REDACTED]") != std::string::npos);
 }
 
-TEST_CASE(
-    "Session Resume restores complete assistant identity and usage",
-    "[harness][session][resume][issue17][issue19]") {
+TEST_CASE("Session Resume restores complete assistant identity and usage",
+        "[harness][session][resume][issue17][issue19][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "complete-usage.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -275,9 +275,8 @@ TEST_CASE(
     CHECK(restored.usage.cost.total == 0.23);
 }
 
-TEST_CASE(
-    "Session Resume rejects incomplete assistant identity and non-real timestamps",
-    "[harness][session][resume][issue19]") {
+TEST_CASE("Session Resume rejects incomplete assistant identity and non-real timestamps",
+        "[harness][session][resume][issue19][compat-pi]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
     const auto rejected = [&](support::JsonValue message, std::string expected_detail) {
@@ -311,9 +310,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Session Resume rejects missing required assistant usage fields",
-    "[harness][session][resume][issue17]") {
+TEST_CASE("Session Resume rejects missing required assistant usage fields",
+        "[harness][session][resume][issue17][compat-pi]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
     const auto rejected = [&](support::JsonValue message, std::string expected_field) {
@@ -347,9 +345,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Session Resume propagates missing and unsupported assistant stop reasons",
-    "[harness][session][resume][issue18]") {
+TEST_CASE("Session Resume propagates missing and unsupported assistant stop reasons",
+        "[harness][session][resume][issue18][compat-pi]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
     const auto rejected = [&](support::JsonValue message, std::string expected_detail) {
@@ -371,7 +368,7 @@ TEST_CASE(
     rejected(std::move(unsupported), "future_reason");
 }
 
-TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "future.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -393,7 +390,7 @@ TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session
     CHECK(text_from_message(loaded->messages[0]) == "known");
 }
 
-TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][session][u8]") {
+TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][session][u8][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "v3-tree.jsonl";
     {
@@ -442,7 +439,7 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     CHECK(text_from_message(reloaded->messages[0]) == "resumed after tree entries");
 }
 
-TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "bad.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -459,7 +456,7 @@ TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][sessi
     CHECK(loaded.error().detail.find("line 2") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][session][u3]") {
+TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][session][u3][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "missing-type.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -477,7 +474,8 @@ TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][
     CHECK(loaded.error().detail.find("line 2") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a symlink", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a symlink",
+        "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto real_directory = workspace.path() / "real";
     const auto linked_directory = workspace.path() / "linked";
@@ -492,7 +490,7 @@ TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a syml
     CHECK_FALSE(std::filesystem::exists(real_directory / "nested"));
 }
 
-TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto original_directory = workspace.path() / "sessions";
     const auto moved_directory = workspace.path() / "moved-sessions";
@@ -519,7 +517,7 @@ TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness
     CHECK(read_all(outside_file) == "outside");
 }
 
-TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto real = workspace.path() / "real.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(real, metadata_for(workspace));
@@ -537,7 +535,7 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
     CHECK(public_load.error().message.find("readable") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
 
@@ -549,7 +547,7 @@ TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[ha
     CHECK(second.error().message.find("already exists") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target", "[harness][session][u7]") {
+TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target", "[harness][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto outside = workspace.path() / "outside.jsonl";
     {
@@ -583,7 +581,7 @@ const Value& require_entry_value(const harness::session::SessionEntry& entry) {
 }
 } // namespace
 
-TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9]") {
+TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "v3-header.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -602,7 +600,7 @@ TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9
     CHECK(raw.find("\"version\":3") != std::string::npos);
 }
 
-TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session][wire]") {
+TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session][wire][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "wire-fields.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -640,7 +638,7 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     CHECK(raw.find(R"("parentId":null)") != std::string::npos);
 }
 
-TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9]") {
+TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "id-format.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -653,7 +651,7 @@ TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9]") {
     CHECK(is_hex8(loaded->entries[1].entry_id));
 }
 
-TEST_CASE("model_change entry round-trips", "[harness][session][u9]") {
+TEST_CASE("model_change entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "model-change.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -672,7 +670,7 @@ TEST_CASE("model_change entry round-trips", "[harness][session][u9]") {
     CHECK(loaded->messages.empty());
 }
 
-TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9]") {
+TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "thinking-change.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -689,7 +687,7 @@ TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9]") {
     CHECK(value.thinking_level == "high");
 }
 
-TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9]") {
+TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "tools-change.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -707,7 +705,7 @@ TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9]") {
     CHECK(value.active_tool_names[2] == "bash");
 }
 
-TEST_CASE("wire parser accepts activeToolNames compatibility field", "[harness][session][wire]") {
+TEST_CASE("wire parser accepts activeToolNames compatibility field", "[harness][session][wire][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "tools-change-compat.jsonl";
     {
@@ -729,7 +727,7 @@ TEST_CASE("wire parser accepts activeToolNames compatibility field", "[harness][
     CHECK(value.active_tool_names[1] == "bash");
 }
 
-TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
+TEST_CASE("custom entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -749,7 +747,7 @@ TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
     CHECK(read_all(path).find(R"("data":{"count":42,"name":"test"})") != std::string::npos);
 }
 
-TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
+TEST_CASE("custom_message entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom-msg.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -773,9 +771,8 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
     CHECK(read_all(path).find("\"content\":\"injected content\"") != std::string::npos);
 }
 
-TEST_CASE(
-    "Session Resume preserves ordered custom_message text and image content",
-    "[harness][session][wire][issue28]") {
+TEST_CASE("Session Resume preserves ordered custom_message text and image content",
+        "[harness][session][wire][issue28][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom-msg-images.jsonl";
     {
@@ -804,9 +801,8 @@ TEST_CASE(
     CHECK(std::get<ai::ImageContent>(custom.content[3]).data == "d2VicC1ieXRlcw==");
 }
 
-TEST_CASE(
-    "pi v3 custom_message rejects content blocks outside text and image",
-    "[harness][session][wire][issue28]") {
+TEST_CASE("pi v3 custom_message rejects content blocks outside text and image",
+        "[harness][session][wire][issue28][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom-msg-thinking.jsonl";
     {
@@ -823,7 +819,7 @@ TEST_CASE(
     CHECK_FALSE(resumed.has_value());
 }
 
-TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9]") {
+TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "label.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -850,7 +846,7 @@ TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9]"
     CHECK_FALSE(clear_value.label.has_value());
 }
 
-TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
+TEST_CASE("compaction entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "compaction.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -887,7 +883,7 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
     CHECK(*value.from_hook == true);
 }
 
-TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
+TEST_CASE("branch_summary entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "branch-summary.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -912,7 +908,7 @@ TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
     CHECK_FALSE(value.from_hook.has_value());
 }
 
-TEST_CASE("session_info entry round-trips", "[harness][session][u9]") {
+TEST_CASE("session_info entry round-trips", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "session-info.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -928,7 +924,7 @@ TEST_CASE("session_info entry round-trips", "[harness][session][u9]") {
     CHECK(*value.name == "Refactor auth module");
 }
 
-TEST_CASE("leaf entry round-trips as typed value", "[harness][session][u9]") {
+TEST_CASE("leaf entry round-trips as typed value", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-entry.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -944,7 +940,7 @@ TEST_CASE("leaf entry round-trips as typed value", "[harness][session][u9]") {
     CHECK(*value.target_id == "leaf-target");
 }
 
-TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9]") {
+TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "mixed.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -972,7 +968,8 @@ TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][sess
     CHECK(text_from_message(loaded->messages[0]) == "hello");
 }
 
-TEST_CASE("open_existing succeeds and allows append on session with tree entries", "[harness][session][u9]") {
+TEST_CASE(
+        "open_existing succeeds and allows append on session with tree entries", "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "resume-tree.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -993,7 +990,8 @@ TEST_CASE("open_existing succeeds and allows append on session with tree entries
     CHECK(text_from_message(loaded->messages[1]) == "second message");
 }
 
-TEST_CASE("open_existing appends after stale latest leaf marker at last navigable entry", "[harness][session][u9]") {
+TEST_CASE("open_existing appends after stale latest leaf marker at last navigable entry",
+        "[harness][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "stale-leaf-append.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1042,7 +1040,7 @@ TEST_CASE("open_existing appends after stale latest leaf marker at last navigabl
     CHECK(*leaf.target_id == appended->entry_id);
 }
 
-TEST_CASE("extended message types survive session append and load", "[harness][session][extended]") {
+TEST_CASE("extended message types survive session append and load", "[harness][session][extended][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "extended-messages.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));

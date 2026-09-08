@@ -12,7 +12,7 @@
 
 using namespace cch;
 
-TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][contract]") {
+TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][contract][compat-pi]") {
     static_assert(std::is_aggregate_v<ai::TextContent>);
     static_assert(std::is_aggregate_v<ai::ToolCallContent>);
     static_assert(std::is_aggregate_v<ai::UsageCost>);
@@ -64,9 +64,8 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
     CHECK(*error.context == "message");
 }
 
-TEST_CASE(
-    "UserMessage content is a passive sum type with string and block-array alternatives",
-    "[ai][u3][contract][issue365]") {
+TEST_CASE("UserMessage content is a passive sum type with string and block-array alternatives",
+        "[ai][u3][contract][issue365][compat-pi]") {
     static_assert(std::is_aggregate_v<ai::UserMessage>);
     static_assert(std::is_same_v<
                   decltype(ai::UserMessage::content),
@@ -89,9 +88,8 @@ TEST_CASE(
     CHECK(std::get<ai::TextContent>(blocks[0]).text == "block text");
 }
 
-TEST_CASE(
-    "UserMessage string and block-array alternatives round-trip with four-way distinction",
-    "[ai][glaze][issue365]") {
+TEST_CASE("UserMessage string and block-array alternatives round-trip with four-way distinction",
+        "[ai][glaze][issue365][compat-pi]") {
     const auto round_trip = [](ai::UserMessage message) -> ai::UserMessage {
         auto json = ai::glaze::write_message_json(ai::MessageVariant{message});
         REQUIRE(json);
@@ -157,9 +155,8 @@ TEST_CASE(
     CHECK(empty_array_json->find(R"("content":[])") != std::string::npos);
 }
 
-TEST_CASE(
-    "session-style user message JSON with string content loads the string alternative",
-    "[ai][glaze][issue365]") {
+TEST_CASE("session-style user message JSON with string content loads the string alternative",
+        "[ai][glaze][issue365][compat-pi]") {
     const auto parsed = ai::glaze::read_message_json(
         R"({"role":"user","content":"resumed string message","timestamp":1718000000000})");
     REQUIRE(parsed);
@@ -169,7 +166,7 @@ TEST_CASE(
     CHECK(std::get<std::string>(user.content) == "resumed string message");
 }
 
-TEST_CASE("user text message serializes through explicit Glaze content tags", "[ai][u2][glaze]") {
+TEST_CASE("user text message serializes through explicit Glaze content tags", "[ai][u2][glaze][compat-pi]") {
     ai::MessageVariant original = ai::UserMessage{
         .content = std::vector<ai::Content>{ai::TextContent{
             .text = "hello model",
@@ -197,7 +194,7 @@ TEST_CASE("user text message serializes through explicit Glaze content tags", "[
     CHECK(*std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(user.content)[0]).text_signature == "sig-1");
 }
 
-TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2]") {
+TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2][compat-pi]") {
     auto arguments = support::read_json(R"({"path":"README.md","limit":20})");
     REQUIRE(arguments);
 
@@ -281,7 +278,7 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     CHECK(round_trip.timestamp == 1718000000123);
 }
 
-TEST_CASE("assistant pending stop reason and raw stop reason round-trip", "[ai][glaze][issue374]") {
+TEST_CASE("assistant pending stop reason and raw stop reason round-trip", "[ai][glaze][issue374][compat-pi]") {
     const auto parsed = ai::glaze::read_message_json(
         R"({"role":"assistant","content":[{"type":"text","text":"in flight"}],"api":"anthropic-messages","provider":"kimi-coding","model":"kimi-for-coding","usage":{"input":1,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":1,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","rawStopReason":"pause_turn","timestamp":1718000000000})");
     REQUIRE(parsed);
@@ -305,7 +302,7 @@ TEST_CASE("assistant pending stop reason and raw stop reason round-trip", "[ai][
     CHECK(*round_trip.raw_stop_reason == "pause_turn");
 }
 
-TEST_CASE("assistant message without rawStopReason round-trips as absence", "[ai][glaze][issue374]") {
+TEST_CASE("assistant message without rawStopReason round-trips as absence", "[ai][glaze][issue374][compat-pi]") {
     ai::AssistantMessage assistant;
     assistant.content.emplace_back(ai::TextContent{
         .text = "answer",
@@ -327,7 +324,7 @@ TEST_CASE("assistant message without rawStopReason round-trips as absence", "[ai
     CHECK(std::get<ai::AssistantMessage>(*parsed).raw_stop_reason == std::nullopt);
 }
 
-TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][issue18]") {
+TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][issue18][compat-pi]") {
     const auto missing = ai::glaze::read_message_json(
         R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");
     REQUIRE_FALSE(missing);
@@ -341,7 +338,7 @@ TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][is
     CHECK(unsupported.error().detail.find("future_reason") != std::string::npos);
 }
 
-TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][glaze]") {
+TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][glaze][compat-pi]") {
     auto parsed = ai::glaze::read_message_json(
         R"({"role":"user","content":[{"type":"audio","data":"AAAA"}],"timestamp":1718000000000})");
 
@@ -351,7 +348,7 @@ TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][
     CHECK(parsed.error().detail.find("audio") != std::string::npos);
 }
 
-TEST_CASE("missing required content payload fields return typed JSON errors", "[ai][u2][glaze]") {
+TEST_CASE("missing required content payload fields return typed JSON errors", "[ai][u2][glaze][compat-pi]") {
     auto missing_text = ai::glaze::read_message_json(
         R"({"role":"user","content":[{"type":"text"}],"timestamp":1718000000000})");
     REQUIRE_FALSE(missing_text);
@@ -373,7 +370,7 @@ TEST_CASE("missing required content payload fields return typed JSON errors", "[
 
 // ── Extended message type round-trip tests ──
 
-TEST_CASE("BashExecutionMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+TEST_CASE("BashExecutionMessage serializes and deserializes round-trip", "[ai][extended][glaze][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "echo hello";
     bash.output = "hello\n";
@@ -401,7 +398,7 @@ TEST_CASE("BashExecutionMessage serializes and deserializes round-trip", "[ai][e
     CHECK(rt.timestamp == 1718000000001);
 }
 
-TEST_CASE("BashExecutionMessage with optional fields null round-trips", "[ai][extended][glaze]") {
+TEST_CASE("BashExecutionMessage with optional fields null round-trips", "[ai][extended][glaze][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "ls";
     bash.output = "";
@@ -419,7 +416,7 @@ TEST_CASE("BashExecutionMessage with optional fields null round-trips", "[ai][ex
     CHECK(rt.cancelled == false);
 }
 
-TEST_CASE("CompactionSummaryMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+TEST_CASE("CompactionSummaryMessage serializes and deserializes round-trip", "[ai][extended][glaze][compat-pi]") {
     ai::CompactionSummaryMessage compaction;
     compaction.summary = "Compacted 10 messages";
     compaction.tokens_before = 5000;
@@ -439,7 +436,7 @@ TEST_CASE("CompactionSummaryMessage serializes and deserializes round-trip", "[a
     CHECK(rt.timestamp == 1718000000003);
 }
 
-TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip", "[ai][extended][glaze][compat-pi]") {
     ai::BranchSummaryMessage branch;
     branch.summary = "Branch resolved";
     branch.from_id = "abc12345";
@@ -459,7 +456,7 @@ TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip", "[ai][e
     CHECK(rt.timestamp == 1718000000004);
 }
 
-TEST_CASE("CustomMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+TEST_CASE("CustomMessage serializes and deserializes round-trip", "[ai][extended][glaze][compat-pi]") {
     ai::CustomMessage custom;
     custom.custom_type = "my-extension";
     custom.content.emplace_back(ai::TextContent{
@@ -485,7 +482,7 @@ TEST_CASE("CustomMessage serializes and deserializes round-trip", "[ai][extended
     CHECK(rt.timestamp == 1718000000005);
 }
 
-TEST_CASE("CustomMessage with display false round-trips", "[ai][extended][glaze]") {
+TEST_CASE("CustomMessage with display false round-trips", "[ai][extended][glaze][compat-pi]") {
     ai::CustomMessage custom;
     custom.custom_type = "hidden-ext";
     custom.display = false;
@@ -502,7 +499,7 @@ TEST_CASE("CustomMessage with display false round-trips", "[ai][extended][glaze]
 
 // ── LLM conversion tests ──
 
-TEST_CASE("bash_execution_to_user_message produces formatted text", "[ai][extended][convert]") {
+TEST_CASE("bash_execution_to_user_message produces formatted text", "[ai][extended][convert][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "echo hello";
     bash.output = "hello\n";
@@ -517,7 +514,7 @@ TEST_CASE("bash_execution_to_user_message produces formatted text", "[ai][extend
     CHECK(text.text.find("```\nhello") != std::string::npos);
 }
 
-TEST_CASE("bash_execution_to_user_message reports non-zero exit code", "[ai][extended][convert]") {
+TEST_CASE("bash_execution_to_user_message reports non-zero exit code", "[ai][extended][convert][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "false";
     bash.output = "";
@@ -529,7 +526,7 @@ TEST_CASE("bash_execution_to_user_message reports non-zero exit code", "[ai][ext
     CHECK(text.text.find("Command exited with code 1") != std::string::npos);
 }
 
-TEST_CASE("bash_execution_to_user_message reports cancellation", "[ai][extended][convert]") {
+TEST_CASE("bash_execution_to_user_message reports cancellation", "[ai][extended][convert][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "sleep 999";
     bash.output = "";
@@ -540,7 +537,7 @@ TEST_CASE("bash_execution_to_user_message reports cancellation", "[ai][extended]
     CHECK(text.text.find("(command cancelled)") != std::string::npos);
 }
 
-TEST_CASE("bash_execution_to_user_message reports truncation with path", "[ai][extended][convert]") {
+TEST_CASE("bash_execution_to_user_message reports truncation with path", "[ai][extended][convert][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "cat huge.log";
     bash.output = "truncated...";
@@ -552,7 +549,7 @@ TEST_CASE("bash_execution_to_user_message reports truncation with path", "[ai][e
     CHECK(text.text.find("[Output truncated. Full output: /tmp/bash-output-12345.txt]") != std::string::npos);
 }
 
-TEST_CASE("compaction_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert]") {
+TEST_CASE("compaction_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert][compat-pi]") {
     ai::CompactionSummaryMessage compaction;
     compaction.summary = "Previous 20 messages compacted";
     compaction.tokens_before = 8000;
@@ -565,7 +562,7 @@ TEST_CASE("compaction_summary_to_user_message wraps with prefix and suffix", "[a
                          std::string{ai::kCompactionSummarySuffix}) != std::string::npos);
 }
 
-TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert]") {
+TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert][compat-pi]") {
     ai::BranchSummaryMessage branch;
     branch.summary = "Branch work completed";
     branch.from_id = "abc12345";
@@ -578,9 +575,8 @@ TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][e
                          std::string{ai::kBranchSummarySuffix}) != std::string::npos);
 }
 
-TEST_CASE(
-    "custom_message_to_user_message preserves ordered text and image blocks",
-    "[ai][extended][convert][issue22]") {
+TEST_CASE("custom_message_to_user_message preserves ordered text and image blocks",
+        "[ai][extended][convert][issue22][compat-pi]") {
     ai::CustomMessage custom;
     custom.custom_type = "ext";
     custom.content.emplace_back(ai::TextContent{
@@ -607,7 +603,7 @@ TEST_CASE(
     CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[2]).text == "part2");
 }
 
-TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extended][convert][issue22]") {
+TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extended][convert][issue22][compat-pi]") {
     ai::CustomMessage custom;
     custom.custom_type = "ext";
     custom.timestamp = 1718000000006;
@@ -618,7 +614,7 @@ TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extend
     CHECK(msg.timestamp == 1718000000006);
 }
 
-TEST_CASE("default-constructed AI contracts are empty passive values", "[ai][contract][issue372]") {
+TEST_CASE("default-constructed AI contracts are empty passive values", "[ai][contract][issue372][compat-pi]") {
     ai::Tool tool;
     CHECK(tool.name.empty());
     CHECK(tool.description.empty());

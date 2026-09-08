@@ -138,7 +138,8 @@ std::vector<ai::MessageVariant> resumed_history(const std::filesystem::path& pat
 
 } // namespace
 
-TEST_CASE("user messages for forking list user texts in order", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE(
+        "user messages for forking list user texts in order", "[coding_agent][runtime][session-fork][issue409][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
     auto created = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -162,7 +163,8 @@ TEST_CASE("user messages for forking list user texts in order", "[coding_agent][
     CHECK(messages[0].entry_id != messages[1].entry_id);
 }
 
-TEST_CASE("fork before a middle user message writes the prefix branch with selected text", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE("fork before a middle user message writes the prefix branch with selected text",
+        "[coding_agent][runtime][session-fork][issue409][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
     auto store = build_linear_session(path, workspace);
@@ -196,7 +198,8 @@ TEST_CASE("fork before a middle user message writes the prefix branch with selec
     CHECK(loaded->metadata.workspace == workspace.path());
 }
 
-TEST_CASE("fork at the current position duplicates the branch to the entry", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE("fork at the current position duplicates the branch to the entry",
+        "[coding_agent][runtime][session-fork][issue409][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
     auto store = build_linear_session(path, workspace);
@@ -222,7 +225,8 @@ TEST_CASE("fork at the current position duplicates the branch to the entry", "[c
     CHECK(user_text_at(history, 4) == "user-2");
 }
 
-TEST_CASE("fork before a root user message creates an empty parented session", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE("fork before a root user message creates an empty parented session",
+        "[coding_agent][runtime][session-fork][issue409][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
     auto store = build_linear_session(path, workspace);
@@ -249,7 +253,7 @@ TEST_CASE("fork before a root user message creates an empty parented session", "
     CHECK(*loaded->metadata.parent_session == path);
 }
 
-TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][session-fork][issue409][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
     auto store = build_linear_session(path, workspace);
@@ -334,7 +338,8 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
             headerless_source.string());
 }
 
-TEST_CASE("fork re-chains parents past labels and re-creates retained labels", "[coding_agent][runtime][session-fork][issue409]") {
+TEST_CASE("fork re-chains parents past labels and re-creates retained labels",
+        "[coding_agent][runtime][session-fork][issue409][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
     auto store = build_labeled_session(path, workspace);
@@ -393,7 +398,8 @@ TEST_CASE("fork re-chains parents past labels and re-creates retained labels", "
     CHECK(ai::text_from_user_message(*parent_user) == "user-0");
 }
 
-TEST_CASE("in-memory fork produces the branch seed from the live store tree", "[coding_agent][runtime][session-fork][issue409][issue491]") {
+TEST_CASE("in-memory fork produces the branch seed from the live store tree",
+        "[coding_agent][runtime][session-fork][issue409][issue491][spec]") {
     tests::TempWorkspace workspace;
     // The in-memory source is the session store's live tree (pi's
     // non-persisting SessionManager entries): a thinking-level change above

@@ -32,7 +32,7 @@ std::string read_fixture(std::string_view name) {
 
 } // namespace
 
-TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issue336]") {
+TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issue336][compat-pi]") {
     auto model = tests::make_model("kimi-for-coding", "kimi-coding", "anthropic-messages");
     model.name = "Kimi for Coding";
     model.base_url = "https://api.kimi.com/coding";
@@ -70,7 +70,7 @@ TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issu
     CHECK(*serialized == read_fixture("complete-anthropic-model.json"));
 }
 
-TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][issue336]") {
+TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][issue336][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     agent::Agent instance(runtime->factory(), agent::ToolRegistry{});
 
@@ -79,7 +79,7 @@ TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][is
     CHECK(*serialized == read_fixture("default-model.json"));
 }
 
-TEST_CASE("thinking level map distinguishes no map missing key and explicit null", "[ai][model][issue336]") {
+TEST_CASE("thinking level map distinguishes no map missing key and explicit null", "[ai][model][issue336][compat-pi]") {
     auto parsed = ai::glaze::read_model_json(read_fixture("complete-anthropic-model.json"));
     REQUIRE(parsed);
     REQUIRE(parsed->thinking_level_map.has_value());
@@ -98,7 +98,8 @@ TEST_CASE("thinking level map distinguishes no map missing key and explicit null
     CHECK_FALSE(no_map->thinking_level_map.has_value());
 }
 
-TEST_CASE("Model validation rejects partial identity invalid cost and incompatible compat", "[ai][model][issue336]") {
+TEST_CASE("Model validation rejects partial identity invalid cost and incompatible compat",
+        "[ai][model][issue336][compat-pi]") {
     auto model = tests::make_model("model-1");
 
     model.id.clear();

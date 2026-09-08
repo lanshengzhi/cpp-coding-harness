@@ -304,9 +304,8 @@ sequential_session_ids() {
 
 } // namespace
 
-TEST_CASE(
-    "compaction token estimation matches pi's conservative char/4 heuristic",
-    "[harness][compaction][issue358]") {
+TEST_CASE("compaction token estimation matches pi's conservative char/4 heuristic",
+        "[harness][compaction][issue358][spec]") {
     using harness::session::calculate_context_tokens;
     using harness::session::estimate_tokens;
 
@@ -352,7 +351,7 @@ TEST_CASE(
 }
 
 TEST_CASE("estimateContextTokens uses the last assistant usage plus trailing estimate",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     using harness::session::estimate_context_tokens;
 
     auto no_usage = estimate_context_tokens(
@@ -392,7 +391,8 @@ TEST_CASE("estimateContextTokens uses the last assistant usage plus trailing est
     CHECK(anchored.usage_tokens == 20);
 }
 
-TEST_CASE("the compaction door skips inapplicable branches with typed reasons", "[harness][compaction][issue541]") {
+TEST_CASE(
+        "the compaction door skips inapplicable branches with typed reasons", "[harness][compaction][issue541][spec]") {
     const auto model = tests::make_model("gpt-test");
 
     auto run_with_probes = [&](harness::session::SessionStore& store) {
@@ -447,7 +447,7 @@ TEST_CASE("the compaction door skips inapplicable branches with typed reasons", 
 }
 
 TEST_CASE("the compaction door keeps the recent-token budget and never cuts before the boundary",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     const auto model = tests::make_model("gpt-test");
 
     // Ten user/assistant pairs of 100 characters (25 estimated tokens each);
@@ -527,7 +527,7 @@ TEST_CASE("the compaction door keeps the recent-token budget and never cuts befo
 }
 
 TEST_CASE("the compaction door never splits a turn when the cut lands on a user message",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     auto store = harness::session::SessionStore::in_memory();
     append_user(store, "large turn");
     append_assistant(store, "large assistant message", mock_usage(300, 100));
@@ -559,7 +559,7 @@ TEST_CASE("the compaction door never splits a turn when the cut lands on a user 
 }
 
 TEST_CASE("split-turn compaction issues two requests with distinct fresh session ids",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     auto history_response = ai::assistant_text_message("history summary");
     history_response.usage = mock_usage(1000, 200);
@@ -628,7 +628,7 @@ TEST_CASE("split-turn compaction issues two requests with distinct fresh session
 }
 
 TEST_CASE("the compaction door carries the latest compaction summary into the update prompt",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     auto store = harness::session::SessionStore::in_memory();
     append_user(store, "user msg 1");
     append_assistant(store, "assistant msg 1", mock_usage(5000, 1000));
@@ -670,7 +670,7 @@ TEST_CASE("the compaction door carries the latest compaction summary into the up
 }
 
 TEST_CASE("the compaction door summarizes custom and branch summary entries",
-        "[harness][compaction][fixture][issue358][issue541]") {
+        "[harness][compaction][fixture][issue358][issue541][spec]") {
     // custom_message entries only enter a session through the interoperable
     // wire format (their producers are extensions, a Deferred Capability), so
     // this scenario opens a fixture session instead of appending.
@@ -716,7 +716,7 @@ TEST_CASE("the compaction door summarizes custom and branch summary entries",
 }
 
 TEST_CASE("summarization requests carry cacheRetention none and a fresh session id",
-        "[harness][compaction][fixture][issue358][issue541]") {
+        "[harness][compaction][fixture][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     auto summary_response = ai::assistant_text_message("## Goal\nTest summary");
     summary_response.usage = mock_usage(1000, 200);
@@ -751,7 +751,7 @@ TEST_CASE("summarization requests carry cacheRetention none and a fresh session 
 }
 
 TEST_CASE("the compaction door surfaces summarization-failed, aborted, and missing-stream errors",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     const auto model = tests::make_model("gpt-test");
 
     // Error terminal → summarization failure with pi's message.
@@ -801,7 +801,7 @@ TEST_CASE("the compaction door surfaces summarization-failed, aborted, and missi
 }
 
 TEST_CASE("the compaction door appends pi's file-operation tags and details to the summary",
-        "[harness][compaction][issue358][issue541]") {
+        "[harness][compaction][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("## Goal\nTest summary"));
 
@@ -847,7 +847,7 @@ TEST_CASE("the compaction door appends pi's file-operation tags and details to t
 }
 
 TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry wire fields",
-        "[harness][compaction][fixture][issue358][issue541]") {
+        "[harness][compaction][fixture][issue358][issue541][compat-pi]") {
     // Deterministic session history with fixed message timestamps: the cut
     // keeps the last two pairs and summarizes the first (keepRecentTokens
     // 30). Entry ids/timestamps are store-generated; the goldens normalize
@@ -948,8 +948,8 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
     expect_json_equal(rebuild, "compaction-rebuild.json");
 }
 
-TEST_CASE(
-        "the compaction door serializes pi's verbatim conversation text", "[harness][compaction][issue358][issue541]") {
+TEST_CASE("the compaction door serializes pi's verbatim conversation text",
+        "[harness][compaction][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("## Summary"));
 
@@ -983,9 +983,7 @@ TEST_CASE(
 
 // ── T10 trigger-policy machinery (#359): shouldCompact + isContextOverflow ──
 
-TEST_CASE(
-    "shouldCompact mirrors pi's threshold arithmetic",
-    "[harness][compaction][issue359]") {
+TEST_CASE("shouldCompact mirrors pi's threshold arithmetic", "[harness][compaction][issue359][spec]") {
     using harness::session::CompactionSettings;
     using harness::session::should_compact;
 
@@ -1014,9 +1012,8 @@ TEST_CASE(
     CHECK(should_compact(1, 4096, defaults));
 }
 
-TEST_CASE(
-    "isContextOverflow detects provider overflow errors, silent usage overflow, and length-stop overflow",
-    "[harness][compaction][issue359]") {
+TEST_CASE("isContextOverflow detects provider overflow errors, silent usage overflow, and length-stop overflow",
+        "[harness][compaction][issue359][spec]") {
     using harness::session::is_context_overflow;
 
     constexpr std::size_t kWindow = 128000;

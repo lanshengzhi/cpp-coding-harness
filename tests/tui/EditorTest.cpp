@@ -40,9 +40,8 @@ bool menu_rendered(cch::tui::Editor& editor, std::size_t width = 80) {
 }
 } // namespace
 
-TEST_CASE(
-    "Editor edits Unicode text through semantic cursor and deletion operations",
-    "[tui][editor][issue48][issue57]") {
+TEST_CASE("Editor edits Unicode text through semantic cursor and deletion operations",
+        "[tui][editor][issue48][issue57][spec]") {
     cch::tui::Editor editor;
     type(editor, "A\xc3\xa9\xf0\x9f\x98\x80");
     key(editor, "left");
@@ -65,7 +64,7 @@ TEST_CASE(
     CHECK(editor.text().empty());
 }
 
-TEST_CASE("Editor preserves multiline undo kill yank and jump state", "[tui][editor][issue48]") {
+TEST_CASE("Editor preserves multiline undo kill yank and jump state", "[tui][editor][issue48][spec]") {
     cch::tui::Editor editor;
     editor.insert_text_at_cursor("first second\nthird");
     key(editor, "home");
@@ -83,7 +82,7 @@ TEST_CASE("Editor preserves multiline undo kill yank and jump state", "[tui][edi
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 4}));
 }
 
-TEST_CASE("Editor rotates the kill ring only after a yank", "[tui][editor][issue48]") {
+TEST_CASE("Editor rotates the kill ring only after a yank", "[tui][editor][issue48][spec]") {
     cch::tui::Editor editor;
     editor.set_text("first");
     key(editor, "home");
@@ -97,7 +96,7 @@ TEST_CASE("Editor rotates the kill ring only after a yank", "[tui][editor][issue
     CHECK(editor.text() == "first");
 }
 
-TEST_CASE("Editor yanks multiline and pasted content without losing marker semantics", "[tui][editor][issue48]") {
+TEST_CASE("Editor yanks multiline and pasted content without losing marker semantics", "[tui][editor][issue48][spec]") {
     cch::tui::Editor editor;
     editor.set_text("first\nsecond");
     key(editor, "home");
@@ -117,7 +116,7 @@ TEST_CASE("Editor yanks multiline and pasted content without losing marker seman
     CHECK(editor.expanded_text() == std::string(1001, 'x'));
 }
 
-TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[tui][editor][issue48]") {
+TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[tui][editor][issue48][spec]") {
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
         {},
@@ -140,9 +139,8 @@ TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[
     CHECK(editor.expanded_text().empty());
 }
 
-TEST_CASE(
-    "Editor accepts caller supplied command and filesystem suggestions through the async provider",
-    "[tui][editor][issue48][issue60][issue383]") {
+TEST_CASE("Editor accepts caller supplied command and filesystem suggestions through the async provider",
+        "[tui][editor][issue48][issue60][issue383][spec]") {
     class ScriptedProvider final : public cch::tui::AutocompleteProvider {
     public:
         std::optional<cch::tui::AutocompleteSuggestions> response;
@@ -275,7 +273,7 @@ public:
 
 } // namespace
 
-TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit", "[tui][editor]") {
+TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit", "[tui][editor][spec]") {
     auto provider = std::make_unique<SlashScriptedProvider>();
     auto* provider_ptr = provider.get();
     std::vector<std::string> submitted;
@@ -311,7 +309,7 @@ TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3}));
 }
 
-TEST_CASE("Editor resolves a key shared by two editing actions in dispatch order", "[tui][editor]") {
+TEST_CASE("Editor resolves a key shared by two editing actions in dispatch order", "[tui][editor][spec]") {
     // f9 claims both deletion actions; the dispatch order — char deletion
     // ahead of word deletion (pi editor-component.ts) — decides.
     auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
@@ -324,7 +322,7 @@ TEST_CASE("Editor resolves a key shared by two editing actions in dispatch order
     CHECK(editor.text() == "one tw");
 }
 
-TEST_CASE("Editor resolves a menu key shared by cancel and confirm in dispatch order", "[tui][editor]") {
+TEST_CASE("Editor resolves a menu key shared by cancel and confirm in dispatch order", "[tui][editor][spec]") {
     auto provider = std::make_unique<SlashScriptedProvider>();
     auto* provider_ptr = provider.get();
     // f9 claims both menu actions; cancel leads the menu dispatch phase.
@@ -342,7 +340,7 @@ TEST_CASE("Editor resolves a menu key shared by cancel and confirm in dispatch o
     CHECK(editor.text() == "/");
 }
 
-TEST_CASE("Editor raw shift guards fire at their chain positions", "[tui][editor]") {
+TEST_CASE("Editor raw shift guards fire at their chain positions", "[tui][editor][spec]") {
     // shift+backspace / shift+delete bound to LATER actions: the raw guards at
     // the deleteChar positions still win (pi editor-component.ts).
     auto later = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
@@ -377,7 +375,7 @@ TEST_CASE("Editor raw shift guards fire at their chain positions", "[tui][editor
     CHECK(claiming.text() == "/");
 }
 
-TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport", "[tui][editor][issue48]") {
+TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport", "[tui][editor][issue48][spec]") {
     cch::tui::Editor editor({.max_visible_lines = 3});
     editor.insert_text_at_cursor("abcdefgh\nijklmnop\nqrstuvwx\nyz");
     auto lines = editor.render(4);
@@ -397,7 +395,7 @@ TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport"
     CHECK(terminal.screen().back().find("yz") != std::string::npos);
 }
 
-TEST_CASE("Editor scrolls the active cursor into the Virtual Terminal viewport", "[tui][editor][issue48]") {
+TEST_CASE("Editor scrolls the active cursor into the Virtual Terminal viewport", "[tui][editor][issue48][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 2});
     cch::tui::Tui tui(terminal);
     auto editor = std::make_unique<cch::tui::Editor>();
@@ -410,7 +408,7 @@ TEST_CASE("Editor scrolls the active cursor into the Virtual Terminal viewport",
     CHECK(terminal.screen().back().find("yz") != std::string::npos);
 }
 
-TEST_CASE("Editor edits Unicode input through the Virtual Terminal seam", "[tui][editor][issue48]") {
+TEST_CASE("Editor edits Unicode input through the Virtual Terminal seam", "[tui][editor][issue48][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 2});
     cch::tui::Tui tui(terminal);
     auto editor = std::make_unique<cch::tui::Editor>();
@@ -424,7 +422,7 @@ TEST_CASE("Editor edits Unicode input through the Virtual Terminal seam", "[tui]
     CHECK(editor_pointer->text() == "\xc3\xa9");
 }
 
-TEST_CASE("Editor keeps typed uppercase letters while identifiers stay canonical", "[tui][editor][issue386]") {
+TEST_CASE("Editor keeps typed uppercase letters while identifiers stay canonical", "[tui][editor][issue386][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 2});
     cch::tui::Tui tui(terminal);
     auto editor = std::make_unique<cch::tui::Editor>();
@@ -444,7 +442,7 @@ TEST_CASE("Editor keeps typed uppercase letters while identifiers stay canonical
     CHECK(editor_pointer->text() == "AbCZZ");
 }
 
-TEST_CASE("Editor converts the semantic space key back to fresh text", "[tui][editor][issue58]") {
+TEST_CASE("Editor converts the semantic space key back to fresh text", "[tui][editor][issue58][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 2});
     cch::tui::Tui tui(terminal);
     auto editor = std::make_unique<cch::tui::Editor>();
@@ -456,7 +454,7 @@ TEST_CASE("Editor converts the semantic space key back to fresh text", "[tui][ed
     CHECK(editor_pointer->text() == "two words");
 }
 
-TEST_CASE("Editor receives decoder paste events through the Virtual Terminal seam", "[tui][editor][issue48]") {
+TEST_CASE("Editor receives decoder paste events through the Virtual Terminal seam", "[tui][editor][issue48][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});
     cch::tui::Tui tui(terminal);
     auto editor = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{.max_visible_lines = 3});
@@ -471,9 +469,8 @@ TEST_CASE("Editor receives decoder paste events through the Virtual Terminal sea
     CHECK_FALSE(terminal.screen().empty());
 }
 
-TEST_CASE(
-    "Editor submits and resets repeatedly with configured newline operations",
-    "[tui][editor][issue48][issue57]") {
+TEST_CASE("Editor submits and resets repeatedly with configured newline operations",
+        "[tui][editor][issue48][issue57][spec]") {
     cch::tui::KeybindingResolutionRequest request;
     request.definitions = cch::tui::builtin_tui_keybinding_definitions();
     request.overrides = {
@@ -510,9 +507,8 @@ TEST_CASE(
     CHECK(changes.back().empty());
 }
 
-TEST_CASE(
-    "Editor applies replaceable generic styling without changing visible width",
-    "[tui][editor][theme][issue55]") {
+TEST_CASE("Editor applies replaceable generic styling without changing visible width",
+        "[tui][editor][theme][issue55][spec]") {
     cch::tui::Editor editor;
     cch::tui::EditorTheme first;
     first.text = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
@@ -535,7 +531,7 @@ TEST_CASE(
     CHECK(blue->lines[0].find("\x1b[31m") == std::string::npos);
 }
 
-TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][editor][theme][issue55]") {
+TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][editor][theme][issue55][spec]") {
     cch::tui::Editor editor;
     cch::tui::EditorTheme wider;
     wider.text = [](std::string text) { return text + "x"; };
@@ -559,13 +555,13 @@ TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][edi
 #endif
 }
 
-TEST_CASE("Editor does nothing on Up when history is empty", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor does nothing on Up when history is empty", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     key(editor, "up");
     CHECK(editor.text().empty());
 }
 
-TEST_CASE("Editor recalls the most recent entry on Up when empty", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor recalls the most recent entry on Up when empty", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("first prompt");
     editor.add_to_history("second prompt");
@@ -575,7 +571,7 @@ TEST_CASE("Editor recalls the most recent entry on Up when empty", "[tui][editor
     CHECK(editor.text() == "second prompt");
 }
 
-TEST_CASE("Editor cycles through history entries on repeated Up", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor cycles through history entries on repeated Up", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("first");
     editor.add_to_history("second");
@@ -591,7 +587,8 @@ TEST_CASE("Editor cycles through history entries on repeated Up", "[tui][editor]
     CHECK(editor.text() == "first");  // Stays at the oldest entry
 }
 
-TEST_CASE("Editor jumps to start before entering history from a non-empty draft", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor jumps to start before entering history from a non-empty draft",
+        "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("prompt");
     editor.set_text("draft");
@@ -610,7 +607,7 @@ TEST_CASE("Editor jumps to start before entering history from a non-empty draft"
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
 }
 
-TEST_CASE("Editor navigates forward through history with Down", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor navigates forward through history with Down", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("first");
     editor.add_to_history("second");
@@ -632,7 +629,7 @@ TEST_CASE("Editor navigates forward through history with Down", "[tui][editor][h
     CHECK(editor.text() == "draft");
 }
 
-TEST_CASE("Editor exits history mode when typing a character", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor exits history mode when typing a character", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("old prompt");
 
@@ -642,7 +639,7 @@ TEST_CASE("Editor exits history mode when typing a character", "[tui][editor][hi
     CHECK(editor.text() == "xold prompt");
 }
 
-TEST_CASE("Editor exits history mode on set_text", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor exits history mode on set_text", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("first");
     editor.add_to_history("second");
@@ -654,7 +651,7 @@ TEST_CASE("Editor exits history mode on set_text", "[tui][editor][history][issue
     CHECK(editor.text() == "second");
 }
 
-TEST_CASE("Editor does not add empty strings to history", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor does not add empty strings to history", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("");
     editor.add_to_history("   ");
@@ -666,7 +663,7 @@ TEST_CASE("Editor does not add empty strings to history", "[tui][editor][history
     CHECK(editor.text() == "valid");
 }
 
-TEST_CASE("Editor does not add consecutive duplicates to history", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor does not add consecutive duplicates to history", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("same");
     editor.add_to_history("same");
@@ -678,7 +675,7 @@ TEST_CASE("Editor does not add consecutive duplicates to history", "[tui][editor
     CHECK(editor.text() == "same");
 }
 
-TEST_CASE("Editor allows non-consecutive duplicates in history", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor allows non-consecutive duplicates in history", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("first");
     editor.add_to_history("second");
@@ -692,7 +689,8 @@ TEST_CASE("Editor allows non-consecutive duplicates in history", "[tui][editor][
     CHECK(editor.text() == "first");  // Older one
 }
 
-TEST_CASE("Editor uses cursor movement instead of history when content is present", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor uses cursor movement instead of history when content is present",
+        "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("history item");
     editor.set_text("line1\nline2");
@@ -703,7 +701,7 @@ TEST_CASE("Editor uses cursor movement instead of history when content is presen
     CHECK(editor.text() == "line1X\nline2");
 }
 
-TEST_CASE("Editor limits history to 100 entries", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor limits history to 100 entries", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     for (int index = 0; index < 105; ++index) {
         editor.add_to_history(std::format("prompt {}", index));
@@ -718,7 +716,7 @@ TEST_CASE("Editor limits history to 100 entries", "[tui][editor][history][issue3
     CHECK(editor.text() == "prompt 5");
 }
 
-TEST_CASE("Editor places the cursor at the start after browsing upward", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor places the cursor at the start after browsing upward", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("older entry");
     editor.add_to_history("line1\nline2\nline3");
@@ -732,7 +730,7 @@ TEST_CASE("Editor places the cursor at the start after browsing upward", "[tui][
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
 }
 
-TEST_CASE("Editor places the cursor at the end after browsing downward", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor places the cursor at the end after browsing downward", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("older entry");
     editor.add_to_history("line1\nline2\nline3");
@@ -750,7 +748,8 @@ TEST_CASE("Editor places the cursor at the end after browsing downward", "[tui][
     CHECK(editor.text() == "newer entry");
 }
 
-TEST_CASE("Editor allows opposite-direction cursor movement within a multi-line entry", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor allows opposite-direction cursor movement within a multi-line entry",
+        "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("line1\nline2\nline3");
 
@@ -766,7 +765,8 @@ TEST_CASE("Editor allows opposite-direction cursor movement within a multi-line 
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
 }
 
-TEST_CASE("Editor records every submit path and recalls the submitted entry", "[tui][editor][history][issue379]") {
+TEST_CASE(
+        "Editor records every submit path and recalls the submitted entry", "[tui][editor][history][issue379][spec]") {
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
         {},
@@ -797,7 +797,7 @@ TEST_CASE("Editor records every submit path and recalls the submitted entry", "[
     CHECK(editor.text() == "two");
 }
 
-TEST_CASE("Editor recalling history is undoable back to the draft", "[tui][editor][history][issue379]") {
+TEST_CASE("Editor recalling history is undoable back to the draft", "[tui][editor][history][issue379][spec]") {
     cch::tui::Editor editor;
     editor.add_to_history("recalled");
     editor.set_text("draft");
@@ -984,7 +984,8 @@ private:
 
 } // namespace
 
-TEST_CASE("Editor debounces attachment autocomplete until the injected timer fires", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor debounces attachment autocomplete until the injected timer fires",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto timer = std::make_unique<ManualDebounceTimer>();
     auto* timer_ptr = timer.get();
     auto provider = std::make_unique<HeldAutocompleteProvider>();
@@ -1017,7 +1018,7 @@ TEST_CASE("Editor debounces attachment autocomplete until the injected timer fir
 }
 
 TEST_CASE("Editor samples current text and cursor when a debounce callback fires",
-        "[tui][editor][autocomplete][issue383][issue538]") {
+        "[tui][editor][autocomplete][issue383][issue538][spec]") {
     auto timer = std::make_unique<ManualDebounceTimer>();
     auto* timer_ptr = timer.get();
     auto provider = std::make_unique<HeldAutocompleteProvider>();
@@ -1038,7 +1039,7 @@ TEST_CASE("Editor samples current text and cursor when a debounce callback fires
 }
 
 TEST_CASE("Editor rejects a queued debounce callback after a newer generation cancels it",
-        "[tui][editor][autocomplete][issue383][issue538]") {
+        "[tui][editor][autocomplete][issue383][issue538][spec]") {
     auto timer = std::make_unique<QueuedDebounceTimer>();
     auto* timer_ptr = timer.get();
     auto provider = std::make_unique<HeldAutocompleteProvider>();
@@ -1055,7 +1056,7 @@ TEST_CASE("Editor rejects a queued debounce callback after a newer generation ca
 }
 
 TEST_CASE("Editor accepts only the first delivery from one completion request",
-        "[tui][editor][autocomplete][issue383][issue538]") {
+        "[tui][editor][autocomplete][issue383][issue538][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->immediate = false;
@@ -1079,7 +1080,7 @@ TEST_CASE("Editor accepts only the first delivery from one completion request",
 }
 
 TEST_CASE("Editor drops held completion callbacks after provider replacement and destruction",
-        "[tui][editor][autocomplete][issue383][issue473][issue538]") {
+        "[tui][editor][autocomplete][issue383][issue473][issue538][spec]") {
     const auto holder = std::make_shared<EscapingSinkHolder>();
     std::size_t render_requests = 0;
     {
@@ -1104,7 +1105,7 @@ TEST_CASE("Editor drops held completion callbacks after provider replacement and
 }
 
 TEST_CASE("Editor drops a queued debounce callback after destruction",
-        "[tui][editor][autocomplete][issue383][issue473][issue538]") {
+        "[tui][editor][autocomplete][issue383][issue473][issue538][spec]") {
     auto timer = std::make_unique<PersistentQueuedDebounceTimer>();
     const auto timer_state = timer->state;
     const auto holder = std::make_shared<EscapingSinkHolder>();
@@ -1121,7 +1122,7 @@ TEST_CASE("Editor drops a queued debounce callback after destruction",
 }
 
 TEST_CASE("Editor teardown from a synchronous render notification is safe",
-        "[tui][editor][autocomplete][issue473][issue538]") {
+        "[tui][editor][autocomplete][issue473][issue538][spec]") {
     const auto owner = std::make_shared<std::unique_ptr<cch::tui::Editor>>();
     *owner = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{
             .render_request = [owner]() -> cch::support::ExpectedVoid {
@@ -1135,7 +1136,8 @@ TEST_CASE("Editor teardown from a synchronous render notification is safe",
     CHECK_FALSE(*owner);
 }
 
-TEST_CASE("Editor deactivates a failed autocomplete render notification", "[tui][editor][autocomplete][issue538]") {
+TEST_CASE(
+        "Editor deactivates a failed autocomplete render notification", "[tui][editor][autocomplete][issue538][spec]") {
     std::size_t render_requests = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     cch::tui::Editor editor(cch::tui::EditorOptions{
@@ -1154,7 +1156,8 @@ TEST_CASE("Editor deactivates a failed autocomplete render notification", "[tui]
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("Editor deactivates a throwing autocomplete render notification", "[tui][editor][autocomplete][issue538]") {
+TEST_CASE("Editor deactivates a throwing autocomplete render notification",
+        "[tui][editor][autocomplete][issue538][spec]") {
     std::size_t render_requests = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     cch::tui::Editor editor(cch::tui::EditorOptions{
@@ -1172,7 +1175,7 @@ TEST_CASE("Editor deactivates a throwing autocomplete render notification", "[tu
 }
 #endif
 
-TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][editor][autocomplete][issue383][spec]") {
     auto timer = std::make_unique<ManualDebounceTimer>();
     auto* timer_ptr = timer.get();
     auto provider = std::make_unique<HeldAutocompleteProvider>();
@@ -1194,7 +1197,7 @@ TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][ed
     REQUIRE(menu_rendered(editor));
 }
 
-TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->immediate = false;
@@ -1217,7 +1220,8 @@ TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][ed
     CHECK(editor.render(80)->lines[1].starts_with("> /"));
 }
 
-TEST_CASE("Editor aborts an in-flight autocomplete request when superseded", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor aborts an in-flight autocomplete request when superseded",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->immediate = false;
@@ -1239,7 +1243,8 @@ TEST_CASE("Editor aborts an in-flight autocomplete request when superseded", "[t
     CHECK_FALSE(menu_rendered(editor));
 }
 
-TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the menu", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the menu",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->immediate = false;
@@ -1265,7 +1270,8 @@ TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the
     CHECK_FALSE(menu_rendered(editor));
 }
 
-TEST_CASE("Editor drops autocomplete results that no longer match the buffer snapshot", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor drops autocomplete results that no longer match the buffer snapshot",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->immediate = false;
@@ -1287,7 +1293,8 @@ TEST_CASE("Editor drops autocomplete results that no longer match the buffer sna
     CHECK_FALSE(menu_rendered(editor));
 }
 
-TEST_CASE("Editor applies a unique forced completion without opening the menu", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor applies a unique forced completion without opening the menu",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->response = cch::tui::AutocompleteSuggestions{
@@ -1304,7 +1311,7 @@ TEST_CASE("Editor applies a unique forced completion without opening the menu", 
     CHECK(provider_ptr->requests.back().force);
 }
 
-TEST_CASE("Editor gates forced file completion behind the provider", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor gates forced file completion behind the provider", "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->trigger_file_completion = false;
@@ -1317,7 +1324,8 @@ TEST_CASE("Editor gates forced file completion behind the provider", "[tui][edit
     CHECK_FALSE(menu_rendered(editor));
 }
 
-TEST_CASE("Editor select.confirm applies and falls through to submit for slash commands", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor select.confirm applies and falls through to submit for slash commands",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->response = slash_suggestions();
@@ -1339,7 +1347,8 @@ TEST_CASE("Editor select.confirm applies and falls through to submit for slash c
     CHECK(submitted[0] == "/help");
 }
 
-TEST_CASE("Editor select.confirm applies without submitting outside slash commands", "[tui][editor][autocomplete][issue383]") {
+TEST_CASE("Editor select.confirm applies without submitting outside slash commands",
+        "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->response = cch::tui::AutocompleteSuggestions{
@@ -1363,7 +1372,8 @@ TEST_CASE("Editor select.confirm applies without submitting outside slash comman
     CHECK(submitted.empty());
 }
 
-TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set", "[tui][editor][theme][issue411]") {
+TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set",
+        "[tui][editor][theme][issue411][spec]") {
     cch::tui::Editor editor;
     cch::tui::EditorTheme theme;
     theme.text = [](std::string text) { return text; };
@@ -1381,7 +1391,7 @@ TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set"
     CHECK(rendered->lines[2] == rule);
 }
 
-TEST_CASE("Editor border shows pi scroll indicators while scrolled", "[tui][editor][theme][issue411]") {
+TEST_CASE("Editor border shows pi scroll indicators while scrolled", "[tui][editor][theme][issue411][spec]") {
     cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 2});
     cch::tui::EditorTheme theme;
     theme.border = [](std::string text) { return text; };
@@ -1403,7 +1413,7 @@ TEST_CASE("Editor border shows pi scroll indicators while scrolled", "[tui][edit
     CHECK(rendered->lines[3].find("↓") == std::string::npos);
 }
 
-TEST_CASE("Editor border does not render without a border hook", "[tui][editor][theme][issue411]") {
+TEST_CASE("Editor border does not render without a border hook", "[tui][editor][theme][issue411][spec]") {
     cch::tui::Editor editor;
     editor.set_text("hello");
     const auto rendered = editor.render(8);
@@ -1412,7 +1422,7 @@ TEST_CASE("Editor border does not render without a border hook", "[tui][editor][
     CHECK(rendered->lines[0] == "hello\x1b[7m \x1b[27m  ");
 }
 
-TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "[tui][editor][cursor]") {
+TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "[tui][editor][cursor][spec]") {
     // pi's editor.ts renders the cursor as reverse video on the grapheme at the
     // cursor (or a highlighted space at end of line); the C++ port must match.
     cch::tui::Editor editor;
@@ -1443,7 +1453,7 @@ TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "
 
 TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row cap, visibility, formatting, cursor "
           "stability",
-        "[tui][editor][autocomplete][presentation]") {
+        "[tui][editor][autocomplete][presentation][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->response = cch::tui::AutocompleteSuggestions{
@@ -1552,7 +1562,7 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
 }
 
 TEST_CASE("Editor presentation repaint notifications fire for menu navigation, cancel, and async delivery",
-        "[tui][editor][autocomplete][presentation]") {
+        "[tui][editor][autocomplete][presentation][spec]") {
     std::size_t repaint_requests = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
@@ -1602,7 +1612,7 @@ TEST_CASE("Editor presentation repaint notifications fire for menu navigation, c
 }
 
 TEST_CASE("Editor does not request a duplicate repaint when a mutation closes the menu",
-        "[tui][editor][autocomplete][presentation]") {
+        "[tui][editor][autocomplete][presentation][spec]") {
     std::size_t repaint_requests = 0;
     std::size_t change_notifications = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
@@ -1634,7 +1644,7 @@ TEST_CASE("Editor does not request a duplicate repaint when a mutation closes th
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][editor][autocomplete][issue538]") {
+TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][editor][autocomplete][issue538][spec]") {
     std::size_t render_requests = 0;
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
@@ -1667,7 +1677,8 @@ TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][ed
 }
 #endif
 
-TEST_CASE("Editor client-side prediction emits in-place local echo to pinned dock", "[tui][editor][dock][issue605]") {
+TEST_CASE("Editor client-side prediction emits in-place local echo to pinned dock",
+        "[tui][editor][dock][issue605][spec]") {
     cch::tui::VirtualTerminal vt(cch::tui::VirtualTerminalOptions{
             .columns = 80,
             .rows = 24,
@@ -1708,7 +1719,8 @@ TEST_CASE("Editor client-side prediction emits in-place local echo to pinned doc
     key(editor, "enter");
     CHECK(submitted_text == "echo test messag");
 }
-TEST_CASE("Editor keeps history, cursor, autocomplete, and submit in the local dock", "[tui][editor][dock][issue605]") {
+TEST_CASE("Editor keeps history, cursor, autocomplete, and submit in the local dock",
+        "[tui][editor][dock][issue605][spec]") {
     cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{
             .columns = 40,
             .rows = 12,
@@ -1774,7 +1786,7 @@ TEST_CASE("Editor keeps history, cursor, autocomplete, and submit in the local d
     CHECK(terminal.screen()[0].find_first_not_of(' ') == std::string::npos);
 }
 
-TEST_CASE("Editor reports local dock terminal write failures", "[tui][editor][dock][issue605]") {
+TEST_CASE("Editor reports local dock terminal write failures", "[tui][editor][dock][issue605][spec]") {
     cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{
             .columns = 40,
             .rows = 12,

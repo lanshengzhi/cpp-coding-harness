@@ -219,9 +219,8 @@ struct ModelFlowFixture {
 
 } // namespace
 
-TEST_CASE(
-    "ModelFlowController cycles forward and backward with pi statuses through the presenter",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController cycles forward and backward with pi statuses through the presenter",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot();
@@ -242,9 +241,8 @@ TEST_CASE(
     CHECK(fixture.presenter.slot_replacements == 0);
 }
 
-TEST_CASE(
-    "ModelFlowController reports the one-model scope status when the cycle cannot move",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController reports the one-model scope status when the cycle cannot move",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot({"alpha/alpha-1"});
@@ -257,9 +255,8 @@ TEST_CASE(
     CHECK(fixture.presenter.statuses.back() == "Only one model in scope");
 }
 
-TEST_CASE(
-    "ModelFlowController switches on an exact /model reference and opens the selector otherwise",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController switches on an exact /model reference and opens the selector otherwise",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot();
@@ -292,9 +289,8 @@ TEST_CASE(
     CHECK(fixture.presenter.errors.empty());
 }
 
-TEST_CASE(
-    "ModelFlowController opens the scoped-models selector through the presenter",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController opens the scoped-models selector through the presenter",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot();
@@ -310,9 +306,8 @@ TEST_CASE(
     CHECK(fixture.session->scoped_models().empty());
 }
 
-TEST_CASE(
-    "ModelFlowController applies scoped-models selector changes to the session scope only",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController applies scoped-models selector changes to the session scope only",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot();
@@ -348,9 +343,8 @@ TEST_CASE(
     CHECK(fixture.presenter.errors.empty());
 }
 
-TEST_CASE(
-    "ModelFlowController persists the scoped-models selection on save and clears it when all enabled",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController persists the scoped-models selection on save and clears it when all enabled",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot();
@@ -385,9 +379,8 @@ TEST_CASE(
     CHECK(fixture.presenter.errors.empty());
 }
 
-TEST_CASE(
-    "ModelFlowController builds the /model completion snapshot from the scope or availability",
-    "[coding_agent][tui][model-flows][issue503]") {
+TEST_CASE("ModelFlowController builds the /model completion snapshot from the scope or availability",
+        "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     fixture.boot();

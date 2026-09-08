@@ -204,7 +204,8 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 // Model resolution chain — CLI profile
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("CLI model resolution: --model wins over settings defaults", "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("CLI model resolution: --model wins over settings defaults",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"alpha","defaultModel":"alpha-1"})");
@@ -222,7 +223,8 @@ TEST_CASE("CLI model resolution: --model wins over settings defaults", "[coding_
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: settings default wins with configured auth", "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("CLI model resolution: settings default wins with configured auth",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"beta","defaultModel":"beta-1"})");
@@ -234,9 +236,8 @@ TEST_CASE("CLI model resolution: settings default wins with configured auth", "[
     result->session->close();
 }
 
-TEST_CASE(
-    "CLI model resolution: unauthenticated settings default falls through to first available with auth",
-    "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("CLI model resolution: unauthenticated settings default falls through to first available with auth",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
     // The saved default (alpha-1) has no configured auth; pi findInitialModel
@@ -251,7 +252,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: scoped models select the first scoped model for new sessions", "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("CLI model resolution: scoped models select the first scoped model for new sessions",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -265,9 +267,8 @@ TEST_CASE("CLI model resolution: scoped models select the first scoped model for
     result->session->close();
 }
 
-TEST_CASE(
-    "CLI model resolution: the saved default in scope wins over the first scoped model",
-    "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("CLI model resolution: the saved default in scope wins over the first scoped model",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"beta","defaultModel":"beta-1"})");
@@ -284,7 +285,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", "[coding_agent][model-resolution][resume][issue353])") {
+TEST_CASE("CLI model resolution: resume re-resolves the stored model identity",
+        "[coding_agent][model-resolution][resume][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -307,9 +309,8 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", 
     resumed->session->close();
 }
 
-TEST_CASE(
-    "CLI model resolution: resume without configured auth falls back with pi's message",
-    "[coding_agent][model-resolution][resume][issue357])") {
+TEST_CASE("CLI model resolution: resume without configured auth falls back with pi's message",
+        "[coding_agent][model-resolution][resume][issue357])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -340,9 +341,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "resume restore failure with nothing available reports the no-models message",
-    "[coding_agent][model-resolution][resume][issue404])") {
+TEST_CASE("resume restore failure with nothing available reports the no-models message",
+        "[coding_agent][model-resolution][resume][issue404])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -370,9 +370,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "CLI model resolution: resume with a missing model falls back with pi's message",
-    "[coding_agent][model-resolution][resume][issue357])") {
+TEST_CASE("CLI model resolution: resume with a missing model falls back with pi's message",
+        "[coding_agent][model-resolution][resume][issue357])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -411,9 +410,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "session files persist only model_change provider/modelId, never auth material",
-    "[coding_agent][model-resolution][resume][issue357])") {
+TEST_CASE("session files persist only model_change provider/modelId, never auth material",
+        "[coding_agent][model-resolution][resume][issue357])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -453,9 +451,8 @@ TEST_CASE(
     CHECK(line.find("token") == std::string::npos);
 }
 
-TEST_CASE(
-    "CLI model resolution: nothing configured keeps kDefaultModel and fails through provider lookup",
-    "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("CLI model resolution: nothing configured keeps kDefaultModel and fails through provider lookup",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     // Empty Agent Config Directory: no providers, no models, no auth. The
     // persistent store needs a Runtime channel so the prompt below can admit
@@ -491,9 +488,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "a zero-model session never persists a placeholder model_change identity",
-    "[coding_agent][model-resolution][issue404])") {
+TEST_CASE("a zero-model session never persists a placeholder model_change identity",
+        "[coding_agent][model-resolution][issue404])[spec]") {
     Fixture fixture;
     // Empty Agent Config Directory: nothing available, so the resolution
     // lands on the unknown placeholder. pi sdk.ts guards the model_change
@@ -523,9 +519,8 @@ TEST_CASE(
 // Model resolution chain — default CLI creation profile
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "default creation resolves the first available model with configured auth",
-    "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("default creation resolves the first available model with configured auth",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
 
@@ -536,9 +531,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "default creation honors the settings default only with configured auth",
-    "[coding_agent][model-resolution][issue353])") {
+TEST_CASE("default creation honors the settings default only with configured auth",
+        "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
     // defaultModel alpha-1 (keyless) is skipped; defaultModel beta-1 wins.
@@ -551,9 +545,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "default creation resume re-resolves the stored model with configured auth",
-    "[coding_agent][model-resolution][resume][issue353])") {
+TEST_CASE("default creation resume re-resolves the stored model with configured auth",
+        "[coding_agent][model-resolution][resume][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -572,9 +565,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "default creation resume re-resolves a non-default stored model identity",
-    "[coding_agent][model-resolution][resume][issue357])") {
+TEST_CASE("default creation resume re-resolves a non-default stored model identity",
+        "[coding_agent][model-resolution][resume][issue357])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -604,9 +596,8 @@ TEST_CASE(
 // Thinking-level persistence
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "set_thinking_level persists a thinking_level_change entry and the settings default",
-    "[coding_agent][thinking-persistence][issue353])") {
+TEST_CASE("set_thinking_level persists a thinking_level_change entry and the settings default",
+        "[coding_agent][thinking-persistence][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -644,9 +635,8 @@ TEST_CASE(
     CHECK(reloaded.settings().default_thinking_level == "high");
 }
 
-TEST_CASE(
-    "resume restores the persisted thinking level from the session entry",
-    "[coding_agent][thinking-persistence][resume][issue353])") {
+TEST_CASE("resume restores the persisted thinking level from the session entry",
+        "[coding_agent][thinking-persistence][resume][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -667,9 +657,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "resumed session without a thinking entry uses the settings default",
-    "[coding_agent][thinking-persistence][resume][issue353])") {
+TEST_CASE("resumed session without a thinking entry uses the settings default",
+        "[coding_agent][thinking-persistence][resume][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -703,9 +692,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "fresh session requests the settings default thinking level",
-    "[coding_agent][thinking-persistence][issue353])") {
+TEST_CASE("fresh session requests the settings default thinking level",
+        "[coding_agent][thinking-persistence][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
     fixture.write_settings(R"({"defaultThinkingLevel":"high"})");
@@ -718,9 +706,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "set_thinking_level to off persists on a reasoning model (pi supportsThinking gate)",
-    "[coding_agent][thinking-persistence][issue353])") {
+TEST_CASE("set_thinking_level to off persists on a reasoning model (pi supportsThinking gate)",
+        "[coding_agent][thinking-persistence][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -748,9 +735,8 @@ TEST_CASE(
     CHECK(*found->second.get_if<std::string>() == "off");
 }
 
-TEST_CASE(
-    "set_thinking_level clamps to the active model and rejects invalid levels",
-    "[coding_agent][thinking-persistence][issue353])") {
+TEST_CASE("set_thinking_level clamps to the active model and rejects invalid levels",
+        "[coding_agent][thinking-persistence][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -792,9 +778,8 @@ TEST_CASE(
 // New-session initial entries (P8 resume chain)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "new sessions append model_change then the initial thinking_level_change",
-    "[coding_agent][model-resolution][thinking-persistence][issue404])") {
+TEST_CASE("new sessions append model_change then the initial thinking_level_change",
+        "[coding_agent][model-resolution][thinking-persistence][issue404])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -828,9 +813,8 @@ TEST_CASE(
     CHECK(value.thinking_level == "medium");
 }
 
-TEST_CASE(
-    "the initial thinking entry carries the clamped creation level",
-    "[coding_agent][model-resolution][thinking-persistence][issue404])") {
+TEST_CASE("the initial thinking entry carries the clamped creation level",
+        "[coding_agent][model-resolution][thinking-persistence][issue404])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
     // A non-reasoning stored model would clamp the default to "off" (pi:
@@ -853,9 +837,8 @@ TEST_CASE(
     CHECK(value.thinking_level == "high");
 }
 
-TEST_CASE(
-    "resume without a thinking entry appends the restored level",
-    "[coding_agent][thinking-persistence][resume][issue404])") {
+TEST_CASE("resume without a thinking entry appends the restored level",
+        "[coding_agent][thinking-persistence][resume][issue404])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -897,9 +880,8 @@ TEST_CASE(
     CHECK(value.thinking_level == "low");
 }
 
-TEST_CASE(
-    "resume binds the settings manager to the session header cwd",
-    "[coding_agent][model-resolution][resume][issue404])") {
+TEST_CASE("resume binds the settings manager to the session header cwd",
+        "[coding_agent][model-resolution][resume][issue404])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -949,9 +931,8 @@ TEST_CASE(
 // Committed golden: thinking_level_change entry shape + settings default write
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "thinking-persistence golden pins the entry shape and the settings default write",
-    "[coding_agent][fixture][issue353])") {
+TEST_CASE("thinking-persistence golden pins the entry shape and the settings default write",
+        "[coding_agent][fixture][issue353])[compat-pi]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 

@@ -87,7 +87,8 @@ using cch::tui::SlashCommand;
 
 } // namespace
 
-TEST_CASE("CombinedAutocompleteProvider completes slash commands with fuzzy ranking", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider completes slash commands with fuzzy ranking",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     std::vector<std::variant<SlashCommand, AutocompleteItem>> commands;
     commands.push_back(SlashCommand{.name = "settings", .description = "Open settings", .argument_hint = "section"});
@@ -119,7 +120,8 @@ TEST_CASE("CombinedAutocompleteProvider completes slash commands with fuzzy rank
     CHECK_FALSE(request_suggestions(provider, {"/set"}, 0, 4, /*force=*/true).has_value());
 }
 
-TEST_CASE("CombinedAutocompleteProvider completes command arguments through SlashCommand", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider completes command arguments through SlashCommand",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     std::vector<std::variant<SlashCommand, AutocompleteItem>> commands;
     commands.push_back(SlashCommand{
@@ -154,7 +156,8 @@ TEST_CASE("CombinedAutocompleteProvider completes command arguments through Slas
     CHECK_FALSE(request_suggestions(provider, {"/plain "}, 0, 7).has_value());
 }
 
-TEST_CASE("CombinedAutocompleteProvider completes paths from the base directory", "[tui][autocomplete][issue383]") {
+TEST_CASE(
+        "CombinedAutocompleteProvider completes paths from the base directory", "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     workspace.write("src/main.cc", "int main() {}\n");
     workspace.write("src/util/helper.cc", "// helper\n");
@@ -193,7 +196,8 @@ TEST_CASE("CombinedAutocompleteProvider completes paths from the base directory"
     CHECK_FALSE(request_suggestions(provider, {"hello"}, 0, 5).has_value());
 }
 
-TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through fd", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through fd",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     workspace.write("src/main.cc", "int main() {}\n");
     workspace.write("src/deep/nested.cc", "// nested\n");
@@ -232,7 +236,8 @@ TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through f
     CHECK_FALSE(forced->items.empty());
 }
 
-TEST_CASE("CombinedAutocompleteProvider applyCompletion performs pi's text surgery", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider applyCompletion performs pi's text surgery",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     auto provider = make_provider({}, workspace.path());
 
@@ -275,7 +280,8 @@ TEST_CASE("CombinedAutocompleteProvider applyCompletion performs pi's text surge
     CHECK(quoted.cursor_column == 15);
 }
 
-TEST_CASE("CombinedAutocompleteProvider shouldTriggerFileCompletion defers to slash commands", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider shouldTriggerFileCompletion defers to slash commands",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     auto provider = make_provider({}, workspace.path());
 
@@ -286,7 +292,7 @@ TEST_CASE("CombinedAutocompleteProvider shouldTriggerFileCompletion defers to sl
     CHECK(provider.should_trigger_file_completion({"hello"}, 0, 5));
 }
 
-TEST_CASE("CombinedAutocompleteProvider aborts the fd walk on stop request", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider aborts the fd walk on stop request", "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto fake_fd = write_fake_fd(
         workspace,
@@ -315,7 +321,8 @@ TEST_CASE("CombinedAutocompleteProvider aborts the fd walk on stop request", "[t
     CHECK(delivered);
 }
 
-TEST_CASE("CombinedAutocompleteProvider fd walk delivers async results from a worker", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider fd walk delivers async results from a worker",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto fake_fd = write_fake_fd(workspace, "main.cc\n");
     auto provider = make_provider({}, workspace.path(), fake_fd);
@@ -361,7 +368,8 @@ TEST_CASE("CombinedAutocompleteProvider fd walk delivers async results from a wo
     CHECK(result->prefix == "@ma");
 }
 
-TEST_CASE("CombinedAutocompleteProvider shouldTriggerFileCompletion trims both ends", "[tui][autocomplete][issue383]") {
+TEST_CASE("CombinedAutocompleteProvider shouldTriggerFileCompletion trims both ends",
+        "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
     auto provider = make_provider({}, workspace.path());
 

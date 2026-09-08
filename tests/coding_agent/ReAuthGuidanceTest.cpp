@@ -287,9 +287,8 @@ struct GuidedRun {
 // Preflight (pi `agent-session.ts` prompt() `hasConfiguredAuth` check)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "preflight no-key branch fails the prompt with pi's verbatim formatNoApiKeyFoundMessage",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("preflight no-key branch fails the prompt with pi's verbatim formatNoApiKeyFoundMessage",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
 
@@ -313,9 +312,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "preflight OAuth branch fails the prompt with pi's verbatim re-auth guidance",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("preflight OAuth branch fails the prompt with pi's verbatim re-auth guidance",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     Fixture fixture;
 
     // No models.json: the built-in kimi-coding provider (OAuth + ambient API
@@ -341,9 +339,8 @@ TEST_CASE(
 // Request time (pi `_getRequiredRequestAuth`, session-layer stream decorator)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "request-time no-key branch surfaces pi's verbatim guidance through the terminal assistant message",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("request-time no-key branch surfaces pi's verbatim guidance through the terminal assistant message",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The scripted Session's turn work is admitted to the fixture Runtime
@@ -373,9 +370,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "request-time OAuth branch surfaces pi's verbatim re-auth guidance for dead credentials",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("request-time OAuth branch surfaces pi's verbatim re-auth guidance for dead credentials",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The scripted Session's turn work is admitted to the fixture Runtime
@@ -409,9 +405,8 @@ TEST_CASE(
 // wraps one AI-owned ModelStream produced by the narrow fake factory, rewriting
 // auth/oauth-category terminals. No virtual Models Runtime surface is involved.
 
-TEST_CASE(
-    "request-time decorator maps an auth terminal to the no-key branch through a ModelStream",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("request-time decorator maps an auth terminal to the no-key branch through a ModelStream",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     auto fake = std::make_shared<tests::FakeModelStream>();
     fake->terminal_failure_code = support::ErrorCode::Auth;
     fake->responses.push_back(
@@ -435,9 +430,8 @@ TEST_CASE(
     CHECK(fake->terminal_events == 1);
 }
 
-TEST_CASE(
-    "request-time decorator maps an auth terminal on an OAuth provider to the re-auth branch",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("request-time decorator maps an auth terminal on an OAuth provider to the re-auth branch",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     auto fake = std::make_shared<tests::FakeModelStream>();
     fake->terminal_failure_code = support::ErrorCode::Auth;
     fake->responses.push_back(
@@ -457,9 +451,8 @@ TEST_CASE(
     CHECK(*error->error.error_message == default_oauth_guidance("fake"));
 }
 
-TEST_CASE(
-    "request-time decorator maps an oauth terminal (dead credentials) to the re-auth branch",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("request-time decorator maps an oauth terminal (dead credentials) to the re-auth branch",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     auto fake = std::make_shared<tests::FakeModelStream>();
     fake->terminal_failure_code = support::ErrorCode::OAuth;
     fake->responses.push_back(
@@ -479,9 +472,8 @@ TEST_CASE(
     CHECK(*error->error.error_message == default_oauth_guidance("fake"));
 }
 
-TEST_CASE(
-    "request-time decorator passes non-auth terminals and successes through unchanged",
-    "[coding_agent][re-auth-guidance][issue360]") {
+TEST_CASE("request-time decorator passes non-auth terminals and successes through unchanged",
+        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
     {
         auto fake = std::make_shared<tests::FakeModelStream>();
         fake->terminal_failure_code = support::ErrorCode::Stream;
@@ -501,13 +493,11 @@ TEST_CASE(
     }
 }
 
-
 // Summarization seam (pi `_getSummarizationRequestAuth` → `_getRequiredRequestAuth`)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "summarization requests carry the request-time guidance when auth fails",
-    "[coding_agent][re-auth-guidance][compaction][issue360]") {
+TEST_CASE("summarization requests carry the request-time guidance when auth fails",
+        "[coding_agent][re-auth-guidance][compaction][issue360][compat-pi]") {
     // A persisted session whose live history reaches the 20000-token
     // keepRecentTokens budget (three 20K-char user/assistant pairs, each
     // ~5001 estimated tokens), then a manual compaction whose summarization

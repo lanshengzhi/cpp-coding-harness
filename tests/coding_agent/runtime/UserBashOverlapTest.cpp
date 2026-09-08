@@ -154,9 +154,8 @@ template <typename Predicate> [[nodiscard]] boost::asio::awaitable<void> wait_un
 
 } // namespace
 
-TEST_CASE(
-    "User Bash completed during an Agent run commits once after the whole run settles",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("User Bash completed during an Agent run commits once after the whole run settles",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
@@ -233,9 +232,8 @@ TEST_CASE(
     CHECK(bash->command == "during run");
 }
 
-TEST_CASE(
-    "an ordinary Prompt is admitted during active User Bash and orders deterministically",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("an ordinary Prompt is admitted during active User Bash and orders deterministically",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
@@ -296,9 +294,8 @@ TEST_CASE(
     CHECK(bash->command == "first bash");
 }
 
-TEST_CASE(
-    "a second User Bash is rejected before runtime mutation and the Session stays usable",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("a second User Bash is rejected before runtime mutation and the Session stays usable",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
@@ -372,9 +369,8 @@ TEST_CASE(
     CHECK(client_pointer->requests.size() == 1);
 }
 
-TEST_CASE(
-    "deferred User Bash commits exactly once through JSONL and resumes in Session order",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("deferred User Bash commits exactly once through JSONL and resumes in Session order",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "overlap.jsonl";
@@ -443,9 +439,7 @@ TEST_CASE(
     CHECK(bash_message_count(history) == 1);
 }
 
-TEST_CASE(
-    "pending User Bash never splits a tool-call/tool-result sequence",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("pending User Bash never splits a tool-call/tool-result sequence", "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     workspace.write("note.txt", "note contents");
@@ -540,9 +534,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::UserMessage>(context[5]));
 }
 
-TEST_CASE(
-    "deferred User Bash persistence failure is reported without rolling back Live Session State",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("deferred User Bash persistence failure is reported without rolling back Live Session State",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "overlap-failure.jsonl";
@@ -626,9 +619,8 @@ TEST_CASE(
     CHECK(bash_message_count(resumed->history) == 0);
 }
 
-TEST_CASE(
-    "Session Close during an active run commits a pending User Bash before teardown",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("Session Close during an active run commits a pending User Bash before teardown",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "close-overlap.jsonl";
@@ -702,9 +694,8 @@ TEST_CASE(
     CHECK(bash->command == "pending at close");
 }
 
-TEST_CASE(
-    "Session Close cancels an overlapping User Bash and finalizes after the last work settles",
-    "[coding_agent][runtime][issue87]") {
+TEST_CASE("Session Close cancels an overlapping User Bash and finalizes after the last work settles",
+        "[coding_agent][runtime][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();

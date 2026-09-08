@@ -87,7 +87,8 @@ std::size_t count_diag(
 
 } // namespace
 
-TEST_CASE("project resource loader loads trusted .pi/ skills and prompts", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader loads trusted .pi/ skills and prompts",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_skill(fix);
     write_valid_project_prompt(fix);
@@ -106,9 +107,8 @@ TEST_CASE("project resource loader loads trusted .pi/ skills and prompts", "[cod
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE(
-    "project resource loader collects trust-gated project themes and skips them with --no-themes",
-    "[coding_agent][project-resource-loader][theme][issue405][issue415]") {
+TEST_CASE("project resource loader collects trust-gated project themes and skips them with --no-themes",
+        "[coding_agent][project-resource-loader][theme][issue405][issue415][spec]") {
     LoaderFixture fix;
     fix.write(".pi/themes/project.json", valid_theme_json());
 
@@ -134,9 +134,8 @@ TEST_CASE(
     CHECK(no_themes.resources.themes.empty());
 }
 
-TEST_CASE(
-    "project resource loader collects user themes from the agent config directory",
-    "[coding_agent][project-resource-loader][theme][issue415]") {
+TEST_CASE("project resource loader collects user themes from the agent config directory",
+        "[coding_agent][project-resource-loader][theme][issue415][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace agent_config;
     agent_config.write("themes/user.json", valid_theme_json());
@@ -159,9 +158,8 @@ TEST_CASE(
     CHECK(empty.diagnostics.empty());
 }
 
-TEST_CASE(
-    "project resource loader --theme explicit paths load directories and files",
-    "[coding_agent][project-resource-loader][theme][issue415]") {
+TEST_CASE("project resource loader --theme explicit paths load directories and files",
+        "[coding_agent][project-resource-loader][theme][issue415][spec]") {
     LoaderFixture fix;
     fix.write("explicit-dir/one.json", valid_theme_json());
     fix.write("explicit-dir/two.json", valid_theme_json());
@@ -190,9 +188,8 @@ TEST_CASE(
     CHECK(no_themes.resources.themes[0].path == "explicit.json");
 }
 
-TEST_CASE(
-    "project resource loader missing --theme paths carry pi's two non-fatal diagnostics",
-    "[coding_agent][project-resource-loader][theme][issue415]") {
+TEST_CASE("project resource loader missing --theme paths carry pi's two non-fatal diagnostics",
+        "[coding_agent][project-resource-loader][theme][issue415][spec]") {
     LoaderFixture fix;
 
     coding_agent::ProjectResourceLoadingRequest request;
@@ -205,7 +202,8 @@ TEST_CASE(
     CHECK(result.fatal_errors.empty());
 }
 
-TEST_CASE("project resource loader skips untrusted resources before parsing adapters", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader skips untrusted resources before parsing adapters",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     fix.write(
         ".pi/skills/bad/SKILL.md",
@@ -231,7 +229,8 @@ TEST_CASE("project resource loader skips untrusted resources before parsing adap
     CHECK_FALSE(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "description"));
 }
 
-TEST_CASE("project resource loader treats marker presence as trust-requiring under --no-skills", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader treats marker presence as trust-requiring under --no-skills",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_skill(fix);
     write_valid_project_prompt(fix);
@@ -248,7 +247,8 @@ TEST_CASE("project resource loader treats marker presence as trust-requiring und
     CHECK(result.resources.prompt_templates.empty());
 }
 
-TEST_CASE("project resource loader --no-skills drops skills discovery only", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader --no-skills drops skills discovery only",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_skill(fix);
     write_valid_project_prompt(fix);
@@ -265,7 +265,8 @@ TEST_CASE("project resource loader --no-skills drops skills discovery only", "[c
     CHECK(result.resources.prompt_templates[0].name == "review");
 }
 
-TEST_CASE("project resource loader --no-prompt-templates drops discovery but keeps explicit inputs", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader --no-prompt-templates drops discovery but keeps explicit inputs",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_prompt(fix, "shared");
     fix.write(
@@ -287,7 +288,8 @@ TEST_CASE("project resource loader --no-prompt-templates drops discovery but kee
     CHECK(result.resources.prompt_templates[0].name == "explicit");
 }
 
-TEST_CASE("project resource loader loads explicit prompt template inputs apart from project markers", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader loads explicit prompt template inputs apart from project markers",
+        "[coding_agent][project-resource-loader][spec]") {
     LoaderFixture fix;
     fix.write(
         "explicit.md",
@@ -308,7 +310,8 @@ TEST_CASE("project resource loader loads explicit prompt template inputs apart f
     CHECK(result.resources.skills.empty());
 }
 
-TEST_CASE("project resource loader explicit prompt templates take precedence over project prompts", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader explicit prompt templates take precedence over project prompts",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_prompt(fix, "shared");
     fix.write(
@@ -341,7 +344,8 @@ TEST_CASE("project resource loader explicit prompt templates take precedence ove
     CHECK(collision->collision->loser_path.find(".pi/prompts/shared.md") != std::string::npos);
 }
 
-TEST_CASE("project resource loader loads user prompt templates below project precedence", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader loads user prompt templates below project precedence",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_prompt(fix, "shared");
     tests::TempWorkspace agent_dir;
@@ -379,7 +383,8 @@ TEST_CASE("project resource loader loads user prompt templates below project pre
     CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Collision, "name \"/shared\" collision"));
 }
 
-TEST_CASE("project resource loader user prompt templates load without project trust", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader user prompt templates load without project trust",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace agent_dir;
     agent_dir.write("prompts/user-only.md",
@@ -398,7 +403,8 @@ TEST_CASE("project resource loader user prompt templates load without project tr
     CHECK(result.resources.prompt_templates[0].name == "user-only");
 }
 
-TEST_CASE("project resource loader surfaces adapter diagnostics for malformed trusted inputs", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader surfaces adapter diagnostics for malformed trusted inputs",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     fix.write(
         ".pi/skills/bad/SKILL.md",
@@ -425,7 +431,8 @@ TEST_CASE("project resource loader surfaces adapter diagnostics for malformed tr
     CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "YAML frontmatter parse error"));
 }
 
-TEST_CASE("project resource loader diagnoses skill name collisions with winner and loser paths", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader diagnoses skill name collisions with winner and loser paths",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     fix.write(
         ".pi/skills/first/SKILL.md",
@@ -467,7 +474,8 @@ TEST_CASE("project resource loader diagnoses skill name collisions with winner a
     CHECK(diagnostic.collision->loser_path.find(".pi/skills/second/SKILL.md") != std::string::npos);
 }
 
-TEST_CASE("project resource loader diagnoses prompt collisions within one project directory", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader diagnoses prompt collisions within one project directory",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     fix.write(
         ".pi/prompts/dupe.md",
@@ -499,7 +507,8 @@ TEST_CASE("project resource loader diagnoses prompt collisions within one projec
     CHECK(diagnostic.collision->name == "dupe");
 }
 
-TEST_CASE("project resource loader surfaces trust store failures as pi-shaped warnings", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader surfaces trust store failures as pi-shaped warnings",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     write_valid_project_skill(fix);
     fix.write("trust.json", "{not json");
@@ -517,9 +526,8 @@ TEST_CASE("project resource loader surfaces trust store failures as pi-shaped wa
     CHECK(diag->path->find("trust.json") != std::string::npos);
 }
 
-TEST_CASE(
-    "project resource diagnostics redact before shared bounded truncation",
-    "[coding_agent][project-resource-loader][issue72]") {
+TEST_CASE("project resource diagnostics redact before shared bounded truncation",
+        "[coding_agent][project-resource-loader][issue72][spec]") {
     LoaderFixture fix;
     const std::string secret = "sk-resource-diagnostic-secret-123456";
     // A hostile frontmatter name that is otherwise loadable (lowercase,
@@ -549,9 +557,8 @@ TEST_CASE(
     CHECK(collision_diag->message.size() <= 1024);
 }
 
-TEST_CASE(
-    "project resource diagnostic paths are bounded at the shared seam",
-    "[coding_agent][project-resource-loader][issue72]") {
+TEST_CASE("project resource diagnostic paths are bounded at the shared seam",
+        "[coding_agent][project-resource-loader][issue72][spec]") {
     LoaderFixture fix;
     const std::string long_dir = std::string(200, 'a') + "/" +
         std::string(200, 'b') + "/" + std::string(200, 'c') + "/" +
@@ -572,7 +579,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE("project resource loader treats explicit prompt template read failure as fatal", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader treats explicit prompt template read failure as fatal",
+        "[coding_agent][project-resource-loader][spec]") {
     LoaderFixture fix;
     // No file named missing.md exists.
     coding_agent::ProjectResourceLoadingRequest request;
@@ -589,7 +597,8 @@ TEST_CASE("project resource loader treats explicit prompt template read failure 
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("project resource loader treats explicit non-markdown input as fatal", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader treats explicit non-markdown input as fatal",
+        "[coding_agent][project-resource-loader][spec]") {
     LoaderFixture fix;
     fix.write("notes.txt", "not a template");
 
@@ -603,7 +612,8 @@ TEST_CASE("project resource loader treats explicit non-markdown input as fatal",
     CHECK(result.fatal_errors[0].message.find(".md extension") != std::string::npos);
 }
 
-TEST_CASE("project resource loader rejects legacy .cpp-harness/ markers without loading them", "[coding_agent][project-resource-loader][issue405]") {
+TEST_CASE("project resource loader rejects legacy .cpp-harness/ markers without loading them",
+        "[coding_agent][project-resource-loader][issue405][spec]") {
     LoaderFixture fix;
     // A legacy marker tree must be invisible: no trust trigger, no load.
     fix.write(
@@ -633,9 +643,8 @@ TEST_CASE("project resource loader rejects legacy .cpp-harness/ markers without 
 
 // ── P16: skill discovery — user ~/.pi/agent/skills, .agents/skills, --skill ──
 
-TEST_CASE(
-    "project resource loader loads user skills with pi root-level .md inclusion",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader loads user skills with pi root-level .md inclusion",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace agent_dir;
     agent_dir.write("skills/user-skill/SKILL.md",
@@ -674,9 +683,8 @@ TEST_CASE(
     CHECK(root_skill->filePath.find("skills/root-skill.md") != std::string::npos);
 }
 
-TEST_CASE(
-    "project resource loader loads project .pi/skills root-level .md files (pi mode)",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader loads project .pi/skills root-level .md files (pi mode)",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
     fix.write(
         ".pi/skills/root-skill.md",
@@ -708,9 +716,8 @@ TEST_CASE(
     CHECK(root_skill->sourceInfo.base_dir.value_or("").find(".pi") != std::string::npos);
 }
 
-TEST_CASE(
-    "project resource loader loads .agents/skills with per-directory baseDir",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader loads .agents/skills with per-directory baseDir",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     // A git-rooted workspace with a nested project directory: the ancestor
     // walk covers the workspace and the git root.
     tests::TempWorkspace git_root;
@@ -743,9 +750,8 @@ TEST_CASE(
     CHECK(result.resources.skills[0].baseDir.find("repo-skill") != std::string::npos);
 }
 
-TEST_CASE(
-    "project resource loader .agents/skills presence triggers the trust decision",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader .agents/skills presence triggers the trust decision",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
     fix.write(
         ".agents/skills/proj-skill/SKILL.md",
@@ -765,9 +771,8 @@ TEST_CASE(
     CHECK(result.resources.skills.empty());
 }
 
-TEST_CASE(
-    "project resource loader loads the user ~/.agents/skills convention without trust",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader loads the user ~/.agents/skills convention without trust",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace home;
     home.write(".agents/skills/user-agents-skill/SKILL.md",
@@ -791,9 +796,8 @@ TEST_CASE(
     CHECK(result.resources.skills[0].sourceInfo.base_dir.value_or("").find(".agents") != std::string::npos);
 }
 
-TEST_CASE(
-    "project resource loader --skill explicit paths load first and survive --no-skills",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader --skill explicit paths load first and survive --no-skills",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
     fix.write(
         "explicit-skill.md",
@@ -826,9 +830,8 @@ TEST_CASE(
     CHECK_FALSE(result.resources.skills[0].sourceInfo.base_dir.has_value());
 }
 
-TEST_CASE(
-    "project resource loader discovered skills win name collisions over explicit --skill",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader discovered skills win name collisions over explicit --skill",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
     fix.write(
         "explicit-dir/skill/SKILL.md",
@@ -867,9 +870,8 @@ TEST_CASE(
     CHECK(collision->collision->loser_path.find("explicit-dir/skill/SKILL.md") != std::string::npos);
 }
 
-TEST_CASE(
-    "project resource loader missing --skill paths carry pi's two diagnostics",
-    "[coding_agent][project-resource-loader][issue412]") {
+TEST_CASE("project resource loader missing --skill paths carry pi's two diagnostics",
+        "[coding_agent][project-resource-loader][issue412][spec]") {
     LoaderFixture fix;
 
     coding_agent::ProjectResourceLoadingRequest request;
@@ -887,9 +889,8 @@ TEST_CASE(
 // P20 (#416): Project Context Files and SYSTEM.md/APPEND_SYSTEM.md
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE(
-    "project resource loader discovers project context files from the global dir and the cwd ancestor chain",
-    "[coding_agent][project-resource-loader][context-files][issue416]") {
+TEST_CASE("project resource loader discovers project context files from the global dir and the cwd ancestor chain",
+        "[coding_agent][project-resource-loader][context-files][issue416][spec]") {
     LoaderFixture fix;
     // Global context file from the Agent Config Directory.
     tests::TempWorkspace agent_config;
@@ -922,9 +923,8 @@ TEST_CASE(
     CHECK(result.resources.agents_files[3].content == "deep instructions\n");
 }
 
-TEST_CASE(
-    "project resource loader context files are not trust-gated and --no-context-files disables discovery",
-    "[coding_agent][project-resource-loader][context-files][issue416]") {
+TEST_CASE("project resource loader context files are not trust-gated and --no-context-files disables discovery",
+        "[coding_agent][project-resource-loader][context-files][issue416][spec]") {
     LoaderFixture fix;
     fix.write("AGENTS.md", "workspace instructions\n");
 
@@ -979,9 +979,8 @@ void link_worktree(
     return contents;
 }
 
-TEST_CASE(
-    "project resource loader context files load even under an untrusted decision",
-    "[coding_agent][project-resource-loader][context-files][issue416]") {
+TEST_CASE("project resource loader context files load even under an untrusted decision",
+        "[coding_agent][project-resource-loader][context-files][issue416][spec]") {
     LoaderFixture fix;
     // A trust-requiring marker forces an Untrusted decision (default ask),
     // yet the context file still loads: Project Context Files are never
@@ -997,9 +996,8 @@ TEST_CASE(
     CHECK(result.resources.skills.empty());
 }
 
-TEST_CASE(
-    "project resource loader dedupes a global context file that is also an ancestor",
-    "[coding_agent][project-resource-loader][context-files][issue416]") {
+TEST_CASE("project resource loader dedupes a global context file that is also an ancestor",
+        "[coding_agent][project-resource-loader][context-files][issue416][spec]") {
     LoaderFixture fix;
     fix.write("repo/AGENTS.md", "repo instructions\n");
 
@@ -1015,9 +1013,8 @@ TEST_CASE(
     CHECK(result.resources.agents_files[0].content == "repo instructions\n");
 }
 
-TEST_CASE(
-    "project resource loader shadows the main repo context file in a nested linked worktree",
-    "[coding_agent][project-resource-loader][context-files][issue416]") {
+TEST_CASE("project resource loader shadows the main repo context file in a nested linked worktree",
+        "[coding_agent][project-resource-loader][context-files][issue416][spec]") {
     LoaderFixture fix;
     // Fake git layout: a main repo at repo/ and a nested linked worktree at
     // repo/wt (the `.git` file's `gitdir:` pointer + commondir like `git
@@ -1046,9 +1043,8 @@ TEST_CASE(
     CHECK(result.resources.agents_files[0].content == "worktree copy\n");
 }
 
-TEST_CASE(
-    "project resource loader worktree shadowing matches pi's dedupe cases",
-    "[coding_agent][project-resource-loader][context-files][issue416]") {
+TEST_CASE("project resource loader worktree shadowing matches pi's dedupe cases",
+        "[coding_agent][project-resource-loader][context-files][issue416][spec]") {
     // 1. The worktree root has no context file: the main repo's copy loads
     // (shadowing needs the worktree's own copy to exist).
     {
@@ -1149,9 +1145,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "project resource loader resolves SYSTEM.md trust-gated project file then global",
-    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+TEST_CASE("project resource loader resolves SYSTEM.md trust-gated project file then global",
+        "[coding_agent][project-resource-loader][system-prompt][issue416][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace agent_config;
     agent_config.write("SYSTEM.md", "global system prompt\n");
@@ -1181,9 +1176,8 @@ TEST_CASE(
           (fix.workspace.path() / ".pi" / "SYSTEM.md").string());
 }
 
-TEST_CASE(
-    "project resource loader resolves APPEND_SYSTEM.md trust-gated project file then global",
-    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+TEST_CASE("project resource loader resolves APPEND_SYSTEM.md trust-gated project file then global",
+        "[coding_agent][project-resource-loader][system-prompt][issue416][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace agent_config;
     agent_config.write("APPEND_SYSTEM.md", "global append\n");
@@ -1208,9 +1202,8 @@ TEST_CASE(
     CHECK(trusted.resources.append_system_prompt[0] == "project append\n");
 }
 
-TEST_CASE(
-    "project resource loader --system-prompt and --append-system-prompt resolve text-or-file per pi",
-    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+TEST_CASE("project resource loader --system-prompt and --append-system-prompt resolve text-or-file per pi",
+        "[coding_agent][project-resource-loader][system-prompt][issue416][spec]") {
     LoaderFixture fix;
     fix.write("custom.md", "custom file prompt\n");
     // Discovery must not win over the CLI values.
@@ -1238,9 +1231,8 @@ TEST_CASE(
           (fix.workspace.path() / "custom.md").string());
 }
 
-TEST_CASE(
-    "project resource loader --system-prompt raw text wins over discovery and empty suppresses it",
-    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+TEST_CASE("project resource loader --system-prompt raw text wins over discovery and empty suppresses it",
+        "[coding_agent][project-resource-loader][system-prompt][issue416][spec]") {
     LoaderFixture fix;
     fix.write(".pi/SYSTEM.md", "discovered prompt\n");
 
@@ -1272,9 +1264,8 @@ TEST_CASE(
     CHECK(missing.diagnostics.empty());
 }
 
-TEST_CASE(
-    "project resource loader unreadable --system-prompt file warns and falls back to the raw value",
-    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+TEST_CASE("project resource loader unreadable --system-prompt file warns and falls back to the raw value",
+        "[coding_agent][project-resource-loader][system-prompt][issue416][spec]") {
     LoaderFixture fix;
     fix.write("adir/note.txt", "x");
 
@@ -1296,9 +1287,8 @@ TEST_CASE(
           (fix.workspace.path() / "adir").string());
 }
 
-TEST_CASE(
-    "project resource loader no SYSTEM.md or APPEND_SYSTEM.md loads nothing",
-    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+TEST_CASE("project resource loader no SYSTEM.md or APPEND_SYSTEM.md loads nothing",
+        "[coding_agent][project-resource-loader][system-prompt][issue416][spec]") {
     LoaderFixture fix;
     tests::TempWorkspace agent_config;
 

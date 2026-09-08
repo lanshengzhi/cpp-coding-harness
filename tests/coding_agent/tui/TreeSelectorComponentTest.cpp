@@ -164,9 +164,8 @@ struct SinkCalls {
 
 } // namespace
 
-TEST_CASE(
-    "tree selector renders the session topology with connectors and the counter",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector renders the session topology with connectors and the counter",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::optional<std::string> leaf_id;
@@ -203,9 +202,8 @@ TEST_CASE(
     CHECK(text.find("(4/5)") != std::string::npos);
 }
 
-TEST_CASE(
-    "tree selector filter modes and search narrow the visible rows",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector filter modes and search narrow the visible rows",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::optional<std::string> leaf_id;
@@ -276,9 +274,8 @@ TEST_CASE(
     CHECK(text.find("first question") != std::string::npos);
 }
 
-TEST_CASE(
-    "tree selector folds and unfolds branches with the branch actions",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector folds and unfolds branches with the branch actions",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::optional<std::string> leaf_id;
@@ -311,9 +308,8 @@ TEST_CASE(
     CHECK(text.find("second answer") != std::string::npos);
 }
 
-TEST_CASE(
-    "tree selector edits a label through the inline input and reports it",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector edits a label through the inline input and reports it",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::optional<std::string> leaf_id;
@@ -361,9 +357,8 @@ TEST_CASE(
     CHECK(calls.labels.size() == 2);
 }
 
-TEST_CASE(
-    "tree selector copies the selected entry and reports no-text entries",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector copies the selected entry and reports no-text entries",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::optional<std::string> leaf_id;
@@ -416,9 +411,8 @@ TEST_CASE(
     CHECK_FALSE(calls.copies.back().has_value());
 }
 
-TEST_CASE(
-    "tree selector selects on Enter, cancels on Escape, and toggles label timestamps",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector selects on Enter, cancels on Escape, and toggles label timestamps",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::optional<std::string> leaf_id;
@@ -453,9 +447,7 @@ TEST_CASE(
     CHECK(render_text(component).find("[+label time]") == std::string::npos);
 }
 
-TEST_CASE(
-    "tree selector renders the empty filtered state",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector renders the empty filtered state", "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     // A tree whose only entry is hidden by the default filter.
@@ -477,9 +469,8 @@ TEST_CASE(
     CHECK(text.find("(0/0)") != std::string::npos);
 }
 
-TEST_CASE(
-    "tree selector renders branch-summary and compaction entries from pi-created sessions",
-    "[coding_agent][tui][tree-selector][issue410]") {
+TEST_CASE("tree selector renders branch-summary and compaction entries from pi-created sessions",
+        "[coding_agent][tui][tree-selector][issue410][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
 

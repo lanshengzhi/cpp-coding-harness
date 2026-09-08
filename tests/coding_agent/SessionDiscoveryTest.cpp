@@ -27,7 +27,7 @@ void write_session_header(
 
 } // namespace
 
-TEST_CASE("session id validation matches pi assertValidSessionId", "[coding_agent][session-discovery]") {
+TEST_CASE("session id validation matches pi assertValidSessionId", "[coding_agent][session-discovery][spec]") {
     CHECK_FALSE(discovery::invalid_session_id_reason("abc").has_value());
     CHECK_FALSE(discovery::invalid_session_id_reason("a1-B_c.d").has_value());
     CHECK_FALSE(discovery::invalid_session_id_reason("a").has_value());
@@ -44,7 +44,7 @@ TEST_CASE("session id validation matches pi assertValidSessionId", "[coding_agen
     CHECK(discovery::invalid_session_id_reason(".abc") == expected);
 }
 
-TEST_CASE("session directory listing reads headers and skips non-sessions", "[coding_agent][session-discovery]") {
+TEST_CASE("session directory listing reads headers and skips non-sessions", "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "sessions";
     std::filesystem::create_directory(directory);
@@ -84,7 +84,7 @@ TEST_CASE("session directory listing reads headers and skips non-sessions", "[co
     }
 }
 
-TEST_CASE("session directory listing sorts newest first and cwd-filters", "[coding_agent][session-discovery]") {
+TEST_CASE("session directory listing sorts newest first and cwd-filters", "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "sessions";
     const auto other_cwd = temp.path() / "other-project";
@@ -117,13 +117,13 @@ TEST_CASE("session directory listing sorts newest first and cwd-filters", "[codi
         }));
 }
 
-TEST_CASE("missing and unreadable session directories list empty", "[coding_agent][session-discovery]") {
+TEST_CASE("missing and unreadable session directories list empty", "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     CHECK(discovery::list_sessions_in_directory(temp.path() / "missing", std::nullopt).empty());
     CHECK_FALSE(discovery::find_most_recent_session(temp.path() / "missing", std::nullopt).has_value());
 }
 
-TEST_CASE("find most recent session returns the newest cwd-matched file", "[coding_agent][session-discovery]") {
+TEST_CASE("find most recent session returns the newest cwd-matched file", "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "sessions";
     const auto other_cwd = temp.path() / "other-project";
@@ -143,7 +143,8 @@ TEST_CASE("find most recent session returns the newest cwd-matched file", "[codi
     CHECK_FALSE(discovery::find_most_recent_session(directory, other_cwd).has_value());
 }
 
-TEST_CASE("list all sessions scans per-project directories under the sessions root", "[coding_agent][session-discovery]") {
+TEST_CASE("list all sessions scans per-project directories under the sessions root",
+        "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto sessions_root = temp.path() / "sessions";
     const auto project_a = sessions_root / "--project-a--";
@@ -175,7 +176,8 @@ TEST_CASE("list all sessions scans per-project directories under the sessions ro
     CHECK(custom_all.front().id == "id-c");
 }
 
-TEST_CASE("resolve session arg classifies path-like values against the workspace", "[coding_agent][session-discovery]") {
+TEST_CASE("resolve session arg classifies path-like values against the workspace",
+        "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
@@ -205,7 +207,8 @@ TEST_CASE("resolve session arg classifies path-like values against the workspace
     CHECK(bare.kind == discovery::SessionArgKind::NotFound);
 }
 
-TEST_CASE("resolve session arg matches local exact then prefix, then global", "[coding_agent][session-discovery]") {
+TEST_CASE(
+        "resolve session arg matches local exact then prefix, then global", "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     const auto local_dir = temp.path() / "local";
@@ -248,7 +251,7 @@ TEST_CASE("resolve session arg matches local exact then prefix, then global", "[
     CHECK(missing.arg == "nothing-here");
 }
 
-TEST_CASE("resolve session arg honors the engaged cwd filter", "[coding_agent][session-discovery]") {
+TEST_CASE("resolve session arg honors the engaged cwd filter", "[coding_agent][session-discovery][spec]") {
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     const auto other_cwd = temp.path() / "other";
@@ -268,7 +271,8 @@ TEST_CASE("resolve session arg honors the engaged cwd filter", "[coding_agent][s
     CHECK(match.kind == discovery::SessionArgKind::Local);
 }
 
-TEST_CASE("build session info parses name, counts, first message, and activity", "[coding_agent][session-discovery][issue409]") {
+TEST_CASE("build session info parses name, counts, first message, and activity",
+        "[coding_agent][session-discovery][issue409][spec]") {
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
@@ -329,7 +333,8 @@ TEST_CASE("build session info parses name, counts, first message, and activity",
     CHECK(bare_info->all_messages_text.empty());
 }
 
-TEST_CASE("build session info skips malformed lines and non-session files", "[coding_agent][session-discovery][issue409]") {
+TEST_CASE("build session info skips malformed lines and non-session files",
+        "[coding_agent][session-discovery][issue409][spec]") {
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
@@ -360,7 +365,8 @@ TEST_CASE("build session info skips malformed lines and non-session files", "[co
     CHECK_FALSE(discovery::build_session_info(temp.path() / "missing.jsonl").has_value());
 }
 
-TEST_CASE("list sessions info scans, cwd-filters, and sorts newest first", "[coding_agent][session-discovery][issue409]") {
+TEST_CASE("list sessions info scans, cwd-filters, and sorts newest first",
+        "[coding_agent][session-discovery][issue409][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "sessions";
     const auto workspace = temp.path() / "workspace";
@@ -412,7 +418,8 @@ TEST_CASE("list sessions info scans, cwd-filters, and sorts newest first", "[cod
     CHECK(discovery::list_sessions_info(temp.path() / "missing", std::nullopt).empty());
 }
 
-TEST_CASE("list all sessions info scans projects and honors a custom directory", "[coding_agent][session-discovery][issue409]") {
+TEST_CASE("list all sessions info scans projects and honors a custom directory",
+        "[coding_agent][session-discovery][issue409][spec]") {
     tests::TempWorkspace temp;
     const auto sessions_root = temp.path() / "root";
     const auto workspace = temp.path() / "workspace";
@@ -437,4 +444,3 @@ TEST_CASE("list all sessions info scans projects and honors a custom directory",
     REQUIRE(custom_all.size() == 1);
     CHECK(custom_all.front().id == "id-c");
 }
-

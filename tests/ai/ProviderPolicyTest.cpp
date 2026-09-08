@@ -34,8 +34,7 @@ std::string_view stop_reason_name(ai::AssistantStopReason reason) {
 } // namespace
 
 TEST_CASE(
-    "Provider termination mapping follows the committed terminal matrix",
-    "[ai][provider-policy][issue339]") {
+        "Provider termination mapping follows the committed terminal matrix", "[ai][provider-policy][issue339][spec]") {
     const auto fixture = tests::read_pi_fixture("termination/matrix.json");
     REQUIRE(fixture);
 
@@ -68,9 +67,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Provider retry policy classifies transient failures and bounds server delays",
-    "[ai][provider-policy][issue339]") {
+TEST_CASE("Provider retry policy classifies transient failures and bounds server delays",
+        "[ai][provider-policy][issue339][spec]") {
     CHECK(ai::SimpleStreamOptions{}.max_retries == 0);
     CHECK(ai::SimpleStreamOptions{}.max_retry_delay_ms == std::nullopt);
 

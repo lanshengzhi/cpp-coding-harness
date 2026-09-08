@@ -87,9 +87,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "Native TUI session assembly provides its independent User Shell",
-    "[coding_agent][runtime][assembly][issue90]") {
+TEST_CASE("Native TUI session assembly provides its independent User Shell",
+        "[coding_agent][runtime][assembly][issue90][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
     auto created = create_cli_session(runtime_fixture, workspace, true);
@@ -107,9 +106,8 @@ TEST_CASE(
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
 }
 
-TEST_CASE(
-    "CLI assembly without the Native TUI leaves the User Shell absent",
-    "[coding_agent][runtime][assembly][issue90]") {
+TEST_CASE("CLI assembly without the Native TUI leaves the User Shell absent",
+        "[coding_agent][runtime][assembly][issue90][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
     auto created = create_cli_session(runtime_fixture, workspace, false);
@@ -118,9 +116,8 @@ TEST_CASE(
     CHECK_FALSE(coding_agent::detail::AgentSessionInteractiveAccess::has_user_shell(session));
 }
 
-TEST_CASE(
-    "the model Bash tool is always registered alongside the Session-owned User Shell",
-    "[coding_agent][runtime][assembly][issue90]") {
+TEST_CASE("the model Bash tool is always registered alongside the Session-owned User Shell",
+        "[coding_agent][runtime][assembly][issue90][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
     auto created = create_cli_session(runtime_fixture, workspace, true);

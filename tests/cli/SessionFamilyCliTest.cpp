@@ -158,7 +158,7 @@ std::vector<std::string> session_info_names(const std::filesystem::path& path) {
 
 } // namespace
 
-TEST_CASE("session-family: --session with a path opens-or-creates at the target", "[cli][session-family]") {
+TEST_CASE("session-family: --session with a path opens-or-creates at the target", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "target.jsonl";
 
@@ -175,7 +175,8 @@ TEST_CASE("session-family: --session with a path opens-or-creates at the target"
     CHECK(user_message_count(session) == 2);
 }
 
-TEST_CASE("session-family: --session initializes an existing empty file as a new session", "[cli][session-family]") {
+TEST_CASE("session-family: --session initializes an existing empty file as a new session",
+        "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "empty.jsonl";
     std::ofstream(session) << "";
@@ -186,7 +187,8 @@ TEST_CASE("session-family: --session initializes an existing empty file as a new
     CHECK_FALSE(header_session_id(session).empty());
 }
 
-TEST_CASE("session-family: --session resolves a local session id exactly then by prefix", "[cli][session-family]") {
+TEST_CASE(
+        "session-family: --session resolves a local session id exactly then by prefix", "[cli][session-family][spec]") {
     SessionFixture fixture;
 
     auto first = fixture.run({"first-message"});
@@ -211,7 +213,7 @@ TEST_CASE("session-family: --session resolves a local session id exactly then by
     CHECK(user_message_count(files[1]) == 2);
 }
 
-TEST_CASE("session-family: --session with an unknown id errors like pi", "[cli][session-family]") {
+TEST_CASE("session-family: --session with an unknown id errors like pi", "[cli][session-family][spec]") {
     SessionFixture fixture;
     auto result = fixture.run({"--session", "no-such-session", "hello"});
 
@@ -220,7 +222,7 @@ TEST_CASE("session-family: --session with an unknown id errors like pi", "[cli][
     CHECK(result.stdout_text.empty());
 }
 
-TEST_CASE("session-family: --session on an existing file resumes with the header cwd", "[cli][session-family]") {
+TEST_CASE("session-family: --session on an existing file resumes with the header cwd", "[cli][session-family][spec]") {
     SessionFixture fixture;
     TempWorkspace original;
     TempWorkspace other;
@@ -245,7 +247,7 @@ TEST_CASE("session-family: --session on an existing file resumes with the header
     CHECK(user_message_count(session) == 2);
 }
 
-TEST_CASE("session-family: --session with a global id prompts to fork and confirms", "[cli][session-family]") {
+TEST_CASE("session-family: --session with a global id prompts to fork and confirms", "[cli][session-family][spec]") {
     SessionFixture fixture;
     TempWorkspace other;
     std::filesystem::create_directory(other.path());
@@ -283,7 +285,8 @@ TEST_CASE("session-family: --session with a global id prompts to fork and confir
     CHECK(user_message_count(forked_file) == 2);
 }
 
-TEST_CASE("session-family: declining the cross-project fork prints Aborted and exits 0", "[cli][session-family]") {
+TEST_CASE(
+        "session-family: declining the cross-project fork prints Aborted and exits 0", "[cli][session-family][spec]") {
     SessionFixture fixture;
     TempWorkspace other;
     std::filesystem::create_directory(other.path());
@@ -313,7 +316,7 @@ TEST_CASE("session-family: declining the cross-project fork prints Aborted and e
     CHECK(files.size() == 1);
 }
 
-TEST_CASE("session-family: --continue resumes the most recent session", "[cli][session-family]") {
+TEST_CASE("session-family: --continue resumes the most recent session", "[cli][session-family][spec]") {
     SessionFixture fixture;
 
     auto first = fixture.run({"first-message"});
@@ -336,7 +339,7 @@ TEST_CASE("session-family: --continue resumes the most recent session", "[cli][s
     CHECK(user_message_count(files[0]) == 1);
 }
 
-TEST_CASE("session-family: --continue creates a new session when none exists", "[cli][session-family]") {
+TEST_CASE("session-family: --continue creates a new session when none exists", "[cli][session-family][spec]") {
     SessionFixture fixture;
     auto result = fixture.run({"--continue", "only-message"});
     REQUIRE(result.exit_code == 0);
@@ -346,7 +349,7 @@ TEST_CASE("session-family: --continue creates a new session when none exists", "
     CHECK(user_message_count(files.front()) == 1);
 }
 
-TEST_CASE("session-family: --fork forks from a path with the full history", "[cli][session-family]") {
+TEST_CASE("session-family: --fork forks from a path with the full history", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto source = fixture.workspace.path() / "source.jsonl";
     auto created = fixture.run({"--session", source.string(), "first"});
@@ -363,7 +366,7 @@ TEST_CASE("session-family: --fork forks from a path with the full history", "[cl
     CHECK(user_message_count(files.front()) == 2);
 }
 
-TEST_CASE("session-family: --fork resolves a local id and never prompts cross-project", "[cli][session-family]") {
+TEST_CASE("session-family: --fork resolves a local id and never prompts cross-project", "[cli][session-family][spec]") {
     SessionFixture fixture;
     TempWorkspace other;
     std::filesystem::create_directory(other.path());
@@ -394,14 +397,14 @@ TEST_CASE("session-family: --fork resolves a local id and never prompts cross-pr
     CHECK(header_parent_session(forked_file) == other_files.front().string());
 }
 
-TEST_CASE("session-family: --fork rejects unknown targets", "[cli][session-family]") {
+TEST_CASE("session-family: --fork rejects unknown targets", "[cli][session-family][spec]") {
     SessionFixture fixture;
     auto result = fixture.run({"--fork", "no-such-session", "hello"});
     REQUIRE(result.exit_code == 1);
     CHECK(result.stderr_text.find("No session found matching 'no-such-session'") != std::string::npos);
 }
 
-TEST_CASE("session-family: --fork conflict checks match pi", "[cli][session-family]") {
+TEST_CASE("session-family: --fork conflict checks match pi", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "source.jsonl";
 
@@ -427,7 +430,7 @@ TEST_CASE("session-family: --fork conflict checks match pi", "[cli][session-fami
     }
 }
 
-TEST_CASE("session-family: --fork with an occupied --session-id target errors locally", "[cli][session-family]") {
+TEST_CASE("session-family: --fork with an occupied --session-id target errors locally", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto source = fixture.workspace.path() / "source.jsonl";
     auto created = fixture.run({"--session", source.string(), "first"});
@@ -442,7 +445,7 @@ TEST_CASE("session-family: --fork with an occupied --session-id target errors lo
     CHECK(result.stderr_text.find("Session already exists with id 'target-id'") != std::string::npos);
 }
 
-TEST_CASE("session-family: --fork --session-id creates the fork with that id", "[cli][session-family]") {
+TEST_CASE("session-family: --fork --session-id creates the fork with that id", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto source = fixture.workspace.path() / "source.jsonl";
     auto created = fixture.run({"--session", source.string(), "first"});
@@ -455,7 +458,7 @@ TEST_CASE("session-family: --fork --session-id creates the fork with that id", "
     CHECK(header_session_id(files.front()) == "fork-id");
 }
 
-TEST_CASE("session-family: --session-id conflict checks match pi", "[cli][session-family]") {
+TEST_CASE("session-family: --session-id conflict checks match pi", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "x.jsonl";
 
@@ -476,7 +479,7 @@ TEST_CASE("session-family: --session-id conflict checks match pi", "[cli][sessio
     }
 }
 
-TEST_CASE("session-family: --session-id validates the id format like pi", "[cli][session-family]") {
+TEST_CASE("session-family: --session-id validates the id format like pi", "[cli][session-family][spec]") {
     SessionFixture fixture;
     for (const auto& invalid : {"", "bad id", "-leading", "trailing-", "a/b"}) {
         auto result = fixture.run({"--session-id", invalid, "hello"});
@@ -485,7 +488,8 @@ TEST_CASE("session-family: --session-id validates the id format like pi", "[cli]
     }
 }
 
-TEST_CASE("session-family: --session-id warns and creates when missing, resumes when present", "[cli][session-family]") {
+TEST_CASE("session-family: --session-id warns and creates when missing, resumes when present",
+        "[cli][session-family][spec]") {
     SessionFixture fixture;
 
     // Missing: warning + a new session carrying the id.
@@ -507,7 +511,7 @@ TEST_CASE("session-family: --session-id warns and creates when missing, resumes 
     CHECK(user_message_count(files.front()) == 2);
 }
 
-TEST_CASE("session-family: --name guard rejects empty and whitespace values", "[cli][session-family]") {
+TEST_CASE("session-family: --name guard rejects empty and whitespace values", "[cli][session-family][spec]") {
     SessionFixture fixture;
     for (const auto& empty : {"", "   ", "\t"}) {
         auto result = fixture.run({"--name", empty, "hello"});
@@ -517,7 +521,7 @@ TEST_CASE("session-family: --name guard rejects empty and whitespace values", "[
     }
 }
 
-TEST_CASE("session-family: --name appends a sanitized session_info entry", "[cli][session-family]") {
+TEST_CASE("session-family: --name appends a sanitized session_info entry", "[cli][session-family][spec]") {
     SessionFixture fixture;
     auto result = fixture.run({"--name", "  My Session  ", "hello"});
     REQUIRE(result.exit_code == 0);
@@ -528,7 +532,7 @@ TEST_CASE("session-family: --name appends a sanitized session_info entry", "[cli
     CHECK(names.front() == "My Session");
 }
 
-TEST_CASE("session-family: --name applies to resumed and forked sessions too", "[cli][session-family]") {
+TEST_CASE("session-family: --name applies to resumed and forked sessions too", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto source = fixture.workspace.path() / "source.jsonl";
     auto created = fixture.run({"--session", source.string(), "first"});
@@ -551,7 +555,7 @@ TEST_CASE("session-family: --name applies to resumed and forked sessions too", "
     CHECK(names[1] == "Fork Name");
 }
 
-TEST_CASE("session-family: --no-session short-circuits silently over session flags", "[cli][session-family]") {
+TEST_CASE("session-family: --no-session short-circuits silently over session flags", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "explicit.jsonl";
 
@@ -584,14 +588,14 @@ TEST_CASE("session-family: --no-session short-circuits silently over session fla
     }
 }
 
-TEST_CASE("session-family: --no-session --session-id keeps the id in memory", "[cli][session-family]") {
+TEST_CASE("session-family: --no-session --session-id keeps the id in memory", "[cli][session-family][spec]") {
     SessionFixture fixture;
     auto result = fixture.run({"--no-session", "--session-id", "memory-id", "hello"});
     REQUIRE(result.exit_code == 0);
     CHECK(session_files(fixture.agent_dir / "sessions").empty());
 }
 
-TEST_CASE("session-family: --session wins over --resume without a conflict error", "[cli][session-family]") {
+TEST_CASE("session-family: --session wins over --resume without a conflict error", "[cli][session-family][spec]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "wins.jsonl";
 
@@ -601,7 +605,7 @@ TEST_CASE("session-family: --session wins over --resume without a conflict error
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("session-family: custom --session-dir filters local id search by cwd", "[cli][session-family]") {
+TEST_CASE("session-family: custom --session-dir filters local id search by cwd", "[cli][session-family][spec]") {
     SessionFixture fixture;
     TempWorkspace other;
     std::filesystem::create_directory(other.path());
@@ -638,7 +642,7 @@ TEST_CASE("session-family: custom --session-dir filters local id search by cwd",
     CHECK(session_files(shared).size() == 2);
 }
 
-TEST_CASE("session-family: custom --session-dir filters --continue by cwd", "[cli][session-family]") {
+TEST_CASE("session-family: custom --session-dir filters --continue by cwd", "[cli][session-family][spec]") {
     SessionFixture fixture;
     TempWorkspace other;
     std::filesystem::create_directory(other.path());
@@ -661,7 +665,8 @@ TEST_CASE("session-family: custom --session-dir filters --continue by cwd", "[cl
     CHECK(session_files(shared).size() == 2);
 }
 
-TEST_CASE("session-family: --session-dir equal to the default directory skips the cwd filter", "[cli][session-family]") {
+TEST_CASE("session-family: --session-dir equal to the default directory skips the cwd filter",
+        "[cli][session-family][spec]") {
     SessionFixture fixture;
 
     auto first = fixture.run({"first-message"});
@@ -703,7 +708,8 @@ TEST_CASE("session-family: --session-dir equal to the default directory skips th
     };
 }
 
-TEST_CASE("session-family: --resume opens the picker and resumes the picked session", "[cli][session-family][issue417]") {
+TEST_CASE("session-family: --resume opens the picker and resumes the picked session",
+        "[cli][session-family][issue417][spec]") {
     SessionFixture fixture;
     auto created = fixture.run({"first"});
     REQUIRE(created.exit_code == 0);
@@ -727,7 +733,8 @@ TEST_CASE("session-family: --resume opens the picker and resumes the picked sess
     CHECK(user_message_count(files.front()) == 2);
 }
 
-TEST_CASE("session-family: --resume cancel prints pi's No session selected and exits 0", "[cli][session-family][issue417]") {
+TEST_CASE("session-family: --resume cancel prints pi's No session selected and exits 0",
+        "[cli][session-family][issue417][spec]") {
     SessionFixture fixture;
     auto created = fixture.run({"first"});
     REQUIRE(created.exit_code == 0);
@@ -749,7 +756,8 @@ TEST_CASE("session-family: --resume cancel prints pi's No session selected and e
     CHECK(cancelled.stderr_text.find("No session selected") != std::string::npos);
 }
 
-TEST_CASE("session-family: --no-session wins before the --resume picker opens", "[cli][session-family][issue417]") {
+TEST_CASE(
+        "session-family: --no-session wins before the --resume picker opens", "[cli][session-family][issue417][spec]") {
     SessionFixture fixture;
     bool called = false;
     auto result = run_cli(CliRunOptions{
@@ -771,7 +779,7 @@ TEST_CASE("session-family: --no-session wins before the --resume picker opens", 
 /// pi main.ts `getMissingSessionCwdIssue` over the assembled target: the
 /// assembly runs chdir'd to the launch workspace (the session space is
 /// workspace-keyed).
-TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cli][session-family][issue417]") {
+TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cli][session-family][issue417][spec]") {
     SessionFixture fixture;
     TempWorkspace storage;
     TempWorkspace continue_agent;

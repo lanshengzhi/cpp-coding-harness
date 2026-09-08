@@ -12,9 +12,8 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "Thinking levels preserve pi null and explicit extended mapping semantics",
-    "[ai][simple-options][issue339]") {
+TEST_CASE("Thinking levels preserve pi null and explicit extended mapping semantics",
+        "[ai][simple-options][issue339][spec]") {
     auto model = tests::make_model("reasoning", "deepseek", "openai-responses");
     model.reasoning = true;
     model.thinking_level_map = ai::ThinkingLevelMap{
@@ -38,9 +37,8 @@ TEST_CASE(
           ai::ModelThinkingLevel::XHigh);
 }
 
-TEST_CASE(
-    "string-level clamp matches pi clampThinkingLevel across the seven-level set",
-    "[ai][simple-options][issue352]") {
+TEST_CASE("string-level clamp matches pi clampThinkingLevel across the seven-level set",
+        "[ai][simple-options][issue352][spec]") {
     auto partial = tests::make_model("partial", "deepseek", "openai-responses");
     partial.reasoning = true;
     partial.thinking_level_map = ai::ThinkingLevelMap{
@@ -66,9 +64,7 @@ TEST_CASE(
     CHECK(ai::clamp_thinking_level_string(basic, "turbo") == "turbo");
 }
 
-TEST_CASE(
-    "Simple request options are move-only and clamp output to context",
-    "[ai][simple-options][issue339]") {
+TEST_CASE("Simple request options are move-only and clamp output to context", "[ai][simple-options][issue339][spec]") {
     static_assert(!std::is_copy_constructible_v<ai::SimpleStreamOptions>);
     static_assert(std::is_move_constructible_v<ai::SimpleStreamOptions>);
     static_assert(std::is_same_v<

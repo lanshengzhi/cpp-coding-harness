@@ -120,9 +120,8 @@ struct CommitmentChannel {
 
 } // namespace
 
-TEST_CASE(
-    "Session Event Commitment persists only completed Session Entry messages",
-    "[coding_agent][runtime][commitment][issue36]") {
+TEST_CASE("Session Event Commitment persists only completed Session Entry messages",
+        "[coding_agent][runtime][commitment][issue36][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{channel.persistence};
     auto sink = commitment.sink();
@@ -139,9 +138,8 @@ TEST_CASE(
     CHECK(channel.persisted_user_texts() == std::vector<std::string>{"hello"});
 }
 
-TEST_CASE(
-    "Session Event Commitment returns the first persistence failure unwrapped after drain",
-    "[coding_agent][runtime][commitment][issue36]") {
+TEST_CASE("Session Event Commitment returns the first persistence failure unwrapped after drain",
+        "[coding_agent][runtime][commitment][issue36][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{channel.persistence};
     auto sink = commitment.sink();
@@ -161,9 +159,8 @@ TEST_CASE(
     CHECK(channel.persisted_user_texts().empty());
 }
 
-TEST_CASE(
-    "Session Event Commitment fails fast once a persistence failure is latched",
-    "[coding_agent][runtime][commitment][issue36]") {
+TEST_CASE("Session Event Commitment fails fast once a persistence failure is latched",
+        "[coding_agent][runtime][commitment][issue36][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{channel.persistence};
     auto sink = commitment.sink();
@@ -181,9 +178,8 @@ TEST_CASE(
     CHECK(rejected.error().message == "could not persist session entry");
 }
 
-TEST_CASE(
-    "Session Event Commitment reports an unfinished Agent prompt",
-    "[coding_agent][runtime][commitment][issue36]") {
+TEST_CASE("Session Event Commitment reports an unfinished Agent prompt",
+        "[coding_agent][runtime][commitment][issue36][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{channel.persistence};
 
@@ -193,9 +189,8 @@ TEST_CASE(
     CHECK(verdict.error().message == "stateful Agent prompt did not finish");
 }
 
-TEST_CASE(
-    "Session Event Commitment passes through Agent failures when storage succeeded",
-    "[coding_agent][runtime][commitment][issue36]") {
+TEST_CASE("Session Event Commitment passes through Agent failures when storage succeeded",
+        "[coding_agent][runtime][commitment][issue36][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{channel.persistence};
     auto sink = commitment.sink();
@@ -210,9 +205,8 @@ TEST_CASE(
     CHECK(verdict.error().message == "provider exploded");
 }
 
-TEST_CASE(
-    "Session Event Commitment persists admitted messages in FIFO order",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("Session Event Commitment persists admitted messages in FIFO order",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{channel.persistence};
     auto sink = commitment.sink();
@@ -227,9 +221,8 @@ TEST_CASE(
         std::vector<std::string>{"one", "two", "three"});
 }
 
-TEST_CASE(
-    "Session Event Commitment vetoes the run with a typed Busy when admission is saturated",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("Session Event Commitment vetoes the run with a typed Busy when admission is saturated",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     // Both the ordinary and reserved budgets are exhausted: control work has
     // no lane left, so the commitment is rejected with a typed Busy.
     CommitmentChannel channel{harness::RuntimeLimits{
@@ -253,9 +246,8 @@ TEST_CASE(
     CHECK(channel.persisted_user_texts().empty());
 }
 
-TEST_CASE(
-    "Session Event Commitment without a persistence channel is a successful no-op",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("Session Event Commitment without a persistence channel is a successful no-op",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     CommitmentChannel channel;
     runtime::SessionEventCommitment commitment{nullptr};
     auto sink = commitment.sink();
@@ -265,9 +257,8 @@ TEST_CASE(
     CHECK(channel.persisted_user_texts().empty());
 }
 
-TEST_CASE(
-    "Session Event Commitment appends completed messages to an in-memory store's live tree",
-    "[coding_agent][runtime][commitment][issue491]") {
+TEST_CASE("Session Event Commitment appends completed messages to an in-memory store's live tree",
+        "[coding_agent][runtime][commitment][issue491][spec]") {
     // In-memory sessions have no off-loop channel; the sink commits straight
     // into the store's live tree (pi's non-persisting SessionManager keeps
     // the same in-memory entries).
@@ -311,9 +302,8 @@ TEST_CASE(
               .has_value());
 }
 
-TEST_CASE(
-    "persistence control work is admitted while the ordinary runtime budget is saturated",
-    "[coding_agent][runtime][commitment][issue465]") {
+TEST_CASE("persistence control work is admitted while the ordinary runtime budget is saturated",
+        "[coding_agent][runtime][commitment][issue465][spec]") {
     // A small ordinary budget, a full reserved control lane (defaults).
     CommitmentChannel channel{harness::RuntimeLimits{
         .worker_count = 2,

@@ -27,7 +27,7 @@ std::string canonical_json(const support::JsonValue& value) {
 
 } // namespace
 
-TEST_CASE("tool parameters are the passive project JSON value", "[ai][u2][tool][issue24]") {
+TEST_CASE("tool parameters are the passive project JSON value", "[ai][u2][tool][issue24][compat-pi]") {
     static_assert(std::is_same_v<decltype(ai::Tool::parameters), support::JsonValue>);
 
     ai::Tool object_tool{"object_contract", "Object contract", complex_contract()};
@@ -38,7 +38,7 @@ TEST_CASE("tool parameters are the passive project JSON value", "[ai][u2][tool][
     CHECK_FALSE(boolean_tool.parameters.get_boolean());
 }
 
-TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", "[ai][u2][tool][issue24]") {
+TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", "[ai][u2][tool][issue24][compat-pi]") {
     const auto expected = complex_contract();
     const ai::Tool tool{"complete_contract", "Complete contract", expected};
 
@@ -52,7 +52,7 @@ TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", 
     CHECK(canonical_json(parsed->at("parameters")) == canonical_json(expected));
 }
 
-TEST_CASE("function tool serialization preserves boolean JSON Schemas", "[ai][u2][tool][issue24]") {
+TEST_CASE("function tool serialization preserves boolean JSON Schemas", "[ai][u2][tool][issue24][compat-pi]") {
     const ai::Tool tool{"disabled_contract", "Reject every argument", support::JsonValue{false}};
 
     auto json = ai::glaze::write_function_tool_json(tool);

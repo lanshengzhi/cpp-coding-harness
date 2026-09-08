@@ -102,9 +102,8 @@ coding_agent::session_discovery::SessionInfo make_session(
 
 } // namespace
 
-TEST_CASE(
-    "session selector renders the threaded tree with parent/child prefixes",
-    "[coding_agent][tui][session-selector][issue409]") {
+TEST_CASE("session selector renders the threaded tree with parent/child prefixes",
+        "[coding_agent][tui][session-selector][issue409][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     auto loader = [] {
@@ -151,9 +150,8 @@ TEST_CASE(
     CHECK(text.find("  other message") != std::string::npos);
 }
 
-TEST_CASE(
-    "session selector cycles sort modes and the named filter through the bindings",
-    "[coding_agent][tui][session-selector][issue409]") {
+TEST_CASE("session selector cycles sort modes and the named filter through the bindings",
+        "[coding_agent][tui][session-selector][issue409][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     auto loader = [] {
@@ -191,9 +189,8 @@ TEST_CASE(
     CHECK(named.find("alpha") == std::string::npos);
 }
 
-TEST_CASE(
-    "session selector toggles the path display and the delete confirmation cancels",
-    "[coding_agent][tui][session-selector][issue409]") {
+TEST_CASE("session selector toggles the path display and the delete confirmation cancels",
+        "[coding_agent][tui][session-selector][issue409][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     auto loader = [] {
@@ -226,9 +223,8 @@ TEST_CASE(
     CHECK(render_text(component).find("Delete session?") == std::string::npos);
 }
 
-TEST_CASE(
-    "session selector rename mode confirms through the inline input",
-    "[coding_agent][tui][session-selector][issue409]") {
+TEST_CASE("session selector rename mode confirms through the inline input",
+        "[coding_agent][tui][session-selector][issue409][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     std::vector<coding_agent::session_discovery::SessionInfo> sessions{
@@ -267,7 +263,7 @@ TEST_CASE(
 }
 
 TEST_CASE("session selector search delegates the query and filtered rows to the SelectList",
-        "[coding_agent][tui][session-selector][issue590]") {
+        "[coding_agent][tui][session-selector][issue590][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
     auto loader = [] {

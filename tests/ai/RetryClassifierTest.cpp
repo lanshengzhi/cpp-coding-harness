@@ -25,9 +25,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "isRetryableAssistantError retries transient provider and network patterns",
-    "[ai][retry][issue361]") {
+TEST_CASE("isRetryableAssistantError retries transient provider and network patterns",
+        "[ai][retry][issue361][diverge][issue624]") {
     // Generic provider load / HTTP status / server-side transients.
     for (const std::string message :
          {"overloaded", "model overloaded; retry later",
@@ -70,9 +69,8 @@ TEST_CASE(
         error_terminal("Socket Hang Up")));
 }
 
-TEST_CASE(
-    "isRetryableAssistantError never retries quota, billing, or provider-limit patterns",
-    "[ai][retry][issue361]") {
+TEST_CASE("isRetryableAssistantError never retries quota, billing, or provider-limit patterns",
+        "[ai][retry][issue361][diverge][issue624]") {
     for (const std::string message :
          {"GoUsageLimitError", "FreeUsageLimitError",
           "Monthly usage limit reached", "available balance",
@@ -89,9 +87,8 @@ TEST_CASE(
         error_terminal("Monthly usage limit reached (503)")));
 }
 
-TEST_CASE(
-    "isRetryableAssistantError requires an error terminal with an error message",
-    "[ai][retry][issue361]") {
+TEST_CASE("isRetryableAssistantError requires an error terminal with an error message",
+        "[ai][retry][issue361][diverge][issue624]") {
     auto stopped = ai::assistant_text_message("fine");
     stopped.stop_reason = ai::AssistantStopReason::Stop;
     CHECK_FALSE(ai::is_retryable_assistant_error(stopped));

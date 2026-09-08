@@ -30,7 +30,7 @@ struct LoaderTestFixture {
 
 // ── loadPromptTemplateFromFile ──
 
-TEST_CASE("loadPromptTemplateFromFile basic frontmatter", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile basic frontmatter", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("greet.md",
         "---\n"
@@ -49,7 +49,7 @@ TEST_CASE("loadPromptTemplateFromFile basic frontmatter", "[coding_agent][prompt
     CHECK_FALSE(tmpl.argument_hint.has_value());
 }
 
-TEST_CASE("loadPromptTemplateFromFile with argument-hint", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile with argument-hint", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("review.md",
         "---\n"
@@ -69,7 +69,7 @@ TEST_CASE("loadPromptTemplateFromFile with argument-hint", "[coding_agent][promp
     CHECK(tmpl.content == "Review the staged changes.");
 }
 
-TEST_CASE("loadPromptTemplateFromFile no frontmatter", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile no frontmatter", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("plain.md", "Just a plain template with $1 and $2.\n");
 
@@ -83,7 +83,7 @@ TEST_CASE("loadPromptTemplateFromFile no frontmatter", "[coding_agent][prompt][l
     CHECK(tmpl.content == "Just a plain template with $1 and $2.");
 }
 
-TEST_CASE("loadPromptTemplateFromFile empty body", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile empty body", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("empty.md",
         "---\n"
@@ -99,7 +99,7 @@ TEST_CASE("loadPromptTemplateFromFile empty body", "[coding_agent][prompt][loade
     CHECK(tmpl.content.empty());
 }
 
-TEST_CASE("loadPromptTemplateFromFile frontmatter only no body", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile frontmatter only no body", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("meta.md",
         "---\n"
@@ -116,7 +116,7 @@ TEST_CASE("loadPromptTemplateFromFile frontmatter only no body", "[coding_agent]
     CHECK(tmpl.content.find_first_not_of(" \t\n\r") == std::string::npos);
 }
 
-TEST_CASE("loadPromptTemplateFromFile file not found", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile file not found", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     auto result = coding_agent::loadPromptTemplateFromFile(fix.fs, "nonexistent.md");
     CHECK(result.templates.empty());
@@ -125,7 +125,7 @@ TEST_CASE("loadPromptTemplateFromFile file not found", "[coding_agent][prompt][l
     CHECK(result.diagnostics[0].path == "nonexistent.md");
 }
 
-TEST_CASE("loadPromptTemplateFromFile diagnoses non-md extension", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile diagnoses non-md extension", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("notes.txt", "Some text content\n");
     auto result = coding_agent::loadPromptTemplateFromFile(fix.fs, "notes.txt");
@@ -137,7 +137,7 @@ TEST_CASE("loadPromptTemplateFromFile diagnoses non-md extension", "[coding_agen
 
 // ── loadPromptTemplates (directory) ──
 
-TEST_CASE("loadPromptTemplates directory with multiple files", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates directory with multiple files", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("prompts/greet.md",
         "---\n"
@@ -161,7 +161,7 @@ TEST_CASE("loadPromptTemplates directory with multiple files", "[coding_agent][p
     CHECK(result.templates[1].name == "review");
 }
 
-TEST_CASE("loadPromptTemplates missing directory is silent", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates missing directory is silent", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     std::vector<coding_agent::PromptTemplateDirSpec> dirs = {{"nonexistent_dir"}};
     auto result = coding_agent::loadPromptTemplates(fix.fs, dirs);
@@ -169,7 +169,8 @@ TEST_CASE("loadPromptTemplates missing directory is silent", "[coding_agent][pro
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("loadPromptTemplates keeps duplicate names for the loader dedupe", "[coding_agent][prompt][loader][issue405]") {
+TEST_CASE("loadPromptTemplates keeps duplicate names for the loader dedupe",
+        "[coding_agent][prompt][loader][issue405][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("prompts/greet.md",
         "---\n"
@@ -195,7 +196,7 @@ TEST_CASE("loadPromptTemplates keeps duplicate names for the loader dedupe", "[c
     }
 }
 
-TEST_CASE("loadPromptTemplates explicit file path", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates explicit file path", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("custom.md",
         "---\n"
@@ -210,7 +211,7 @@ TEST_CASE("loadPromptTemplates explicit file path", "[coding_agent][prompt][load
     CHECK(result.templates[0].description == "Custom template");
 }
 
-TEST_CASE("loadPromptTemplates parse failure produces diagnostic", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates parse failure produces diagnostic", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("prompts/bad.md",
         "---\n"
@@ -225,7 +226,7 @@ TEST_CASE("loadPromptTemplates parse failure produces diagnostic", "[coding_agen
     CHECK(result.diagnostics[0].code == coding_agent::PromptTemplateDiagnosticCode::parse_failed);
 }
 
-TEST_CASE("loadPromptTemplates empty directory", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates empty directory", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     // Create the directory but no .md files
     fix.writeFile("prompts/.gitkeep", "");
@@ -236,7 +237,7 @@ TEST_CASE("loadPromptTemplates empty directory", "[coding_agent][prompt][loader]
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("loadPromptTemplates dotfile skipped", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates dotfile skipped", "[coding_agent][prompt][loader][spec]") {
     LoaderTestFixture fix;
     fix.writeFile("prompts/.hidden.md",
         "---\n"

@@ -57,7 +57,7 @@
 
 using namespace cch;
 
-TEST_CASE("public headers compile from the include contract surface", "[architecture][u1]") {
+TEST_CASE("public headers compile from the include contract surface", "[architecture][u1][spec]") {
     ai::AiContext context;
     context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     context.tools.push_back(ai::Tool{
@@ -95,7 +95,7 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
     CHECK(metadata.model == "gpt-test");
 }
 
-TEST_CASE("public contracts remain value and interface oriented", "[architecture][u1]") {
+TEST_CASE("public contracts remain value and interface oriented", "[architecture][u1][spec]") {
     static_assert(std::is_aggregate_v<agent::AgentInitialState>);
     static_assert(std::is_aggregate_v<ai::Model>);
     static_assert(std::is_aggregate_v<ai::SimpleStreamOptions>);
@@ -279,7 +279,8 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     CHECK(std::holds_alternative<agent::TurnStartEvent>(agent_event));
 }
 
-TEST_CASE("session targets remain one passive variant with optional path results", "[architecture][session][sdk]") {
+TEST_CASE(
+        "session targets remain one passive variant with optional path results", "[architecture][session][sdk][spec]") {
     static_assert(std::is_aggregate_v<coding_agent::DefaultPersistedSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitOpenOrCreateSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitResumeSessionTarget>);
@@ -305,7 +306,7 @@ TEST_CASE("session targets remain one passive variant with optional path results
     CHECK(std::holds_alternative<coding_agent::DefaultPersistedSessionTarget>(request.session_target));
 }
 
-TEST_CASE("agent lifecycle advertises only the supported pi event alternatives", "[architecture][agent]") {
+TEST_CASE("agent lifecycle advertises only the supported pi event alternatives", "[architecture][agent][spec]") {
     static_assert(std::variant_size_v<agent::AgentLifecycleEvent> == 10);
     static_assert(std::is_same_v<std::variant_alternative_t<0, agent::AgentLifecycleEvent>, agent::AgentStartEvent>);
     static_assert(std::is_same_v<std::variant_alternative_t<1, agent::AgentLifecycleEvent>, agent::AgentEndEvent>);

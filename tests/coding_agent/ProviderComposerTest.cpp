@@ -50,7 +50,8 @@ namespace {
 // ProviderComposer: built-in/config composition (pi provider-composer subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs", "[coding_agent][provider-composer][issue546]") {
+TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
+        "[coding_agent][provider-composer][issue546][spec]") {
     const auto builtins = ai::builtin_provider_definitions();
     REQUIRE(builtins.size() == 2);
 
@@ -82,9 +83,8 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs", "[coding_
     CHECK(kimi_coding->compat->allow_empty_signature == true);
 }
 
-TEST_CASE(
-    "builtin catalogs match the frozen baseline shard values",
-    "[coding_agent][provider-composer][issue370]") {
+TEST_CASE("builtin catalogs match the frozen baseline shard values",
+        "[coding_agent][provider-composer][issue370][spec]") {
     // The committed shard goldens (fixtures/pi-ai/models/*-shard.json) are
     // verbatim copies of the frozen-baseline pi shards (byte-hashes pinned in
     // the pi-ai fixture README). Every built-in catalog model must serialize
@@ -131,7 +131,8 @@ TEST_CASE(
     check_shard(builtins[1].models, "models/kimi-coding-shard.json", "anthropic-messages");
 }
 
-TEST_CASE("built-in without models.json config is submitted unchanged", "[coding_agent][provider-composer][issue546]") {
+TEST_CASE("built-in without models.json config is submitted unchanged",
+        "[coding_agent][provider-composer][issue546][spec]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({"providers": {}})");
     auto base = builtin_definition("openai-codex");
@@ -147,7 +148,8 @@ TEST_CASE("built-in without models.json config is submitted unchanged", "[coding
     CHECK(change.definition->auth.oauth.has_value());
 }
 
-TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a custom model", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a custom model",
+        "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({
       "providers": {
@@ -185,7 +187,7 @@ TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a cust
     CHECK(change.definition->auth.oauth.has_value());
 }
 
-TEST_CASE("model overrides apply last over the composed model", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("model overrides apply last over the composed model", "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({
       "providers": {
@@ -210,7 +212,8 @@ TEST_CASE("model overrides apply last over the composed model", "[coding_agent][
     CHECK(target->reasoning == false);
 }
 
-TEST_CASE("config-only provider composes from models.json plus the openai-responses adapter", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("config-only provider composes from models.json plus the openai-responses adapter",
+        "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({
       "providers": {
@@ -238,7 +241,8 @@ TEST_CASE("config-only provider composes from models.json plus the openai-respon
     CHECK(models.front().input == std::vector<ai::ModelInput>{ai::ModelInput::Text});
 }
 
-TEST_CASE("config-only provider without apiKey still composes but resolves no auth", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("config-only provider without apiKey still composes but resolves no auth",
+        "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({
       "providers": {
@@ -256,7 +260,8 @@ TEST_CASE("config-only provider without apiKey still composes but resolves no au
     REQUIRE(change.definition->auth.api_key.has_value());
 }
 
-TEST_CASE("composition failure falls back to the built-in and records the error", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("composition failure falls back to the built-in and records the error",
+        "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     // kimi-coding overlay with no useful content: "must specify baseUrl/..."
     const auto config = load_models_json(workspace, R"({
@@ -279,7 +284,7 @@ TEST_CASE("composition failure falls back to the built-in and records the error"
     CHECK(change.definition->auth.api_key.has_value());
 }
 
-TEST_CASE("absent provider with no config returns null", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("absent provider with no config returns null", "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     const auto config = load_models_json(workspace, R"({"providers": {}})");
     std::optional<std::string> error;
@@ -289,7 +294,7 @@ TEST_CASE("absent provider with no config returns null", "[coding_agent][provide
     CHECK_FALSE(change.definition.has_value());
 }
 
-TEST_CASE("custom model requires an api and baseUrl", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE("custom model requires an api and baseUrl", "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;
     // Model with neither api nor baseUrl.
     const auto config = load_models_json(workspace, R"({
@@ -306,7 +311,8 @@ TEST_CASE("custom model requires an api and baseUrl", "[coding_agent][provider-c
     CHECK_FALSE(change.definition.has_value());
 }
 
-TEST_CASE("default-model table maps the supported provider subset", "[coding_agent][provider-composer][issue345]") {
+TEST_CASE(
+        "default-model table maps the supported provider subset", "[coding_agent][provider-composer][issue345][spec]") {
     CHECK(coding_agent::default_model_for_provider("openai-codex") == std::optional<std::string>{"gpt-5.5"});
     CHECK(coding_agent::default_model_for_provider("kimi-coding") == std::optional<std::string>{"kimi-for-coding"});
     // Config-only deepseek has no default model (the "no default model" branch).

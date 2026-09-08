@@ -291,9 +291,8 @@ struct RecordedSessionEvents {
 
 } // namespace
 
-TEST_CASE(
-    "turn auto-retry retries a transient error and succeeds, emitting start and end events",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("turn auto-retry retries a transient error and succeeds, emitting start and end events",
+        "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     // baseDelayMs 1 keeps the test deterministic and fast; pi's own retry
     // tests use the same override.
@@ -330,9 +329,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "session-event observers grow reentrantly without invalidating delivery",
-    "[coding_agent][retry][subscription][issue452]") {
+TEST_CASE("session-event observers grow reentrantly without invalidating delivery",
+        "[coding_agent][retry][subscription][issue452][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -379,9 +377,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "session-event observer failures deactivate and bound diagnostics",
-    "[coding_agent][retry][subscription][issue452]") {
+TEST_CASE("session-event observer failures deactivate and bound diagnostics",
+        "[coding_agent][retry][subscription][issue452][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -432,9 +429,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "session-event subscription handle outlives its session as a benign drop",
-    "[coding_agent][retry][subscription][issue452]") {
+TEST_CASE("session-event subscription handle outlives its session as a benign drop",
+        "[coding_agent][retry][subscription][issue452][spec]") {
     std::unique_ptr<coding_agent::SessionEventSubscription> handle;
     {
         TestPaths paths;
@@ -458,9 +454,8 @@ TEST_CASE(
     handle.reset();
 }
 
-TEST_CASE(
-    "turn auto-retry exhausts max retries and emits the final failure event",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("turn auto-retry exhausts max retries and emits the final failure event",
+        "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -503,9 +498,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "turn auto-retry uses pi defaults: enabled, maxRetries 3, baseDelayMs 2000, exponential backoff",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("turn auto-retry uses pi defaults: enabled, maxRetries 3, baseDelayMs 2000, exponential backoff",
+        "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     // One retry on the default settings: the first `auto_retry_start` must
     // carry pi's `maxAttempts` 3 and `delayMs = 2000 * 2^0`.
@@ -553,9 +547,8 @@ TEST_CASE(
     exp_session->close();
 }
 
-TEST_CASE(
-    "turn auto-retry retryability follows isRetryableAssistantError: transient patterns retry, quota never",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("turn auto-retry retryability follows isRetryableAssistantError: transient patterns retry, quota never",
+        "[coding_agent][retry][issue361][spec]") {
     // A network/transport pattern retries (pi "retries provider network_error
     // failures").
     TestPaths network_paths;
@@ -595,9 +588,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "context overflow routes to compaction and never enters the retry path",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("context overflow routes to compaction and never enters the retry path",
+        "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -659,9 +651,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "the failed assistant message is removed from live state but retained in session history",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("the failed assistant message is removed from live state but retained in session history",
+        "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -727,9 +718,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "abort during the backoff sleep cancels the retry with exactly one auto_retry_end",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("abort during the backoff sleep cancels the retry with exactly one auto_retry_end",
+        "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     // A long backoff so the abort deterministically lands inside the sleep.
     auto under_test = make_retry_session(
@@ -828,9 +818,7 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "disabled retry settings suppress turn auto-retry entirely",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("disabled retry settings suppress turn auto-retry entirely", "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -851,9 +839,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "turn auto-retry lifecycle golden matches pi's retry event sequence",
-    "[coding_agent][retry][issue361][golden]") {
+TEST_CASE("turn auto-retry lifecycle golden matches pi's retry event sequence",
+        "[coding_agent][retry][issue361][golden][compat-pi]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -899,9 +886,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "the retry continuation runs the full agent loop when it produces tool calls",
-    "[coding_agent][retry][issue361]") {
+TEST_CASE("the retry continuation runs the full agent loop when it produces tool calls",
+        "[coding_agent][retry][issue361][spec]") {
     // pi agent-session-retry.test.ts "prompt waits for full agent loop when
     // retry produces tool calls": after the retry response includes a tool
     // call, session.prompt() must wait for the entire tool loop and the

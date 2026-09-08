@@ -107,8 +107,7 @@ namespace {
 } // namespace
 
 TEST_CASE(
-    "list-models prints pi's six-column table with K/M formatting and sort",
-    "[cli][list-models][issue404]") {
+        "list-models prints pi's six-column table with K/M formatting and sort", "[cli][list-models][issue404][spec]") {
     auto result = run_list_models({"--list-models"}, table_catalog_runtime());
 
     REQUIRE(result.exit_code == 0);
@@ -122,9 +121,7 @@ TEST_CASE(
           "beta      beta-1   999      1.5K     no        yes   \n");
 }
 
-TEST_CASE(
-    "list-models fuzzy search filters the table and keeps the header",
-    "[cli][list-models][issue404]") {
+TEST_CASE("list-models fuzzy search filters the table and keeps the header", "[cli][list-models][issue404][spec]") {
     auto result = run_list_models({"--list-models", "alpha"}, table_catalog_runtime());
 
     REQUIRE(result.exit_code == 0);
@@ -134,9 +131,7 @@ TEST_CASE(
           "alpha     alpha-2  1M       2M       yes       yes   \n");
 }
 
-TEST_CASE(
-    "list-models with no fuzzy matches prints pi's no-match message",
-    "[cli][list-models][issue404]") {
+TEST_CASE("list-models with no fuzzy matches prints pi's no-match message", "[cli][list-models][issue404][spec]") {
     auto result = run_list_models({"--list-models", "nomatch"}, table_catalog_runtime());
 
     REQUIRE(result.exit_code == 0);
@@ -144,9 +139,8 @@ TEST_CASE(
     CHECK(result.stderr_text.empty());
 }
 
-TEST_CASE(
-    "list-models with no models prints the no-models message and exits 0",
-    "[cli][list-models][issue404]") {
+TEST_CASE("list-models with no models prints the no-models message and exits 0",
+        "[cli][list-models][issue404][diverge][issue626]") {
     // The default scripted fake providers have empty catalogs, so the
     // available snapshot is empty.
     auto result = run_list_models({"--list-models"}, {});
@@ -158,9 +152,8 @@ TEST_CASE(
           "  ~/.pi/docs/models.md\n");
 }
 
-TEST_CASE(
-    "list-models runs in-memory: no session file is created and help/version keep precedence",
-    "[cli][list-models][issue404]") {
+TEST_CASE("list-models runs in-memory: no session file is created and help/version keep precedence",
+        "[cli][list-models][issue404][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
     tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
@@ -184,9 +177,8 @@ TEST_CASE(
     CHECK_FALSE(ec);
 }
 
-TEST_CASE(
-    "list-models reports the models.json load error as a stderr warning",
-    "[cli][list-models][issue404]") {
+TEST_CASE("list-models reports the models.json load error as a stderr warning",
+        "[cli][list-models][issue404][diverge][issue626]") {
     // A real runtime over a broken models.json carries the config diagnostic;
     // the CLI surface prints it as pi's yellow warning (colorless here). The
     // built-in providers still compose structurally, so the table prints too.

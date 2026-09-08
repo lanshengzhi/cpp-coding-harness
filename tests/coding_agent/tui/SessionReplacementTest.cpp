@@ -235,9 +235,8 @@ private:
 
 } // namespace
 
-TEST_CASE(
-    "a replacement installs a working Session and reuses the shared provider",
-    "[coding_agent][tui][replacement][issue466]") {
+TEST_CASE("a replacement installs a working Session and reuses the shared provider",
+        "[coding_agent][tui][replacement][issue466][spec]") {
     Fixture fixture;
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
@@ -276,8 +275,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "a failed replacement keeps the previous Session running",
-    "[coding_agent][tui][replacement][issue466]") {
+        "a failed replacement keeps the previous Session running", "[coding_agent][tui][replacement][issue466][spec]") {
     Fixture fixture;
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
@@ -324,9 +322,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "replacement retires the previous Session's late prompt so the replacement accepts a fresh prompt",
-    "[coding_agent][tui][replacement][issue466]") {
+TEST_CASE("replacement retires the previous Session's late prompt so the replacement accepts a fresh prompt",
+        "[coding_agent][tui][replacement][issue466][spec]") {
     Fixture fixture;
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
@@ -364,9 +361,7 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "rapid repeated Session replacement stays interactive",
-    "[coding_agent][tui][replacement][issue466]") {
+TEST_CASE("rapid repeated Session replacement stays interactive", "[coding_agent][tui][replacement][issue466][spec]") {
     Fixture fixture;
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
@@ -399,9 +394,7 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "shutdown during a Session transition exits cleanly",
-    "[coding_agent][tui][replacement][issue466]") {
+TEST_CASE("shutdown during a Session transition exits cleanly", "[coding_agent][tui][replacement][issue466][spec]") {
     Fixture fixture;
     Running running;
     auto provider = std::make_shared<tests::GatedChatProvider>();
@@ -431,9 +424,8 @@ TEST_CASE(
     drain_ready(running.io);
 }
 
-TEST_CASE(
-    "replacement clears a retired Session's pending User Bash block",
-    "[coding_agent][tui][replacement][issue466]") {
+TEST_CASE("replacement clears a retired Session's pending User Bash block",
+        "[coding_agent][tui][replacement][issue466][spec]") {
     Fixture fixture;
     Running running;
     auto shell_state = std::make_shared<SharedGateShell::State>();

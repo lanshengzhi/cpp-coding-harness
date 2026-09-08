@@ -83,7 +83,7 @@ void require_virtual_terminal_accepts(const tui::RenderResult& lines, std::size_
 
 } // namespace
 
-TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown("alpha beta gamma", 0, 0);
 
     const auto lines = markdown.render(10);
@@ -93,7 +93,7 @@ TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][is
     CHECK(lines->lines == expected);
 }
 
-TEST_CASE("Markdown renders common response constructs in semantic order", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown renders common response constructs in semantic order", "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown(
         "# Heading\n\nParagraph with *emphasis*, **strong**, ~~gone~~, and `code`.\n\n"
         "- first item\n- second item\n\n"
@@ -132,7 +132,8 @@ TEST_CASE("Markdown renders common response constructs in semantic order", "[tui
     CHECK(text.find("─") != std::string::npos);
 }
 
-TEST_CASE("Markdown styles link labels and visible URL fallbacks independently", "[tui][markdown][theme][issue55]") {
+TEST_CASE("Markdown styles link labels and visible URL fallbacks independently",
+        "[tui][markdown][theme][issue55][spec]") {
     tui::MarkdownStyleConfig style;
     style.link_text = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
     style.link_url = [](std::string text) { return "\x1b[2m" + text + "\x1b[22m"; };
@@ -154,9 +155,8 @@ TEST_CASE("Markdown styles link labels and visible URL fallbacks independently",
     CHECK(std::count(line.begin(), line.end(), '@') == 1);
 }
 
-TEST_CASE(
-    "Markdown preserves nested styles Unicode and link termination at narrow widths",
-    "[tui][markdown][issue51]") {
+TEST_CASE("Markdown preserves nested styles Unicode and link termination at narrow widths",
+        "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown(
         "> **Cafe\xcc\x81 \xe4\xb8\xad \xf0\x9f\x99\x82 [linked words](https://example.com/long)**",
         0,
@@ -187,7 +187,8 @@ TEST_CASE(
     CHECK(terminal.final_style() == tui::VirtualTerminalStyle{});
 }
 
-TEST_CASE("Markdown injects syntax highlighting and falls back for unknown languages", "[tui][markdown][issue51]") {
+TEST_CASE(
+        "Markdown injects syntax highlighting and falls back for unknown languages", "[tui][markdown][issue51][spec]") {
     std::string received_code;
     std::string received_language;
     auto highlighter = [&](std::string_view code, std::string_view language)
@@ -222,7 +223,7 @@ TEST_CASE("Markdown injects syntax highlighting and falls back for unknown langu
     CHECK(fallback->lines.at(1).find("\x1b[32m") != std::string::npos);
 }
 
-TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown("**unfinished [link](\n\n```cpp\nint value = 1;", 0, 0, ansi_style());
 
     const auto lines = markdown.render(18);
@@ -236,7 +237,7 @@ TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][
     CHECK(text.find("```") != std::string::npos);
 }
 
-TEST_CASE("Markdown degrades semantic prefixes at extremely narrow widths", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown degrades semantic prefixes at extremely narrow widths", "[tui][markdown][issue51][spec]") {
     const std::vector<std::string> samples{
         "> quote",
         "- item",
@@ -253,7 +254,7 @@ TEST_CASE("Markdown degrades semantic prefixes at extremely narrow widths", "[tu
     }
 }
 
-TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown(
         "~~valid~~ and ~~invalid ~~ plus ~~a\\ ~~ and ~~\\~a~~",
         0,
@@ -270,7 +271,7 @@ TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][ma
     CHECK(text.find("~~~a~~") == std::string::npos);
 }
 
-TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown(
         "1. first paragraph\n\n   second paragraph\n\n2. final item",
         0,
@@ -290,7 +291,7 @@ TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][
     CHECK(std::distance(first, second) >= 2);
 }
 
-TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown][issue51][spec]") {
     const std::vector<std::pair<std::string, std::string>> samples{
         {"```cpp\nvalue\n``", "```cpp\nvalue\n```"},
         {"> ```cpp\n> value\n> ``", "> ```cpp\n> value\n> ```"},
@@ -311,7 +312,7 @@ TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown
     }
 }
 
-TEST_CASE("Markdown converts injected callback exceptions to render errors", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown converts injected callback exceptions to render errors", "[tui][markdown][issue51][spec]") {
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     // The staged build still defends against a throwing style hook; the
     // no-exception build enforces non-throwing hooks by construction.
@@ -327,7 +328,7 @@ TEST_CASE("Markdown converts injected callback exceptions to render errors", "[t
 #endif
 }
 
-TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][markdown][issue51][spec]") {
     auto style = ansi_style();
     style.strong = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
     tui::Markdown markdown("**old**", 0, 0, std::move(style));
@@ -386,7 +387,7 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
     CHECK(second_highlight->lines.at(1).find("\x1b[36m") == std::string::npos);
 }
 
-TEST_CASE("Markdown applies configured padding and background to every cell", "[tui][markdown][issue51]") {
+TEST_CASE("Markdown applies configured padding and background to every cell", "[tui][markdown][issue51][spec]") {
     auto background = [](std::string text) { return "\x1b[44m" + text + "\x1b[49m"; };
     tui::Markdown markdown("body", 1, 1, {}, {}, std::move(background));
 

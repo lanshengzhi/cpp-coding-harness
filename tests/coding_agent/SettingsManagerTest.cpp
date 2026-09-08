@@ -29,7 +29,7 @@ struct SettingsDirs {
 
 } // namespace
 
-TEST_CASE("SettingsManager resolves empty settings without files", "[settings][two-scope]") {
+TEST_CASE("SettingsManager resolves empty settings without files", "[settings][two-scope][spec]") {
     SettingsDirs dirs;
     auto manager = coding_agent::SettingsManager::create(
         dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
@@ -41,7 +41,7 @@ TEST_CASE("SettingsManager resolves empty settings without files", "[settings][t
     CHECK_FALSE(manager.default_project_trust().has_value());
 }
 
-TEST_CASE("SettingsManager loads the pi field subset from the global scope", "[settings][two-scope]") {
+TEST_CASE("SettingsManager loads the pi field subset from the global scope", "[settings][two-scope][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "defaultProvider": "deepseek",
@@ -73,7 +73,7 @@ TEST_CASE("SettingsManager loads the pi field subset from the global scope", "[s
     CHECK(*manager.default_project_trust() == coding_agent::DefaultProjectTrust::Always);
 }
 
-TEST_CASE("SettingsManager ignores legacy and unknown keys", "[settings][two-scope]") {
+TEST_CASE("SettingsManager ignores legacy and unknown keys", "[settings][two-scope][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"provider":"old","model":"old-m","base_url":"https://x",
         "api_key_env":["OLD_KEY"],"auth":"entry","project_resources":{"skills":"off"},
@@ -91,7 +91,7 @@ TEST_CASE("SettingsManager ignores legacy and unknown keys", "[settings][two-sco
     CHECK_FALSE(manager.default_project_trust().has_value());
 }
 
-TEST_CASE("SettingsManager deep-merges with the project scope winning", "[settings][two-scope]") {
+TEST_CASE("SettingsManager deep-merges with the project scope winning", "[settings][two-scope][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "defaultProvider": "openai-codex",
@@ -119,7 +119,8 @@ TEST_CASE("SettingsManager deep-merges with the project scope winning", "[settin
     CHECK(manager.project_settings().default_model == "kimi-for-coding");
 }
 
-TEST_CASE("SettingsManager ignores defaultProjectTrust from the project scope", "[settings][two-scope][global-only]") {
+TEST_CASE("SettingsManager ignores defaultProjectTrust from the project scope",
+        "[settings][two-scope][global-only][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"defaultProjectTrust":"never"})");
     dirs.write_project(R"({"defaultProjectTrust":"always"})");
@@ -132,7 +133,7 @@ TEST_CASE("SettingsManager ignores defaultProjectTrust from the project scope", 
     CHECK(*manager.default_project_trust() == coding_agent::DefaultProjectTrust::Never);
 }
 
-TEST_CASE("SettingsManager loads the project scope only while trusted", "[settings][two-scope][trust]") {
+TEST_CASE("SettingsManager loads the project scope only while trusted", "[settings][two-scope][trust][spec]") {
     SettingsDirs dirs;
     dirs.write_project(R"({"defaultModel":"project-model","theme":"project-theme"})");
 
@@ -152,7 +153,7 @@ TEST_CASE("SettingsManager loads the project scope only while trusted", "[settin
     CHECK_FALSE(untrusted.settings().default_model.has_value());
 }
 
-TEST_CASE("SettingsManager records a global parse error and suppresses writes", "[settings][two-scope][error]") {
+TEST_CASE("SettingsManager records a global parse error and suppresses writes", "[settings][two-scope][error][spec]") {
     SettingsDirs dirs;
     dirs.write_global("{not valid json");
 
@@ -169,7 +170,7 @@ TEST_CASE("SettingsManager records a global parse error and suppresses writes", 
     CHECK(dirs.workspace.read("agent/settings.json") == "{not valid json");
 }
 
-TEST_CASE("SettingsManager records a project parse error independently", "[settings][two-scope][error]") {
+TEST_CASE("SettingsManager records a project parse error independently", "[settings][two-scope][error][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"defaultModel":"global-model"})");
     dirs.write_project("{broken");
@@ -183,7 +184,7 @@ TEST_CASE("SettingsManager records a project parse error independently", "[setti
     CHECK(manager.settings().default_model == "global-model");
 }
 
-TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel", "[settings][two-scope][error]") {
+TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel", "[settings][two-scope][error][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"defaultThinkingLevel":"sometimes"})");
 
@@ -194,7 +195,8 @@ TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel", "[settings]
     CHECK(manager.errors()[0].message.find("defaultThinkingLevel") != std::string::npos);
 }
 
-TEST_CASE("SettingsManager surgical theme write preserves unknown and unmodified fields", "[settings][two-scope][write]") {
+TEST_CASE("SettingsManager surgical theme write preserves unknown and unmodified fields",
+        "[settings][two-scope][write][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "provider": "legacy",
@@ -225,7 +227,7 @@ TEST_CASE("SettingsManager surgical theme write preserves unknown and unmodified
     CHECK(manager.settings().shell_path == "/bin/custom-shell");
 }
 
-TEST_CASE("SettingsManager surgical theme write creates a missing file", "[settings][two-scope][write]") {
+TEST_CASE("SettingsManager surgical theme write creates a missing file", "[settings][two-scope][write][spec]") {
     SettingsDirs dirs;
     auto manager = coding_agent::SettingsManager::create(
         dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
@@ -237,7 +239,7 @@ TEST_CASE("SettingsManager surgical theme write creates a missing file", "[setti
     CHECK(manager.settings().theme == "dark");
 }
 
-TEST_CASE("SettingsManager writes the project scope only when trusted", "[settings][two-scope][write][trust]") {
+TEST_CASE("SettingsManager writes the project scope only when trusted", "[settings][two-scope][write][trust][spec]") {
     SettingsDirs dirs;
     dirs.write_project(R"({"theme":"dark"})");
 
@@ -257,7 +259,8 @@ TEST_CASE("SettingsManager writes the project scope only when trusted", "[settin
     CHECK(manager.settings().theme == "light");
 }
 
-TEST_CASE("SettingsManager surgical defaultThinkingLevel write preserves unknown fields and creates the file", "[settings][two-scope][write][issue353]") {
+TEST_CASE("SettingsManager surgical defaultThinkingLevel write preserves unknown fields and creates the file",
+        "[settings][two-scope][write][issue353][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "defaultProvider": "alpha",
@@ -286,7 +289,8 @@ TEST_CASE("SettingsManager surgical defaultThinkingLevel write preserves unknown
     CHECK(manager.settings().default_provider == "alpha");
 }
 
-TEST_CASE("SettingsManager defaultThinkingLevel write creates a missing file", "[settings][two-scope][write][issue353]") {
+TEST_CASE("SettingsManager defaultThinkingLevel write creates a missing file",
+        "[settings][two-scope][write][issue353][spec]") {
     SettingsDirs dirs;
     auto manager = coding_agent::SettingsManager::create(
         dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
@@ -299,7 +303,8 @@ TEST_CASE("SettingsManager defaultThinkingLevel write creates a missing file", "
     CHECK(manager.settings().default_thinking_level == "low");
 }
 
-TEST_CASE("SettingsManager surgical enabledModels write preserves unknown fields and clears on nullopt", "[settings][two-scope][write][issue407]") {
+TEST_CASE("SettingsManager surgical enabledModels write preserves unknown fields and clears on nullopt",
+        "[settings][two-scope][write][issue407][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "defaultProvider": "alpha",
@@ -333,7 +338,8 @@ TEST_CASE("SettingsManager surgical enabledModels write preserves unknown fields
     REQUIRE(manager.set_enabled_models(std::nullopt));
 }
 
-TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel write", "[settings][two-scope][write][issue353]") {
+TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel write",
+        "[settings][two-scope][write][issue353][spec]") {
     SettingsDirs dirs;
     auto manager = coding_agent::SettingsManager::create(
         dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
@@ -347,7 +353,8 @@ TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel write", "[set
     CHECK_FALSE(manager.settings().default_thinking_level.has_value());
 }
 
-TEST_CASE("SettingsManager defaultThinkingLevel writes the project scope only when trusted", "[settings][two-scope][write][trust][issue353]") {
+TEST_CASE("SettingsManager defaultThinkingLevel writes the project scope only when trusted",
+        "[settings][two-scope][write][trust][issue353][spec]") {
     SettingsDirs dirs;
     dirs.write_project(R"({"defaultThinkingLevel":"high"})");
 
@@ -369,7 +376,8 @@ TEST_CASE("SettingsManager defaultThinkingLevel writes the project scope only wh
     CHECK(manager.settings().default_thinking_level == "low");
 }
 
-TEST_CASE("SettingsManager defaultThinkingLevel write is a no-op when unchanged", "[settings][two-scope][write][issue353]") {
+TEST_CASE("SettingsManager defaultThinkingLevel write is a no-op when unchanged",
+        "[settings][two-scope][write][issue353][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"defaultThinkingLevel":"high"})");
 
@@ -383,7 +391,8 @@ TEST_CASE("SettingsManager defaultThinkingLevel write is a no-op when unchanged"
     CHECK(manager.settings().default_thinking_level == "high");
 }
 
-TEST_CASE("SettingsManager applies pi read-time migrations on load and write", "[settings][two-scope][migration]") {
+TEST_CASE(
+        "SettingsManager applies pi read-time migrations on load and write", "[settings][two-scope][migration][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "queueMode": "all",
@@ -417,7 +426,7 @@ TEST_CASE("SettingsManager applies pi read-time migrations on load and write", "
     CHECK(content.find("\"theme\": \"light\"") != std::string::npos);
 }
 
-TEST_CASE("SettingsManager reload re-reads both scopes and re-records errors", "[settings][two-scope][reload]") {
+TEST_CASE("SettingsManager reload re-reads both scopes and re-records errors", "[settings][two-scope][reload][spec]") {
     SettingsDirs dirs;
     auto manager = coding_agent::SettingsManager::create(
         dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
@@ -434,7 +443,7 @@ TEST_CASE("SettingsManager reload re-reads both scopes and re-records errors", "
     CHECK_FALSE(manager.settings().default_model.has_value());
 }
 
-TEST_CASE("SettingsManager treats an empty agent_dir as no global scope", "[settings][two-scope]") {
+TEST_CASE("SettingsManager treats an empty agent_dir as no global scope", "[settings][two-scope][spec]") {
     tests::TempWorkspace workspace;
     auto manager = coding_agent::SettingsManager::create(
         workspace.path(), /* agent_dir */ {}, /* project_trusted */ true);
@@ -447,7 +456,7 @@ TEST_CASE("SettingsManager treats an empty agent_dir as no global scope", "[sett
     CHECK_FALSE(manager.settings().theme.has_value());
 }
 
-TEST_CASE("SettingsManager times out acquiring a held settings lock", "[settings][two-scope][lock][issue346]") {
+TEST_CASE("SettingsManager times out acquiring a held settings lock", "[settings][two-scope][lock][issue346][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"theme":"dark"})");
 
@@ -468,7 +477,7 @@ TEST_CASE("SettingsManager times out acquiring a held settings lock", "[settings
     std::filesystem::remove_all(lock_path);
 }
 
-TEST_CASE("SettingsManager never loads secrets or secret-reference fields", "[settings][two-scope][secret]") {
+TEST_CASE("SettingsManager never loads secrets or secret-reference fields", "[settings][two-scope][secret][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "apiKey": "sk-super-secret-value",
@@ -485,7 +494,8 @@ TEST_CASE("SettingsManager never loads secrets or secret-reference fields", "[se
     CHECK(manager.settings().default_model == "gpt-5.5");
 }
 
-TEST_CASE("SettingsManager loads and deep-merges the compaction settings object", "[settings][two-scope][issue359]") {
+TEST_CASE("SettingsManager loads and deep-merges the compaction settings object",
+        "[settings][two-scope][issue359][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "compaction": { "enabled": false, "reserveTokens": 8192 }
@@ -511,7 +521,8 @@ TEST_CASE("SettingsManager loads and deep-merges the compaction settings object"
     CHECK(manager.project_settings().compaction->keep_recent_tokens == 4096);
 }
 
-TEST_CASE("SettingsManager compaction fields are optional and mistyped values fall back to defaults", "[settings][two-scope][issue359]") {
+TEST_CASE("SettingsManager compaction fields are optional and mistyped values fall back to defaults",
+        "[settings][two-scope][issue359][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "compaction": { "enabled": "yes", "reserveTokens": -1, "keepRecentTokens": 10000 }
@@ -529,7 +540,7 @@ TEST_CASE("SettingsManager compaction fields are optional and mistyped values fa
     CHECK(manager.settings().compaction->keep_recent_tokens == 10000);
 }
 
-TEST_CASE("SettingsManager rejects a non-object compaction field", "[settings][two-scope][issue359]") {
+TEST_CASE("SettingsManager rejects a non-object compaction field", "[settings][two-scope][issue359][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"compaction": "enabled"})");
 
@@ -540,7 +551,7 @@ TEST_CASE("SettingsManager rejects a non-object compaction field", "[settings][t
     CHECK(manager.errors()[0].message.find("compaction") != std::string::npos);
 }
 
-TEST_CASE("SettingsManager loads and deep-merges the retry settings object", "[settings][two-scope][issue361]") {
+TEST_CASE("SettingsManager loads and deep-merges the retry settings object", "[settings][two-scope][issue361][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "retry": { "enabled": false, "maxRetries": 5 }
@@ -566,7 +577,8 @@ TEST_CASE("SettingsManager loads and deep-merges the retry settings object", "[s
     CHECK(manager.project_settings().retry->base_delay_ms == 100);
 }
 
-TEST_CASE("SettingsManager retry fields are optional and mistyped values fall back to defaults", "[settings][two-scope][issue361]") {
+TEST_CASE("SettingsManager retry fields are optional and mistyped values fall back to defaults",
+        "[settings][two-scope][issue361][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "retry": { "enabled": "yes", "maxRetries": -1, "baseDelayMs": 500 }
@@ -584,7 +596,7 @@ TEST_CASE("SettingsManager retry fields are optional and mistyped values fall ba
     CHECK(manager.settings().retry->base_delay_ms == 500);
 }
 
-TEST_CASE("SettingsManager rejects a non-object retry field", "[settings][two-scope][issue361]") {
+TEST_CASE("SettingsManager rejects a non-object retry field", "[settings][two-scope][issue361][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"retry": "enabled"})");
 
@@ -595,7 +607,8 @@ TEST_CASE("SettingsManager rejects a non-object retry field", "[settings][two-sc
     CHECK(manager.errors()[0].message.find("retry") != std::string::npos);
 }
 
-TEST_CASE("SettingsManager loads the graduated render settings with pi defaults", "[settings][two-scope][issue408]") {
+TEST_CASE("SettingsManager loads the graduated render settings with pi defaults",
+        "[settings][two-scope][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "hideThinkingBlock": true,
@@ -619,7 +632,8 @@ TEST_CASE("SettingsManager loads the graduated render settings with pi defaults"
     CHECK(defaults.output_pad() == 1);
 }
 
-TEST_CASE("SettingsManager outputPad resolves every non-zero value as 1 like pi", "[settings][two-scope][issue408]") {
+TEST_CASE("SettingsManager outputPad resolves every non-zero value as 1 like pi",
+        "[settings][two-scope][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"outputPad": 7})");
 
@@ -632,7 +646,8 @@ TEST_CASE("SettingsManager outputPad resolves every non-zero value as 1 like pi"
     CHECK(manager.output_pad() == 1);
 }
 
-TEST_CASE("SettingsManager deep-merges the graduated render settings with the project scope winning", "[settings][two-scope][issue408]") {
+TEST_CASE("SettingsManager deep-merges the graduated render settings with the project scope winning",
+        "[settings][two-scope][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
         "hideThinkingBlock": true,
@@ -652,7 +667,8 @@ TEST_CASE("SettingsManager deep-merges the graduated render settings with the pr
     CHECK(manager.output_pad() == 0);
 }
 
-TEST_CASE("SettingsManager hideThinkingBlock write is a surgical global-scope merge", "[settings][two-scope][write][issue408]") {
+TEST_CASE("SettingsManager hideThinkingBlock write is a surgical global-scope merge",
+        "[settings][two-scope][write][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"theme":"dark","future":true})");
 
@@ -674,7 +690,8 @@ TEST_CASE("SettingsManager hideThinkingBlock write is a surgical global-scope me
     CHECK(reloaded.hide_thinking_block() == true);
 }
 
-TEST_CASE("SettingsManager hideThinkingBlock write creates the file and is a no-op when unchanged", "[settings][two-scope][write][issue408]") {
+TEST_CASE("SettingsManager hideThinkingBlock write creates the file and is a no-op when unchanged",
+        "[settings][two-scope][write][issue408][spec]") {
     SettingsDirs dirs;
 
     auto manager = coding_agent::SettingsManager::create(
@@ -689,7 +706,8 @@ TEST_CASE("SettingsManager hideThinkingBlock write creates the file and is a no-
     CHECK(dirs.workspace.read("agent/settings.json") == before);
 }
 
-TEST_CASE("SettingsManager outputPad write is a surgical global-scope merge and validates the value", "[settings][two-scope][write][issue408]") {
+TEST_CASE("SettingsManager outputPad write is a surgical global-scope merge and validates the value",
+        "[settings][two-scope][write][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"theme":"dark"})");
 
@@ -713,7 +731,8 @@ TEST_CASE("SettingsManager outputPad write is a surgical global-scope merge and 
     CHECK(manager.output_pad() == 0);
 }
 
-TEST_CASE("SettingsManager render-setting writes suppress on a global load failure", "[settings][two-scope][write][error][issue408]") {
+TEST_CASE("SettingsManager render-setting writes suppress on a global load failure",
+        "[settings][two-scope][write][error][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global("{");
 
@@ -727,7 +746,8 @@ TEST_CASE("SettingsManager render-setting writes suppress on a global load failu
     CHECK(manager.output_pad() == 1);
 }
 
-TEST_CASE("SettingsManager defaultProjectTrust write is a surgical global-scope merge", "[settings][two-scope][write][issue408]") {
+TEST_CASE("SettingsManager defaultProjectTrust write is a surgical global-scope merge",
+        "[settings][two-scope][write][issue408][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"theme":"dark","future":true})");
 
@@ -747,7 +767,8 @@ TEST_CASE("SettingsManager defaultProjectTrust write is a surgical global-scope 
     CHECK(*reloaded.default_project_trust() == coding_agent::DefaultProjectTrust::Never);
 }
 
-TEST_CASE("SettingsManager loads enableSkillCommands with the pi default true", "[settings][two-scope][issue412]") {
+TEST_CASE(
+        "SettingsManager loads enableSkillCommands with the pi default true", "[settings][two-scope][issue412][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"enableSkillCommands": false})");
 
@@ -765,7 +786,8 @@ TEST_CASE("SettingsManager loads enableSkillCommands with the pi default true", 
     CHECK(defaults.get_enable_skill_commands() == true);
 }
 
-TEST_CASE("SettingsManager deep-merges enableSkillCommands with the project scope winning", "[settings][two-scope][issue412]") {
+TEST_CASE("SettingsManager deep-merges enableSkillCommands with the project scope winning",
+        "[settings][two-scope][issue412][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"enableSkillCommands": true})");
     dirs.write_project(R"({"enableSkillCommands": false})");
@@ -777,7 +799,8 @@ TEST_CASE("SettingsManager deep-merges enableSkillCommands with the project scop
     CHECK(manager.get_enable_skill_commands() == false);
 }
 
-TEST_CASE("SettingsManager enableSkillCommands write is a surgical global-scope merge", "[settings][two-scope][write][issue412]") {
+TEST_CASE("SettingsManager enableSkillCommands write is a surgical global-scope merge",
+        "[settings][two-scope][write][issue412][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"theme":"dark","future":true})");
 
@@ -799,7 +822,8 @@ TEST_CASE("SettingsManager enableSkillCommands write is a surgical global-scope 
     CHECK(reloaded.get_enable_skill_commands() == false);
 }
 
-TEST_CASE("SettingsManager enableSkillCommands write is a no-op when unchanged", "[settings][two-scope][write][issue412]") {
+TEST_CASE("SettingsManager enableSkillCommands write is a no-op when unchanged",
+        "[settings][two-scope][write][issue412][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"enableSkillCommands": true})");
 

@@ -97,13 +97,15 @@ void check_golden(std::string_view golden_name, const std::string& prompt) {
 
 } // namespace
 
-TEST_CASE("system prompt default branch matches the Pike identity golden", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt default branch matches the Pike identity golden",
+        "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.skills = {dummy_skill()};
     check_golden("system-prompt-default.txt", coding_agent::prompt::buildSystemPrompt(options));
 }
 
-TEST_CASE("system prompt custom branch matches the Pike identity golden", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE(
+        "system prompt custom branch matches the Pike identity golden", "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.customPrompt = "You are a custom assistant.";
     options.appendSystemPrompt = "Custom append section.";
@@ -114,8 +116,8 @@ TEST_CASE("system prompt custom branch matches the Pike identity golden", "[codi
     check_golden("system-prompt-custom.txt", coding_agent::prompt::buildSystemPrompt(options));
 }
 
-TEST_CASE(
-        "system prompt pi-truthy edge cases match the Pike identity goldens", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt pi-truthy edge cases match the Pike identity goldens",
+        "[coding_agent][prompt][system-prompt][spec]") {
     // pi `if (customPrompt)`: an empty custom prompt is falsy and takes the
     // default branch — byte-identical to the default golden.
     auto empty_custom = session_shape_options();
@@ -133,7 +135,8 @@ TEST_CASE(
     check_golden("system-prompt-empty-tools.txt", coding_agent::prompt::buildSystemPrompt(empty_tools));
 }
 
-TEST_CASE("system prompt renders (none) when no tool snippets are known", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE(
+        "system prompt renders (none) when no tool snippets are known", "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.toolSnippets.clear();
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -143,7 +146,8 @@ TEST_CASE("system prompt renders (none) when no tool snippets are known", "[codi
     CHECK(prompt.find("- Use bash for file operations like ls, rg, find\n") != std::string::npos);
 }
 
-TEST_CASE("system prompt renders the tools list only for tools with snippets", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt renders the tools list only for tools with snippets",
+        "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.toolSnippets = {{"read", "Read file contents"}};
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -154,7 +158,7 @@ TEST_CASE("system prompt renders the tools list only for tools with snippets", "
     CHECK(prompt.find("- Use bash for file operations like ls, rg, find\n") != std::string::npos);
 }
 
-TEST_CASE("system prompt dedupes and trims guideline bullets", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt dedupes and trims guideline bullets", "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.toolSnippets.clear();
     options.promptGuidelines = {
@@ -177,7 +181,8 @@ TEST_CASE("system prompt dedupes and trims guideline bullets", "[coding_agent][p
     CHECK(second_concise == std::string::npos);
 }
 
-TEST_CASE("system prompt suppresses the bash exploration rule when grep/find/ls are selected", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt suppresses the bash exploration rule when grep/find/ls are selected",
+        "[coding_agent][prompt][system-prompt][spec]") {
     for (const std::string extra : {"grep", "find", "ls"}) {
         auto options = session_shape_options();
         options.selectedTools = std::vector<std::string>{"read", "bash", extra};
@@ -187,7 +192,8 @@ TEST_CASE("system prompt suppresses the bash exploration rule when grep/find/ls 
     }
 }
 
-TEST_CASE("system prompt appends the append section after the documentation block", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt appends the append section after the documentation block",
+        "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.appendSystemPrompt = "APPENDED";
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -197,7 +203,8 @@ TEST_CASE("system prompt appends the append section after the documentation bloc
     CHECK(prompt.find("\n\nAPPENDED", docs_at) == docs_at + 16);
 }
 
-TEST_CASE("system prompt renders project context files in both branches", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE(
+        "system prompt renders project context files in both branches", "[coding_agent][prompt][system-prompt][spec]") {
     const coding_agent::prompt::ProjectContextFile file{
         "AGENTS.md", "Be careful.\n\nNo trailing newline"};
     auto options = session_shape_options();
@@ -221,7 +228,7 @@ TEST_CASE("system prompt renders project context files in both branches", "[codi
     CHECK(custom_prompt.find("custom\n\n<project_context>") != std::string::npos);
 }
 
-TEST_CASE("system prompt gates the skills section on the read tool", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt gates the skills section on the read tool", "[coding_agent][prompt][system-prompt][spec]") {
     const auto skill = dummy_skill();
 
     // Default branch: skills render only when read is selected.
@@ -255,7 +262,8 @@ TEST_CASE("system prompt gates the skills section on the read tool", "[coding_ag
               .find("<available_skills>") != std::string::npos);
 }
 
-TEST_CASE("system prompt distinguishes absent from explicitly empty tool selections", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt distinguishes absent from explicitly empty tool selections",
+        "[coding_agent][prompt][system-prompt][spec]") {
     const auto skill = dummy_skill();
 
     // pi `selectedTools || defaults`: an explicitly empty list keeps no tools
@@ -279,7 +287,8 @@ TEST_CASE("system prompt distinguishes absent from explicitly empty tool selecti
     CHECK(absent_prompt.find("<available_skills>") != std::string::npos);
 }
 
-TEST_CASE("system prompt treats an empty custom prompt as absent like pi's truthy check", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt treats an empty custom prompt as absent like pi's truthy check",
+        "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.customPrompt = "";
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -289,7 +298,7 @@ TEST_CASE("system prompt treats an empty custom prompt as absent like pi's truth
     CHECK(prompt.find("pike documentation") != std::string::npos);
 }
 
-TEST_CASE("system prompt renders the skills section in pi's shape", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt renders the skills section in pi's shape", "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.skills = {dummy_skill()};
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -309,7 +318,8 @@ TEST_CASE("system prompt renders the skills section in pi's shape", "[coding_age
               "</available_skills>") != std::string::npos);
 }
 
-TEST_CASE("system prompt posix-normalizes the cwd and keeps the trailing line", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt posix-normalizes the cwd and keeps the trailing line",
+        "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options("C:\\workspace\\path");
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
@@ -317,7 +327,7 @@ TEST_CASE("system prompt posix-normalizes the cwd and keeps the trailing line", 
     CHECK(prompt.find("C:\\workspace") == std::string::npos);
 }
 
-TEST_CASE("system prompt custom branch omits the default sections", "[coding_agent][prompt][system-prompt]") {
+TEST_CASE("system prompt custom branch omits the default sections", "[coding_agent][prompt][system-prompt][spec]") {
     auto options = session_shape_options();
     options.customPrompt = "Only this.";
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);

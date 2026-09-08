@@ -139,9 +139,8 @@ struct Running {
 
 } // namespace
 
-TEST_CASE(
-    "Ctrl+L opens the model selector and Enter selects a model with the Model status",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("Ctrl+L opens the model selector and Enter selects a model with the Model status",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -182,9 +181,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "Ctrl+P and Shift+Ctrl+P cycle models with pi statuses; Shift+Tab cycles thinking",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("Ctrl+P and Shift+Ctrl+P cycle models with pi statuses; Shift+Tab cycles thinking",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -231,9 +229,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "/model switches on an exact reference and opens the selector pre-filtered otherwise",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("/model switches on an exact reference and opens the selector pre-filtered otherwise",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -271,9 +268,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "/model argument completion lists the candidate models through model-search",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("/model argument completion lists the candidate models through model-search",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -308,9 +304,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "/scoped-models enables a session scope, saves enabledModels, and cycling honors it",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("/scoped-models enables a session scope, saves enabledModels, and cycling honors it",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;

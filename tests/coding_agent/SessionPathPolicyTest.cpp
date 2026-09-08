@@ -31,7 +31,8 @@ mode_t permission_bits(const std::filesystem::path& path) {
 
 } // namespace
 
-TEST_CASE("session directory override values resolve against the final workspace", "[coding_agent][session-path-policy]") {
+TEST_CASE("session directory override values resolve against the final workspace",
+        "[coding_agent][session-path-policy][spec]") {
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     const auto home = temp.path() / "home";
@@ -66,7 +67,7 @@ TEST_CASE("session directory override values resolve against the final workspace
     CHECK_FALSE(std::filesystem::exists(home));
 }
 
-TEST_CASE("workspace session keys use pi readable encoding", "[coding_agent][session-path-policy]") {
+TEST_CASE("workspace session keys use pi readable encoding", "[coding_agent][session-path-policy][spec]") {
     struct Example {
         const char* input;
         const char* expected;
@@ -86,7 +87,8 @@ TEST_CASE("workspace session keys use pi readable encoding", "[coding_agent][ses
     }
 }
 
-TEST_CASE("automatic session identity is a UUID correlated with one UTC timestamp", "[coding_agent][session-path-policy]") {
+TEST_CASE("automatic session identity is a UUID correlated with one UTC timestamp",
+        "[coding_agent][session-path-policy][spec]") {
     const auto identity = session_paths::generate_automatic_session_identity();
     const std::regex uuid_v4{
         R"(^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$)"};
@@ -106,7 +108,7 @@ TEST_CASE("automatic session identity is a UUID correlated with one UTC timestam
           safe_timestamp + "_" + identity.session_id + ".jsonl");
 }
 
-TEST_CASE("automatic session target calculation is side effect free", "[coding_agent][session-path-policy]") {
+TEST_CASE("automatic session target calculation is side effect free", "[coding_agent][session-path-policy][spec]") {
     tests::TempWorkspace temp;
     const auto sessions_root = temp.path() / "not-created" / "sessions";
     const auto workspace = std::filesystem::path{"/resolved/workspace"};
@@ -127,7 +129,8 @@ TEST_CASE("automatic session target calculation is side effect free", "[coding_a
     CHECK(target.workspace_directory.filename().string().find("123e4567") == std::string::npos);
 }
 
-TEST_CASE("automatic session publication correlates path header and identity", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("automatic session publication correlates path header and identity",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     config_dir.set((temp.path() / "agent").string());
@@ -165,7 +168,8 @@ TEST_CASE("automatic session publication correlates path header and identity", "
     CHECK(permission_bits(session_path) == 0600);
 }
 
-TEST_CASE("automatic publication makes default directories and file private", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("automatic publication makes default directories and file private",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     config_dir.set((temp.path() / "agent").string());
@@ -193,7 +197,8 @@ TEST_CASE("automatic publication makes default directories and file private", "[
     CHECK(permission_bits(*published->store->path()) == 0600);
 }
 
-TEST_CASE("custom automatic session target calculation is side effect free", "[coding_agent][session-path-policy]") {
+TEST_CASE("custom automatic session target calculation is side effect free",
+        "[coding_agent][session-path-policy][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "not-created" / "custom-sessions";
     const auto workspace = std::filesystem::path{"/resolved/workspace"};
@@ -217,7 +222,8 @@ TEST_CASE("custom automatic session target calculation is side effect free", "[c
     CHECK(target.identity.created_at == identity.created_at);
 }
 
-TEST_CASE("custom automatic publication creates a missing override directory privately", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("custom automatic publication creates a missing override directory privately",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "missing" / "custom-sessions";
     const auto workspace = temp.path() / "workspace";
@@ -243,7 +249,8 @@ TEST_CASE("custom automatic publication creates a missing override directory pri
     CHECK(loaded->metadata.session_id == published->metadata.session_id);
 }
 
-TEST_CASE("custom automatic publication preserves an existing override directory mode", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("custom automatic publication preserves an existing override directory mode",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "custom-sessions";
     const auto workspace = temp.path() / "workspace";
@@ -266,7 +273,8 @@ TEST_CASE("custom automatic publication preserves an existing override directory
     CHECK(permission_bits(*published->store->path()) == 0600);
 }
 
-TEST_CASE("custom automatic publication rejects symbolic link override directories", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("custom automatic publication rejects symbolic link override directories",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     const auto real_directory = temp.path() / "real-sessions";
     const auto linked_directory = temp.path() / "linked-sessions";
@@ -290,7 +298,8 @@ TEST_CASE("custom automatic publication rejects symbolic link override directori
     CHECK(std::filesystem::is_empty(real_directory));
 }
 
-TEST_CASE("custom automatic publication failures include attempted target and reason", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("custom automatic publication failures include attempted target and reason",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     const auto directory = temp.path() / "custom-sessions";
     const auto workspace = temp.path() / "workspace";
@@ -314,7 +323,8 @@ TEST_CASE("custom automatic publication failures include attempted target and re
     CHECK(published.error().detail.find("directory") != std::string::npos);
 }
 
-TEST_CASE("custom automatic publication rejects a relative override directory", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("custom automatic publication rejects a relative override directory",
+        "[coding_agent][session-path-policy][publication][spec]") {
     auto published = runtime::publish_session(
         runtime::AutomaticPublication{
             .workspace = std::filesystem::path{"/resolved/workspace"},
@@ -329,7 +339,8 @@ TEST_CASE("custom automatic publication rejects a relative override directory", 
     CHECK_FALSE(std::filesystem::exists("relative-sessions"));
 }
 
-TEST_CASE("explicit publication preserves custom directory mode while making file private", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("explicit publication preserves custom directory mode while making file private",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     const auto custom_directory = temp.path() / "custom";
     std::filesystem::create_directory(custom_directory);
@@ -349,7 +360,8 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
     CHECK(permission_bits(path) == 0600);
 }
 
-TEST_CASE("automatic publication rejects symbolic link directories", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("automatic publication rejects symbolic link directories",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
@@ -377,7 +389,8 @@ TEST_CASE("automatic publication rejects symbolic link directories", "[coding_ag
     CHECK_FALSE(std::filesystem::exists(real_root / session_paths::encode_workspace_key(workspace)));
 }
 
-TEST_CASE("automatic publication failures include attempted target and reason", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("automatic publication failures include attempted target and reason",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
@@ -405,7 +418,8 @@ TEST_CASE("automatic publication failures include attempted target and reason", 
     CHECK(published.error().detail.find("directory") != std::string::npos);
 }
 
-TEST_CASE("automatic publication rejects a relative sessions root", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("automatic publication rejects a relative sessions root",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     config_dir.set("relative-agent");
@@ -426,7 +440,8 @@ TEST_CASE("automatic publication rejects a relative sessions root", "[coding_age
     CHECK_FALSE(std::filesystem::exists("relative-agent"));
 }
 
-TEST_CASE("automatic publication fails when the user sessions root is unresolved", "[coding_agent][session-path-policy][publication]") {
+TEST_CASE("automatic publication fails when the user sessions root is unresolved",
+        "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard config_dir{"PI_CODING_AGENT_DIR"};
     tests::EnvVarGuard home{"HOME"};

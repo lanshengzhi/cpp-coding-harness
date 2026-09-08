@@ -204,8 +204,7 @@ struct ViewFixture {
 } // namespace
 
 TEST_CASE(
-    "main-screen keybindings emit the matching ViewAction alternative",
-    "[coding_agent][tui][view_actions]") {
+        "main-screen keybindings emit the matching ViewAction alternative", "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
 
@@ -280,9 +279,7 @@ TEST_CASE(
     CHECK(std::holds_alternative<coding_agent::tui::OpenTreeSelectorAction>(fixture.actions[15]));
 }
 
-TEST_CASE(
-    "submit and follow-up preserve the sampled editor payload",
-    "[coding_agent][tui][view_actions]") {
+TEST_CASE("submit and follow-up preserve the sampled editor payload", "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
 
@@ -310,8 +307,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interrupt captures the bash-mode editor state at key-press time",
-    "[coding_agent][tui][view_actions]") {
+        "interrupt captures the bash-mode editor state at key-press time", "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture{/*user_bash_available=*/true};
     auto& view = *fixture.view;
 
@@ -328,9 +324,7 @@ TEST_CASE(
     CHECK(interrupt.request.editor_revision == 3);
 }
 
-TEST_CASE(
-    "admission order is preserved across a burst of actions",
-    "[coding_agent][tui][view_actions]") {
+TEST_CASE("admission order is preserved across a burst of actions", "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
 
@@ -345,9 +339,7 @@ TEST_CASE(
     CHECK(std::holds_alternative<coding_agent::tui::ExitAction>(fixture.actions[3]));
 }
 
-TEST_CASE(
-    "toolkit-only editor state emits no application action",
-    "[coding_agent][tui][view_actions]") {
+TEST_CASE("toolkit-only editor state emits no application action", "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
 
@@ -365,7 +357,7 @@ TEST_CASE(
     CHECK(fixture.invalidations > 0);
 }
 
-TEST_CASE("editor cursor navigation requests a Native TUI repaint", "[coding_agent][tui][editor]") {
+TEST_CASE("editor cursor navigation requests a Native TUI repaint", "[coding_agent][tui][editor][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
     view.set_focused(true);
@@ -388,9 +380,8 @@ TEST_CASE("editor cursor navigation requests a Native TUI repaint", "[coding_age
     CHECK(back_at_end->column == at_end->column);
 }
 
-TEST_CASE(
-    "the coalescible invalidate request stays separate from the action seam",
-    "[coding_agent][tui][view_actions]") {
+TEST_CASE("the coalescible invalidate request stays separate from the action seam",
+        "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
 
@@ -411,9 +402,8 @@ TEST_CASE(
     CHECK(fixture.invalidations == 2);
 }
 
-TEST_CASE(
-    "an ExpectedVoid failure is recorded and surfaces as the render error",
-    "[coding_agent][tui][view_actions]") {
+TEST_CASE("an ExpectedVoid failure is recorded and surfaces as the render error",
+        "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
 
@@ -432,7 +422,7 @@ TEST_CASE(
 }
 
 TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt Admission",
-        "[coding_agent][tui][view_actions][autocomplete]") {
+        "[coding_agent][tui][view_actions][autocomplete][spec]") {
     ViewFixture fixture{false, std::make_unique<SimpleSlashProvider>()};
     auto& view = *fixture.view;
 
@@ -463,7 +453,7 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
 }
 
 TEST_CASE("InteractiveView local editor input bypasses full-view invalidation",
-        "[coding_agent][tui][view_actions][dock][issue605]") {
+        "[coding_agent][tui][view_actions][dock][issue605][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
     REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
             [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
@@ -485,7 +475,7 @@ TEST_CASE("InteractiveView local editor input bypasses full-view invalidation",
 }
 
 TEST_CASE("an interrupt key overlapping cancellation and insertion keeps application-first precedence",
-        "[coding_agent][tui][view_actions][autocomplete]") {
+        "[coding_agent][tui][view_actions][autocomplete][spec]") {
     // f6 means interrupt + selector cancellation, and it is also a printable
     // key the editor would insert. With the menu closed, Interrupt Admission
     // must win; only an open menu lets the editor consume it as cancellation.

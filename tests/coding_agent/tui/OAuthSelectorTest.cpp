@@ -94,9 +94,8 @@ void type(cch::tui::InputHandler& handler, std::string text) {
 
 } // namespace
 
-TEST_CASE(
-    "OAuthSelector renders the login title and provider rows with auth-status indicators",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector renders the login title and provider rows with auth-status indicators",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorProvider;
     using coding_agent::tui::AuthSelectorStatus;
@@ -132,9 +131,8 @@ TEST_CASE(
     CHECK(screen.find("Kimi For Coding [API key] ✓ env: KIMI_API_KEY") != std::string::npos);
 }
 
-TEST_CASE(
-    "OAuthSelector warns when the stored credential type differs from the row's auth type",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector warns when the stored credential type differs from the row's auth type",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorStatus;
     using coding_agent::tui::AuthSelectorType;
@@ -160,9 +158,8 @@ TEST_CASE(
     CHECK(screen.find("[API key]") == std::string::npos);
 }
 
-TEST_CASE(
-    "OAuthSelector fuzzy-filters providers through the search input",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector fuzzy-filters providers through the search input",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     std::vector<coding_agent::tui::AuthSelectorProvider> providers;
@@ -193,9 +190,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "OAuthSelector submits the highlighted provider with id and auth type",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector submits the highlighted provider with id and auth type",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     std::optional<std::pair<std::string, AuthSelectorType>> selected;
@@ -229,7 +225,8 @@ TEST_CASE(
     CHECK(selected->second == AuthSelectorType::ApiKey);
 }
 
-TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id", "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     std::optional<std::pair<std::string, AuthSelectorType>> selected;
@@ -252,9 +249,7 @@ TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id", "
     CHECK(selected->second == AuthSelectorType::ApiKey);
 }
 
-TEST_CASE(
-    "OAuthSelector renders logout empty states and cancels",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector renders logout empty states and cancels", "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     std::size_t cancellations = 0;
     coding_agent::tui::OAuthSelectorComponent selector(
@@ -273,9 +268,8 @@ TEST_CASE(
     CHECK(cancellations == 1);
 }
 
-TEST_CASE(
-    "OAuthSelector renders the login empty state and windows long lists with scroll info",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("OAuthSelector renders the login empty state and windows long lists with scroll info",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     {
@@ -316,7 +310,7 @@ TEST_CASE(
 }
 
 TEST_CASE("OAuthSelector reports the search cursor on the real search row of its chrome",
-        "[coding_agent][tui][login][issue588]") {
+        "[coding_agent][tui][login][issue588][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     coding_agent::tui::OAuthSelectorComponent selector(

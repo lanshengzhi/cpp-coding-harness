@@ -200,9 +200,8 @@ struct RunResult {
 
 } // namespace
 
-TEST_CASE(
-    "DeepSeek Responses streams the frozen request and SSE sequence through Models",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses streams the frozen request and SSE sequence through Models",
+        "[ai][provider][responses][issue340][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
     REQUIRE_FALSE(sse.empty());
@@ -271,9 +270,8 @@ TEST_CASE(
     REQUIRE(support::read_json(request.body));
 }
 
-TEST_CASE(
-    "DeepSeek Responses emits a string user message as one input_text and omits an empty block array",
-    "[ai][provider][responses][issue366]") {
+TEST_CASE("DeepSeek Responses emits a string user message as one input_text and omits an empty block array",
+        "[ai][provider][responses][issue366][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
     REQUIRE_FALSE(sse.empty());
@@ -321,9 +319,8 @@ TEST_CASE(
     CHECK(content[0].at("text").get_string() == "hello");
 }
 
-TEST_CASE(
-    "DeepSeek Responses emits an empty string user message as one input_text",
-    "[ai][provider][responses][issue366]") {
+TEST_CASE("DeepSeek Responses emits an empty string user message as one input_text",
+        "[ai][provider][responses][issue366][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
     REQUIRE_FALSE(sse.empty());
@@ -368,9 +365,8 @@ TEST_CASE(
     CHECK(content[0].at("text").get_string() == "");
 }
 
-TEST_CASE(
-    "DeepSeek Responses preserves post-merge transformed headers",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
+        "[ai][provider][responses][issue340][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .chunks = {terminal_sse("response.completed", "completed")},
@@ -425,7 +421,7 @@ TEST_CASE(
 }
 
 TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_answer",
-        "[ai][provider][responses][issue374][issue370][issue536]") {
+        "[ai][provider][responses][issue374][issue370][issue536][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_pending\"}}\n\n"
@@ -469,7 +465,7 @@ TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_a
 }
 
 TEST_CASE("DeepSeek Responses stream ending without a terminal event is a terminal error",
-        "[ai][provider][responses][issue374][issue375][issue536]") {
+        "[ai][provider][responses][issue374][issue375][issue536][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse =
         read_fixture_text("wire/openai-responses-deepseek-no-terminal.sse");
@@ -519,9 +515,8 @@ TEST_CASE("DeepSeek Responses stream ending without a terminal event is a termin
     CHECK(transport->requests.front().body == expected_request_bytes);
 }
 
-TEST_CASE(
-    "DeepSeek Responses termination matrix does not treat DONE as terminal",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses termination matrix does not treat DONE as terminal",
+        "[ai][provider][responses][issue340][compat-pi]") {
     struct Case {
         std::string sse;
         ai::AssistantStopReason expected;
@@ -562,9 +557,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "DeepSeek Responses surfaces SSE error data and ignores unknown events",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses surfaces SSE error data and ignores unknown events",
+        "[ai][provider][responses][issue340][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "event: future.event\ndata: {\"ignored\":true}\n\n"
@@ -586,9 +580,8 @@ TEST_CASE(
     CHECK(event_names(run.events) == expected_events);
 }
 
-TEST_CASE(
-    "DeepSeek Responses removes parser scratch state from partial failures",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses removes parser scratch state from partial failures",
+        "[ai][provider][responses][issue340][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "data: {\"type\":\"response.output_item.added\",\"output_index\":0,"
@@ -629,9 +622,7 @@ TEST_CASE(
     CHECK(partial_tool.arguments->get_object().empty());
 }
 
-TEST_CASE(
-    "DeepSeek Responses retries only eligible setup failures",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses retries only eligible setup failures", "[ai][provider][responses][issue340][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts = {
         TransportAttempt{
@@ -706,9 +697,8 @@ TEST_CASE(
     CHECK(terminal_transport->requests.size() == 1);
 }
 
-TEST_CASE(
-    "DeepSeek Responses cancellation yields one aborted terminal",
-    "[ai][provider][responses][issue340]") {
+TEST_CASE("DeepSeek Responses cancellation yields one aborted terminal",
+        "[ai][provider][responses][issue340][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .head = {},

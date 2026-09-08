@@ -82,7 +82,8 @@ private:
 
 } // namespace
 
-TEST_CASE("project resource detection ignores an empty project and sessions dir", "[coding_agent][project-resources]") {
+TEST_CASE("project resource detection ignores an empty project and sessions dir",
+        "[coding_agent][project-resources][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".pi" / "sessions");
 
@@ -93,9 +94,8 @@ TEST_CASE("project resource detection ignores an empty project and sessions dir"
     CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE(
-    "project resource detection maps the .pi/ trust-requiring markers",
-    "[coding_agent][project-resources][issue405]") {
+TEST_CASE("project resource detection maps the .pi/ trust-requiring markers",
+        "[coding_agent][project-resources][issue405][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".pi" / "skills");
     std::filesystem::create_directories(workspace.path() / ".pi" / "prompts");
@@ -114,7 +114,8 @@ TEST_CASE(
     CHECK(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE("project resource detection ignores legacy .cpp-harness/ markers with no fallback read", "[coding_agent][project-resources][issue405]") {
+TEST_CASE("project resource detection ignores legacy .cpp-harness/ markers with no fallback read",
+        "[coding_agent][project-resources][issue405][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "skills");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
@@ -130,7 +131,7 @@ TEST_CASE("project resource detection ignores legacy .cpp-harness/ markers with 
     CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE("project resource detection is case-sensitive", "[coding_agent][project-resources]") {
+TEST_CASE("project resource detection is case-sensitive", "[coding_agent][project-resources][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".pi" / "Skills");
     workspace.write(".pi/system.md", "lowercase");
@@ -142,9 +143,8 @@ TEST_CASE("project resource detection is case-sensitive", "[coding_agent][projec
     CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE(
-    "project resource detection treats every loadable marker as trust-requiring",
-    "[coding_agent][project-resources][issue405]") {
+TEST_CASE("project resource detection treats every loadable marker as trust-requiring",
+        "[coding_agent][project-resources][issue405][spec]") {
     tests::TempWorkspace workspace;
     workspace.write(".pi/SYSTEM.md", "system");
 
@@ -154,7 +154,8 @@ TEST_CASE(
     CHECK(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE("project resource detection reports marker kind mismatches and keeps them untrusted", "[coding_agent][project-resources]") {
+TEST_CASE("project resource detection reports marker kind mismatches and keeps them untrusted",
+        "[coding_agent][project-resources][spec]") {
     tests::TempWorkspace workspace;
     workspace.write(".pi/skills", "a file where a directory is expected");
 
@@ -169,7 +170,7 @@ TEST_CASE("project resource detection reports marker kind mismatches and keeps t
     CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE("project resource detection rejects escaping symlink marker", "[coding_agent][project-resources]") {
+TEST_CASE("project resource detection rejects escaping symlink marker", "[coding_agent][project-resources][spec]") {
     tests::TempWorkspace workspace;
     auto outside = std::filesystem::temp_directory_path() / "cch-outside-skills";
     std::filesystem::remove_all(outside);
@@ -189,7 +190,8 @@ TEST_CASE("project resource detection rejects escaping symlink marker", "[coding
     std::filesystem::remove_all(outside);
 }
 
-TEST_CASE("project resource detection maps markers with pi diagnostic shape", "[coding_agent][project-resources][issue405]") {
+TEST_CASE("project resource detection maps markers with pi diagnostic shape",
+        "[coding_agent][project-resources][issue405][spec]") {
     tests::TempWorkspace workspace;
     workspace.write(".pi/skills", "not a directory");
 
@@ -203,7 +205,7 @@ TEST_CASE("project resource detection maps markers with pi diagnostic shape", "[
     CHECK_FALSE(diagnostic.collision.has_value());
 }
 
-TEST_CASE("to_string names the .pi/ marker kinds", "[coding_agent][project-resources]") {
+TEST_CASE("to_string names the .pi/ marker kinds", "[coding_agent][project-resources][spec]") {
     CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectSkills) == "project_skills");
     CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectPrompts) == "project_prompts");
     CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectThemes) == "project_themes");
@@ -214,9 +216,8 @@ TEST_CASE("to_string names the .pi/ marker kinds", "[coding_agent][project-resou
           "project_agents_skills");
 }
 
-TEST_CASE(
-    "project resource detection treats a workspace .agents/skills directory as trust-requiring",
-    "[coding_agent][project-resources][issue412]") {
+TEST_CASE("project resource detection treats a workspace .agents/skills directory as trust-requiring",
+        "[coding_agent][project-resources][issue412][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".agents" / "skills");
 
@@ -227,9 +228,8 @@ TEST_CASE(
     CHECK(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE(
-    "project resource detection walks .agents/skills into workspace ancestors",
-    "[coding_agent][project-resources][issue412]") {
+TEST_CASE("project resource detection walks .agents/skills into workspace ancestors",
+        "[coding_agent][project-resources][issue412][spec]") {
     tests::TempWorkspace root;
     std::filesystem::create_directories(root.path() / ".agents" / "skills");
     const auto nested = root.path() / "proj" / "sub";
@@ -243,9 +243,8 @@ TEST_CASE(
     CHECK(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE(
-    "project resource detection excludes the user's own ~/.agents/skills from the walk",
-    "[coding_agent][project-resources][issue412]") {
+TEST_CASE("project resource detection excludes the user's own ~/.agents/skills from the walk",
+        "[coding_agent][project-resources][issue412][spec]") {
     tests::TempWorkspace root;
     std::filesystem::create_directories(root.path() / ".agents" / "skills");
     const auto nested = root.path() / "proj";
@@ -265,7 +264,7 @@ TEST_CASE(
 }
 
 TEST_CASE("async project resource detection uses a fake filesystem",
-        "[coding_agent][project_resources][async][issue560]") {
+        "[coding_agent][project_resources][async][issue560][spec]") {
     auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>("/workspace");
     filesystem->add_directory(".pi");
     filesystem->add_file(".pi/SYSTEM.md", "system");
@@ -283,7 +282,7 @@ TEST_CASE("async project resource detection uses a fake filesystem",
 }
 
 TEST_CASE("async project resource detection propagates filesystem failures",
-        "[coding_agent][project_resources][async][issue560]") {
+        "[coding_agent][project_resources][async][issue560][spec]") {
     auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>("/workspace");
     filesystem->next_error = harness::FileError{
             .code = harness::FileErrorCode::Busy,
@@ -304,7 +303,7 @@ TEST_CASE("async project resource detection propagates filesystem failures",
 }
 
 TEST_CASE("async project resource detection preserves cancellation as an error",
-        "[coding_agent][project_resources][async][issue560]") {
+        "[coding_agent][project_resources][async][issue560][spec]") {
     auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>("/workspace");
     coding_agent::ProjectResourceFileSystems filesystems;
     filesystems.workspace = filesystem;
@@ -320,7 +319,7 @@ TEST_CASE("async project resource detection preserves cancellation as an error",
 }
 
 TEST_CASE("async project resource detection rejects a missing workspace capability",
-        "[coding_agent][project_resources][async][issue560]") {
+        "[coding_agent][project_resources][async][issue560][spec]") {
     AsyncDetectionRuntime runtime;
     auto result = runtime.run(coding_agent::detect_project_resources(
             coding_agent::ProjectResourceFileSystems{}, "/user/.agents/skills", {}));
@@ -331,7 +330,7 @@ TEST_CASE("async project resource detection rejects a missing workspace capabili
 }
 
 TEST_CASE("async project resource detection works through the local adapter",
-        "[coding_agent][project_resources][async][local][issue560]") {
+        "[coding_agent][project_resources][async][local][issue560][spec]") {
     tests::TempWorkspace workspace;
     workspace.write(".pi/SYSTEM.md", "system");
 

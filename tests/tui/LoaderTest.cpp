@@ -49,7 +49,7 @@ private:
 
 } // namespace
 
-TEST_CASE("Loader requests renders for animation and stops without busy waiting", "[tui][loader][issue52]") {
+TEST_CASE("Loader requests renders for animation and stops without busy waiting", "[tui][loader][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 3});
     cch::tui::Tui tui(terminal);
     auto timer = std::make_unique<ManualAnimationTimer>();
@@ -94,7 +94,7 @@ TEST_CASE("Loader requests renders for animation and stops without busy waiting"
     CHECK_FALSE(loader_ptr->running());
 }
 
-TEST_CASE("Loader safely replaces its indicator and handles an empty frame list", "[tui][loader][issue52]") {
+TEST_CASE("Loader safely replaces its indicator and handles an empty frame list", "[tui][loader][issue52][spec]") {
     auto timer = std::make_unique<ManualAnimationTimer>();
     auto* timer_ptr = timer.get();
     cch::tui::Loader loader(cch::tui::LoaderOptions{
@@ -122,7 +122,7 @@ TEST_CASE("Loader safely replaces its indicator and handles an empty frame list"
     CHECK(timer_ptr->starts == 1);
 }
 
-TEST_CASE("CancellableLoader mutations permit render-request reentry", "[tui][loader][issue52]") {
+TEST_CASE("CancellableLoader mutations permit render-request reentry", "[tui][loader][issue52][spec]") {
     cch::tui::CancellableLoader* loader_ptr = nullptr;
     bool armed = false;
     std::size_t reentries = 0;
@@ -148,7 +148,7 @@ TEST_CASE("CancellableLoader mutations permit render-request reentry", "[tui][lo
     CHECK(reentries == 2);
 }
 
-TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once", "[tui][loader][issue52]") {
+TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once", "[tui][loader][issue52][spec]") {
     std::size_t completions = 0;
     std::size_t cancellations = 0;
     cch::tui::CancellableLoader completed(cch::tui::CancellableLoaderOptions{
@@ -187,7 +187,7 @@ TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once
     CHECK(cancelled.cancelled());
 }
 
-TEST_CASE("CancellableLoader dispatches cancellation from its effective registry", "[tui][loader][issue57]") {
+TEST_CASE("CancellableLoader dispatches cancellation from its effective registry", "[tui][loader][issue57][spec]") {
     cch::tui::KeybindingResolutionRequest request;
     request.definitions = cch::tui::builtin_tui_keybinding_definitions();
     request.overrides = {{.id = "tui.select.cancel", .keys = {"f2"}}};
@@ -207,7 +207,7 @@ TEST_CASE("CancellableLoader dispatches cancellation from its effective registry
     CHECK(loader.state() == cch::tui::CancellableLoaderState::Cancelled);
 }
 
-TEST_CASE("CancellableLoader resolves concurrent terminal outcomes exactly once", "[tui][loader][issue52]") {
+TEST_CASE("CancellableLoader resolves concurrent terminal outcomes exactly once", "[tui][loader][issue52][spec]") {
     std::atomic_size_t completions{0};
     std::atomic_size_t cancellations{0};
     cch::tui::CancellableLoader loader(cch::tui::CancellableLoaderOptions{
@@ -229,7 +229,8 @@ TEST_CASE("CancellableLoader resolves concurrent terminal outcomes exactly once"
            loader.state() == cch::tui::CancellableLoaderState::Cancelled));
 }
 
-TEST_CASE("Cancelling a stacked loader restores the previous overlay input target", "[tui][loader][overlay][issue52]") {
+TEST_CASE("Cancelling a stacked loader restores the previous overlay input target",
+        "[tui][loader][overlay][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 5});
     cch::tui::Tui tui(terminal);
     cch::tui::OverlayOptions lower_options;
@@ -274,7 +275,8 @@ TEST_CASE("Cancelling a stacked loader restores the previous overlay input targe
     CHECK(lower_list_ptr->selected_item()->value == "second");
 }
 
-TEST_CASE("Cancelling an overlay loader restores focus through VirtualTerminal", "[tui][loader][overlay][issue52]") {
+TEST_CASE("Cancelling an overlay loader restores focus through VirtualTerminal",
+        "[tui][loader][overlay][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 5});
     cch::tui::Tui tui(terminal);
     auto fallback = std::make_unique<cch::tui::SelectList>(
