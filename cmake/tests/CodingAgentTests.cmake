@@ -96,6 +96,7 @@ include_guard(GLOBAL)
     target_link_libraries(cch_tests_coding_agent
         PRIVATE
             cch_coding_agent
+            frontend_tui
             Boost::headers
             Catch2::Catch2
 )
@@ -107,8 +108,8 @@ include_guard(GLOBAL)
     add_dependencies(cch_tests_coding_agent ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # coding-agent interactive TUI composition. BootTrustInteractiveTest
-    # drives the in-process CLI seam (CliRunFixture) through the one
-    # repository-private cch_coding_agent library (#468).
+    # drives the in-process CLI seam (CliRunFixture) through the independent
+    # frontend targets and headless Session library.
     add_executable(cch_tests_coding_agent_interactive
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
@@ -151,6 +152,8 @@ include_guard(GLOBAL)
     target_link_libraries(cch_tests_coding_agent_interactive
         PRIVATE
             cch_coding_agent
+            frontend_tui
+            frontend_cli
             Boost::headers
             Catch2::Catch2
 )

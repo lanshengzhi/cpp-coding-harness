@@ -23,17 +23,7 @@
         ]
       }
     ],
-    "exceptions": [
-      {
-        "id": "async-cli-runtime-frontend-coupling",
-        "rule_id": "headless-no-frontend-dependencies",
-        "source": "src/coding_agent/runtime/AsyncCliRuntime.cpp",
-        "owner": "architecture-maintainers",
-        "removal_ticket": "#623",
-        "expires": "2026-12-31",
-        "reason": "The CLI runtime still hosts the interactive frontend until the frontend targets are split."
-      }
-    ]
+    "exceptions": []
   },
   "exception_policy": {
     "schema_version": 1,

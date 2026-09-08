@@ -118,7 +118,7 @@ The following sources are compiled into both `cpp_harness` and `cpp_harness_test
 - `src/cli/FrontendSelection.cpp`
 - `src/cli/ListModels.cpp`
 - `src/cli/StartupTui.cpp`
-- `src/coding_agent/runtime/AsyncCliRuntime.cpp`
+- `src/cli/AsyncCliRuntime.cpp`
 
 This wastes cold-build CPU and signals missing CMake ownership for the shared CLI/runtime composition.
 
