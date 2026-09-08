@@ -5,7 +5,7 @@
 using namespace cch;
 using namespace cch::tui::detail;
 
-TEST_CASE("TextBuffer basic insertion and query", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer basic insertion and query", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     CHECK(buffer.empty());
     CHECK(buffer.text().empty());
@@ -27,7 +27,7 @@ TEST_CASE("TextBuffer basic insertion and query", "[tui][text_buffer]") {
     CHECK(buffer.lines() == std::vector<std::string>{"hello", "world"});
 }
 
-TEST_CASE("TextBuffer single-line mode flattens newlines", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer single-line mode flattens newlines", "[tui][text_buffer][spec]") {
     TextBuffer buffer(TextBufferOptions{.multiline = false, .enable_paste_markers = false});
     buffer.insert_text("hello\nworld\r\nfoo");
     CHECK(buffer.line_count() == 1);
@@ -39,7 +39,7 @@ TEST_CASE("TextBuffer single-line mode flattens newlines", "[tui][text_buffer]")
     CHECK(buffer.text() == "hello world foo");
 }
 
-TEST_CASE("TextBuffer cursor navigation and word movements", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer cursor navigation and word movements", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     buffer.insert_text("hello world test");
     CHECK(buffer.cursor().column == 16);
@@ -69,7 +69,7 @@ TEST_CASE("TextBuffer cursor navigation and word movements", "[tui][text_buffer]
     CHECK(buffer.cursor().column == 12);
 }
 
-TEST_CASE("TextBuffer multiline jump_to searches across lines", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer multiline jump_to searches across lines", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     buffer.insert_text("line one\nline two\nline three");
     buffer.set_cursor(BufferCursor{.line = 0, .column = 0});
@@ -81,7 +81,7 @@ TEST_CASE("TextBuffer multiline jump_to searches across lines", "[tui][text_buff
     CHECK(buffer.cursor() == BufferCursor{.line = 0, .column = 5}); // 'o' in 'line one'
 }
 
-TEST_CASE("TextBuffer backspace and forward delete", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer backspace and forward delete", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     buffer.insert_text("abc");
     buffer.backspace();
@@ -102,7 +102,7 @@ TEST_CASE("TextBuffer backspace and forward delete", "[tui][text_buffer]") {
     CHECK(buffer.cursor() == BufferCursor{.line = 0, .column = 5});
 }
 
-TEST_CASE("TextBuffer Kill Ring and Yank Pop accumulation", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer Kill Ring and Yank Pop accumulation", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     buffer.insert_text("one two three four");
     buffer.set_cursor(BufferCursor{.line = 0, .column = 8}); // after "one two "
@@ -128,7 +128,7 @@ TEST_CASE("TextBuffer Kill Ring and Yank Pop accumulation", "[tui][text_buffer]"
     CHECK(buffer2.text() == "beta gammaalpha ");
 }
 
-TEST_CASE("TextBuffer Undo stack with typing coalescing", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer Undo stack with typing coalescing", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     // Typing coalescing: consecutive word characters coalesce
     buffer.insert_character("a");
@@ -152,7 +152,7 @@ TEST_CASE("TextBuffer Undo stack with typing coalescing", "[tui][text_buffer]") 
     CHECK(buffer.text().empty());
 }
 
-TEST_CASE("TextBuffer Paste markers in multiline mode", "[tui][text_buffer]") {
+TEST_CASE("TextBuffer Paste markers in multiline mode", "[tui][text_buffer][spec]") {
     TextBuffer buffer(TextBufferOptions{.multiline = true, .enable_paste_markers = true});
     std::string large_multiline = "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12";
     buffer.insert_paste(large_multiline);

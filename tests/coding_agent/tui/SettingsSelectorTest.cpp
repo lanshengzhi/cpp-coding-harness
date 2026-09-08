@@ -68,9 +68,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "SettingsSelector renders the #327 subset items with pi labels and resolved values",
-    "[coding_agent][tui][settings-selector][issue408]") {
+TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and resolved values",
+        "[coding_agent][tui][settings-selector][issue408][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.hide_thinking_block = true;
@@ -137,9 +136,8 @@ TEST_CASE(
     CHECK(resolved.find("dark") != std::string::npos);
 }
 
-TEST_CASE(
-    "SettingsSelector cycles value items and fires the change sinks",
-    "[coding_agent][tui][settings-selector][issue408]") {
+TEST_CASE("SettingsSelector cycles value items and fires the change sinks",
+        "[coding_agent][tui][settings-selector][issue408][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.output_pad = 1;
@@ -191,9 +189,8 @@ TEST_CASE(
     CHECK(cancellations == 1);
 }
 
-TEST_CASE(
-    "SettingsSelector thinking submenu lists the available levels with pi descriptions",
-    "[coding_agent][tui][settings-selector][issue408]") {
+TEST_CASE("SettingsSelector thinking submenu lists the available levels with pi descriptions",
+        "[coding_agent][tui][settings-selector][issue408][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.thinking_level = "low";
@@ -226,9 +223,8 @@ TEST_CASE(
     CHECK(*level_change == "low");
 }
 
-TEST_CASE(
-    "SettingsSelector Theme item opens the single-mode ThemeSubmenu with preview and commit",
-    "[coding_agent][tui][settings-selector][issue408][issue415]") {
+TEST_CASE("SettingsSelector Theme item opens the single-mode ThemeSubmenu with preview and commit",
+        "[coding_agent][tui][settings-selector][issue408][issue415][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.current_theme = "dark";
@@ -276,9 +272,8 @@ TEST_CASE(
     CHECK(committed[0] == "light");
 }
 
-TEST_CASE(
-    "SettingsSelector ThemeSubmenu cancel re-previews the original without committing",
-    "[coding_agent][tui][settings-selector][issue415]") {
+TEST_CASE("SettingsSelector ThemeSubmenu cancel re-previews the original without committing",
+        "[coding_agent][tui][settings-selector][issue415][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.current_theme = "light";
@@ -314,8 +309,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SettingsSelector search filters the subset items",
-    "[coding_agent][tui][settings-selector][issue408]") {
+        "SettingsSelector search filters the subset items", "[coding_agent][tui][settings-selector][issue408][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorComponent selector(
         theme,
@@ -338,9 +332,8 @@ TEST_CASE(
     CHECK(screen.find("Theme") == std::string::npos);
 }
 
-TEST_CASE(
-    "SettingsSelector always renders the Theme item with the single-mode submenu",
-    "[coding_agent][tui][settings-selector][issue415]") {
+TEST_CASE("SettingsSelector always renders the Theme item with the single-mode submenu",
+        "[coding_agent][tui][settings-selector][issue415][spec]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.available_themes = {"dark", "light"};

@@ -332,9 +332,8 @@ struct GatedCloseToolHandle {
 
 } // namespace
 
-TEST_CASE(
-    "focused User Bash commits included and excluded results through the private composition",
-    "[coding_agent][tui][issue85]") {
+TEST_CASE("focused User Bash commits included and excluded results through the private composition",
+        "[coding_agent][tui][issue85][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -440,9 +439,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "only non-empty focused editor prefixes enter the private User Shell path",
-    "[coding_agent][tui][issue85]") {
+TEST_CASE("only non-empty focused editor prefixes enter the private User Shell path",
+        "[coding_agent][tui][issue85][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -496,9 +494,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "User Bash sanitizes and bounds retained output and spills the complete sanitized stream",
-    "[coding_agent][tui][issue85][issue86][issue96][issue97][issue99]") {
+TEST_CASE("User Bash sanitizes and bounds retained output and spills the complete sanitized stream",
+        "[coding_agent][tui][issue85][issue86][issue96][issue97][issue99][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto spill_dir = workspace.path() / "spill";
@@ -626,9 +623,8 @@ TEST_CASE(
     std::filesystem::remove(spill_path);
 }
 
-TEST_CASE(
-    "User Shell infrastructure failure creates no Bash message and leaves the Session usable",
-    "[coding_agent][tui][issue85][issue98]") {
+TEST_CASE("User Shell infrastructure failure creates no Bash message and leaves the Session usable",
+        "[coding_agent][tui][issue85][issue98][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -695,9 +691,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "User Shell progress callback failure creates no Bash message and leaves the Session usable",
-    "[coding_agent][runtime][issue85][issue96]") {
+TEST_CASE("User Shell progress callback failure creates no Bash message and leaves the Session usable",
+        "[coding_agent][runtime][issue85][issue96][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -772,9 +767,8 @@ TEST_CASE(
     CHECK(created->session->snapshot().agent_state.messages.size() == 2);
 }
 
-TEST_CASE(
-    "private User Bash cancellation commits one cancelled terminal outcome without events",
-    "[coding_agent][runtime][issue85]") {
+TEST_CASE("private User Bash cancellation commits one cancelled terminal outcome without events",
+        "[coding_agent][runtime][issue85][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -845,9 +839,8 @@ TEST_CASE(
     CHECK(bash.output == "partial output");
 }
 
-TEST_CASE(
-    "User Bash output spill failure preserves the bounded truncated result and a safe diagnostic",
-    "[coding_agent][runtime][issue86][issue97]") {
+TEST_CASE("User Bash output spill failure preserves the bounded truncated result and a safe diagnostic",
+        "[coding_agent][runtime][issue86][issue97][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     tests::EnvVarGuard tmpdir{
@@ -917,9 +910,7 @@ TEST_CASE(
     CHECK((*completion)->diagnostic->detail.find(secret) == std::string::npos);
 }
 
-TEST_CASE(
-    "User Bash overlaps an active Agent run through the Native TUI",
-    "[coding_agent][tui][issue87]") {
+TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[coding_agent][tui][issue87][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
@@ -1033,9 +1024,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI interrupt cancels an active Agent run before an overlapping User Bash",
-    "[coding_agent][tui][issue88]") {
+TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlapping User Bash",
+        "[coding_agent][tui][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -1159,9 +1149,8 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "idle Bash-mode interrupt clears the editor without creating a command or message",
-    "[coding_agent][tui][issue88][issue93][issue94]") {
+TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command or message",
+        "[coding_agent][tui][issue88][issue93][issue94][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -1264,9 +1253,7 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "repeated User Bash interrupts coalesce and recovery still works",
-    "[coding_agent][tui][issue88]") {
+TEST_CASE("repeated User Bash interrupts coalesce and recovery still works", "[coding_agent][tui][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -1353,9 +1340,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Session Close through the exit command cancels gated provider, tool, and User Shell work",
-    "[coding_agent][tui][issue88]") {
+TEST_CASE("Session Close through the exit command cancels gated provider, tool, and User Shell work",
+        "[coding_agent][tui][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -1441,9 +1427,8 @@ TEST_CASE(
     CHECK(terminal.modes().cursor_visible);
 }
 
-TEST_CASE(
-    "Session Close through the effective exit keybinding cancels gated provider, tool, and User Shell work",
-    "[coding_agent][tui][issue88]") {
+TEST_CASE("Session Close through the effective exit keybinding cancels gated provider, tool, and User Shell work",
+        "[coding_agent][tui][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -1526,9 +1511,8 @@ TEST_CASE(
     CHECK(terminal.modes().cursor_visible);
 }
 
-TEST_CASE(
-    "committed User Bash blocks preview the output tail and expand through the effective action",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("committed User Bash blocks preview the output tail and expand through the effective action",
+        "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -1626,9 +1610,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "resumed User Bash messages render in original order with their recorded meanings",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("resumed User Bash messages render in original order with their recorded meanings",
+        "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -1734,9 +1717,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "live User Bash blocks stream through one status block with a loader and effective hints",
-    "[coding_agent][tui][issue89][issue99]") {
+TEST_CASE("live User Bash blocks stream through one status block with a loader and effective hints",
+        "[coding_agent][tui][issue89][issue99][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -1827,9 +1809,7 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "User Bash blocks style model-context inclusion through theme tokens",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("User Bash blocks style model-context inclusion through theme tokens", "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -1902,9 +1882,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "the editor enters Bash mode on trimmed ! input and recalls the original submission verbatim",
-    "[coding_agent][tui][issue89][issue94][issue98]") {
+TEST_CASE("the editor enters Bash mode on trimmed ! input and recalls the original submission verbatim",
+        "[coding_agent][tui][issue89][issue94][issue98][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
@@ -1990,9 +1969,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "User Bash hints follow effective remapped interruption and expansion bindings",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("User Bash hints follow effective remapped interruption and expansion bindings",
+        "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
@@ -2065,9 +2043,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "the collapsed User Bash block renders at most 20 visual lines on a narrow terminal",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("the collapsed User Bash block renders at most 20 visual lines on a narrow terminal",
+        "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -2140,9 +2117,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "focused User Bash dispatch trims, parses prefixes, and falls through like the pi baseline",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("focused User Bash dispatch trims, parses prefixes, and falls through like the pi baseline",
+        "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -2241,9 +2217,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Skill and Prompt Template expansions beginning with ! stay ordinary Agent Prompt text",
-    "[coding_agent][tui][issue89]") {
+TEST_CASE("Skill and Prompt Template expansions beginning with ! stay ordinary Agent Prompt text",
+        "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     workspace.write(
@@ -2316,9 +2291,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "User Bash input prefixes render in the header hints without a pseudo-command or hotkey action",
-    "[coding_agent][tui][issue89][issue419]") {
+TEST_CASE("User Bash input prefixes render in the header hints without a pseudo-command or hotkey action",
+        "[coding_agent][tui][issue89][issue419][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();

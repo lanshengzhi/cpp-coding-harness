@@ -32,7 +32,7 @@ harness::session::SessionMetadata test_metadata(const tests::TempWorkspace& work
 
 // ── U1: SessionTree construction and basic queries ──
 
-TEST_CASE("SessionTree constructs from linear LoadedSession", "[harness][session][tree]") {
+TEST_CASE("SessionTree constructs from linear LoadedSession", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "linear.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -50,7 +50,7 @@ TEST_CASE("SessionTree constructs from linear LoadedSession", "[harness][session
     CHECK(tree.metadata().session_id == "session-test");
 }
 
-TEST_CASE("SessionTree getEntry finds entry by ID", "[harness][session][tree]") {
+TEST_CASE("SessionTree getEntry finds entry by ID", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "lookup.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -71,7 +71,7 @@ TEST_CASE("SessionTree getEntry finds entry by ID", "[harness][session][tree]") 
     CHECK(entry->kind == harness::session::SessionEntryKind::Message);
 }
 
-TEST_CASE("SessionTree getEntry returns nullptr for unknown ID", "[harness][session][tree]") {
+TEST_CASE("SessionTree getEntry returns nullptr for unknown ID", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "empty.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -85,7 +85,7 @@ TEST_CASE("SessionTree getEntry returns nullptr for unknown ID", "[harness][sess
     CHECK(tree.getEntry("deadbeef") == nullptr);
 }
 
-TEST_CASE("SessionTree getChildren returns correct children", "[harness][session][tree]") {
+TEST_CASE("SessionTree getChildren returns correct children", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "children.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -114,7 +114,7 @@ TEST_CASE("SessionTree getChildren returns correct children", "[harness][session
     }
 }
 
-TEST_CASE("SessionTree empty tree (header only)", "[harness][session][tree]") {
+TEST_CASE("SessionTree empty tree (header only)", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "header-only.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -130,7 +130,7 @@ TEST_CASE("SessionTree empty tree (header only)", "[harness][session][tree]") {
     CHECK(tree.entries().empty());
 }
 
-TEST_CASE("SessionTree is move-only", "[harness][session][tree]") {
+TEST_CASE("SessionTree is move-only", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "move.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -154,7 +154,7 @@ TEST_CASE("SessionTree is move-only", "[harness][session][tree]") {
 
 // ── U2: Leaf tracking and tree navigation ──
 
-TEST_CASE("SessionTree leaf_id defaults to last entry in linear session", "[harness][session][tree]") {
+TEST_CASE("SessionTree leaf_id defaults to last entry in linear session", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-default.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -173,7 +173,7 @@ TEST_CASE("SessionTree leaf_id defaults to last entry in linear session", "[harn
     CHECK(leaf->entry_id == tree.leaf_id());
 }
 
-TEST_CASE("SessionTree branch switches active leaf", "[harness][session][tree]") {
+TEST_CASE("SessionTree branch switches active leaf", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "branch.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -197,7 +197,7 @@ TEST_CASE("SessionTree branch switches active leaf", "[harness][session][tree]")
     CHECK(tree.leaf_id() == first_id);
 }
 
-TEST_CASE("SessionTree branch rejects unknown entry ID", "[harness][session][tree]") {
+TEST_CASE("SessionTree branch rejects unknown entry ID", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "branch-err.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -216,7 +216,7 @@ TEST_CASE("SessionTree branch rejects unknown entry ID", "[harness][session][tre
     CHECK(tree.leaf_id() == original_leaf);
 }
 
-TEST_CASE("SessionTree getBranch returns leaf-to-root path", "[harness][session][tree]") {
+TEST_CASE("SessionTree getBranch returns leaf-to-root path", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "path.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -241,7 +241,7 @@ TEST_CASE("SessionTree getBranch returns leaf-to-root path", "[harness][session]
     CHECK(from_middle[0]->entry_id == middle_id);
 }
 
-TEST_CASE("SessionTree getBranch from root returns single entry", "[harness][session][tree]") {
+TEST_CASE("SessionTree getBranch from root returns single entry", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "root-path.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -256,7 +256,7 @@ TEST_CASE("SessionTree getBranch from root returns single entry", "[harness][ses
     REQUIRE(path_entries.size() == 1);
 }
 
-TEST_CASE("SessionTree root returns root entry", "[harness][session][tree]") {
+TEST_CASE("SessionTree root returns root entry", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "find-root.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -273,7 +273,7 @@ TEST_CASE("SessionTree root returns root entry", "[harness][session][tree]") {
     CHECK(r->entry_id == tree.entries()[0].entry_id);
 }
 
-TEST_CASE("SessionTree root returns nullptr for empty tree", "[harness][session][tree]") {
+TEST_CASE("SessionTree root returns nullptr for empty tree", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "empty-root.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -316,7 +316,7 @@ support::JsonValue ignored_payload_marker(std::string marker) {
 }
 } // namespace
 
-TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-linear.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -339,7 +339,7 @@ TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][ses
     CHECK_FALSE(ctx.active_tool_names.has_value());
 }
 
-TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-model.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -361,9 +361,8 @@ TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][se
     CHECK(first_user_text(ctx.messages) == "hello");
 }
 
-TEST_CASE(
-    "buildSessionContext derives thinkingLevel/model/activeToolNames over every entry type",
-    "[harness][session][tree][issue357]") {
+TEST_CASE("buildSessionContext derives thinkingLevel/model/activeToolNames over every entry type",
+        "[harness][session][tree][issue357][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-derived-full.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -428,9 +427,8 @@ TEST_CASE(
     CHECK(*ctx.active_tool_names == expected_tools);
 }
 
-TEST_CASE(
-    "buildSessionContext last model_change wins over an earlier assistant message",
-    "[harness][session][tree][issue357]") {
+TEST_CASE("buildSessionContext last model_change wins over an earlier assistant message",
+        "[harness][session][tree][issue357][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-derived-model.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -466,7 +464,7 @@ TEST_CASE(
     CHECK(ctx.active_tool_names->empty());
 }
 
-TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-compact.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -510,7 +508,7 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     CHECK(first_user_text({ctx.messages[2]}) == "msg4");
 }
 
-TEST_CASE("buildSessionContext branch summary converted to message", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext branch summary converted to message", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-branch.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -531,7 +529,7 @@ TEST_CASE("buildSessionContext branch summary converted to message", "[harness][
     CHECK(std::get<ai::BranchSummaryMessage>(ctx.messages[1]).summary == "explored X");
 }
 
-TEST_CASE("buildSessionContext custom message converted", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext custom message converted", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-custom.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -552,7 +550,7 @@ TEST_CASE("buildSessionContext custom message converted", "[harness][session][tr
     CHECK(std::get<ai::TextContent>(cm.content.front()).text == "injected");
 }
 
-TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     harness::session::LoadedSession loaded;
     loaded.metadata = test_metadata(workspace);
@@ -627,7 +625,7 @@ TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[ha
     CHECK(branch_msg.timestamp == 1783209602345);
 }
 
-TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     harness::session::LoadedSession loaded;
     loaded.metadata = test_metadata(workspace);
@@ -707,7 +705,7 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
     CHECK(branch_msg.from_id == "typed-from");
 }
 
-TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-empty.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -725,7 +723,7 @@ TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][ses
     CHECK_FALSE(ctx.active_tool_names.has_value());
 }
 
-TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][tree]") {
+TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-nav.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -754,7 +752,7 @@ TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][
 
 // ── U5: JsonlSessionStore integration ──
 
-TEST_CASE("loading a session file returns a valid SessionTree", "[harness][session][tree]") {
+TEST_CASE("loading a session file returns a valid SessionTree", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "open-tree.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -767,7 +765,7 @@ TEST_CASE("loading a session file returns a valid SessionTree", "[harness][sessi
     CHECK_FALSE(tree->leaf_id().empty());
 }
 
-TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][session][tree]") {
+TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-roundtrip.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -792,7 +790,8 @@ TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][sessi
     CHECK(tree->leaf_id() == second_id);
 }
 
-TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last navigable entry", "[harness][session][tree]") {
+TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last navigable entry",
+        "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-stale-latest.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -817,7 +816,7 @@ TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last
     CHECK(tree->leaf_id() == third_id);
 }
 
-TEST_CASE("SessionTree restores leaf from typed leaf value", "[harness][session][tree]") {
+TEST_CASE("SessionTree restores leaf from typed leaf value", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     harness::session::LoadedSession loaded;
     loaded.metadata = test_metadata(workspace);
@@ -846,7 +845,7 @@ TEST_CASE("SessionTree restores leaf from typed leaf value", "[harness][session]
     CHECK(tree.leaf_id() == "first001");
 }
 
-TEST_CASE("loading a missing session file returns an error", "[harness][session][tree]") {
+TEST_CASE("loading a missing session file returns an error", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "nonexistent.jsonl";
     auto tree = open_tree(path);
@@ -855,7 +854,7 @@ TEST_CASE("loading a missing session file returns an error", "[harness][session]
 
 // ── U4: Branch summary hook ──
 
-TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][session][tree]") {
+TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "branch-summary-hook.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -901,7 +900,7 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     CHECK(value.summary == "summarized 2 entries");
 }
 
-TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree]") {
+TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "skip-summary.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -933,7 +932,7 @@ TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree]")
     CHECK_FALSE(writer_called);  // No entry written
 }
 
-TEST_CASE("branchWithSummary rejects unknown target", "[harness][session][tree]") {
+TEST_CASE("branchWithSummary rejects unknown target", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "bad-target.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));

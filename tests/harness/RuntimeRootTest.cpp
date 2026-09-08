@@ -22,9 +22,8 @@ using tests::pump_until;
 
 } // namespace
 
-TEST_CASE(
-    "RuntimeRoot rejects admission at operation-count saturation without running work",
-    "[harness][runtime][issue459]") {
+TEST_CASE("RuntimeRoot rejects admission at operation-count saturation without running work",
+        "[harness][runtime][issue459][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -60,9 +59,7 @@ TEST_CASE(
     CHECK(worker_runs.load() == 2);
 }
 
-TEST_CASE(
-    "RuntimeRoot rejects admission at byte-charge saturation",
-    "[harness][runtime][issue459]") {
+TEST_CASE("RuntimeRoot rejects admission at byte-charge saturation", "[harness][runtime][issue459][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -89,9 +86,8 @@ TEST_CASE(
     root.close();
 }
 
-TEST_CASE(
-    "input and timer callbacks progress while a gated worker holds an admission",
-    "[harness][runtime][issue459]") {
+TEST_CASE("input and timer callbacks progress while a gated worker holds an admission",
+        "[harness][runtime][issue459][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -138,9 +134,7 @@ TEST_CASE(
     root.close();
 }
 
-TEST_CASE(
-    "RuntimeTarget delivers terminal results in admission order",
-    "[harness][runtime][issue459]") {
+TEST_CASE("RuntimeTarget delivers terminal results in admission order", "[harness][runtime][issue459][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -169,8 +163,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "RuntimeRoot close drains admitted worker completions before teardown",
-    "[harness][runtime][issue459]") {
+        "RuntimeRoot close drains admitted worker completions before teardown", "[harness][runtime][issue459][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -201,9 +194,8 @@ TEST_CASE(
     CHECK(completed.load() == 2);
 }
 
-TEST_CASE(
-    "a busy target's mailbox drain requeues in bounded batches so a second target is not starved",
-    "[harness][runtime][issue465]") {
+TEST_CASE("a busy target's mailbox drain requeues in bounded batches so a second target is not starved",
+        "[harness][runtime][issue465][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -262,9 +254,8 @@ TEST_CASE(
     CHECK(busy_delivered.load(std::memory_order_acquire) == 64);
 }
 
-TEST_CASE(
-    "a loop-posted Close signal is serviced between bounded mailbox batches",
-    "[harness][runtime][issue465]") {
+TEST_CASE("a loop-posted Close signal is serviced between bounded mailbox batches",
+        "[harness][runtime][issue465][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -311,9 +302,8 @@ TEST_CASE(
     CHECK(delivered.load(std::memory_order_acquire) == 16);
 }
 
-TEST_CASE(
-    "reserved control admission succeeds while the ordinary budget is exhausted",
-    "[harness][runtime][issue465]") {
+TEST_CASE("reserved control admission succeeds while the ordinary budget is exhausted",
+        "[harness][runtime][issue465][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -357,9 +347,7 @@ TEST_CASE(
     root.close();
 }
 
-TEST_CASE(
-    "reserved admission enforces an independent byte budget",
-    "[harness][runtime][issue465]") {
+TEST_CASE("reserved admission enforces an independent byte budget", "[harness][runtime][issue465][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -393,9 +381,8 @@ TEST_CASE(
     root.close();
 }
 
-TEST_CASE(
-    "control and ordinary terminals deliver through one mailbox in admission order",
-    "[harness][runtime][issue465]") {
+TEST_CASE("control and ordinary terminals deliver through one mailbox in admission order",
+        "[harness][runtime][issue465][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -432,9 +419,8 @@ TEST_CASE(
     root.close();
 }
 
-TEST_CASE(
-    "timers keep firing while sustained traffic fills a production-capacity mailbox",
-    "[harness][runtime][issue465]") {
+TEST_CASE("timers keep firing while sustained traffic fills a production-capacity mailbox",
+        "[harness][runtime][issue465][spec]") {
     // The measured production policy (docs/runtime-capacities.md): the
     // default RuntimeLimits is the chosen worker/admission/batch policy.
     auto io = std::make_shared<boost::asio::io_context>();
@@ -509,9 +495,8 @@ TEST_CASE(
     CHECK(admitted.load(std::memory_order_acquire) > 0);
 }
 
-TEST_CASE(
-    "Close control work progresses while a production-capacity mailbox drains sustained traffic",
-    "[harness][runtime][issue465]") {
+TEST_CASE("Close control work progresses while a production-capacity mailbox drains sustained traffic",
+        "[harness][runtime][issue465][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(io, harness::RuntimeLimits{});
     auto target = root.make_target();
@@ -554,9 +539,8 @@ TEST_CASE(
     CHECK_FALSE(target->try_admit(4).has_value());
 }
 
-TEST_CASE(
-    "RuntimeRoot Close releases the loop work guard so the final application drain returns",
-    "[harness][runtime][close][issue467]") {
+TEST_CASE("RuntimeRoot Close releases the loop work guard so the final application drain returns",
+        "[harness][runtime][close][issue467][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(
         io,
@@ -592,9 +576,8 @@ TEST_CASE(
     CHECK(io->run() == 0);
 }
 
-TEST_CASE(
-    "RuntimeRoot Close under load delivers every admitted terminal in per-target order",
-    "[harness][runtime][close][issue467]") {
+TEST_CASE("RuntimeRoot Close under load delivers every admitted terminal in per-target order",
+        "[harness][runtime][close][issue467][spec]") {
     auto io = std::make_shared<boost::asio::io_context>();
     constexpr std::size_t kOperationsPerTarget = 32;
     harness::RuntimeRoot root(

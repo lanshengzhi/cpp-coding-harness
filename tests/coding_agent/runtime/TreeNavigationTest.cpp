@@ -285,9 +285,8 @@ public:
 
 } // namespace
 
-TEST_CASE(
-    "navigate_tree moves the leaf to a user message's parent and returns its text",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("navigate_tree moves the leaf to a user message's parent and returns its text",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     auto session = open_session(fixture);
@@ -313,9 +312,8 @@ TEST_CASE(
     CHECK_FALSE(leaf_marker.target.has_value());
 }
 
-TEST_CASE(
-    "navigate_tree to a non-user message makes it the leaf with no editor text",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("navigate_tree to a non-user message makes it the leaf with no editor text",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     auto session = open_session(fixture);
@@ -338,9 +336,7 @@ TEST_CASE(
     CHECK(*leaf_marker.target == ids[3]);
 }
 
-TEST_CASE(
-    "navigate_tree to the current leaf is a no-op",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("navigate_tree to the current leaf is a no-op", "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     auto session = open_session(fixture);
@@ -362,9 +358,8 @@ TEST_CASE(
     CHECK(after.target == before.target);
 }
 
-TEST_CASE(
-    "navigate_tree rejects an unknown entry with pi's verbatim error",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("navigate_tree rejects an unknown entry with pi's verbatim error",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     auto session = open_session(fixture);
@@ -376,9 +371,8 @@ TEST_CASE(
     CHECK(live_user_texts(*session).size() == 3);
 }
 
-TEST_CASE(
-    "navigate_tree rejects while a response is streaming with pi's verbatim error",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("navigate_tree rejects while a response is streaming with pi's verbatim error",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     auto provider = std::make_shared<GatedProvider>();
     auto* provider_ptr = provider.get();
@@ -425,9 +419,8 @@ TEST_CASE(
             "Wait for the current response to finish before navigating the session tree.");
 }
 
-TEST_CASE(
-    "set_entry_label appends label entries and session_tree resolves them",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("set_entry_label appends label entries and session_tree resolves them",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     auto session = open_session(fixture);
@@ -466,9 +459,8 @@ TEST_CASE(
     CHECK(invalid.error().message == "Entry deadbeef not found");
 }
 
-TEST_CASE(
-    "navigate_tree after branching appends to the new active path",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("navigate_tree after branching appends to the new active path",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     // Three scripted replies: the first two complete the initial turns; the
     // third answers the post-navigation prompt on the new branch.
@@ -537,9 +529,8 @@ TEST_CASE(
     CHECK(users[0] == "branch prompt");
 }
 
-TEST_CASE(
-    "an in-memory fork seed mirrors into the new session's live tree",
-    "[coding_agent][runtime][tree-navigation][issue491]") {
+TEST_CASE("an in-memory fork seed mirrors into the new session's live tree",
+        "[coding_agent][runtime][tree-navigation][issue491][spec]") {
     Fixture fixture;
     std::deque<ai::AssistantMessage> replies;
     replies.push_back(scripted_reply("first reply"));
@@ -616,9 +607,8 @@ TEST_CASE(
         std::vector<std::string>{"branch prompt"});
 }
 
-TEST_CASE(
-    "a branch seed's thinking level wins over the settings default in the new session",
-    "[coding_agent][runtime][tree-navigation][issue491]") {
+TEST_CASE("a branch seed's thinking level wins over the settings default in the new session",
+        "[coding_agent][runtime][tree-navigation][issue491][spec]") {
     Fixture fixture;
     // A seed whose branch path carries a thinking-level entry at "off"; the
     // settings default ("medium") must not leak into the new session's
@@ -665,9 +655,8 @@ TEST_CASE(
             .thinking_level == "off");
 }
 
-TEST_CASE(
-    "persisted navigation then prompt appends to the navigated leaf",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("persisted navigation then prompt appends to the navigated leaf",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     std::deque<ai::AssistantMessage> replies;
@@ -728,9 +717,8 @@ TEST_CASE(
     CHECK(live_users[1] == "branch prompt");
 }
 
-TEST_CASE(
-    "session_tree exposes the topology for an empty persisted session",
-    "[coding_agent][runtime][tree-navigation][issue410]") {
+TEST_CASE("session_tree exposes the topology for an empty persisted session",
+        "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     auto created = harness::session::SessionStore::create_new(
         fixture.session_file, test_metadata(fixture));

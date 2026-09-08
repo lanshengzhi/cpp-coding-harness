@@ -115,7 +115,7 @@ struct ExpectedKey {
 
 } // namespace
 
-TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][differential][issue386]") {
+TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -135,7 +135,7 @@ TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][dif
     }
 }
 
-TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui][differential][issue386]") {
+TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -158,7 +158,7 @@ TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui]
     }
 }
 
-TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differential][issue386]") {
+TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -196,7 +196,7 @@ TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differentia
     }
 }
 
-TEST_CASE("discarded control sequences produce no key events", "[tui][differential][issue386]") {
+TEST_CASE("discarded control sequences produce no key events", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -211,7 +211,7 @@ TEST_CASE("discarded control sequences produce no key events", "[tui][differenti
     }
 }
 
-TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differential][issue386]") {
+TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -238,7 +238,7 @@ TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differ
     }
 }
 
-TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][differential][issue386]") {
+TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -276,7 +276,7 @@ TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][
     }
 }
 
-TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][differential][issue386]") {
+TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("keybindings.json");
     REQUIRE(fixture);
     const auto& entries = fixture->get<support::JsonValue::array_t>();
@@ -309,7 +309,7 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
     CHECK(assembled == 30);
 }
 
-TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][differential][issue386]") {
+TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("image-encoder.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -411,7 +411,7 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
     }
 }
 
-TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][differential][issue386]") {
+TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("utils.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -480,7 +480,7 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
     }
 }
 
-TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][differential][issue386]") {
+TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("fuzzy.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
@@ -518,7 +518,7 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][dif
     }
 }
 
-TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][differential][issue386]") {
+TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_fixture("markdown.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();

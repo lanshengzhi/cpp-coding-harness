@@ -42,7 +42,8 @@ template <typename T> SpawnResult<T> run_awaitable(boost::asio::awaitable<T> ope
 
 } // namespace
 
-TEST_CASE("the no-exception AsyncResult bridge delivers a successful terminal outcome", "[support][bridge][issue482]") {
+TEST_CASE("the no-exception AsyncResult bridge delivers a successful terminal outcome",
+        "[support][bridge][issue482][spec]") {
     auto operation = cch::support::detail::make_async_result(
             []() -> boost::asio::awaitable<cch::support::Expected<int>> { co_return 42; });
 
@@ -55,7 +56,8 @@ TEST_CASE("the no-exception AsyncResult bridge delivers a successful terminal ou
     CHECK(run.value->value() == 42);
 }
 
-TEST_CASE("the no-exception AsyncResult bridge preserves an explicit terminal error", "[support][bridge][issue482]") {
+TEST_CASE("the no-exception AsyncResult bridge preserves an explicit terminal error",
+        "[support][bridge][issue482][spec]") {
     auto operation =
             cch::support::detail::make_async_result([]() -> boost::asio::awaitable<cch::support::Expected<int>> {
                 co_return std::unexpected(

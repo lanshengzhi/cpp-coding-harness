@@ -4,7 +4,7 @@
 
 using namespace cch;
 
-TEST_CASE("SSE parser emits one event from a complete frame", "[ai][provider][sse][u3]") {
+TEST_CASE("SSE parser emits one event from a complete frame", "[ai][provider][sse][u3][compat-pi]") {
     ai::providers::SseParser parser;
 
     auto events = parser.append("event: message\ndata: {\"text\":\"hello\"}\n\n");
@@ -16,7 +16,7 @@ TEST_CASE("SSE parser emits one event from a complete frame", "[ai][provider][ss
     CHECK_FALSE((*events)[0].done);
 }
 
-TEST_CASE("SSE parser preserves events across fragmented CRLF buffers", "[ai][provider][sse][u3]") {
+TEST_CASE("SSE parser preserves events across fragmented CRLF buffers", "[ai][provider][sse][u3][compat-pi]") {
     ai::providers::SseParser parser;
 
     auto first = parser.append("eve");
@@ -34,7 +34,7 @@ TEST_CASE("SSE parser preserves events across fragmented CRLF buffers", "[ai][pr
     CHECK((*third)[0].data == "part-1\npart-2");
 }
 
-TEST_CASE("SSE parser ignores comments and joins multiple data lines", "[ai][provider][sse][u3]") {
+TEST_CASE("SSE parser ignores comments and joins multiple data lines", "[ai][provider][sse][u3][compat-pi]") {
     ai::providers::SseParser parser;
 
     auto events = parser.append(": keep-alive\ndata: first\ndata: second\nid: ignored\n\n");
@@ -45,7 +45,7 @@ TEST_CASE("SSE parser ignores comments and joins multiple data lines", "[ai][pro
     CHECK((*events)[0].data == "first\nsecond");
 }
 
-TEST_CASE("SSE parser marks OpenAI done sentinel", "[ai][provider][sse][u3]") {
+TEST_CASE("SSE parser marks OpenAI done sentinel", "[ai][provider][sse][u3][compat-pi]") {
     ai::providers::SseParser parser;
 
     auto events = parser.append("data: [DONE]\n\n");
@@ -56,7 +56,7 @@ TEST_CASE("SSE parser marks OpenAI done sentinel", "[ai][provider][sse][u3]") {
     CHECK((*events)[0].data == "[DONE]");
 }
 
-TEST_CASE("SSE parser can dispatch a final unterminated event on finish", "[ai][provider][sse][u3]") {
+TEST_CASE("SSE parser can dispatch a final unterminated event on finish", "[ai][provider][sse][u3][compat-pi]") {
     ai::providers::SseParser parser;
     auto events = parser.append("data: final");
     REQUIRE(events);

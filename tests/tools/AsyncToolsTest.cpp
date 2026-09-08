@@ -170,7 +170,7 @@ agent::ToolInvocation invocation(std::string name, std::string json) {
 
 } // namespace
 
-TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
+TEST_CASE("built-in tools default to exclusive execution", "[tools][async][spec]") {
     tests::TempWorkspace workspace;
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
     auto shell = std::make_shared<CapturingShell>();
@@ -186,7 +186,7 @@ TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
     CHECK(bash.concurrency == agent::ToolConcurrency::Exclusive);
 }
 
-TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6]") {
+TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "line1\nline2\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -203,7 +203,8 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
     CHECK(ai::text_from_content(result->content) == "line2");
 }
 
-TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff details", "[tools][async][issue354]") {
+TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff details",
+        "[tools][async][issue354][compat-pi]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "alpha\nbeta\ngamma\ndelta\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -250,7 +251,8 @@ TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff det
     CHECK(workspace.read("edit.txt") == "ALPHA\nbeta\nGAMMA\ndelta\n");
 }
 
-TEST_CASE("async edit tool matches every edit against the original and rejects overlaps", "[tools][async][issue354]") {
+TEST_CASE("async edit tool matches every edit against the original and rejects overlaps",
+        "[tools][async][issue354][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "one\ntwo\nthree\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -271,7 +273,8 @@ TEST_CASE("async edit tool matches every edit against the original and rejects o
     CHECK(workspace.read("edit.txt") == "one\ntwo\nthree\n");
 }
 
-TEST_CASE("async edit tool rejects missing and duplicate target text with pi messages", "[tools][async][issue354]") {
+TEST_CASE("async edit tool rejects missing and duplicate target text with pi messages",
+        "[tools][async][issue354][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "foo foo foo");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -297,7 +300,7 @@ TEST_CASE("async edit tool rejects missing and duplicate target text with pi mes
     CHECK(workspace.read("edit.txt") == "foo foo foo");
 }
 
-TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async][issue354]") {
+TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async][issue354][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "\xef\xbb\xbf" "one\r\ntwo\r\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -313,7 +316,7 @@ TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async]
     CHECK(workspace.read("edit.txt") == "\xef\xbb\xbf" "one\r\nTWO\r\n");
 }
 
-TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools][async][issue354]") {
+TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools][async][issue354][spec]") {
     tests::TempWorkspace workspace;
     // The file carries smart quotes, an em dash, and trailing line
     // whitespace; the edit uses ASCII forms without the trailing space,
@@ -335,7 +338,7 @@ TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools
     CHECK(workspace.read("note.txt") == "fixed\n");
 }
 
-TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][async][issue354]") {
+TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][async][issue354][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "content\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -353,7 +356,7 @@ TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][as
     CHECK(workspace.read("note.txt") == "content\n");
 }
 
-TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][async][issue354]") {
+TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][async][issue354][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "same\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -371,7 +374,8 @@ TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][
     CHECK(workspace.read("note.txt") == "same\n");
 }
 
-TEST_CASE("edit declared contract validation and execution acceptance agree", "[tools][async][issue77][issue354]") {
+TEST_CASE(
+        "edit declared contract validation and execution acceptance agree", "[tools][async][issue77][issue354][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -426,7 +430,7 @@ TEST_CASE("edit declared contract validation and execution acceptance agree", "[
     CHECK_FALSE(execution_accepts(missing_path));
 }
 
-TEST_CASE("async tools prefer structured arguments over raw provider text", "[tools][async][u6]") {
+TEST_CASE("async tools prefer structured arguments over raw provider text", "[tools][async][u6][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("structured.txt", "from-structured");
     workspace.write("raw.txt", "from-raw");
@@ -446,9 +450,8 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     CHECK(ai::text_from_content(result->content) == "from-structured");
 }
 
-TEST_CASE(
-    "async bash tool preserves its visible command and carries execution options",
-    "[tools][async][issue40][issue84]") {
+TEST_CASE("async bash tool preserves its visible command and carries execution options",
+        "[tools][async][issue40][issue84][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -468,9 +471,8 @@ TEST_CASE(
     CHECK(shell->last_stop_token == stop_source.get_token());
 }
 
-TEST_CASE(
-    "async bash tool exposes live PI_* session facts when a session environment is provided",
-    "[tools][async][issue414]") {
+TEST_CASE("async bash tool exposes live PI_* session facts when a session environment is provided",
+        "[tools][async][issue414][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -499,9 +501,8 @@ TEST_CASE(
     CHECK(shell->last_env->at("PI_REASONING_LEVEL") == "high");
 }
 
-TEST_CASE(
-    "async bash tool shadows absent PI_* facts with empty values and injects nothing without a holder",
-    "[tools][async][issue414]") {
+TEST_CASE("async bash tool shadows absent PI_* facts with empty values and injects nothing without a holder",
+        "[tools][async][issue414][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -536,7 +537,8 @@ TEST_CASE(
     CHECK_FALSE(shell->last_env.has_value());
 }
 
-TEST_CASE("async bash tool spill file contains complete output beyond the visible limit", "[tools][async][issue73]") {
+TEST_CASE("async bash tool spill file contains complete output beyond the visible limit",
+        "[tools][async][issue73][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -565,7 +567,8 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     CHECK(filesystem->last_write_content.ends_with("complete-tail\xc3\xa9"));
 }
 
-TEST_CASE("async bash tool without streamed output reports capping at the execution layer without a spill file", "[tools][async][issue73]") {
+TEST_CASE("async bash tool without streamed output reports capping at the execution layer without a spill file",
+        "[tools][async][issue73][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -597,7 +600,7 @@ TEST_CASE("async bash tool without streamed output reports capping at the execut
     CHECK(filesystem->last_write_path.empty());
 }
 
-TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
+TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -618,7 +621,7 @@ TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     CHECK(visible.find('\x1b') == std::string::npos);
 }
 
-TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", "[tools][async]") {
+TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", "[tools][async][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<harness::AsyncLocalShell>(test_runtime_target(), workspace.path(), false);
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());

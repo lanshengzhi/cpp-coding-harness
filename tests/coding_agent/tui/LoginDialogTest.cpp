@@ -104,9 +104,7 @@ void type(cch::tui::InputHandler& handler, std::string text) {
 
 } // namespace
 
-TEST_CASE(
-    "LoginDialog renders the auth URL view and opens the browser",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("LoginDialog renders the auth URL view and opens the browser", "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Login to OpenAI Codex");
 
@@ -125,9 +123,8 @@ TEST_CASE(
     CHECK(fixture.invalidations > 0);
 }
 
-TEST_CASE(
-    "LoginDialog renders the device code view with the waiting hint",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("LoginDialog renders the device code view with the waiting hint",
+        "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Login to Kimi For Coding");
 
@@ -142,8 +139,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "LoginDialog renders info lines with links and the close hint",
-    "[coding_agent][tui][login][issue406]") {
+        "LoginDialog renders info lines with links and the close hint", "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Kimi For Coding setup");
 
@@ -160,9 +156,8 @@ TEST_CASE(
     CHECK(fixture.opened_urls.empty());
 }
 
-TEST_CASE(
-    "LoginDialog prompt submits the entered value and freezes it as echoed text",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("LoginDialog prompt submits the entered value and freezes it as echoed text",
+        "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Login to DeepSeek");
 
@@ -203,9 +198,8 @@ TEST_CASE(
     CHECK_FALSE(dialog.stop_token().stop_requested());
 }
 
-TEST_CASE(
-    "LoginDialog escape cancels the pending prompt and fires the stop source",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("LoginDialog escape cancels the pending prompt and fires the stop source",
+        "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Login to OpenAI Codex");
 
@@ -232,9 +226,8 @@ TEST_CASE(
     CHECK(fixture.cancellations == 1);
 }
 
-TEST_CASE(
-    "LoginDialog per-prompt cancellation rejects without firing the stop source",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("LoginDialog per-prompt cancellation rejects without firing the stop source",
+        "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Login to OpenAI Codex");
 
@@ -262,9 +255,8 @@ TEST_CASE(
     CHECK(fixture.cancellations == 0);
 }
 
-TEST_CASE(
-    "LoginDialog serves sequential prompts, echoing each submitted value",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("LoginDialog serves sequential prompts, echoing each submitted value",
+        "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
     auto dialog = fixture.make("Login to DeepSeek");
     boost::asio::io_context io;

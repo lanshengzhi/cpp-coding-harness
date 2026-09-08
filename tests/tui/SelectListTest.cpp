@@ -27,7 +27,8 @@ std::vector<cch::tui::SelectItem> make_items(std::size_t count) {
 
 } // namespace
 
-TEST_CASE("SelectList renders empty and unmatched filters through VirtualTerminal", "[tui][select-list][issue52]") {
+TEST_CASE(
+        "SelectList renders empty and unmatched filters through VirtualTerminal", "[tui][select-list][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
     cch::tui::Tui tui(terminal);
     auto list = std::make_unique<cch::tui::SelectList>(std::vector<cch::tui::SelectItem>{});
@@ -43,7 +44,8 @@ TEST_CASE("SelectList renders empty and unmatched filters through VirtualTermina
     CHECK(terminal.screen()[0].find("No matching commands") != std::string::npos);
 }
 
-TEST_CASE("SelectList pages large bounded lists and adapts descriptions after resize", "[tui][select-list][issue52]") {
+TEST_CASE("SelectList pages large bounded lists and adapts descriptions after resize",
+        "[tui][select-list][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 60, .rows = 5});
     cch::tui::Tui tui(terminal);
     auto list = std::make_unique<cch::tui::SelectList>(
@@ -71,7 +73,8 @@ TEST_CASE("SelectList pages large bounded lists and adapts descriptions after re
     }
 }
 
-TEST_CASE("SelectList filters navigates wraps selects and cancels with semantic keys", "[tui][select-list][issue52]") {
+TEST_CASE("SelectList filters navigates wraps selects and cancels with semantic keys",
+        "[tui][select-list][issue52][spec]") {
     std::string selected;
     std::string changed;
     std::size_t cancellations = 0;
@@ -108,8 +111,8 @@ TEST_CASE("SelectList filters navigates wraps selects and cancels with semantic 
     CHECK(cancellations == 1);
 }
 
-TEST_CASE(
-        "SelectList can clamp navigation and enable raw j k keys without stealing search input", "[tui][select-list]") {
+TEST_CASE("SelectList can clamp navigation and enable raw j k keys without stealing search input",
+        "[tui][select-list][spec]") {
     cch::tui::SelectList list(make_items(3),
             cch::tui::SelectListOptions{
                     .wrap_navigation = false,
@@ -138,7 +141,8 @@ TEST_CASE(
     CHECK(searchable.search_query() == "j");
 }
 
-TEST_CASE("SelectList normalizes and aligns descriptions within configured columns", "[tui][select-list][issue52]") {
+TEST_CASE("SelectList normalizes and aligns descriptions within configured columns",
+        "[tui][select-list][issue52][spec]") {
     cch::tui::SelectList list(
         {
             {.value = "short", .label = "Short", .description = "line one\nline two"},
@@ -168,7 +172,7 @@ TEST_CASE("SelectList normalizes and aligns descriptions within configured colum
           cch::tui::visible_width(rendered->lines[1].substr(0, second_description)));
 }
 
-TEST_CASE("SelectList dispatches configured keys from its effective registry", "[tui][select-list][issue57]") {
+TEST_CASE("SelectList dispatches configured keys from its effective registry", "[tui][select-list][issue57][spec]") {
     cch::tui::KeybindingResolutionRequest request;
     request.definitions = cch::tui::builtin_tui_keybinding_definitions();
     request.overrides = {{.id = "tui.select.confirm", .keys = {"f2"}}};
@@ -191,7 +195,7 @@ TEST_CASE("SelectList dispatches configured keys from its effective registry", "
     CHECK(selections == 1);
 }
 
-TEST_CASE("SelectList resolves a key shared by two actions in dispatch order", "[tui][select-list]") {
+TEST_CASE("SelectList resolves a key shared by two actions in dispatch order", "[tui][select-list][spec]") {
     // f9 claims up and confirm; selection movement leads pi's select-list chain.
     auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
             {.id = "tui.select.up", .keys = {"f9"}},
@@ -214,7 +218,8 @@ TEST_CASE("SelectList resolves a key shared by two actions in dispatch order", "
     CHECK(selections == 1);
 }
 
-TEST_CASE("SelectList renders descriptions in an overlay with bounded rows", "[tui][select-list][overlay][issue52]") {
+TEST_CASE("SelectList renders descriptions in an overlay with bounded rows",
+        "[tui][select-list][overlay][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 70, .rows = 6});
     cch::tui::Tui tui(terminal);
     cch::tui::OverlayOptions overlay_options;
@@ -257,7 +262,7 @@ std::string border_rule(std::size_t width) {
 } // namespace
 
 TEST_CASE("SelectList search mode typing re-ranks and clamps the selection to the top match",
-        "[tui][select-list][issue586]") {
+        "[tui][select-list][issue586][spec]") {
     std::vector<std::string> changed;
     cch::tui::SelectList list(
             {
@@ -316,8 +321,8 @@ TEST_CASE("SelectList search mode typing re-ranks and clamps the selection to th
     CHECK(changed.back() == "first");
 }
 
-TEST_CASE(
-        "SelectList search mode ranks better fuzzy matches above the original order", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList search mode ranks better fuzzy matches above the original order",
+        "[tui][select-list][issue586][spec]") {
     cch::tui::SelectList list(
             {
                     {.value = "scattered", .label = "f_o_o_bar"},
@@ -332,7 +337,8 @@ TEST_CASE(
     CHECK(list.selected_item()->value == "consecutive");
 }
 
-TEST_CASE("SelectList search mode matches label description and hidden search text", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList search mode matches label description and hidden search text",
+        "[tui][select-list][issue586][spec]") {
     // The default searchable text joins the label, description and value, so
     // the description-only word matches.
     cch::tui::SelectList by_description(
@@ -370,7 +376,8 @@ TEST_CASE("SelectList search mode matches label description and hidden search te
     CHECK_FALSE(hidden.selected_item());
 }
 
-TEST_CASE("SelectList search mode confirm selects the filtered item and cancel exits", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList search mode confirm selects the filtered item and cancel exits",
+        "[tui][select-list][issue586][spec]") {
     std::string selected;
     std::size_t cancellations = 0;
     cch::tui::SelectList list(
@@ -421,7 +428,7 @@ TEST_CASE("SelectList search mode confirm selects the filtered item and cancel e
 }
 
 TEST_CASE("SelectList search mode pages through the filtered window and reports the indicator",
-        "[tui][select-list][issue586]") {
+        "[tui][select-list][issue586][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 60, .rows = 10});
     cch::tui::Tui tui(terminal);
     auto list = std::make_unique<cch::tui::SelectList>(
@@ -455,7 +462,7 @@ TEST_CASE("SelectList search mode pages through the filtered window and reports 
     CHECK(list_ptr->selected_item()->value == "item3");
 }
 
-TEST_CASE("SelectList search filter hook fully replaces the fuzzy ranking", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList search filter hook fully replaces the fuzzy ranking", "[tui][select-list][issue586][spec]") {
     std::vector<std::string> queries;
     cch::tui::SelectSearchFilterHook hook =
             [&queries](std::string_view query,
@@ -526,7 +533,7 @@ TEST_CASE("SelectList search filter hook fully replaces the fuzzy ranking", "[tu
 }
 
 TEST_CASE("SelectList set_items re-filters with the current query and preserves the selection",
-        "[tui][select-list][issue586]") {
+        "[tui][select-list][issue586][spec]") {
     cch::tui::SelectList list(
             {
                     {.value = "alpha", .label = "Alpha"},
@@ -590,7 +597,8 @@ TEST_CASE("SelectList set_items re-filters with the current query and preserves 
     CHECK_FALSE(legacy.selected_item());
 }
 
-TEST_CASE("SelectList renders the search placeholder initial query and cursor column", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList renders the search placeholder initial query and cursor column",
+        "[tui][select-list][issue586][spec]") {
     cch::tui::SelectList list(
             {
                     {.value = "alpha", .label = "Alpha"},
@@ -625,7 +633,7 @@ TEST_CASE("SelectList renders the search placeholder initial query and cursor co
 }
 
 TEST_CASE("SelectList programmatic search values place the cursor at the end without a keybinding",
-        "[tui][select-list][issue586]") {
+        "[tui][select-list][issue586][spec]") {
     auto keybindings =
             std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{});
     cch::tui::SelectList list(
@@ -660,7 +668,7 @@ TEST_CASE("SelectList programmatic search values place the cursor at the end wit
 }
 
 TEST_CASE("SelectList frames lists with borders titles and hints in a deterministic chrome layout",
-        "[tui][select-list][issue586]") {
+        "[tui][select-list][issue586][spec]") {
     cch::tui::SelectList list(
             {
                     {.value = "alpha", .label = "Alpha"},
@@ -723,7 +731,8 @@ TEST_CASE("SelectList frames lists with borders titles and hints in a determinis
     }
 }
 
-TEST_CASE("SelectList chrome with search styles borders and stays width bounded", "[tui][select-list][issue586]") {
+TEST_CASE(
+        "SelectList chrome with search styles borders and stays width bounded", "[tui][select-list][issue586][spec]") {
     cch::tui::SelectList list(
             {
                     {.value = "very-long-value-name", .label = "A very long primary label that must truncate"},
@@ -756,8 +765,8 @@ TEST_CASE("SelectList chrome with search styles borders and stays width bounded"
     CHECK(cursor->column == 4);
 }
 
-TEST_CASE(
-        "SelectList reports the search cursor across chrome layouts and focus states", "[tui][select-list][issue586]") {
+TEST_CASE("SelectList reports the search cursor across chrome layouts and focus states",
+        "[tui][select-list][issue586][spec]") {
     const auto focused_list = [](cch::tui::SelectListOptions options) {
         cch::tui::SelectList list({{.value = "alpha", .label = "Alpha"}}, std::move(options));
         for (const auto& character : std::string("tool")) {
@@ -835,7 +844,7 @@ TEST_CASE(
 }
 
 TEST_CASE("SelectList no-match row text is overridable and defaults to the toolkit wording",
-        "[tui][select-list][issue590]") {
+        "[tui][select-list][issue590][spec]") {
     // Custom wording replaces the no-match row for empty and unmatched
     // lists (search disabled and enabled); the default stays byte-identical
     // so existing consumers are unaffected.
@@ -872,7 +881,7 @@ TEST_CASE("SelectList no-match row text is overridable and defaults to the toolk
     CHECK(default_search->lines[1] == "  No matching commands");
 }
 
-TEST_CASE("select_item_search_text prefers search_text and joins the visible parts", "[tui][select-list]") {
+TEST_CASE("select_item_search_text prefers search_text and joins the visible parts", "[tui][select-list][spec]") {
     // search_text overrides the label/description/value join entirely.
     CHECK(cch::tui::select_item_search_text(cch::tui::SelectItem{
                   .value = "value", .label = "Label", .description = "Details", .search_text = "hidden search text"}) ==
@@ -890,7 +899,7 @@ TEST_CASE("select_item_search_text prefers search_text and joins the visible par
 }
 
 TEST_CASE("SelectList outcome-based admission proves selector forwarding and boundary ownership",
-        "[tui][select-list][input]") {
+        "[tui][select-list][input][spec]") {
     // 1. Boundary no-op on empty list: navigation returns Consumed
     cch::tui::SelectList empty_list({}, cch::tui::SelectListOptions{});
     CHECK(empty_list.handle_input(cch::tui::KeyEvent{.key = "up"}) == cch::tui::InputAdmissionOutcome::Consumed);

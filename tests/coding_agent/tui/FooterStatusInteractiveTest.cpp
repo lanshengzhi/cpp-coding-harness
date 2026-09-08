@@ -160,9 +160,8 @@ struct ResumedSessionFixture {
 
 } // namespace
 
-TEST_CASE(
-    "Native TUI footer renders usage totals, cache hit rate, context, and the model",
-    "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Native TUI footer renders usage totals, cache hit rate, context, and the model",
+        "[coding_agent][tui][footer][issue411][spec]") {
     ResumedSessionFixture fixture;
     fixture.create();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
@@ -228,9 +227,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI shows the Working indicator while a prompt streams and clears at agent end",
-    "[coding_agent][tui][status][issue411]") {
+TEST_CASE("Native TUI shows the Working indicator while a prompt streams and clears at agent end",
+        "[coding_agent][tui][status][issue411][spec]") {
     ResumedSessionFixture fixture;
     fixture.create();
     tests::ScriptedRuntimeFixture gated;
@@ -284,9 +282,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI retry indicator counts down pi's backoff and clears on success",
-    "[coding_agent][tui][status][retry][issue411]") {
+TEST_CASE("Native TUI retry indicator counts down pi's backoff and clears on success",
+        "[coding_agent][tui][status][retry][issue411][spec]") {
     ResumedSessionFixture fixture;
     // The session reads its settings from the Agent Config Directory.
     const tests::EnvVarGuard agent_dir{
@@ -341,9 +338,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI shows the overflow Compaction indicator and rebuilds the chat on compaction end",
-    "[coding_agent][tui][status][compaction][issue411]") {
+TEST_CASE("Native TUI shows the overflow Compaction indicator and rebuilds the chat on compaction end",
+        "[coding_agent][tui][status][compaction][issue411][spec]") {
     // A tiny keepRecentTokens budget makes the small resumed session
     // summarizable (pi's findCutPoint keeps the recent budget), so the
     // overflow auto-compaction runs without a huge transcript (which would
@@ -429,9 +425,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI /reload refuses during auto-compaction with pi's streaming warning",
-    "[coding_agent][tui][reload][compaction][issue418]") {
+TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming warning",
+        "[coding_agent][tui][reload][compaction][issue418][spec]") {
     // The tiny keepRecentTokens budget makes the small resumed session
     // summarizable so the overflow auto-compaction runs (same shape as the
     // overflow Compaction indicator test).
@@ -509,9 +504,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI /reload refuses during a manual compaction with pi's compaction warning",
-    "[coding_agent][tui][reload][compaction][issue418]") {
+TEST_CASE("Native TUI /reload refuses during a manual compaction with pi's compaction warning",
+        "[coding_agent][tui][reload][compaction][issue418][spec]") {
     ResumedSessionFixture fixture;
     const tests::EnvVarGuard agent_dir{
         "PI_CODING_AGENT_DIR", fixture.config.path().string()};
@@ -599,9 +593,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI app.suspend stops the TUI, keeps the run alive, and resumes on SIGCONT",
-    "[coding_agent][tui][suspend][issue411]") {
+TEST_CASE("Native TUI app.suspend stops the TUI, keeps the run alive, and resumes on SIGCONT",
+        "[coding_agent][tui][suspend][issue411][spec]") {
     ResumedSessionFixture fixture;
     fixture.create();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
@@ -664,9 +657,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI app.editor.external edits prompt.md through VISUAL and resumes",
-    "[coding_agent][tui][external-editor][issue411]") {
+TEST_CASE("Native TUI app.editor.external edits prompt.md through VISUAL and resumes",
+        "[coding_agent][tui][external-editor][issue411][spec]") {
     ResumedSessionFixture fixture;
     fixture.create();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
@@ -721,9 +713,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI editor border color transitions for bash mode and thinking level",
-    "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Native TUI editor border color transitions for bash mode and thinking level",
+        "[coding_agent][tui][footer][issue411][spec]") {
     ResumedSessionFixture fixture;
     fixture.create();
     // Bash mode requires the session-owned user shell (the interactive host

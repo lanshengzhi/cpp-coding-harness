@@ -108,7 +108,7 @@ private:
 
 } // namespace
 
-TEST_CASE("OverlayCompositor validates overlay lifetime operations", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor validates overlay lifetime operations", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     tui::Overlay stranger;
 
@@ -127,7 +127,7 @@ TEST_CASE("OverlayCompositor validates overlay lifetime operations", "[tui][over
     CHECK_FALSE(compositor.remove(overlay_ptr));
 }
 
-TEST_CASE("OverlayCompositor invalidates every owned overlay", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor invalidates every owned overlay", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     auto overlay = std::make_unique<tui::Overlay>();
     auto child = std::make_unique<StaticComponent>(std::vector<std::string>{"x"});
@@ -139,7 +139,7 @@ TEST_CASE("OverlayCompositor invalidates every owned overlay", "[tui][overlay]")
     CHECK(child_ptr->invalidation_count == 1);
 }
 
-TEST_CASE("OverlayCompositor splices overlay content at its viewport position", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor splices overlay content at its viewport position", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
 
@@ -164,7 +164,7 @@ TEST_CASE("OverlayCompositor splices overlay content at its viewport position", 
     }
 }
 
-TEST_CASE("OverlayCompositor draws higher z-index overlays on top", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor draws higher z-index overlays on top", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 1};
 
@@ -185,7 +185,7 @@ TEST_CASE("OverlayCompositor draws higher z-index overlays on top", "[tui][overl
     CHECK(output.lines[0] == "bbaa------");
 }
 
-TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 1};
 
@@ -204,7 +204,7 @@ TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", 
     CHECK(tui::visible_width(output.lines[0]) == 10);
 }
 
-TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
     const auto capabilities = kitty_capabilities();
@@ -230,7 +230,7 @@ TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "
     CHECK(output.images[0].resource_id == 2);
 }
 
-TEST_CASE("OverlayCompositor offsets overlay images into the composed buffer", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor offsets overlay images into the composed buffer", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
     const auto capabilities = kitty_capabilities();
@@ -252,7 +252,7 @@ TEST_CASE("OverlayCompositor offsets overlay images into the composed buffer", "
     CHECK(output.images[0].region == tui::CellRegion{.column = 5, .row = 2, .columns = 1, .rows = 1});
 }
 
-TEST_CASE("OverlayCompositor substitutes fallback text for clipped overlay images", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor substitutes fallback text for clipped overlay images", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
     const auto capabilities = kitty_capabilities();
@@ -272,7 +272,7 @@ TEST_CASE("OverlayCompositor substitutes fallback text for clipped overlay image
     CHECK(output.images.empty());
 }
 
-TEST_CASE("OverlayCompositor routes input to the topmost capturing overlay", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor routes input to the topmost capturing overlay", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
 
@@ -317,7 +317,7 @@ TEST_CASE("OverlayCompositor routes input to the topmost capturing overlay", "[t
 }
 TEST_CASE("OverlayCompositor outcome-based input admission proves first-consumed, fallthrough, capture, and release "
           "fallthrough",
-        "[tui][overlay][input]") {
+        "[tui][overlay][input][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 80, .rows = 24};
 
@@ -367,7 +367,7 @@ TEST_CASE("OverlayCompositor outcome-based input admission proves first-consumed
     REQUIRE(compositor.remove(empty_overlay_ptr));
 }
 
-TEST_CASE("OverlayCompositor tracks overlay focus history and restoration targets", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor tracks overlay focus history and restoration targets", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
 
     FocusableInputComponent base_one;
@@ -402,7 +402,7 @@ TEST_CASE("OverlayCompositor tracks overlay focus history and restoration target
     CHECK(compositor.return_focus(overlay_two_ptr) == nullptr);
 }
 
-TEST_CASE("OverlayCompositor reports focus target availability and topmost focusable", "[tui][overlay]") {
+TEST_CASE("OverlayCompositor reports focus target availability and topmost focusable", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
 

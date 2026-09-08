@@ -163,9 +163,8 @@ constexpr std::string_view kReasoningAndPlainProviders = R"({
 
 } // namespace
 
-TEST_CASE(
-    "set_model rejects a switch to a provider with no configured auth",
-    "[coding_agent][set-model][issue406]") {
+TEST_CASE("set_model rejects a switch to a provider with no configured auth",
+        "[coding_agent][set-model][issue406][spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedAlphaKeylessBeta);
 
@@ -192,9 +191,8 @@ TEST_CASE(
     CHECK(value.model_id == "alpha-1");
 }
 
-TEST_CASE(
-    "set_model switches the live model, persists the model_change entry, and writes the settings default",
-    "[coding_agent][set-model][issue406]") {
+TEST_CASE("set_model switches the live model, persists the model_change entry, and writes the settings default",
+        "[coding_agent][set-model][issue406][spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -243,9 +241,8 @@ TEST_CASE(
     CHECK(reloaded.settings().default_model == "beta-1");
 }
 
-TEST_CASE(
-    "the model bash tool's live PI_* facts follow the session model and thinking level",
-    "[coding_agent][set-model][issue414]") {
+TEST_CASE("the model bash tool's live PI_* facts follow the session model and thinking level",
+        "[coding_agent][set-model][issue414][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainProviders);
 
@@ -286,9 +283,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "set_model to a non-thinking model re-clamps the level and persists the thinking_level_change entry",
-    "[coding_agent][set-model][issue406]") {
+TEST_CASE("set_model to a non-thinking model re-clamps the level and persists the thinking_level_change entry",
+        "[coding_agent][set-model][issue406][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainProviders);
 
@@ -328,9 +324,8 @@ TEST_CASE(
     CHECK(*level_value == "high");
 }
 
-TEST_CASE(
-    "set_model from a non-thinking model restores the settings default thinking level",
-    "[coding_agent][set-model][issue406]") {
+TEST_CASE("set_model from a non-thinking model restores the settings default thinking level",
+        "[coding_agent][set-model][issue406][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainProviders);
     fixture.write_settings(R"({"defaultProvider": "beta", "defaultModel": "beta-1", "defaultThinkingLevel": "high"})");
@@ -362,9 +357,8 @@ TEST_CASE(
     CHECK(value.thinking_level == "high");
 }
 
-TEST_CASE(
-    "set_model on an in-memory session skips the model_change entry and still writes settings",
-    "[coding_agent][set-model][issue406]") {
+TEST_CASE("set_model on an in-memory session skips the model_change entry and still writes settings",
+        "[coding_agent][set-model][issue406][spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 

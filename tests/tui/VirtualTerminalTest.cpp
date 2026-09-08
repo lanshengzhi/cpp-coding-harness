@@ -50,9 +50,7 @@ private:
 
 } // namespace
 
-TEST_CASE(
-    "VirtualTerminal anchors buffer row 0 at the seeded shell cursor row",
-    "[tui][terminal][issue476]") {
+TEST_CASE("VirtualTerminal anchors buffer row 0 at the seeded shell cursor row", "[tui][terminal][issue476][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.seed_shell_content(
         {"cmd one", "cmd two", "cmd three"},
@@ -89,9 +87,7 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-    "VirtualTerminal resets the anchored origin on clear screen",
-    "[tui][terminal][issue476]") {
+TEST_CASE("VirtualTerminal resets the anchored origin on clear screen", "[tui][terminal][issue476][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.seed_shell_content({"cmd"}, {.column = 0, .row = 1}));
     REQUIRE(terminal.start(
@@ -113,9 +109,7 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-    "VirtualTerminal validates seeded shell content before start",
-    "[tui][terminal][issue476]") {
+TEST_CASE("VirtualTerminal validates seeded shell content before start", "[tui][terminal][issue476][spec]") {
     tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     const auto too_many = terminal.seed_shell_content(
         {"a", "b", "c", "d"},
@@ -144,9 +138,8 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-    "VirtualTerminal flows the first Tui frame from the seeded shell cursor row",
-    "[tui][terminal][issue476]") {
+TEST_CASE("VirtualTerminal flows the first Tui frame from the seeded shell cursor row",
+        "[tui][terminal][issue476][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.seed_shell_content(
         {"cmd one", "cmd two", "cmd three"},
@@ -211,7 +204,7 @@ TEST_CASE(
 }
 
 TEST_CASE("VirtualTerminal partitioned scrolling preserves bottom dock rows in place",
-        "[tui][terminal][dock][issue598]") {
+        "[tui][terminal][dock][issue598][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
             [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
@@ -276,7 +269,7 @@ TEST_CASE("VirtualTerminal partitioned scrolling preserves bottom dock rows in p
 }
 
 TEST_CASE("VirtualTerminal set_dock_cursor validates dimensions and positions correctly",
-        "[tui][terminal][dock][issue598]") {
+        "[tui][terminal][dock][issue598][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
             [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
@@ -322,7 +315,8 @@ TEST_CASE("VirtualTerminal set_dock_cursor validates dimensions and positions co
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("VirtualTerminal reset_scroll_margins restores full-screen scrolling", "[tui][terminal][dock][issue598]") {
+TEST_CASE("VirtualTerminal reset_scroll_margins restores full-screen scrolling",
+        "[tui][terminal][dock][issue598][spec]") {
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
     REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
             [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));

@@ -278,7 +278,7 @@ void answer_startup_queries(int descriptor, std::atomic_bool& ready) {
 
 } // namespace
 
-TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", "[tui][terminal][issue54][spec]") {
     std::array<int, 2> raw_descriptors{};
     REQUIRE(::pipe(raw_descriptors.data()) == 0);
     cch::support::UniqueFd input(raw_descriptors[0]);
@@ -296,7 +296,7 @@ TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", 
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
-TEST_CASE("Process Terminal restores raw paste cursor and pending render modes", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal restores raw paste cursor and pending render modes", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     termios original{};
@@ -339,7 +339,7 @@ TEST_CASE("Process Terminal restores raw paste cursor and pending render modes",
 }
 
 TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores on stop",
-        "[tui][terminal][dock][issue598]") {
+        "[tui][terminal][dock][issue598][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
 
@@ -398,7 +398,7 @@ TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores 
 }
 
 TEST_CASE("Process Terminal one-row scroll margins park the dock below the transcript row",
-        "[tui][terminal][dock][issue611]") {
+        "[tui][terminal][dock][issue611][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
 
@@ -424,7 +424,7 @@ TEST_CASE("Process Terminal one-row scroll margins park the dock below the trans
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable terminal_environment("TERM");
@@ -465,7 +465,7 @@ TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][
     REQUIRE(generic_terminal.stop());
 }
 
-TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     std::mutex events_mutex;
@@ -517,7 +517,7 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal detects a resize with no input activity", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal detects a resize with no input activity", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     std::vector<cch::tui::TerminalDimensions> resizes;
@@ -547,7 +547,7 @@ TEST_CASE("Process Terminal detects a resize with no input activity", "[tui][ter
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][terminal][issue54]") {
+TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     termios original{};
@@ -588,8 +588,8 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE(
-        "Process Terminal rolls back post-start allocation failures and retries cleanly", "[tui][terminal][issue612]") {
+TEST_CASE("Process Terminal rolls back post-start allocation failures and retries cleanly",
+        "[tui][terminal][issue612][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tests::ImageEnvironmentGuard environment;
@@ -648,7 +648,7 @@ TEST_CASE(
 // The staged build's defensive sink boundary still isolates a throwing
 // interaction callback and reports it with the restoration failure; the
 // no-exception build enforces non-throwing callbacks by construction.
-TEST_CASE("Process Terminal reports callback and restoration failures together", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal reports callback and restoration failures together", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::support::UniqueFd output(::dup(pty->slave.get()));
@@ -684,7 +684,7 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
 }
 #endif
 
-TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -712,7 +712,7 @@ TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 // Unwinding through the TUI stack is an exception-enabled-build concern: the
 // no-exception build cannot throw through the runtime loop at all.
-TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwinding", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwinding", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     termios original{};
@@ -758,7 +758,7 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
 }
 #endif
 
-TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54]") {
+TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::support::UniqueFd read_only_output(::open(pty->slave_name.c_str(), O_RDONLY | O_NOCTTY));
@@ -780,8 +780,8 @@ TEST_CASE("Process Terminal rolls back raw input after partial startup failure",
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
-TEST_CASE(
-        "Process Terminal reports conservative color and appearance observations", "[tui][terminal][theme][issue55]") {
+TEST_CASE("Process Terminal reports conservative color and appearance observations",
+        "[tui][terminal][theme][issue55][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable terminal_environment("TERM");
@@ -851,7 +851,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Process Terminal probes color scheme and OSC background without consuming user input",
-        "[tui][terminal][theme][issue55]") {
+        "[tui][terminal][theme][issue55][spec]") {
     struct ProbeCase {
         std::string response;
         cch::tui::TerminalAppearance expected{cch::tui::TerminalAppearance::Unknown};
@@ -912,7 +912,7 @@ TEST_CASE("Process Terminal probes color scheme and OSC background without consu
 }
 
 TEST_CASE("Process Terminal consumes malformed fragmented and late appearance replies",
-        "[tui][terminal][theme][issue55]") {
+        "[tui][terminal][theme][issue55][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
@@ -991,7 +991,7 @@ TEST_CASE("Process Terminal consumes malformed fragmented and late appearance re
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue378]") {
+TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue378][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1009,7 +1009,8 @@ TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue3
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal clear screen emits the pi-exact clear-scrollback bytes", "[tui][terminal][issue435]") {
+TEST_CASE("Process Terminal clear screen emits the pi-exact clear-scrollback bytes",
+        "[tui][terminal][issue435][compat-pi]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1030,7 +1031,7 @@ TEST_CASE("Process Terminal clear screen emits the pi-exact clear-scrollback byt
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal re-emits active progress on the one-second keepalive", "[tui][terminal][issue378]") {
+TEST_CASE("Process Terminal re-emits active progress on the one-second keepalive", "[tui][terminal][issue378][spec]") {
     constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
     constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
     auto pty = cch::tests::open_pseudo_terminal();
@@ -1076,8 +1077,8 @@ TEST_CASE("Process Terminal re-emits active progress on the one-second keepalive
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-        "Process Terminal stop clears an active progress indicator and restarts cleanly", "[tui][terminal][issue378]") {
+TEST_CASE("Process Terminal stop clears an active progress indicator and restarts cleanly",
+        "[tui][terminal][issue378][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1104,7 +1105,8 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal drains buffered input before exit without delivering it", "[tui][terminal][issue378]") {
+TEST_CASE(
+        "Process Terminal drains buffered input before exit without delivering it", "[tui][terminal][issue378][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     std::mutex delivered_mutex;
@@ -1151,7 +1153,7 @@ TEST_CASE("Process Terminal drains buffered input before exit without delivering
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal drain disables keyboard protocols once before exit", "[tui][terminal][issue378]") {
+TEST_CASE("Process Terminal drain disables keyboard protocols once before exit", "[tui][terminal][issue378][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1190,7 +1192,7 @@ using cch::tests::ImageEnvironmentGuard;
 } // namespace
 
 TEST_CASE("Process Terminal detects image capabilities and queries cell size from the environment",
-        "[tui][terminal][image][issue385]") {
+        "[tui][terminal][image][issue385][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1210,8 +1212,8 @@ TEST_CASE("Process Terminal detects image capabilities and queries cell size fro
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-        "Process Terminal stays conservative under unknown and tmux environments", "[tui][terminal][image][issue385]") {
+TEST_CASE("Process Terminal stays conservative under unknown and tmux environments",
+        "[tui][terminal][image][issue385][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     {
@@ -1240,7 +1242,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Process Terminal consumes CSI 16 t cell-size responses and notifies re-render",
-        "[tui][terminal][image][issue385]") {
+        "[tui][terminal][image][issue385][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1294,8 +1296,8 @@ TEST_CASE("Process Terminal consumes CSI 16 t cell-size responses and notifies r
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE(
-        "Process Terminal places and removes images with pi-exact protocol bytes", "[tui][terminal][image][issue385]") {
+TEST_CASE("Process Terminal places and removes images with pi-exact protocol bytes",
+        "[tui][terminal][image][issue385][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1354,7 +1356,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Process Terminal iTerm2 placement omits default preserveAspectRatio and blanks removal",
-        "[tui][terminal][image][issue385]") {
+        "[tui][terminal][image][issue385][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1389,7 +1391,7 @@ TEST_CASE("Process Terminal iTerm2 placement omits default preserveAspectRatio a
 }
 
 TEST_CASE("Process Terminal scrolls the native scrollback with CRLF line flow past the viewport",
-        "[tui][terminal][issue435]") {
+        "[tui][terminal][issue435][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(40, 8);
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1429,7 +1431,7 @@ TEST_CASE("Process Terminal scrolls the native scrollback with CRLF line flow pa
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal anchors the buffer origin at the probed cursor row", "[tui][terminal][issue476]") {
+TEST_CASE("Process Terminal anchors the buffer origin at the probed cursor row", "[tui][terminal][issue476][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(40, 12);
     REQUIRE(pty);
     // Answer the startup DSR cursor-position query (`\x1b[6n`) with the
@@ -1499,7 +1501,7 @@ TEST_CASE("Process Terminal anchors the buffer origin at the probed cursor row",
 }
 
 TEST_CASE("Process Terminal clears the screen and anchors at row 0 when the cursor probe times out",
-        "[tui][terminal][issue476]") {
+        "[tui][terminal][issue476][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(40, 12);
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1520,7 +1522,7 @@ TEST_CASE("Process Terminal clears the screen and anchors at row 0 when the curs
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal waits on readiness and wakes promptly for stop", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal waits on readiness and wakes promptly for stop", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1540,7 +1542,7 @@ TEST_CASE("Process Terminal waits on readiness and wakes promptly for stop", "[t
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
-TEST_CASE("Process Terminal stops promptly while input is streaming", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal stops promptly while input is streaming", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     std::atomic<bool> delivering{false};
@@ -1577,7 +1579,7 @@ TEST_CASE("Process Terminal stops promptly while input is streaming", "[tui][ter
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
-TEST_CASE("Process Terminal backpressures bounded output in write order", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal backpressures bounded output in write order", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1616,7 +1618,8 @@ TEST_CASE("Process Terminal backpressures bounded output in write order", "[tui]
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal retries a synchronized frame after output backpressure", "[tui][terminal][issue462]") {
+TEST_CASE(
+        "Process Terminal retries a synchronized frame after output backpressure", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable terminal_environment("TERM");
@@ -1677,7 +1680,7 @@ TEST_CASE("Process Terminal retries a synchronized frame after output backpressu
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal admits a large single write on a draining terminal", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal admits a large single write on a draining terminal", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1702,7 +1705,7 @@ TEST_CASE("Process Terminal admits a large single write on a draining terminal",
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal restores output descriptor flags on every exit", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal restores output descriptor flags on every exit", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1723,7 +1726,8 @@ TEST_CASE("Process Terminal restores output descriptor flags on every exit", "[t
     CHECK((restored_flags & ~O_NONBLOCK) == (original_flags & ~O_NONBLOCK));
 }
 
-TEST_CASE("Tui delivers startup-preserved input bytes typed during terminal startup", "[tui][terminal][issue610]") {
+TEST_CASE(
+        "Tui delivers startup-preserved input bytes typed during terminal startup", "[tui][terminal][issue610][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tests::ImageEnvironmentGuard environment;
@@ -1753,7 +1757,8 @@ TEST_CASE("Tui delivers startup-preserved input bytes typed during terminal star
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Process Terminal keeps the startup color scheme over a late background reply", "[tui][terminal][issue613]") {
+TEST_CASE("Process Terminal keeps the startup color scheme over a late background reply",
+        "[tui][terminal][issue613][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tests::ImageEnvironmentGuard environment;
@@ -1791,7 +1796,7 @@ TEST_CASE("Process Terminal keeps the startup color scheme over a late backgroun
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[tui][terminal][issue613]") {
+TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[tui][terminal][issue613][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tests::ImageEnvironmentGuard environment;
@@ -1847,7 +1852,7 @@ TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[t
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal stops promptly after input EOF without hanging", "[tui][terminal][issue462]") {
+TEST_CASE("Process Terminal stops promptly after input EOF without hanging", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(

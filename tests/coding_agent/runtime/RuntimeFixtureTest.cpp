@@ -148,7 +148,7 @@ struct SharedSessionFixture final {
 } // namespace
 
 TEST_CASE("RuntimeFixture preserves ready AsyncResult success and error outcomes",
-        "[coding_agent][runtime][harness][issue568]") {
+        "[coding_agent][runtime][harness][issue568][spec]") {
     tests::RuntimeFixture runtime;
 
     const auto success = runtime.run(support::AsyncResult<int>{std::expected<int, support::Error>{42}});
@@ -163,7 +163,7 @@ TEST_CASE("RuntimeFixture preserves ready AsyncResult success and error outcomes
 }
 
 TEST_CASE("RuntimeFixture preserves pending AsyncResult success and error outcomes",
-        "[coding_agent][runtime][harness][issue568]") {
+        "[coding_agent][runtime][harness][issue568][spec]") {
     tests::RuntimeFixture runtime;
     const auto target = runtime.make_target();
 
@@ -180,13 +180,14 @@ TEST_CASE("RuntimeFixture preserves pending AsyncResult success and error outcom
 }
 
 TEST_CASE("RuntimeFixture bounds a stalled AsyncResult as a test failure",
-        "[coding_agent][runtime][harness][fatal][issue568]") {
+        "[coding_agent][runtime][harness][fatal][issue568][spec]") {
     const auto started = std::chrono::steady_clock::now();
     CHECK(timeout_child_fails());
     CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds{1});
 }
 
-TEST_CASE("RuntimeFixture instances keep Runtime targets isolated", "[coding_agent][runtime][harness][issue568]") {
+TEST_CASE(
+        "RuntimeFixture instances keep Runtime targets isolated", "[coding_agent][runtime][harness][issue568][spec]") {
     tests::RuntimeFixture first;
     tests::RuntimeFixture second;
 
@@ -200,7 +201,7 @@ TEST_CASE("RuntimeFixture instances keep Runtime targets isolated", "[coding_age
 }
 
 TEST_CASE("multiple Agent Sessions share one RuntimeFixture and close before RuntimeRoot",
-        "[coding_agent][runtime][harness][issue568]") {
+        "[coding_agent][runtime][harness][issue568][spec]") {
     SharedSessionFixture fixture;
 
     auto first_result =
@@ -232,7 +233,7 @@ TEST_CASE("multiple Agent Sessions share one RuntimeFixture and close before Run
 }
 
 TEST_CASE("RuntimeFixture waits for admitted Session work before RuntimeRoot close",
-        "[coding_agent][runtime][harness][issue568]") {
+        "[coding_agent][runtime][harness][issue568][spec]") {
     tests::RuntimeFixture runtime;
     const auto target = runtime.make_target();
     const auto state = std::make_shared<DeferredSessionState>();
@@ -255,7 +256,7 @@ TEST_CASE("RuntimeFixture waits for admitted Session work before RuntimeRoot clo
 }
 
 TEST_CASE("RuntimeFixture records Session destruction before Runtime worker join",
-        "[coding_agent][runtime][harness][issue568]") {
+        "[coding_agent][runtime][harness][issue568][spec]") {
     std::vector<std::string> session_events;
     tests::RuntimeFixture runtime;
     (void)runtime.adopt_session(std::make_unique<RecordingSession>(session_events));

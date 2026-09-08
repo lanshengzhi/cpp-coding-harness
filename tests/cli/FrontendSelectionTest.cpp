@@ -4,7 +4,7 @@
 
 using namespace cch;
 
-TEST_CASE("frontend selection follows pi precedence", "[cli][selection][issue64]") {
+TEST_CASE("frontend selection follows pi precedence", "[cli][selection][issue64][spec]") {
     cli::CliConfig config;
     const cli::FrontendEnvironment interactive{
         .stdin_is_terminal = true,
@@ -21,7 +21,7 @@ TEST_CASE("frontend selection follows pi precedence", "[cli][selection][issue64]
     CHECK(*selected == cli::Frontend::Print);
 }
 
-TEST_CASE("text mode leaves terminal-based frontend selection unchanged", "[cli][selection][issue64]") {
+TEST_CASE("text mode leaves terminal-based frontend selection unchanged", "[cli][selection][issue64][spec]") {
     cli::CliConfig config;
 
     auto selected = cli::select_frontend(config, {

@@ -38,7 +38,8 @@ void check_usage_fixture(const ai::Usage& usage, const support::JsonValue& expec
 
 } // namespace
 
-TEST_CASE("Responses and DeepSeek usage split uncached cached and reasoning tokens", "[ai][usage][issue339]") {
+TEST_CASE(
+        "Responses and DeepSeek usage split uncached cached and reasoning tokens", "[ai][usage][issue339][compat-pi]") {
     auto model = tests::make_model("priced");
     model.cost = ai::ModelCost{.input = 2, .output = 4, .cache_read = 1, .cache_write = 3};
 
@@ -71,9 +72,8 @@ TEST_CASE("Responses and DeepSeek usage split uncached cached and reasoning toke
     CHECK(clamped.reasoning == 0);
 }
 
-TEST_CASE(
-    "Anthropic usage deltas preserve omitted fields and shared cost uses tiers and one hour writes",
-    "[ai][usage][issue339]") {
+TEST_CASE("Anthropic usage deltas preserve omitted fields and shared cost uses tiers and one hour writes",
+        "[ai][usage][issue339][compat-pi]") {
     auto model = tests::make_model("tiered");
     model.cost = ai::ModelCost{
         .input = 2,

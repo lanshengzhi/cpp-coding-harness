@@ -12,7 +12,7 @@
 
 using namespace cch;
 
-TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
+TEST_CASE("event sink contracts are move-only", "[architecture][u5][spec]") {
     static_assert(!std::is_copy_constructible_v<agent::Agent>);
     static_assert(!std::is_copy_assignable_v<agent::Agent>);
     static_assert(std::is_move_constructible_v<agent::Agent>);
@@ -57,7 +57,7 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
     static_assert(std::is_move_constructible_v<ai::providers::BodyChunkHandler>);
 }
 
-TEST_CASE("move-only event sinks can own unique state", "[architecture][u5]") {
+TEST_CASE("move-only event sinks can own unique state", "[architecture][u5][spec]") {
     int observed = 0;
     agent::AgentEventSink sink = [state = std::make_unique<int>(41), &observed](const agent::AgentLifecycleEvent&) mutable {
         observed = *state + 1;
@@ -71,7 +71,7 @@ TEST_CASE("move-only event sinks can own unique state", "[architecture][u5]") {
     CHECK(observed == 42);
 }
 
-TEST_CASE("move-only body handlers can own unique buffers", "[architecture][u5]") {
+TEST_CASE("move-only body handlers can own unique buffers", "[architecture][u5][spec]") {
     int observed = 0;
     ai::providers::BodyChunkHandler handler = [buffer = std::make_unique<std::string>(), &observed](std::string_view chunk) mutable {
         *buffer += chunk;

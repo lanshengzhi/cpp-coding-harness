@@ -245,7 +245,8 @@ struct LoginHarness {
 
 } // namespace
 
-TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", "[coding_agent][auth][issue344]") {
+TEST_CASE(
+        "Kimi OAuth lifecycle persists login, refresh rotation, then logout", "[coding_agent][auth][issue344][spec]") {
     LoginHarness harness;
     harness.http->responses[kDeviceAuthorizationUrl] = {
         {200, device_authorization_json()},
@@ -295,7 +296,7 @@ TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", 
     CHECK(read_text(harness.auth_path) == "{}");
 }
 
-TEST_CASE("Kimi login cancellation persists nothing", "[coding_agent][auth][issue344]") {
+TEST_CASE("Kimi login cancellation persists nothing", "[coding_agent][auth][issue344][spec]") {
     LoginHarness harness;
     std::stop_source cancel;
     cancel.request_stop();
@@ -311,7 +312,7 @@ TEST_CASE("Kimi login cancellation persists nothing", "[coding_agent][auth][issu
     CHECK(read_text(harness.auth_path) == "{}");
 }
 
-TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue344]") {
+TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue344][spec]") {
     LoginHarness harness;
     harness.seed_stored_credential(
         "dummy-access-token", "dummy-refresh-token", now_ms() + 60'000);
@@ -342,7 +343,7 @@ TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue
           std::string::npos);
 }
 
-TEST_CASE("Kimi getAuth applies the OAuth Bearer header before streaming", "[coding_agent][auth][issue344]") {
+TEST_CASE("Kimi getAuth applies the OAuth Bearer header before streaming", "[coding_agent][auth][issue344][spec]") {
     LoginHarness harness;
     harness.http->responses[kDeviceAuthorizationUrl] = {
         {200, device_authorization_json()},

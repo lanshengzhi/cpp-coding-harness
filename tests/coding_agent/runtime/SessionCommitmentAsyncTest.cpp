@@ -136,9 +136,8 @@ private:
 
 } // namespace
 
-TEST_CASE(
-    "an admitted event advances live Session state before weak observers are notified",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("an admitted event advances live Session state before weak observers are notified",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;
     PersistentSession fixture{runtime};
     auto options = fixture.options(tests::make_scripted_fake_provider());
@@ -173,9 +172,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "session event persistence executes off the interaction loop in admission order",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("session event persistence executes off the interaction loop in admission order",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;
     PersistentSession fixture{runtime};
     auto options = fixture.options(tests::make_scripted_fake_provider());
@@ -211,9 +209,8 @@ TEST_CASE(
     session.close();
 }
 
-TEST_CASE(
-    "a persistence failure keeps live state and rejects later prompts with a typed failure",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("a persistence failure keeps live state and rejects later prompts with a typed failure",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;
     PersistentSession fixture{runtime};
     auto options = fixture.options(tests::make_scripted_fake_provider());
@@ -252,9 +249,8 @@ TEST_CASE(
     CHECK(fixture.persisted_texts() == std::vector<std::string>{"keep live state"});
 }
 
-TEST_CASE(
-    "an aborted prompt settles the commitment channel with a consistent session file",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("an aborted prompt settles the commitment channel with a consistent session file",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;
     PersistentSession fixture{runtime};
     auto provider = std::make_shared<AbortAwareGatedChatProvider>();
@@ -294,9 +290,8 @@ TEST_CASE(
     session.close();
 }
 
-TEST_CASE(
-    "interaction and timers progress while session persistence is slow",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("interaction and timers progress while session persistence is slow",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;
     PersistentSession fixture{runtime};
     // Hold the model response on the ReleaseGate so the timer observation
@@ -353,9 +348,8 @@ TEST_CASE(
     session.close();
 }
 
-TEST_CASE(
-    "a second session on the same Runtime root completes while persistence is slow",
-    "[coding_agent][runtime][commitment][issue464]") {
+TEST_CASE("a second session on the same Runtime root completes while persistence is slow",
+        "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;
     PersistentSession slow_fixture{runtime};
     PersistentSession fast_fixture{runtime};

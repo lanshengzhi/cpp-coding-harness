@@ -65,7 +65,7 @@ private:
 
 } // namespace
 
-TEST_CASE("Overlay renders children and reports visibility", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay renders children and reports visibility", "[tui][overlay][issue50][spec]") {
     cch::tui::Overlay overlay;
     auto text = std::make_unique<cch::tui::Text>("hello", 0, 0);
     REQUIRE(overlay.add_child(std::move(text)));
@@ -83,7 +83,7 @@ TEST_CASE("Overlay renders children and reports visibility", "[tui][overlay][iss
     CHECK(rendered->lines.empty());
 }
 
-TEST_CASE("Overlay supports position strategies", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay supports position strategies", "[tui][overlay][issue50][spec]") {
     // Absolute position
     cch::tui::OverlayOptions opts;
     opts.position = cch::tui::OverlayPosition::Absolute;
@@ -102,7 +102,7 @@ TEST_CASE("Overlay supports position strategies", "[tui][overlay][issue50]") {
     CHECK(row == 3);
 }
 
-TEST_CASE("Overlay layout position handles TopLeft anchor", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay layout position handles TopLeft anchor", "[tui][overlay][issue50][spec]") {
     cch::tui::Overlay overlay;
     overlay.set_anchor(10, 5, 20, 10);
     const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
@@ -110,7 +110,7 @@ TEST_CASE("Overlay layout position handles TopLeft anchor", "[tui][overlay][issu
     CHECK(row == 5);
 }
 
-TEST_CASE("Overlay layout position handles Center anchor", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay layout position handles Center anchor", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.position = cch::tui::OverlayPosition::Center;
     cch::tui::Overlay overlay(opts);
@@ -120,7 +120,7 @@ TEST_CASE("Overlay layout position handles Center anchor", "[tui][overlay][issue
     CHECK(row == 5 + (10 / 2) - (3 / 2));  // 8
 }
 
-TEST_CASE("Overlay layout position handles BottomRight anchor", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay layout position handles BottomRight anchor", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.position = cch::tui::OverlayPosition::BottomRight;
     cch::tui::Overlay overlay(opts);
@@ -130,7 +130,7 @@ TEST_CASE("Overlay layout position handles BottomRight anchor", "[tui][overlay][
     CHECK(row == 5 + 10 - 3);  // 12
 }
 
-TEST_CASE("Overlay layout position handles LeftCenter anchor", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay layout position handles LeftCenter anchor", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.position = cch::tui::OverlayPosition::LeftCenter;
     cch::tui::Overlay overlay(opts);
@@ -140,7 +140,7 @@ TEST_CASE("Overlay layout position handles LeftCenter anchor", "[tui][overlay][i
     CHECK(row == 5 + (10 / 2) - (3 / 2)); // 8
 }
 
-TEST_CASE("Overlay layout position handles RightCenter anchor", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay layout position handles RightCenter anchor", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.position = cch::tui::OverlayPosition::RightCenter;
     cch::tui::Overlay overlay(opts);
@@ -150,7 +150,7 @@ TEST_CASE("Overlay layout position handles RightCenter anchor", "[tui][overlay][
     CHECK(row == 5 + (10 / 2) - (3 / 2)); // 8
 }
 
-TEST_CASE("Overlay layout position handles Percentage position", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay layout position handles Percentage position", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.position = cch::tui::OverlayPosition::Percentage;
     opts.percentage_column = 50;
@@ -161,7 +161,7 @@ TEST_CASE("Overlay layout position handles Percentage position", "[tui][overlay]
     CHECK(row == (24 * 25) / 100); // 6
 }
 
-TEST_CASE("Overlay visible_at checks viewport constraints", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay visible_at checks viewport constraints", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.visibility.min_viewport_width = 40;
     opts.visibility.max_viewport_height = 30;
@@ -176,7 +176,7 @@ TEST_CASE("Overlay visible_at checks viewport constraints", "[tui][overlay][issu
     CHECK_FALSE(overlay.visible_at({.columns = 50, .rows = 20}));
 }
 
-TEST_CASE("Overlay size constraints limit rendered dimensions", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay size constraints limit rendered dimensions", "[tui][overlay][issue50][spec]") {
     cch::tui::OverlayOptions opts;
     opts.size_constraints.min_width = 20;
     opts.size_constraints.min_height = 3;
@@ -194,7 +194,7 @@ TEST_CASE("Overlay size constraints limit rendered dimensions", "[tui][overlay][
     CHECK(rendered->lines.size() <= 5);
 }
 
-TEST_CASE("Tui routes semantic input to exactly one focused target", "[tui][overlay][issue50]") {
+TEST_CASE("Tui routes semantic input to exactly one focused target", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -227,7 +227,7 @@ TEST_CASE("Tui routes semantic input to exactly one focused target", "[tui][over
     CHECK(comp1_ptr->received_input.size() == 1);
 }
 
-TEST_CASE("Tui routes input to overlays before base content", "[tui][overlay][issue50]") {
+TEST_CASE("Tui routes input to overlays before base content", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -261,7 +261,7 @@ TEST_CASE("Tui routes input to overlays before base content", "[tui][overlay][is
     CHECK(base_ptr->received_input.empty());
 }
 
-TEST_CASE("Non-capturing overlay passes input through to base content", "[tui][overlay][issue50]") {
+TEST_CASE("Non-capturing overlay passes input through to base content", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -287,7 +287,7 @@ TEST_CASE("Non-capturing overlay passes input through to base content", "[tui][o
     CHECK(overlay_comp_ptr->received_input.empty());
 }
 
-TEST_CASE("Overlay z-index controls input routing order", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay z-index controls input routing order", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -330,7 +330,7 @@ TEST_CASE("Overlay z-index controls input routing order", "[tui][overlay][issue5
     CHECK(base_ptr->received_input.empty());
 }
 
-TEST_CASE("Hide and restore overlay with focus fallback", "[tui][overlay][issue50]") {
+TEST_CASE("Hide and restore overlay with focus fallback", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -360,7 +360,7 @@ TEST_CASE("Hide and restore overlay with focus fallback", "[tui][overlay][issue5
     CHECK(overlay_ptr->visible());
 }
 
-TEST_CASE("Remove overlay disposes it and fallback focus works", "[tui][overlay][issue50]") {
+TEST_CASE("Remove overlay disposes it and fallback focus works", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -387,7 +387,7 @@ TEST_CASE("Remove overlay disposes it and fallback focus works", "[tui][overlay]
     CHECK(base_ptr->received_input.size() == 1);
 }
 
-TEST_CASE("IME cursor location follows focused component", "[tui][overlay][issue50]") {
+TEST_CASE("IME cursor location follows focused component", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -407,7 +407,7 @@ TEST_CASE("IME cursor location follows focused component", "[tui][overlay][issue
     CHECK(cursor.column > 0);
 }
 
-TEST_CASE("Overlay with Editor delegates cursor location", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay with Editor delegates cursor location", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 10});
     cch::tui::Tui tui(terminal);
 
@@ -438,7 +438,7 @@ TEST_CASE("Overlay with Editor delegates cursor location", "[tui][overlay][issue
     CHECK(cursor.column > 0);
 }
 
-TEST_CASE("Stacked overlays render in z-order", "[tui][overlay][issue50]") {
+TEST_CASE("Stacked overlays render in z-order", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 10});
     cch::tui::Tui tui(terminal);
 
@@ -482,7 +482,7 @@ TEST_CASE("Stacked overlays render in z-order", "[tui][overlay][issue50]") {
     CHECK_FALSE(screen.empty());
 }
 
-TEST_CASE("Focusable Components expose cursor_location for IME", "[tui][overlay][issue50]") {
+TEST_CASE("Focusable Components expose cursor_location for IME", "[tui][overlay][issue50][spec]") {
     // A Focusable with a custom cursor_location set
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
@@ -505,13 +505,13 @@ TEST_CASE("Focusable Components expose cursor_location for IME", "[tui][overlay]
     REQUIRE(tui.render());
 }
 
-TEST_CASE("Default cursor_location returns nullopt for non-focusable", "[tui][overlay][issue50]") {
+TEST_CASE("Default cursor_location returns nullopt for non-focusable", "[tui][overlay][issue50][spec]") {
     // Text is not Focusable, so it has no cursor location: proven at compile
     // time (the dynamic_cast would be constant-false).
     static_assert(!std::is_base_of_v<cch::tui::Focusable, cch::tui::Text>);
 }
 
-TEST_CASE("Overlay rejects a disposed component after removal", "[tui][overlay][issue50]") {
+TEST_CASE("Overlay rejects a disposed component after removal", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 

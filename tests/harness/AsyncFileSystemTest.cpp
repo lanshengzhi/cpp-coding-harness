@@ -102,7 +102,7 @@ template <typename T, typename E> std::expected<T, E> run_to_completion(support:
 } // namespace
 
 TEST_CASE("filesystem capability is complete and keeps Shell as a separate capability",
-        "[harness][filesystem][u1][issue558]") {
+        "[harness][filesystem][u1][issue558][spec]") {
     static_assert(std::is_abstract_v<harness::AsyncFileSystem>);
     static_assert(std::is_abstract_v<harness::AsyncShell>);
     static_assert(!std::is_base_of_v<harness::AsyncShell, harness::AsyncFileSystem>);
@@ -114,7 +114,7 @@ TEST_CASE("filesystem capability is complete and keeps Shell as a separate capab
 }
 
 TEST_CASE("complete filesystem fake models success cancellation and typed failures",
-        "[harness][filesystem][fake][issue558]") {
+        "[harness][filesystem][fake][issue558][spec]") {
     tests::FakeAsyncFileSystem fake("/workspace");
 
     auto path = fake.readTextFile("note.txt", {});
@@ -182,7 +182,8 @@ TEST_CASE("complete filesystem fake models success cancellation and typed failur
     CHECK(cleanup_result->error().code == harness::FileErrorCode::ResourceLimit);
 }
 
-TEST_CASE("Local filesystem adapter preserves containment and cancellation", "[harness][filesystem][local][issue558]") {
+TEST_CASE("Local filesystem adapter preserves containment and cancellation",
+        "[harness][filesystem][local][issue558][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("nested/note.txt", "hello");
     TestRuntime runtime;
@@ -208,7 +209,7 @@ TEST_CASE("Local filesystem adapter preserves containment and cancellation", "[h
 }
 
 TEST_CASE("started filesystem work returns its committed outcome after cancellation",
-        "[harness][filesystem][async][issue558]") {
+        "[harness][filesystem][async][issue558][spec]") {
     tests::TempWorkspace workspace;
     TestRuntime runtime;
     auto filesystem = std::make_shared<harness::WorkspaceFileSystem>(workspace.path());
@@ -231,7 +232,7 @@ TEST_CASE("started filesystem work returns its committed outcome after cancellat
 }
 
 TEST_CASE("filesystem reads fail with ResourceLimit before returning partial results",
-        "[harness][filesystem][capacity][issue558]") {
+        "[harness][filesystem][capacity][issue558][spec]") {
     tests::TempWorkspace workspace;
     const auto oversized_bytes = harness::kFileSystemCapacity.max_file_bytes + 1;
     workspace.write("oversized.txt", std::string(oversized_bytes, 'x'));
@@ -267,7 +268,7 @@ TEST_CASE("filesystem reads fail with ResourceLimit before returning partial res
 }
 
 TEST_CASE("directory listings reject over-capacity results instead of returning a partial list",
-        "[harness][filesystem][capacity][issue558]") {
+        "[harness][filesystem][capacity][issue558][spec]") {
     tests::TempWorkspace workspace;
     for (std::size_t index = 0; index <= harness::kFileSystemCapacity.max_directory_entries; ++index) {
         workspace.write("entry-" + std::to_string(index), "x");
@@ -283,7 +284,7 @@ TEST_CASE("directory listings reject over-capacity results instead of returning 
 }
 
 TEST_CASE("filesystem cleanup removes only each adapter's tracked temporary resources",
-        "[harness][filesystem][cleanup][issue558]") {
+        "[harness][filesystem][cleanup][issue558][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".cch-tmp");
     workspace.write(".cch-tmp/foreign", "keep");
@@ -318,7 +319,7 @@ TEST_CASE("filesystem cleanup removes only each adapter's tracked temporary reso
     runtime.close();
 }
 
-TEST_CASE("every async filesystem operation observes a pre-requested cancellation", "[harness][async][issue40]") {
+TEST_CASE("every async filesystem operation observes a pre-requested cancellation", "[harness][async][issue40][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "unchanged");
     TestRuntime runtime;
@@ -348,7 +349,7 @@ TEST_CASE("every async filesystem operation observes a pre-requested cancellatio
     runtime.close();
 }
 
-TEST_CASE("async local filesystem adapter preserves file read and write safety", "[harness][async][u6]") {
+TEST_CASE("async local filesystem adapter preserves file read and write safety", "[harness][async][u6][spec]") {
     tests::TempWorkspace workspace;
     TestRuntime runtime;
     harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
@@ -366,8 +367,8 @@ TEST_CASE("async local filesystem adapter preserves file read and write safety",
     runtime.close();
 }
 
-TEST_CASE(
-        "async filesystem submission returns typed Busy when the runtime is saturated", "[harness][async][issue459]") {
+TEST_CASE("async filesystem submission returns typed Busy when the runtime is saturated",
+        "[harness][async][issue459][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "original");
     auto io = std::make_shared<boost::asio::io_context>();
@@ -401,7 +402,8 @@ TEST_CASE(
     root.close();
 }
 
-TEST_CASE("queued filesystem work cancelled before start performs no side effects", "[harness][async][issue459]") {
+TEST_CASE(
+        "queued filesystem work cancelled before start performs no side effects", "[harness][async][issue459][spec]") {
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(io,
@@ -450,7 +452,8 @@ TEST_CASE("queued filesystem work cancelled before start performs no side effect
     root.close();
 }
 
-TEST_CASE("filesystem cleanup preserves replacement temporary resources", "[harness][filesystem][cleanup][issue558]") {
+TEST_CASE("filesystem cleanup preserves replacement temporary resources",
+        "[harness][filesystem][cleanup][issue558][spec]") {
     tests::TempWorkspace workspace;
     TestRuntime runtime;
     harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
@@ -479,7 +482,8 @@ TEST_CASE("filesystem cleanup preserves replacement temporary resources", "[harn
     runtime.close();
 }
 
-TEST_CASE("filesystem ResourceLimit remains distinct from support Busy", "[harness][filesystem][capacity][issue558]") {
+TEST_CASE("filesystem ResourceLimit remains distinct from support Busy",
+        "[harness][filesystem][capacity][issue558][spec]") {
     const auto file_error = harness::to_util_error(harness::FileError{
             .code = harness::FileErrorCode::ResourceLimit,
             .message = "too large",

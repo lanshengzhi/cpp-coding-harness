@@ -11,7 +11,7 @@
 
 using namespace cch;
 
-TEST_CASE("WorkspaceFileSystem reads an existing file inside workspace", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem reads an existing file inside workspace", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world");
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
@@ -22,7 +22,7 @@ TEST_CASE("WorkspaceFileSystem reads an existing file inside workspace", "[harne
     CHECK(*content == "hello world");
 }
 
-TEST_CASE("WorkspaceFileSystem rejects final symlink when reading", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem rejects final symlink when reading", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("real.txt", "secret");
     std::filesystem::create_symlink(workspace.path() / "real.txt", workspace.path() / "link.txt");
@@ -34,7 +34,7 @@ TEST_CASE("WorkspaceFileSystem rejects final symlink when reading", "[harness][f
     CHECK(content.error().detail.find("symlink") != std::string::npos);
 }
 
-TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when reading", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when reading", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("real/target.txt", "secret");
     std::filesystem::create_symlink(workspace.path() / "real", workspace.path() / "fake");
@@ -46,7 +46,7 @@ TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when reading", "[h
     CHECK(content.error().code == support::ErrorCode::Workspace);
 }
 
-TEST_CASE("WorkspaceFileSystem writes a file inside workspace", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem writes a file inside workspace", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(guard);
@@ -57,7 +57,8 @@ TEST_CASE("WorkspaceFileSystem writes a file inside workspace", "[harness][files
     CHECK(workspace.read("note.txt") == "hello");
 }
 
-TEST_CASE("WorkspaceFileSystem creates parent directories without following symlinks", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem creates parent directories without following symlinks",
+        "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(guard);
@@ -67,7 +68,7 @@ TEST_CASE("WorkspaceFileSystem creates parent directories without following syml
     CHECK(workspace.read("nested/deep/note.txt") == "hello");
 }
 
-TEST_CASE("WorkspaceFileSystem rejects writing through final symlink", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem rejects writing through final symlink", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("real.txt", "secret");
     std::filesystem::create_symlink(workspace.path() / "real.txt", workspace.path() / "link.txt");
@@ -80,7 +81,7 @@ TEST_CASE("WorkspaceFileSystem rejects writing through final symlink", "[harness
     CHECK(workspace.read("real.txt") == "secret");
 }
 
-TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when writing", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when writing", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("real/target.txt", "secret");
     std::filesystem::create_symlink(workspace.path() / "real", workspace.path() / "fake");
@@ -92,7 +93,8 @@ TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when writing", "[h
     CHECK(written.error().code == support::ErrorCode::Workspace);
 }
 
-TEST_CASE("WorkspaceFileSystem rejects missing parent when create_parents is false", "[harness][filesystem][u2]") {
+TEST_CASE(
+        "WorkspaceFileSystem rejects missing parent when create_parents is false", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(guard);
@@ -106,7 +108,8 @@ TEST_CASE("WorkspaceFileSystem rejects missing parent when create_parents is fal
 // Pi-shaped filesystem tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("WorkspaceFileSystem fileInfo returns metadata without following symlinks", "[harness][filesystem][u2]") {
+TEST_CASE(
+        "WorkspaceFileSystem fileInfo returns metadata without following symlinks", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world");
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
@@ -126,7 +129,7 @@ TEST_CASE("WorkspaceFileSystem fileInfo returns metadata without following symli
     CHECK(link_info->kind == harness::FileKind::Symlink);
 }
 
-TEST_CASE("WorkspaceFileSystem fileInfo returns not_found for missing path", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem fileInfo returns not_found for missing path", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -136,7 +139,8 @@ TEST_CASE("WorkspaceFileSystem fileInfo returns not_found for missing path", "[h
     CHECK(info.error().code == harness::FileErrorCode::NotFound);
 }
 
-TEST_CASE("WorkspaceFileSystem returns not_found for missing parent paths", "[harness][filesystem][u2][issue558]") {
+TEST_CASE(
+        "WorkspaceFileSystem returns not_found for missing parent paths", "[harness][filesystem][u2][issue558][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -154,7 +158,7 @@ TEST_CASE("WorkspaceFileSystem returns not_found for missing parent paths", "[ha
     CHECK(listing.error().code == harness::FileErrorCode::NotFound);
 }
 
-TEST_CASE("WorkspaceFileSystem listDir returns direct children", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem listDir returns direct children", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("a.txt", "a");
     workspace.write("sub/b.txt", "b");
@@ -187,7 +191,7 @@ TEST_CASE("WorkspaceFileSystem listDir returns direct children", "[harness][file
     CHECK(trailing->empty());
 }
 
-TEST_CASE("WorkspaceFileSystem listDir returns error for regular file", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem listDir returns error for regular file", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello");
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
@@ -198,7 +202,7 @@ TEST_CASE("WorkspaceFileSystem listDir returns error for regular file", "[harnes
     CHECK(listing.error().code == harness::FileErrorCode::NotDirectory);
 }
 
-TEST_CASE("WorkspaceFileSystem readTextLines with max count", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem readTextLines with max count", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("lines.txt", "line1\nline2\nline3\nline4\nline5\n");
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
@@ -215,7 +219,7 @@ TEST_CASE("WorkspaceFileSystem readTextLines with max count", "[harness][filesys
     CHECK(all->size() == 5);
 }
 
-TEST_CASE("WorkspaceFileSystem readBinaryFile preserves exact bytes", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem readBinaryFile preserves exact bytes", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     std::string data("\x00\xFF\x7F\x80", 4);
     workspace.write("bin.dat", data);
@@ -231,7 +235,7 @@ TEST_CASE("WorkspaceFileSystem readBinaryFile preserves exact bytes", "[harness]
     CHECK(bin->at(3) == std::byte{0x80});
 }
 
-TEST_CASE("WorkspaceFileSystem writeFile and appendFile with binary content", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem writeFile and appendFile with binary content", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -250,7 +254,7 @@ TEST_CASE("WorkspaceFileSystem writeFile and appendFile with binary content", "[
     CHECK(read->at(2) == std::byte{0x03});
 }
 
-TEST_CASE("WorkspaceFileSystem createDir and remove with recursive", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem createDir and remove with recursive", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -265,7 +269,7 @@ TEST_CASE("WorkspaceFileSystem createDir and remove with recursive", "[harness][
     CHECK_FALSE(std::filesystem::exists(workspace.path() / "nested"));
 }
 
-TEST_CASE("WorkspaceFileSystem remove rejects workspace root", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem remove rejects workspace root", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -275,7 +279,7 @@ TEST_CASE("WorkspaceFileSystem remove rejects workspace root", "[harness][filesy
     CHECK(result.error().code == harness::FileErrorCode::Invalid);
 }
 
-TEST_CASE("WorkspaceFileSystem remove does not follow symlinks to outside", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem remove does not follow symlinks to outside", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("keep.txt", "safe");
     std::filesystem::create_symlink(workspace.path() / "keep.txt", workspace.path() / "link.txt");
@@ -290,7 +294,7 @@ TEST_CASE("WorkspaceFileSystem remove does not follow symlinks to outside", "[ha
 }
 
 TEST_CASE("WorkspaceFileSystem rejects symlink parents for metadata and mutations",
-        "[harness][filesystem][u2][issue558]") {
+        "[harness][filesystem][u2][issue558][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside;
     outside.write("secret.txt", "outside");
@@ -325,7 +329,7 @@ TEST_CASE("WorkspaceFileSystem rejects symlink parents for metadata and mutation
     CHECK(outside.read("secret.txt") == "outside");
 }
 
-TEST_CASE("WorkspaceFileSystem exists returns false for missing path", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem exists returns false for missing path", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -340,7 +344,7 @@ TEST_CASE("WorkspaceFileSystem exists returns false for missing path", "[harness
     CHECK(*e2);
 }
 
-TEST_CASE("WorkspaceFileSystem canonicalPath resolves symlinks within workspace", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem canonicalPath resolves symlinks within workspace", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("target.txt", "data");
     std::filesystem::create_symlink(workspace.path() / "target.txt", workspace.path() / "link.txt");
@@ -352,7 +356,7 @@ TEST_CASE("WorkspaceFileSystem canonicalPath resolves symlinks within workspace"
     CHECK(*canonical == (workspace.path() / "target.txt").string());
 }
 
-TEST_CASE("WorkspaceFileSystem createTempDir and createTempFile", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem createTempDir and createTempFile", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -370,7 +374,7 @@ TEST_CASE("WorkspaceFileSystem createTempDir and createTempFile", "[harness][fil
 }
 
 TEST_CASE("WorkspaceFileSystem rejects append beyond the fixed file limit without replacement",
-        "[harness][filesystem][capacity][issue558]") {
+        "[harness][filesystem][capacity][issue558][spec]") {
     tests::TempWorkspace workspace;
     const std::string original(harness::kFileSystemCapacity.max_file_bytes, 'x');
     workspace.write("bounded.txt", original);
@@ -389,7 +393,7 @@ TEST_CASE("WorkspaceFileSystem rejects append beyond the fixed file limit withou
     CHECK_FALSE(std::filesystem::exists(workspace.path() / "new-bounded.txt"));
 }
 
-TEST_CASE("WorkspaceFileSystem absolutePath and joinPath", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem absolutePath and joinPath", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -403,7 +407,7 @@ TEST_CASE("WorkspaceFileSystem absolutePath and joinPath", "[harness][filesystem
     CHECK(*joined == (workspace.path() / "sub" / "file.txt").string());
 }
 
-TEST_CASE("WorkspaceFileSystem rejects absolute paths", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem rejects absolute paths", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -415,7 +419,7 @@ TEST_CASE("WorkspaceFileSystem rejects absolute paths", "[harness][filesystem][u
     REQUIRE_FALSE(read);
 }
 
-TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2]") {
+TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
@@ -425,7 +429,7 @@ TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2]
     CHECK(abs.error().code == harness::FileErrorCode::PermissionDenied);
 }
 
-TEST_CASE("WorkspaceFileSystem enforces reviewed path and file contracts", "[harness][filesystem][issue557]") {
+TEST_CASE("WorkspaceFileSystem enforces reviewed path and file contracts", "[harness][filesystem][issue557][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("existing.txt", "content");
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());

@@ -1144,9 +1144,8 @@ private:
 
 } // namespace
 
-TEST_CASE(
-    "Native TUI renders resumed and live message images in source order without mutating content",
-    "[coding_agent][tui][image][issue63]") {
+TEST_CASE("Native TUI renders resumed and live message images in source order without mutating content",
+        "[coding_agent][tui][image][issue63][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -1340,9 +1339,8 @@ TEST_CASE(
     CHECK(*fallback_result);
 }
 
-TEST_CASE(
-    "Native TUI renders a live image-bearing tool result through the transcript path",
-    "[coding_agent][tui][image][tool][issue63]") {
+TEST_CASE("Native TUI renders a live image-bearing tool result through the transcript path",
+        "[coding_agent][tui][image][tool][issue63][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1402,9 +1400,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI keeps tail image sidecars visible while the old transcript scrolled into scrollback",
-    "[coding_agent][tui][image][viewport][issue63]") {
+TEST_CASE("Native TUI keeps tail image sidecars visible while the old transcript scrolled into scrollback",
+        "[coding_agent][tui][image][viewport][issue63][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1497,9 +1494,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI clipboard images become distinct supported temporary paths",
-    "[coding_agent][tui][clipboard][issue63]") {
+TEST_CASE("Native TUI clipboard images become distinct supported temporary paths",
+        "[coding_agent][tui][clipboard][issue63][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1585,9 +1581,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Native TUI clipboard falls back to text at the cursor and ignores read failures",
-    "[coding_agent][tui][clipboard][issue63]") {
+TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores read failures",
+        "[coding_agent][tui][clipboard][issue63][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1676,9 +1671,8 @@ TEST_CASE(
     CHECK(*failed_result);
 }
 
-TEST_CASE(
-    "Native TUI renders a resumed rich transcript before accepting continued input",
-    "[coding_agent][tui][resume][issue59]") {
+TEST_CASE("Native TUI renders a resumed rich transcript before accepting continued input",
+        "[coding_agent][tui][resume][issue59][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -1839,9 +1833,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI presents fresh and resumed persisted history equivalently",
-    "[coding_agent][tui][persistence][issue59]") {
+TEST_CASE("Native TUI presents fresh and resumed persisted history equivalently",
+        "[coding_agent][tui][persistence][issue59][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -1915,9 +1908,8 @@ TEST_CASE(
     CHECK(*resumed_result);
 }
 
-TEST_CASE(
-    "Native TUI correlates repeated Tool Call IDs and locally expands long output",
-    "[coding_agent][tui][tools][issue59]") {
+TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long output",
+        "[coding_agent][tui][tools][issue59][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -1999,9 +1991,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI interrupt cancels autocomplete before aborting active work and recovers",
-    "[coding_agent][tui][abort][issue61]") {
+TEST_CASE("Native TUI interrupt cancels autocomplete before aborting active work and recovers",
+        "[coding_agent][tui][abort][issue61][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2074,9 +2065,8 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Native TUI repeated interrupt and shutdown input restores the terminal once",
-    "[coding_agent][tui][abort][shutdown][issue61]") {
+TEST_CASE("Native TUI repeated interrupt and shutdown input restores the terminal once",
+        "[coding_agent][tui][abort][shutdown][issue61][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2126,9 +2116,8 @@ TEST_CASE(
     CHECK(terminal.modes().cursor_visible);
 }
 
-TEST_CASE(
-    "Native TUI waits for cancelled tool quiescence before accepting the next prompt",
-    "[coding_agent][tui][abort][tools][issue61]") {
+TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the next prompt",
+        "[coding_agent][tui][abort][tools][issue61][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2213,9 +2202,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI distinguishes subscriber diagnostics and remains usable",
-    "[coding_agent][tui][diagnostics][issue61]") {
+TEST_CASE("Native TUI distinguishes subscriber diagnostics and remains usable",
+        "[coding_agent][tui][diagnostics][issue61][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2281,9 +2269,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI distinguishes persistence failures and remains usable",
-    "[coding_agent][tui][diagnostics][persistence][issue61]") {
+TEST_CASE("Native TUI distinguishes persistence failures and remains usable",
+        "[coding_agent][tui][diagnostics][persistence][issue61][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2340,9 +2327,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI renders accepted provider outcomes once and remains usable",
-    "[coding_agent][tui][provider-outcome][issue59]") {
+TEST_CASE("Native TUI renders accepted provider outcomes once and remains usable",
+        "[coding_agent][tui][provider-outcome][issue59][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2405,9 +2391,7 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI retries a transient render backpressure failure",
-    "[coding_agent][tui][issue462]") {
+TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding_agent][tui][issue462][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2453,9 +2437,8 @@ TEST_CASE(
     CHECK(run_result->error().message == "Native TUI render failed");
 }
 
-TEST_CASE(
-    "Native TUI redacts startup failures and leaves the Session closed",
-    "[coding_agent][tui][failure][issue58]") {
+TEST_CASE("Native TUI redacts startup failures and leaves the Session closed",
+        "[coding_agent][tui][failure][issue58][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2488,9 +2471,8 @@ TEST_CASE(
     CHECK(terminal.modes() == tui::TerminalModeState{});
 }
 
-TEST_CASE(
-    "Native TUI reports both post-acquisition startup and restoration failures",
-    "[coding_agent][tui][failure][issue58]") {
+TEST_CASE("Native TUI reports both post-acquisition startup and restoration failures",
+        "[coding_agent][tui][failure][issue58][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2525,9 +2507,8 @@ TEST_CASE(
     CHECK_FALSE(created->session->is_open());
 }
 
-TEST_CASE(
-    "Native TUI submits two fresh prompts and replaces streamed assistant state",
-    "[coding_agent][tui][issue58]") {
+TEST_CASE("Native TUI submits two fresh prompts and replaces streamed assistant state",
+        "[coding_agent][tui][issue58][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2575,8 +2556,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Native TUI steers and follows up in pi-compatible turn order",
-    "[coding_agent][tui][queues][issue62]") {
+        "Native TUI steers and follows up in pi-compatible turn order", "[coding_agent][tui][queues][issue62][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2669,9 +2649,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI preserves bounded rejected input and dequeues pending text",
-    "[coding_agent][tui][queues][limits][issue62]") {
+TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text",
+        "[coding_agent][tui][queues][limits][issue62][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2783,9 +2762,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI preserves follow-up after an accepted error and remains usable",
-    "[coding_agent][tui][queues][error][issue62]") {
+TEST_CASE("Native TUI preserves follow-up after an accepted error and remains usable",
+        "[coding_agent][tui][queues][error][issue62][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2848,9 +2826,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI restores pending input before abort and accepts it after quiescence",
-    "[coding_agent][tui][queues][abort][issue62]") {
+TEST_CASE("Native TUI restores pending input before abort and accepts it after quiescence",
+        "[coding_agent][tui][queues][abort][issue62][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2913,9 +2890,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI records accepted follow-up in editor history and queues slash text while a run is active",
-    "[coding_agent][tui][queues][issue401]") {
+TEST_CASE("Native TUI records accepted follow-up in editor history and queues slash text while a run is active",
+        "[coding_agent][tui][queues][issue401][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2997,9 +2973,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI rejects follow-up admission at capacity and restores the text unchanged",
-    "[coding_agent][tui][queues][limits][issue401]") {
+TEST_CASE("Native TUI rejects follow-up admission at capacity and restores the text unchanged",
+        "[coding_agent][tui][queues][limits][issue401][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3067,9 +3042,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI dequeue restores steering, then follow-up, then draft with blank lines",
-    "[coding_agent][tui][queues][issue401]") {
+TEST_CASE("Native TUI dequeue restores steering, then follow-up, then draft with blank lines",
+        "[coding_agent][tui][queues][issue401][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3158,9 +3132,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI expanded header hints assemble followUp and dequeue with pi's keys",
-    "[coding_agent][tui][hints][issue401]") {
+TEST_CASE("Native TUI expanded header hints assemble followUp and dequeue with pi's keys",
+        "[coding_agent][tui][hints][issue401][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3199,9 +3172,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI queues batched submissions across deferred prompt dispatch",
-    "[coding_agent][tui][async][issue58][issue62]") {
+TEST_CASE("Native TUI queues batched submissions across deferred prompt dispatch",
+        "[coding_agent][tui][async][issue58][issue62][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3252,9 +3224,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI replaces one visible assistant entry during incremental streaming",
-    "[coding_agent][tui][streaming][issue58]") {
+TEST_CASE("Native TUI replaces one visible assistant entry during incremental streaming",
+        "[coding_agent][tui][streaming][issue58][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3312,9 +3283,8 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Native TUI keeps input and resize responsive while a prompt is suspended",
-    "[coding_agent][tui][async][issue58]") {
+TEST_CASE("Native TUI keeps input and resize responsive while a prompt is suspended",
+        "[coding_agent][tui][async][issue58][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3364,9 +3334,8 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Native TUI routes slash commands without submitting builtins as Agent Prompts",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent Prompts",
+        "[coding_agent][tui][commands][issue502][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3458,9 +3427,8 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Native TUI command autocomplete includes effective commands and project resources",
-    "[coding_agent][tui][autocomplete][issue60]") {
+TEST_CASE("Native TUI command autocomplete includes effective commands and project resources",
+        "[coding_agent][tui][autocomplete][issue60][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3542,9 +3510,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI skill commands autocomplete follows the enableSkillCommands setting",
-    "[coding_agent][tui][autocomplete][issue412]") {
+TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommands setting",
+        "[coding_agent][tui][autocomplete][issue412][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3621,9 +3588,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI /reload refuses while streaming with pi's verbatim warning",
-    "[coding_agent][tui][reload][issue418]") {
+TEST_CASE("Native TUI /reload refuses while streaming with pi's verbatim warning",
+        "[coding_agent][tui][reload][issue418][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3670,9 +3636,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI /reload re-reads resources, refreshes the presentation, and reports the pi status",
-    "[coding_agent][tui][reload][issue418]") {
+TEST_CASE("Native TUI /reload re-reads resources, refreshes the presentation, and reports the pi status",
+        "[coding_agent][tui][reload][issue418][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3751,9 +3716,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI /reload re-catalogs keybindings.json into the shared slot",
-    "[coding_agent][tui][reload][keybindings][issue418]") {
+TEST_CASE("Native TUI /reload re-catalogs keybindings.json into the shared slot",
+        "[coding_agent][tui][reload][keybindings][issue418][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3801,7 +3765,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders inline",
-        "[coding_agent][tui][overlays][issue60]") {
+        "[coding_agent][tui][overlays][issue60][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3882,9 +3846,8 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Native TUI retains bounded terminal provider failures and allows retry",
-    "[coding_agent][tui][failure][issue58]") {
+TEST_CASE("Native TUI retains bounded terminal provider failures and allows retry",
+        "[coding_agent][tui][failure][issue58][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -3926,9 +3889,8 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Native TUI app.thinking.toggle persists hideThinkingBlock and reports pi status",
-    "[coding_agent][tui][render-settings][issue408]") {
+TEST_CASE("Native TUI app.thinking.toggle persists hideThinkingBlock and reports pi status",
+        "[coding_agent][tui][render-settings][issue408][spec]") {
     RichThinkingSession fixture;
     fixture.create();
     tests::TempWorkspace config;
@@ -3981,9 +3943,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI boots with the persisted hideThinkingBlock and outputPad render settings",
-    "[coding_agent][tui][render-settings][issue408]") {
+TEST_CASE("Native TUI boots with the persisted hideThinkingBlock and outputPad render settings",
+        "[coding_agent][tui][render-settings][issue408][spec]") {
     RichThinkingSession fixture;
     fixture.create();
     tests::TempWorkspace config;
@@ -4022,9 +3983,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI settings selector changes render settings live and they survive persistence",
-    "[coding_agent][tui][settings-selector][issue408]") {
+TEST_CASE("Native TUI settings selector changes render settings live and they survive persistence",
+        "[coding_agent][tui][settings-selector][issue408][spec]") {
     RichThinkingSession fixture;
     fixture.create();
     tests::TempWorkspace config;
@@ -4120,9 +4080,8 @@ TEST_CASE(
     CHECK(*reboot_result);
 }
 
-TEST_CASE(
-    "Native TUI /compact and /trust bind to their runtime flows without changing Agent Session history",
-    "[coding_agent][tui][commands][issue419]") {
+TEST_CASE("Native TUI /compact and /trust bind to their runtime flows without changing Agent Session history",
+        "[coding_agent][tui][commands][issue419][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -4176,9 +4135,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "Native TUI exit during an admitted manual compaction waits for the compaction to settle",
-    "[coding_agent][tui][close][issue467]") {
+TEST_CASE("Native TUI exit during an admitted manual compaction waits for the compaction to settle",
+        "[coding_agent][tui][close][issue467][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -4252,9 +4210,8 @@ TEST_CASE(
     CHECK_FALSE(created->session->is_busy());
 }
 
-TEST_CASE(
-    "Native TUI autocomplete prefixes discovered templates and skills with their scope tags",
-    "[coding_agent][tui][autocomplete][issue419]") {
+TEST_CASE("Native TUI autocomplete prefixes discovered templates and skills with their scope tags",
+        "[coding_agent][tui][autocomplete][issue419][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;

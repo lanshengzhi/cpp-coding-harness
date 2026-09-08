@@ -96,9 +96,8 @@ std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) 
 
 } // namespace
 
-TEST_CASE(
-    "Agent issues every turn through ModelRuntime::streamSimple with the harness-consumer option set",
-    "[agent][streamSimple][issue350]") {
+TEST_CASE("Agent issues every turn through ModelRuntime::streamSimple with the harness-consumer option set",
+        "[agent][streamSimple][issue350][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
@@ -137,8 +136,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Agent loop forwards the exact run stop token through streamSimple",
-    "[agent][streamSimple][issue350]") {
+        "Agent loop forwards the exact run stop token through streamSimple", "[agent][streamSimple][issue350][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncAgentOptions options;
@@ -170,9 +168,8 @@ TEST_CASE(
     CHECK(runtime->calls[0].options.stop_token.stop_requested());
 }
 
-TEST_CASE(
-    "Agent forwards the full harness-consumer option set through streamSimple each turn",
-    "[agent][streamSimple][issue351]") {
+TEST_CASE("Agent forwards the full harness-consumer option set through streamSimple each turn",
+        "[agent][streamSimple][issue351][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
@@ -220,9 +217,8 @@ TEST_CASE(
     CHECK_FALSE(call.options.stop_token.stop_requested());
 }
 
-TEST_CASE(
-    "default turns forward pi's harness-consumer defaults through streamSimple",
-    "[agent][streamSimple][issue351]") {
+TEST_CASE("default turns forward pi's harness-consumer defaults through streamSimple",
+        "[agent][streamSimple][issue351][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
@@ -301,9 +297,8 @@ void expect_terminal_matrix_row(
 
 } // namespace
 
-TEST_CASE(
-    "six-category terminal matrix yields exactly one terminal event plus a final AssistantMessage each",
-    "[agent][streamSimple][terminal][issue351]") {
+TEST_CASE("six-category terminal matrix yields exactly one terminal event plus a final AssistantMessage each",
+        "[agent][streamSimple][terminal][issue351][spec]") {
     expect_terminal_matrix_row(
         support::ErrorCode::ModelSource, "model_source");
     expect_terminal_matrix_row(
@@ -315,8 +310,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "recording fake ModelRuntime drives one successful turn end to end",
-    "[agent][streamSimple][issue350]") {
+        "recording fake ModelRuntime drives one successful turn end to end", "[agent][streamSimple][issue350][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
@@ -338,9 +332,8 @@ TEST_CASE(
               runtime->calls[0].context.messages[0])) == "hi");
 }
 
-TEST_CASE(
-    "terminal-error turn yields exactly one error terminal event and an agreeing final message",
-    "[agent][streamSimple][issue350]") {
+TEST_CASE("terminal-error turn yields exactly one error terminal event and an agreeing final message",
+        "[agent][streamSimple][issue350][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     auto terminal = ai::assistant_text_message("");
     terminal.stop_reason = ai::AssistantStopReason::Error;
@@ -387,9 +380,8 @@ TEST_CASE(
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "cancellation yields exactly one aborted terminal event end to end",
-    "[agent][streamSimple][abort][issue350]") {
+TEST_CASE("cancellation yields exactly one aborted terminal event end to end",
+        "[agent][streamSimple][abort][issue350][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("unused"));
 
@@ -435,9 +427,8 @@ TEST_CASE(
     CHECK(count_events<agent::AgentEndEvent>(events) == 1);
 }
 
-TEST_CASE(
-    "agent_end carries only the current invocation's messages through the fake runtime",
-    "[agent][streamSimple][issue350]") {
+TEST_CASE("agent_end carries only the current invocation's messages through the fake runtime",
+        "[agent][streamSimple][issue350][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("current reply"));
 
@@ -534,9 +525,8 @@ void expect_creation_clamp(
 
 } // namespace
 
-TEST_CASE(
-    "creation-time thinking clamping covers every level against full, partial, and null thinking maps",
-    "[agent][streamSimple][issue352]") {
+TEST_CASE("creation-time thinking clamping covers every level against full, partial, and null thinking maps",
+        "[agent][streamSimple][issue352][spec]") {
     // Full map: every seven-level name mapped, so nothing clamps.
     const auto full_map = tests::make_full_thinking_model("gpt-full");
     // Partial map: "max" absent, so the supported set is off..xhigh.
@@ -563,9 +553,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "model switch re-clamps the thinking level so an unsupported level never reaches the wire",
-    "[agent][streamSimple][issue352]") {
+TEST_CASE("model switch re-clamps the thinking level so an unsupported level never reaches the wire",
+        "[agent][streamSimple][issue352][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("first"));
     runtime->responses.push_back(ai::assistant_text_message("second"));
@@ -610,9 +599,8 @@ TEST_CASE(
     CHECK(subject.state().thinking_level == "off");
 }
 
-TEST_CASE(
-    "the Agent holds kDefaultModel with no special-casing until a real model resolves",
-    "[agent][streamSimple][issue352]") {
+TEST_CASE("the Agent holds kDefaultModel with no special-casing until a real model resolves",
+        "[agent][streamSimple][issue352][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
@@ -633,9 +621,8 @@ TEST_CASE(
     CHECK(runtime->calls[0].options.reasoning == std::nullopt);
 }
 
-TEST_CASE(
-    "the Agent's live state reflects the clamped thinking level at creation",
-    "[agent][streamSimple][issue352]") {
+TEST_CASE("the Agent's live state reflects the clamped thinking level at creation",
+        "[agent][streamSimple][issue352][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
@@ -658,9 +645,8 @@ TEST_CASE(
     CHECK(subject.state().thinking_level == "xhigh");
 }
 
-TEST_CASE(
-    "Agent set_thinking_level clamps to the active model and updates live state",
-    "[agent][streamSimple][issue353]") {
+TEST_CASE("Agent set_thinking_level clamps to the active model and updates live state",
+        "[agent][streamSimple][issue353][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
@@ -691,9 +677,8 @@ TEST_CASE(
     CHECK(runtime->calls[0].options.reasoning == ai::ThinkingLevel::XHigh);
 }
 
-TEST_CASE(
-    "Agent set_thinking_level rejects invalid levels and no-ops on unchanged clamped level",
-    "[agent][streamSimple][issue353]") {
+TEST_CASE("Agent set_thinking_level rejects invalid levels and no-ops on unchanged clamped level",
+        "[agent][streamSimple][issue353][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 

@@ -119,9 +119,7 @@ struct Running {
 
 } // namespace
 
-TEST_CASE(
-    "startup TUI: the --resume picker lists sessions and selects one",
-    "[cli][startup-tui][issue417]") {
+TEST_CASE("startup TUI: the --resume picker lists sessions and selects one", "[cli][startup-tui][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace workspace;
     const auto sessions_root = agent_dir.path() / "sessions";
@@ -177,8 +175,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "startup TUI: the --resume picker cancels on Escape and toggles scope",
-    "[cli][startup-tui][issue417]") {
+        "startup TUI: the --resume picker cancels on Escape and toggles scope", "[cli][startup-tui][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace workspace;
     tests::TempWorkspace other_workspace;
@@ -237,9 +234,8 @@ TEST_CASE(
     CHECK((*running.picker_result)->outcome == cli::StartupPickerOutcome::Cancelled);
 }
 
-TEST_CASE(
-    "startup TUI: the boot missing-cwd prompt shows Continue/Cancel with pi's verbatim text",
-    "[cli][startup-tui][issue417]") {
+TEST_CASE("startup TUI: the boot missing-cwd prompt shows Continue/Cancel with pi's verbatim text",
+        "[cli][startup-tui][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace fallback;
     tests::TempWorkspace vanished;
@@ -283,8 +279,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "startup TUI: the boot missing-cwd Continue resolves the fallback cwd",
-    "[cli][startup-tui][issue417]") {
+        "startup TUI: the boot missing-cwd Continue resolves the fallback cwd", "[cli][startup-tui][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace fallback;
     tests::TempWorkspace vanished;
@@ -317,9 +312,8 @@ TEST_CASE(
     CHECK(**running.prompt_result);
 }
 
-TEST_CASE(
-    "startup TUI: theme init resolves the settings theme (G5 controller default)",
-    "[cli][startup-tui][theme][issue417]") {
+TEST_CASE("startup TUI: theme init resolves the settings theme (G5 controller default)",
+        "[cli][startup-tui][theme][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace fallback;
     tests::TempWorkspace vanished;
@@ -352,9 +346,8 @@ TEST_CASE(
     REQUIRE(running.prompt_result);
 }
 
-TEST_CASE(
-    "startup TUI: theme init falls back to the COLORFGBG env default when unset",
-    "[cli][startup-tui][theme][issue417]") {
+TEST_CASE("startup TUI: theme init falls back to the COLORFGBG env default when unset",
+        "[cli][startup-tui][theme][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace fallback;
     tests::TempWorkspace vanished;
@@ -390,9 +383,7 @@ TEST_CASE(
     REQUIRE(running.prompt_result);
 }
 
-TEST_CASE(
-    "startup TUI: theme init does not register resource themes",
-    "[cli][startup-tui][theme][issue417]") {
+TEST_CASE("startup TUI: theme init does not register resource themes", "[cli][startup-tui][theme][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace fallback;
     tests::TempWorkspace vanished;

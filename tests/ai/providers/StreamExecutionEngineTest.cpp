@@ -8,7 +8,7 @@
 
 using namespace cch;
 
-TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done events", "[ai][provider][engine]") {
+TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done events", "[ai][provider][engine][spec]") {
     tests::ScriptedTransport transport;
     transport.attempts.push_back(tests::TransportAttempt{
         .head = {.status_code = 200, .headers = {}},
@@ -80,7 +80,7 @@ TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done event
     CHECK(std::holds_alternative<ai::AssistantDoneEvent>(events[1]));
 }
 
-TEST_CASE("StreamExecutionEngine retries on 429 and resets state via factory", "[ai][provider][engine]") {
+TEST_CASE("StreamExecutionEngine retries on 429 and resets state via factory", "[ai][provider][engine][spec]") {
     tests::ScriptedTransport transport;
     // Attempt 0: 429 Rate Limit
     transport.attempts.push_back(tests::TransportAttempt{
@@ -156,7 +156,7 @@ TEST_CASE("StreamExecutionEngine retries on 429 and resets state via factory", "
     CHECK(transport.requests.size() == 2);
 }
 
-TEST_CASE("StreamExecutionEngine isolates sink failure and halts immediately", "[ai][provider][engine]") {
+TEST_CASE("StreamExecutionEngine isolates sink failure and halts immediately", "[ai][provider][engine][spec]") {
     tests::ScriptedTransport transport;
     transport.attempts.push_back(tests::TransportAttempt{
         .head = {.status_code = 200, .headers = {}},

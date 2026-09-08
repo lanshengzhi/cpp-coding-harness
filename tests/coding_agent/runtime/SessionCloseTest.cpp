@@ -282,9 +282,8 @@ void spawn_compact(
 
 } // namespace
 
-TEST_CASE(
-    "repeated Session Close is idempotent and rejects every work admission",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("repeated Session Close is idempotent and rejects every work admission",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     auto options = fixture.options(tests::make_scripted_fake_provider());
     auto model_runtime = std::move(options.model_runtime);
@@ -324,9 +323,8 @@ TEST_CASE(
     CHECK(compacted.error().message == "session is closed");
 }
 
-TEST_CASE(
-    "Session Close requested from an event subscriber finalizes after the run settles",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("Session Close requested from an event subscriber finalizes after the run settles",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     auto options = fixture.options(tests::make_scripted_fake_provider());
     auto model_runtime = std::move(options.model_runtime);
@@ -379,9 +377,8 @@ TEST_CASE(
     CHECK(terminal.stop_reason == ai::AssistantStopReason::Aborted);
 }
 
-TEST_CASE(
-    "Session Close waits for an admitted compaction before releasing Session resources",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("Session Close waits for an admitted compaction before releasing Session resources",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     const std::string big(20000, 'x');
     auto provider = std::make_shared<GatedScriptedProvider>();
@@ -455,9 +452,8 @@ TEST_CASE(
     CHECK(found_compaction);
 }
 
-TEST_CASE(
-    "Session Close drains admitted Session Event Commitments under slow persistence",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("Session Close drains admitted Session Event Commitments under slow persistence",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     // Hold the model response on the ReleaseGate so Close observably arrives
     // while admitted work is in flight: without the gate, heavy parallel load
@@ -502,9 +498,8 @@ TEST_CASE(
     CHECK(fixture.persisted_texts() == std::vector<std::string>{"slow close", "turn 1"});
 }
 
-TEST_CASE(
-    "subscriptions and late callbacks after Close are suppressed or benignly dropped",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("subscriptions and late callbacks after Close are suppressed or benignly dropped",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     auto options = fixture.options(tests::make_scripted_fake_provider());
     auto model_runtime = std::move(options.model_runtime);
@@ -552,9 +547,8 @@ TEST_CASE(
     CHECK(delivered == delivered_at_close);
 }
 
-TEST_CASE(
-    "Session Close during a retry backoff cancels the wait and settles the run",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("Session Close during a retry backoff cancels the wait and settles the run",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     auto provider = std::make_shared<GatedScriptedProvider>();
     auto* scripted = provider.get();
@@ -620,9 +614,8 @@ TEST_CASE(
     CHECK(texts.front() == "retry then close");
 }
 
-TEST_CASE(
-    "Session Close with a latched persistence failure completes and keeps the session file consistent",
-    "[coding_agent][runtime][close][issue467]") {
+TEST_CASE("Session Close with a latched persistence failure completes and keeps the session file consistent",
+        "[coding_agent][runtime][close][issue467][spec]") {
     CloseFixture fixture;
     // Hold the model response on the ReleaseGate so Close observably arrives
     // while admitted work is in flight: without the gate, heavy parallel load

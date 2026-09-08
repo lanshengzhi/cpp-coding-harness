@@ -98,7 +98,7 @@ private:
 
 } // namespace
 
-TEST_CASE("loadSkillFromFile loads valid SKILL.md", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile loads valid SKILL.md", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("my-skill/SKILL.md",
         "---\n"
@@ -119,7 +119,7 @@ TEST_CASE("loadSkillFromFile loads valid SKILL.md", "[coding_agent][skill][u3]")
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("loadSkillFromFile with disable-model-invocation", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile with disable-model-invocation", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("hidden-skill/SKILL.md",
         "---\n"
@@ -135,7 +135,8 @@ TEST_CASE("loadSkillFromFile with disable-model-invocation", "[coding_agent][ski
     CHECK(result.skills[0].disableModelInvocation == true);
 }
 
-TEST_CASE("loadSkillFromFile derives name from parent dir when frontmatter omits name", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile derives name from parent dir when frontmatter omits name",
+        "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("derived-name/SKILL.md",
         "---\n"
@@ -149,7 +150,7 @@ TEST_CASE("loadSkillFromFile derives name from parent dir when frontmatter omits
     CHECK(result.skills[0].name == "derived-name");
 }
 
-TEST_CASE("loadSkillFromFile warns on description > 1024 chars but still loads", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile warns on description > 1024 chars but still loads", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     std::string longDesc(1025, 'x');
     fix.writeSkill("long-desc/SKILL.md",
@@ -166,7 +167,7 @@ TEST_CASE("loadSkillFromFile warns on description > 1024 chars but still loads",
     CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::invalid_metadata);
 }
 
-TEST_CASE("loadSkillFromFile warns on uppercase in name", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile warns on uppercase in name", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("my-skill/SKILL.md",
         "---\n"
@@ -186,7 +187,7 @@ TEST_CASE("loadSkillFromFile warns on uppercase in name", "[coding_agent][skill]
     CHECK(hasCharDiag);
 }
 
-TEST_CASE("loadSkillFromFile warns on leading hyphen in name", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile warns on leading hyphen in name", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("-bad-name/SKILL.md",
         "---\n"
@@ -206,7 +207,7 @@ TEST_CASE("loadSkillFromFile warns on leading hyphen in name", "[coding_agent][s
     CHECK(hasDiag);
 }
 
-TEST_CASE("loadSkillFromFile warns on consecutive hyphens in name", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile warns on consecutive hyphens in name", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("bad--name/SKILL.md",
         "---\n"
@@ -226,7 +227,7 @@ TEST_CASE("loadSkillFromFile warns on consecutive hyphens in name", "[coding_age
     CHECK(hasDiag);
 }
 
-TEST_CASE("loadSkillFromFile tolerates unknown frontmatter keys", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile tolerates unknown frontmatter keys", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("extra-keys/SKILL.md",
         "---\n"
@@ -247,7 +248,7 @@ TEST_CASE("loadSkillFromFile tolerates unknown frontmatter keys", "[coding_agent
     }
 }
 
-TEST_CASE("loadSkillFromFile rejects skill with missing description", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile rejects skill with missing description", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("no-desc/SKILL.md",
         "---\n"
@@ -263,7 +264,7 @@ TEST_CASE("loadSkillFromFile rejects skill with missing description", "[coding_a
     CHECK(result.diagnostics[0].message == "description is required");
 }
 
-TEST_CASE("loadSkillFromFile rejects skill with empty description", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile rejects skill with empty description", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("empty-desc/SKILL.md",
         "---\n"
@@ -283,7 +284,7 @@ TEST_CASE("loadSkillFromFile rejects skill with empty description", "[coding_age
     CHECK(hasDiag);
 }
 
-TEST_CASE("loadSkillFromFile rejects skill with whitespace-only description", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile rejects skill with whitespace-only description", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("ws-desc/SKILL.md",
         "---\n"
@@ -299,7 +300,7 @@ TEST_CASE("loadSkillFromFile rejects skill with whitespace-only description", "[
     REQUIRE(result.diagnostics.size() >= 1);
 }
 
-TEST_CASE("loadSkillFromFile handles file read failure", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile handles file read failure", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     // Don't create the file.
 
@@ -310,7 +311,7 @@ TEST_CASE("loadSkillFromFile handles file read failure", "[coding_agent][skill][
     CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::read_failed);
 }
 
-TEST_CASE("loadSkillFromFile handles YAML parse failure", "[coding_agent][skill][u3]") {
+TEST_CASE("loadSkillFromFile handles YAML parse failure", "[coding_agent][skill][u3][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("bad-yaml/SKILL.md",
         "---\n"
@@ -329,7 +330,7 @@ TEST_CASE("loadSkillFromFile handles YAML parse failure", "[coding_agent][skill]
 
 // ── U4: Recursive directory discovery tests ──────────────────────────
 
-TEST_CASE("loadSkills discovers single SKILL.md in root dir", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills discovers single SKILL.md in root dir", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("SKILL.md",
         "---\n"
@@ -346,7 +347,7 @@ TEST_CASE("loadSkills discovers single SKILL.md in root dir", "[coding_agent][sk
     CHECK(result.skills[0].name == "root-skill");
 }
 
-TEST_CASE("loadSkills discovers nested skill directories", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills discovers nested skill directories", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("skill-a/SKILL.md",
         "---\nname: skill-a\ndescription: First skill.\n---\nBody A.\n");
@@ -364,7 +365,7 @@ TEST_CASE("loadSkills discovers nested skill directories", "[coding_agent][skill
     CHECK(std::find(names.begin(), names.end(), "skill-b") != names.end());
 }
 
-TEST_CASE("loadSkills with includeRootFiles loads root .md files", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills with includeRootFiles loads root .md files", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("global-skill.md",
         "---\n"
@@ -380,7 +381,7 @@ TEST_CASE("loadSkills with includeRootFiles loads root .md files", "[coding_agen
     CHECK(result.skills[0].name == "global-skill");
 }
 
-TEST_CASE("loadSkills skips dot-prefixed directories", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills skips dot-prefixed directories", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill(".hidden/skill-hidden/SKILL.md",
         "---\nname: skill-hidden\ndescription: Should be skipped.\n---\nBody.\n");
@@ -394,7 +395,7 @@ TEST_CASE("loadSkills skips dot-prefixed directories", "[coding_agent][skill][u4
     CHECK(result.skills[0].name == "visible");
 }
 
-TEST_CASE("loadSkills skips node_modules", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills skips node_modules", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("node_modules/some-pkg/SKILL.md",
         "---\nname: pkg-skill\ndescription: Should be skipped.\n---\nBody.\n");
@@ -408,7 +409,7 @@ TEST_CASE("loadSkills skips node_modules", "[coding_agent][skill][u4]") {
     CHECK(result.skills[0].name == "my-skill");
 }
 
-TEST_CASE("loadSkills deduplicates by name with a collision diagnostic", "[coding_agent][skill][u4][issue405]") {
+TEST_CASE("loadSkills deduplicates by name with a collision diagnostic", "[coding_agent][skill][u4][issue405][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("dir-a/SKILL.md",
         "---\nname: same-name\ndescription: First occurrence.\n---\nBody A.\n");
@@ -436,7 +437,7 @@ TEST_CASE("loadSkills deduplicates by name with a collision diagnostic", "[codin
     CHECK(collision->collision->loser_path.find("dir-b/SKILL.md") != std::string::npos);
 }
 
-TEST_CASE("loadSkills silently skips missing input directory", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills silently skips missing input directory", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
 
     std::vector<coding_agent::SkillDirSpec> dirs = {{.path = "nonexistent-dir", .include_root_files = false}};
@@ -447,7 +448,7 @@ TEST_CASE("loadSkills silently skips missing input directory", "[coding_agent][s
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("loadSkills handles directory with no SKILL.md", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills handles directory with no SKILL.md", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("empty-dir/placeholder.txt", "not a skill");
 
@@ -457,7 +458,7 @@ TEST_CASE("loadSkills handles directory with no SKILL.md", "[coding_agent][skill
     CHECK(result.skills.empty());
 }
 
-TEST_CASE("loadSkills continues after malformed skill in one directory", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills continues after malformed skill in one directory", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("bad/SKILL.md",
         "---\nname: bad\ndescription:\n---\nBody.\n");  // missing description → rejected
@@ -478,7 +479,7 @@ TEST_CASE("loadSkills continues after malformed skill in one directory", "[codin
     CHECK(hasDiag);
 }
 
-TEST_CASE("loadSkills loads from multiple input directories", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills loads from multiple input directories", "[coding_agent][skill][u4][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("dir1/skill1/SKILL.md",
         "---\nname: skill1\ndescription: First.\n---\nBody1.\n");
@@ -496,7 +497,8 @@ TEST_CASE("loadSkills loads from multiple input directories", "[coding_agent][sk
 
 // ── U5: pi discovery provenance, ignore matcher, explicit paths ──────────
 
-TEST_CASE("loadSkills records pi sourceInfo for user/project/path contexts", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills records pi sourceInfo for user/project/path contexts",
+        "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("user-dir/skill-a/SKILL.md",
         "---\nname: skill-a\ndescription: User skill.\n---\nBody.\n");
@@ -546,7 +548,8 @@ TEST_CASE("loadSkills records pi sourceInfo for user/project/path contexts", "[c
     CHECK(by_name("skill-a").baseDir.find("user-dir/skill-a") != std::string::npos);
 }
 
-TEST_CASE("loadSkills applies a root .gitignore with pi prefix and negation semantics", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills applies a root .gitignore with pi prefix and negation semantics",
+        "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     // A root-level pattern applies at any depth (basename match); the
     // negated pattern re-includes the specific file. Git/pi semantics: a
@@ -573,7 +576,7 @@ TEST_CASE("loadSkills applies a root .gitignore with pi prefix and negation sema
     CHECK(std::find(names.begin(), names.end(), "visible") != names.end());
 }
 
-TEST_CASE("loadSkills prefixes subdirectory ignore rules", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills prefixes subdirectory ignore rules", "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     // nested/.gitignore patterns are prefixed with `nested/`, so they apply
     // beneath the nested directory only — the sibling directory is
@@ -596,7 +599,7 @@ TEST_CASE("loadSkills prefixes subdirectory ignore rules", "[coding_agent][skill
     CHECK(std::find(names.begin(), names.end(), "nested-skill") == names.end());
 }
 
-TEST_CASE("loadSkills reads .ignore and .fdignore alongside .gitignore", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills reads .ignore and .fdignore alongside .gitignore", "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     fix.workspace.write(".ignore", "from-ignore/\n");
     fix.workspace.write(".fdignore", "from-fd/\n");
@@ -614,7 +617,8 @@ TEST_CASE("loadSkills reads .ignore and .fdignore alongside .gitignore", "[codin
     CHECK(result.skills[0].name == "kept");
 }
 
-TEST_CASE("loadSkills skips comments and blank ignore lines and honors escapes", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills skips comments and blank ignore lines and honors escapes",
+        "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     // The comment and blank lines carry no rule; the escaped `\#` pattern is
     // a literal `#escaped-comment/` directory rule (pi `prefixIgnorePattern`).
@@ -631,7 +635,7 @@ TEST_CASE("loadSkills skips comments and blank ignore lines and honors escapes",
     CHECK(result.skills[0].name == "kept");
 }
 
-TEST_CASE("loadSkills ignores a SKILL.md file directly", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills ignores a SKILL.md file directly", "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     fix.workspace.write(".gitignore", "hidden-skill/SKILL.md\n");
     fix.writeSkill("hidden-skill/SKILL.md",
@@ -646,7 +650,8 @@ TEST_CASE("loadSkills ignores a SKILL.md file directly", "[coding_agent][skill][
     CHECK(result.skills[0].name == "visible");
 }
 
-TEST_CASE("loadSkills loads explicit file paths and warns on non-markdown files", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE("loadSkills loads explicit file paths and warns on non-markdown files",
+        "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("explicit/SKILL.md",
         "---\nname: explicit-skill\ndescription: Explicit.\n---\nBody.\n");
@@ -676,7 +681,8 @@ TEST_CASE("loadSkills loads explicit file paths and warns on non-markdown files"
     CHECK(warned);
 }
 
-TEST_CASE("loadSkills deduplicates the same real file reached via symlink", "[coding_agent][skill][u5][issue412]") {
+TEST_CASE(
+        "loadSkills deduplicates the same real file reached via symlink", "[coding_agent][skill][u5][issue412][spec]") {
     SkillTestFixture fix;
     fix.writeSkill("real/SKILL.md",
         "---\nname: real-skill\ndescription: The real file.\n---\nBody.\n");
@@ -698,7 +704,8 @@ TEST_CASE("loadSkills deduplicates the same real file reached via symlink", "[co
     CHECK_FALSE(collision);
 }
 
-TEST_CASE("async loadSkills resolves a renamed in-root symlink directory", "[coding_agent][skill][async][issue559]") {
+TEST_CASE("async loadSkills resolves a renamed in-root symlink directory",
+        "[coding_agent][skill][async][issue559][spec]") {
     tests::FakeAsyncFileSystem filesystem("/workspace");
     filesystem.add_file(
             "real-skill/SKILL.md", "---\nname: real-skill\ndescription: Loaded through an alias.\n---\nBody.\n");
@@ -729,7 +736,7 @@ TEST_CASE("async loadSkills resolves a renamed in-root symlink directory", "[cod
     CHECK(result->diagnostics.empty());
 }
 
-TEST_CASE("async loadSkills reads a renamed in-root symlink file", "[coding_agent][skill][async][issue559]") {
+TEST_CASE("async loadSkills reads a renamed in-root symlink file", "[coding_agent][skill][async][issue559][spec]") {
     tests::FakeAsyncFileSystem filesystem("/workspace");
     filesystem.add_file(
             "real-skill.md", "---\nname: real-file\ndescription: Loaded through a file alias.\n---\nBody.\n");
@@ -750,7 +757,7 @@ TEST_CASE("async loadSkills reads a renamed in-root symlink file", "[coding_agen
     CHECK(result->diagnostics.empty());
 }
 
-TEST_CASE("async loadSkills rejects an outside symlink target", "[coding_agent][skill][async][issue559]") {
+TEST_CASE("async loadSkills rejects an outside symlink target", "[coding_agent][skill][async][issue559][spec]") {
     tests::FakeAsyncFileSystem filesystem("/workspace");
     filesystem.add_directory("scan");
     filesystem.add_symlink("scan/SKILL.md", "/outside/SKILL.md");
@@ -768,7 +775,7 @@ TEST_CASE("async loadSkills rejects an outside symlink target", "[coding_agent][
 }
 
 TEST_CASE("async loadSkills reads a renamed in-root symlink with the local adapter",
-        "[coding_agent][skill][async][local][issue559]") {
+        "[coding_agent][skill][async][local][issue559][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside_workspace;
     workspace.write("real-skill/SKILL.md", "---\nname: real-skill\ndescription: Loaded locally.\n---\nBody.\n");

@@ -130,9 +130,7 @@ support::Expected<std::optional<std::string>> run_delayed_receive(std::uint16_t 
 
 } // namespace
 
-TEST_CASE(
-    "WebSocket transport rejects unsupported URLs before network",
-    "[ai][provider][transport][issue342]") {
+TEST_CASE("WebSocket transport rejects unsupported URLs before network", "[ai][provider][transport][issue342][spec]") {
     ai::providers::WebSocketConnectRequest request;
     request.url = "https://chatgpt.com/backend-api/codex/responses";
 
@@ -143,9 +141,7 @@ TEST_CASE(
     CHECK(connection.error().detail.find("ws") != std::string::npos);
 }
 
-TEST_CASE(
-    "WebSocket transport rejects missing host before network",
-    "[ai][provider][transport][issue342]") {
+TEST_CASE("WebSocket transport rejects missing host before network", "[ai][provider][transport][issue342][spec]") {
     ai::providers::WebSocketConnectRequest request;
     request.url = "wss:///codex/responses";
 
@@ -157,7 +153,7 @@ TEST_CASE(
 }
 
 TEST_CASE("WebSocket transport does not retain the connect timeout after the handshake",
-        "[ai][provider][transport][issue342]") {
+        "[ai][provider][transport][issue342][spec]") {
     auto received = run_delayed_receive(0);
 
     REQUIRE(received);
@@ -166,8 +162,7 @@ TEST_CASE("WebSocket transport does not retain the connect timeout after the han
 }
 
 TEST_CASE(
-    "WebSocket transport observes cancellation before network work",
-    "[ai][provider][transport][issue342]") {
+        "WebSocket transport observes cancellation before network work", "[ai][provider][transport][issue342][spec]") {
     std::stop_source stop_source;
     CHECK(stop_source.request_stop());
 

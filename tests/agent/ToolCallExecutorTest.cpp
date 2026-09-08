@@ -376,20 +376,19 @@ void check_json_format_fixture(const tests::JsonFormatFixture& fixture) {
 
 } // namespace
 
-TEST_CASE("ToolCallExecutor is a move-only private adapter", "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor is a move-only private adapter", "[agent][tool-executor][spec]") {
     static_assert(!std::is_copy_constructible_v<agent::ToolCallExecutor>);
     static_assert(std::is_move_constructible_v<agent::ToolCallExecutor>);
 }
 
-TEST_CASE("ToolCallExecutor default policy is bounded parallel with no explicit cap", "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor default policy is bounded parallel with no explicit cap", "[agent][tool-executor][spec]") {
     agent::ToolCallExecutorOptions options;
     CHECK(std::holds_alternative<agent::BoundedParallelToolExecution>(options.execution));
     CHECK(std::get<agent::BoundedParallelToolExecution>(options.execution).max_in_flight == 0);
 }
 
-TEST_CASE(
-    "ToolCallExecutor executes a single exclusive call through the sequential path",
-    "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor executes a single exclusive call through the sequential path",
+        "[agent][tool-executor][spec]") {
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
@@ -411,9 +410,8 @@ TEST_CASE(
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "sequential execution coerces and validates the foundational argument contract before hooks and tools",
-    "[agent][tool-executor][tool-arguments]") {
+TEST_CASE("sequential execution coerces and validates the foundational argument contract before hooks and tools",
+        "[agent][tool-executor][tool-arguments][spec]") {
     const support::JsonValue contract = support::JsonValue::object_t{
         {"type", "object"},
         {"properties", support::JsonValue::object_t{
@@ -515,8 +513,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "radix coercion uses the recorded JavaScript number rounding",
-    "[agent][tool-executor][tool-arguments]") {
+        "radix coercion uses the recorded JavaScript number rounding", "[agent][tool-executor][tool-arguments][spec]") {
     constexpr double expected = 3.9821406114177461e64;
     const support::JsonValue contract = support::JsonValue::object_t{
         {"type", "number"},
@@ -555,9 +552,8 @@ TEST_CASE(
     CHECK(invocation->arguments.get_number() == expected);
 }
 
-TEST_CASE(
-    "sequential execution recursively prepares schema and tuple array items",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("sequential execution recursively prepares schema and tuple array items",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(ai::Tool{
         "collections",
@@ -584,9 +580,8 @@ TEST_CASE(
     CHECK(*prepared == tests::kRecursiveCollectionExpected);
 }
 
-TEST_CASE(
-    "sequential execution enforces numeric string object and array constraints",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("sequential execution enforces numeric string object and array constraints",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(ai::Tool{
         "bounded",
@@ -625,9 +620,8 @@ TEST_CASE(
     CHECK(ai::text_from_content(run.result->results[3].content).find("/quantity") != std::string::npos);
 }
 
-TEST_CASE(
-    "recorded TypeBox boundary behavior remains executable",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("recorded TypeBox boundary behavior remains executable",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(ai::Tool{
         "baseline-boundaries",
@@ -650,9 +644,8 @@ TEST_CASE(
     CHECK(tool_ptr->invocation_count() == 1);
 }
 
-TEST_CASE(
-    "recorded TypeBox Unicode string-bound fast paths remain executable",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("recorded TypeBox Unicode string-bound fast paths remain executable",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     auto max_one_tool = make_recording_tool(ai::Tool{
         "max-one",
@@ -701,9 +694,8 @@ TEST_CASE(
     CHECK(min_two_ptr->invocation_count() == expected_min_invocations);
 }
 
-TEST_CASE(
-    "array item fixtures enforce boolean schemas additional items and patterns",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("array item fixtures enforce boolean schemas additional items and patterns",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     auto denied_items = make_recording_tool(ai::Tool{
         "denied-items",
@@ -773,9 +765,8 @@ TEST_CASE(
     CHECK(unsupported_ptr->invocation_count() == 0);
 }
 
-TEST_CASE(
-    "composition coercion selects only satisfying branches and validates the final contract",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("composition coercion selects only satisfying branches and validates the final contract",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     auto composed_tool = make_recording_tool(ai::Tool{
         "composed",
@@ -825,9 +816,8 @@ TEST_CASE(
     CHECK(ambiguous_ptr->invocation_count() == 0);
 }
 
-TEST_CASE(
-    "recorded baseline formats reject invalid strings while unknown formats remain annotations",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("recorded baseline formats reject invalid strings while unknown formats remain annotations",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     for (const auto& fixture : tests::kRecognizedFormatFixtures) {
         check_format_fixture(fixture.format, fixture.valid, fixture.invalid);
     }
@@ -859,17 +849,15 @@ TEST_CASE(
     CHECK(annotation_ptr->invocation_count() == 1);
 }
 
-TEST_CASE(
-    "recorded TypeBox IDN separator behavior remains executable",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("recorded TypeBox IDN separator behavior remains executable",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     for (const auto& fixture : tests::kIdnSeparatorFixtures) {
         check_json_format_fixture(fixture);
     }
 }
 
-TEST_CASE(
-    "unsupported dialect vocabulary reference and executable constructs fail closed",
-    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+TEST_CASE("unsupported dialect vocabulary reference and executable constructs fail closed",
+        "[agent][tool-executor][tool-arguments][compatibility-fixture][spec]") {
     agent::ToolRegistry registry;
     std::vector<RecordingToolState*> rejected_tools;
     auto add_rejected = [&](std::string name, support::JsonValue contract) {
@@ -941,9 +929,8 @@ TEST_CASE(
     CHECK(annotation_ptr->invocation_count() == 1);
 }
 
-TEST_CASE(
-    "sequential schema-invalid arguments are isolated before hooks and tools",
-    "[agent][tool-executor][tool-arguments]") {
+TEST_CASE("sequential schema-invalid arguments are isolated before hooks and tools",
+        "[agent][tool-executor][tool-arguments][spec]") {
     const support::JsonValue contract = support::JsonValue::object_t{
         {"type", "object"},
         {"description", "annotation remains non-executable"},
@@ -1018,9 +1005,8 @@ TEST_CASE(
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
-TEST_CASE(
-    "sequential preparation failures complete their lifecycle without suppressing unrelated calls",
-    "[agent][tool-executor][tool-arguments]") {
+TEST_CASE("sequential preparation failures complete their lifecycle without suppressing unrelated calls",
+        "[agent][tool-executor][tool-arguments][spec]") {
     const auto strict_contract = support::JsonValue::object_t{
         {"type", "object"},
         {"required", support::JsonValue::array_t{std::string(6000, 'x')}},
@@ -1125,9 +1111,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "malformed argument diagnostics redact before truncation and preserve peer calls",
-    "[agent][tool-executor][tool-arguments][issue33]") {
+TEST_CASE("malformed argument diagnostics redact before truncation and preserve peer calls",
+        "[agent][tool-executor][tool-arguments][issue33][spec]") {
     const std::string secret = "sk-FAKEBOUNDARYCREDENTIAL123456789";
     std::string parser_prefix = "1:4060: syntax_error\n   ";
     parser_prefix.push_back(static_cast<char>(0xff));
@@ -1219,9 +1204,8 @@ TEST_CASE(
     CHECK(valid_ptr->invocation_count() == 1);
 }
 
-TEST_CASE(
-    "schema validation diagnostics keep credential-like locations actionable",
-    "[agent][tool-executor][tool-arguments][issue33]") {
+TEST_CASE("schema validation diagnostics keep credential-like locations actionable",
+        "[agent][tool-executor][tool-arguments][issue33][spec]") {
     const auto contract = support::JsonValue::object_t{
         {"type", "object"},
         {"properties", support::JsonValue::object_t{
@@ -1249,9 +1233,8 @@ TEST_CASE(
     CHECK(diagnostic.find("[REDACTED]") == std::string::npos);
 }
 
-TEST_CASE(
-    "bounded preparation diagnostics preserve UTF-8 and actionable locations",
-    "[agent][tool-executor][tool-arguments]") {
+TEST_CASE("bounded preparation diagnostics preserve UTF-8 and actionable locations",
+        "[agent][tool-executor][tool-arguments][spec]") {
     std::string unknown_name = "missing-";
     for (int index = 0; index < 2000; ++index) {
         unknown_name += "\xf0\x9f\x98\x80";
@@ -1280,7 +1263,7 @@ TEST_CASE(
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
-TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[agent][tool-executor]") {
+TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[agent][tool-executor][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
@@ -1310,9 +1293,8 @@ TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[age
     CHECK(probe.max_active.load() == 1);
 }
 
-TEST_CASE(
-    "sequential cancellation during a hook does not start later calls",
-    "[agent][tool-executor][issue40][issue497]") {
+TEST_CASE("sequential cancellation during a hook does not start later calls",
+        "[agent][tool-executor][issue40][issue497][spec]") {
     std::stop_source stop_source;
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(ai::Tool{
@@ -1355,9 +1337,8 @@ TEST_CASE(
     check_tool_execution_events_strictly_paired(execution.events);
 }
 
-TEST_CASE(
-    "bounded parallel cancellation leaves queued tool capabilities unstarted",
-    "[agent][tool-executor][issue40][issue497]") {
+TEST_CASE("bounded parallel cancellation leaves queued tool capabilities unstarted",
+        "[agent][tool-executor][issue40][issue497][spec]") {
     std::stop_source stop_source;
     agent::ToolRegistry registry;
     auto tool = make_cancelling_parallel_tool(
@@ -1396,9 +1377,8 @@ TEST_CASE(
     check_tool_execution_events_strictly_paired(execution.events);
 }
 
-TEST_CASE(
-    "pre-aborted parallel batch produces aborted results without tool execution events",
-    "[agent][tool-executor][issue497]") {
+TEST_CASE("pre-aborted parallel batch produces aborted results without tool execution events",
+        "[agent][tool-executor][issue497][spec]") {
     std::stop_source stop_source;
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(
@@ -1441,9 +1421,7 @@ TEST_CASE(
     check_tool_execution_events_strictly_paired(execution.events);
 }
 
-TEST_CASE(
-    "pre-aborted sequential batch emits no tool execution events",
-    "[agent][tool-executor][issue497]") {
+TEST_CASE("pre-aborted sequential batch emits no tool execution events", "[agent][tool-executor][issue497][spec]") {
     std::stop_source stop_source;
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(ai::Tool{
@@ -1474,7 +1452,7 @@ TEST_CASE(
     check_tool_execution_events_strictly_paired(execution.events);
 }
 
-TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-executor]") {
+TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-executor][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
@@ -1501,9 +1479,8 @@ TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-exe
     CHECK(probe.max_active.load() == 2);
 }
 
-TEST_CASE(
-    "sequential and bounded parallel batches share argument preparation semantics",
-    "[agent][tool-executor][tool-arguments][issue27]") {
+TEST_CASE("sequential and bounded parallel batches share argument preparation semantics",
+        "[agent][tool-executor][tool-arguments][issue27][spec]") {
     const auto strict_contract = test::integer_value_tool_argument_contract();
     auto assistant = assistant_with_calls({
         make_call("call-invalid", "work", R"({"value":"not-an-integer"})"),
@@ -1613,9 +1590,8 @@ TEST_CASE(
     CHECK(parallel.max_active == 2);
 }
 
-TEST_CASE(
-    "bounded parallel preparation completes immediate failures before the next source call",
-    "[agent][tool-executor][tool-arguments][issue32]") {
+TEST_CASE("bounded parallel preparation completes immediate failures before the next source call",
+        "[agent][tool-executor][tool-arguments][issue32][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
 
@@ -1749,7 +1725,7 @@ TEST_CASE(
     }));
 }
 
-TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-executor]") {
+TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-executor][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
@@ -1773,7 +1749,7 @@ TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-exe
     CHECK(probe.max_active.load() == 1);
 }
 
-TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", "[agent][tool-executor]") {
+TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", "[agent][tool-executor][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
@@ -1798,7 +1774,7 @@ TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", 
     CHECK(probe.max_active.load() == 2);
 }
 
-TEST_CASE("bounded parallel execution preserves source-order results", "[agent][tool-executor]") {
+TEST_CASE("bounded parallel execution preserves source-order results", "[agent][tool-executor][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
@@ -1849,9 +1825,8 @@ TEST_CASE("bounded parallel execution preserves source-order results", "[agent][
     CHECK(message_order[1] == "beta");
 }
 
-TEST_CASE(
-    "bounded parallel execution serializes suspended hooks and lifecycle callbacks",
-    "[agent][tool-executor][issue82]") {
+TEST_CASE("bounded parallel execution serializes suspended hooks and lifecycle callbacks",
+        "[agent][tool-executor][issue82][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
@@ -1931,7 +1906,7 @@ TEST_CASE(
     CHECK(max_active_lifecycle_callbacks.load() == 1);
 }
 
-TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[agent][tool-executor][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()}).tool));
@@ -1952,7 +1927,7 @@ TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[age
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
-TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][tool-executor][spec]") {
     agent::ToolRegistry registry;
     auto tool = make_recording_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
@@ -1981,7 +1956,7 @@ TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][to
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
-TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[agent][tool-executor][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()}).tool));
@@ -2011,7 +1986,7 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
-TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor]") {
+TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_failing_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
@@ -2026,7 +2001,7 @@ TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor]") {
     CHECK(run.result->results[0].is_error);
 }
 
-TEST_CASE("tool failure diagnostics redact before truncation", "[agent][tool-executor][issue483]") {
+TEST_CASE("tool failure diagnostics redact before truncation", "[agent][tool-executor][issue483][spec]") {
     const std::string secret = "sk-FAKETOOLFAILURECREDENTIAL123456789";
     const std::string detail = secret + " " + std::string(5000, 'x');
     agent::ToolRegistry registry;
@@ -2051,7 +2026,7 @@ TEST_CASE("tool failure diagnostics redact before truncation", "[agent][tool-exe
     CHECK(diagnostic.find("sk-") == std::string::npos);
 }
 
-TEST_CASE("Tool update failure becomes an isolated Tool Call Outcome", "[agent][tool-executor][issue483]") {
+TEST_CASE("Tool update failure becomes an isolated Tool Call Outcome", "[agent][tool-executor][issue483][spec]") {
     agent::ToolRegistry registry;
     auto update_tool = tests::make_fake_tool(
         ai::Tool{
@@ -2142,9 +2117,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "afterToolCall runs for an error execution result (sequential path)",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("afterToolCall runs for an error execution result (sequential path)",
+        "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
@@ -2172,9 +2146,8 @@ TEST_CASE(
     CHECK(hook_saw_error);
 }
 
-TEST_CASE(
-    "afterToolCall runs for an error execution result (bounded parallel path)",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("afterToolCall runs for an error execution result (bounded parallel path)",
+        "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
@@ -2203,9 +2176,7 @@ TEST_CASE(
     CHECK(hook_saw_error);
 }
 
-TEST_CASE(
-    "afterToolCall runs for a throwing tool (isolation handling)",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("afterToolCall runs for a throwing tool (isolation handling)", "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_failing_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()})));
@@ -2230,9 +2201,8 @@ TEST_CASE(
     CHECK(after_calls == 1);
 }
 
-TEST_CASE(
-    "beforeToolCall hook failure finalizes only its call (sequential path)",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("beforeToolCall hook failure finalizes only its call (sequential path)",
+        "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     auto alpha = make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()});
@@ -2272,9 +2242,8 @@ TEST_CASE(
     CHECK(beta_ptr->invocation_count() == 1);
 }
 
-TEST_CASE(
-    "beforeToolCall hook failure finalizes only its call (bounded parallel path)",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("beforeToolCall hook failure finalizes only its call (bounded parallel path)",
+        "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     auto alpha = make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
@@ -2317,9 +2286,8 @@ TEST_CASE(
     CHECK(beta_ptr->invocation_count() == 1);
 }
 
-TEST_CASE(
-    "Tool Call Executor confines an afterToolCall hook failure to its call",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("Tool Call Executor confines an afterToolCall hook failure to its call",
+        "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
@@ -2356,9 +2324,8 @@ TEST_CASE(
     CHECK(run.result->results[1].tool_name == "beta");
 }
 
-TEST_CASE(
-    "an exclusive tool serializes the whole batch with full per-call lifecycle",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("an exclusive tool serializes the whole batch with full per-call lifecycle",
+        "[agent][tool-executor][issue355][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
@@ -2419,9 +2386,7 @@ TEST_CASE(
     }));
 }
 
-TEST_CASE(
-    "default policy executes parallel-safe calls concurrently",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("default policy executes parallel-safe calls concurrently", "[agent][tool-executor][issue355][spec]") {
     ConcurrencyProbe probe;
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_recording_tool(
@@ -2451,9 +2416,8 @@ TEST_CASE(
     CHECK(probe.max_active.load() == 2);
 }
 
-TEST_CASE(
-    "an error result with an explicit terminate hint terminates the batch",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("an error result with an explicit terminate hint terminates the batch",
+        "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
@@ -2474,9 +2438,7 @@ TEST_CASE(
     CHECK(run.result->terminate_batch);
 }
 
-TEST_CASE(
-    "batch termination requires every call to carry the hint",
-    "[agent][tool-executor][issue355]") {
+TEST_CASE("batch termination requires every call to carry the hint", "[agent][tool-executor][issue355][spec]") {
     agent::ToolRegistry registry;
     REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
@@ -2502,9 +2464,8 @@ TEST_CASE(
     CHECK_FALSE(run.result->terminate_batch);
 }
 
-TEST_CASE(
-    "unified single tool call lifecycle preserves execution semantics across execution policies",
-    "[agent][tool-executor][issue489]") {
+TEST_CASE("unified single tool call lifecycle preserves execution semantics across execution policies",
+        "[agent][tool-executor][issue489][spec]") {
     agent::ToolRegistry registry;
     auto echo_tool = make_recording_tool(
         ai::Tool{"echo", "Echo", test::permissive_object_tool_argument_contract()},
@@ -2532,5 +2493,3 @@ TEST_CASE(
     CHECK(run.result->results[1].is_error);
     CHECK_FALSE(run.result->terminate_batch);
 }
-
-

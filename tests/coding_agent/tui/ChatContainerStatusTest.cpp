@@ -82,9 +82,8 @@ test_keybinding_slot() {
 
 } // namespace
 
-TEST_CASE(
-    "ChatContainer status lines replace the newest status like pi showStatus",
-    "[coding_agent][tui][login][issue406]") {
+TEST_CASE("ChatContainer status lines replace the newest status like pi showStatus",
+        "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
@@ -118,9 +117,7 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "ChatContainer trust warning renders pi's untrusted-project line",
-    "[coding_agent][tui][issue413]") {
+TEST_CASE("ChatContainer trust warning renders pi's untrusted-project line", "[coding_agent][tui][issue413][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 

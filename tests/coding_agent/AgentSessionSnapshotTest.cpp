@@ -149,9 +149,7 @@ public:
 
 } // namespace
 
-TEST_CASE(
-    "SDK fresh persisted snapshot is passive session and Agent state",
-    "[sdk][snapshot][issue42]") {
+TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[sdk][snapshot][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto options = new_session_options(paths, coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file});
@@ -190,8 +188,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK in-memory snapshot retains metadata without inventing a session file",
-    "[sdk][snapshot][issue42]") {
+        "SDK in-memory snapshot retains metadata without inventing a session file", "[sdk][snapshot][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto options = new_session_options(paths, coding_agent::InMemorySessionTarget{});
@@ -215,9 +212,8 @@ TEST_CASE(
     created->session->close();
 }
 
-TEST_CASE(
-    "SDK active snapshot copies running and streaming state on the prompt executor",
-    "[sdk][snapshot][async][issue42]") {
+TEST_CASE("SDK active snapshot copies running and streaming state on the prompt executor",
+        "[sdk][snapshot][async][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<GatedSnapshotChatProvider>();
@@ -268,9 +264,8 @@ TEST_CASE(
     created->session->close();
 }
 
-TEST_CASE(
-    "SDK snapshot retains live messages and diagnostics after subscriber failure",
-    "[sdk][snapshot][subscriber-failure][issue42]") {
+TEST_CASE("SDK snapshot retains live messages and diagnostics after subscriber failure",
+        "[sdk][snapshot][subscriber-failure][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto options = new_session_options(paths, coding_agent::InMemorySessionTarget{});
@@ -302,9 +297,8 @@ TEST_CASE(
     created->session->close();
 }
 
-TEST_CASE(
-    "SDK snapshot retains Live Session State after persistence failure",
-    "[sdk][snapshot][persistence-failure][issue42]") {
+TEST_CASE("SDK snapshot retains Live Session State after persistence failure",
+        "[sdk][snapshot][persistence-failure][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     tests::ModelsSessionOptions options;
@@ -336,8 +330,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Frontend resumed snapshot reflects compacted active-path context",
-    "[sdk][snapshot][resume][issue42]") {
+        "Frontend resumed snapshot reflects compacted active-path context", "[sdk][snapshot][resume][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto store = harness::session::SessionStore::create_new(
@@ -378,9 +371,8 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE(
-    "Frontend resumed snapshot preserves branch-summary active-path meaning",
-    "[sdk][snapshot][resume][issue42]") {
+TEST_CASE("Frontend resumed snapshot preserves branch-summary active-path meaning",
+        "[sdk][snapshot][resume][issue42][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto store = harness::session::SessionStore::create_new(

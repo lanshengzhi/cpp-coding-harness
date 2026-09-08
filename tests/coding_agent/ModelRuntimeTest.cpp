@@ -170,7 +170,8 @@ ai::ProviderDefinition login_provider_definition() {
 // ModelRuntime: composition, refresh, availability, login/logout, vertical path
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("ModelRuntime default-created runtime composes the built-in providers", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime default-created runtime composes the built-in providers",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -197,7 +198,8 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
     CHECK_FALSE((*runtime)->provider("missing-provider").has_value());
 }
 
-TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -212,7 +214,8 @@ TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagn
     CHECK((*runtime)->get_error()->find("Failed to parse models.json") != std::string::npos);
 }
 
-TEST_CASE("ModelRuntime per-provider composition failure falls back to the built-in and records the error", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime per-provider composition failure falls back to the built-in and records the error",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -230,7 +233,8 @@ TEST_CASE("ModelRuntime per-provider composition failure falls back to the built
     CHECK((*runtime)->get_error()->find("must specify") != std::string::npos);
 }
 
-TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -257,7 +261,8 @@ TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers", "
     CHECK(model->provider == "deepseek");
 }
 
-TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire path", "[coding_agent][model-runtime][issue345][vertical]") {
+TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire path",
+        "[coding_agent][model-runtime][issue345][vertical][spec]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
     REQUIRE_FALSE(sse.empty());
@@ -333,7 +338,8 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     CHECK(request.body == expected_request_bytes);
 }
 
-TEST_CASE("ModelRuntime login persists the credential and refresh failures never fail the call", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime login persists the credential and refresh failures never fail the call",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -368,7 +374,8 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
     CHECK((*runtime)->get_error()->find("Failed to parse models.json") != std::string::npos);
 }
 
-TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE(
+        "ModelRuntime logout removes the credential and recomposes", "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -391,7 +398,7 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
     CHECK_FALSE(stored->has_value());
 }
 
-TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -411,7 +418,8 @@ TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_ag
     CHECK((*runtime)->get_available_snapshot().empty());
 }
 
-TEST_CASE("ModelRuntime default-model table selects the runtime default", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime default-model table selects the runtime default",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -434,7 +442,8 @@ TEST_CASE("ModelRuntime default-model table selects the runtime default", "[codi
     CHECK_FALSE(coding_agent::ModelRuntime::default_model_for_provider("deepseek").has_value());
 }
 
-TEST_CASE("ModelRuntime configured apiKey env templates surface for secret filtering", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime configured apiKey env templates surface for secret filtering",
+        "[coding_agent][model-runtime][issue345][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -457,7 +466,8 @@ TEST_CASE("ModelRuntime configured apiKey env templates surface for secret filte
     CHECK(names.front() == "DEEPSEEK_SECRET");
 }
 
-TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE(
+        "ModelRuntime env-template apiKey resolves at request time", "[coding_agent][model-runtime][issue345][spec]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .chunks = {"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n"},
@@ -501,7 +511,8 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-env-key");
 }
 
-TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding_agent][model-runtime][issue346][precedence]") {
+TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain",
+        "[coding_agent][model-runtime][issue346][precedence][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
@@ -604,7 +615,8 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
     CHECK(deepseek_restored->auth.api_key == "stored-key");
 }
 
-TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a process-lifetime cache", "[coding_agent][model-runtime][issue345]") {
+TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a process-lifetime cache",
+        "[coding_agent][model-runtime][issue345][spec]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .chunks = {"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n"},
@@ -646,7 +658,8 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");
 }
 
-TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not configured", "[coding_agent][model-runtime][issue406]") {
+TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not configured",
+        "[coding_agent][model-runtime][issue406][spec]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};

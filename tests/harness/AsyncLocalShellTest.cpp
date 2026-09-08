@@ -128,12 +128,12 @@ bool path_exists(const std::filesystem::path& path) {
 
 } // namespace
 
-TEST_CASE("process runner capability follows async naming and ownership rules", "[harness][async][issue75]") {
+TEST_CASE("process runner capability follows async naming and ownership rules", "[harness][async][issue75][spec]") {
     static_assert(std::is_abstract_v<harness::AsyncProcessRunner>);
     static_assert(std::is_final_v<harness::DefaultAsyncProcessRunner>);
 }
 
-TEST_CASE("async local shell runs shell commands concurrently", "[harness][async][u6]") {
+TEST_CASE("async local shell runs shell commands concurrently", "[harness][async][u6][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
 
@@ -169,7 +169,8 @@ TEST_CASE("async local shell runs shell commands concurrently", "[harness][async
     CHECK(elapsed < std::chrono::milliseconds(1100));
 }
 
-TEST_CASE("Shell adapter expands a custom path and joins a non-empty prefix at launch", "[harness][shell][issue84]") {
+TEST_CASE("Shell adapter expands a custom path and joins a non-empty prefix at launch",
+        "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard home_guard{"HOME", workspace.path().string()};
     workspace.write("bin/custom-shell", "#!/bin/sh\nexit 0\n");
@@ -194,7 +195,7 @@ TEST_CASE("Shell adapter expands a custom path and joins a non-empty prefix at l
     CHECK(runner->requests[0].working_directory == workspace.path());
 }
 
-TEST_CASE("Shell resolution expands home when HOME is absent from the environment", "[harness][shell][issue84]") {
+TEST_CASE("Shell resolution expands home when HOME is absent from the environment", "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard home_guard{"HOME", std::nullopt};
     const auto* user = ::getpwuid(::getuid());
@@ -211,7 +212,7 @@ TEST_CASE("Shell resolution expands home when HOME is absent from the environmen
     CHECK(resolved.error().message.find((workspace.path() / "~").string()) == std::string::npos);
 }
 
-TEST_CASE("Shell adapter defaults to non-login system bash", "[harness][shell][issue84]") {
+TEST_CASE("Shell adapter defaults to non-login system bash", "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     auto runner = std::make_shared<FakeAsyncProcessRunner>();
     runner->next.exit_code = 0;
@@ -227,7 +228,7 @@ TEST_CASE("Shell adapter defaults to non-login system bash", "[harness][shell][i
     CHECK(runner->requests[0].arguments[1] == "printf default");
 }
 
-TEST_CASE("Shell adapter ignores an empty command prefix", "[harness][shell][issue84]") {
+TEST_CASE("Shell adapter ignores an empty command prefix", "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     auto runner = std::make_shared<FakeAsyncProcessRunner>();
     runner->next.exit_code = 0;
@@ -242,7 +243,8 @@ TEST_CASE("Shell adapter ignores an empty command prefix", "[harness][shell][iss
     CHECK(runner->requests[0].arguments[1] == "printf plain");
 }
 
-TEST_CASE("Shell resolution prefers PATH bash before sh when system bash is unavailable", "[harness][shell][issue84]") {
+TEST_CASE("Shell resolution prefers PATH bash before sh when system bash is unavailable",
+        "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("bin/bash", "#!/bin/sh\nexit 0\n");
     workspace.write("bin/sh", "#!/bin/sh\nexit 0\n");
@@ -259,7 +261,7 @@ TEST_CASE("Shell resolution prefers PATH bash before sh when system bash is unav
     CHECK(*resolved == workspace.path() / "bin/bash");
 }
 
-TEST_CASE("Shell resolution falls back to PATH sh", "[harness][shell][issue84]") {
+TEST_CASE("Shell resolution falls back to PATH sh", "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("bin/sh", "#!/bin/sh\nexit 0\n");
     REQUIRE(::chmod((workspace.path() / "bin/sh").c_str(), 0700) == 0);
@@ -274,7 +276,7 @@ TEST_CASE("Shell resolution falls back to PATH sh", "[harness][shell][issue84]")
     CHECK(*resolved == workspace.path() / "bin/sh");
 }
 
-TEST_CASE("a stale configured Shell path fails only attempted execution", "[harness][shell][issue84]") {
+TEST_CASE("a stale configured Shell path fails only attempted execution", "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     harness::ShellConfig shell_config{
             .shell_path = (workspace.path() / "stale-shell").string(),
@@ -290,7 +292,7 @@ TEST_CASE("a stale configured Shell path fails only attempted execution", "[harn
     CHECK(result.error().message.find("prefix-must-not-appear") == std::string::npos);
 }
 
-TEST_CASE("async local shell sanitizes shell environment through process capability", "[harness][async][u2]") {
+TEST_CASE("async local shell sanitizes shell environment through process capability", "[harness][async][u2][spec]") {
     setenv("OPENAI_API_KEY", "sk-test-secret", 1);
     setenv("KIMI_API_KEY", "kimi-secret-value", 1);
     setenv("CCH_VISIBLE_ENV", "visible", 1);
@@ -324,7 +326,7 @@ TEST_CASE("async local shell sanitizes shell environment through process capabil
     unsetenv("CCH_CREDENTIAL");
 }
 
-TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[harness][async][issue40]") {
+TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[harness][async][issue40][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
     std::stop_source stop_source;
@@ -339,7 +341,8 @@ TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[ha
     CHECK_FALSE(path_exists(workspace.path() / "should-not-exist"));
 }
 
-TEST_CASE("pi-shaped exec classifies an explicit output callback failure", "[harness][async][process][issue484]") {
+TEST_CASE(
+        "pi-shaped exec classifies an explicit output callback failure", "[harness][async][process][issue484][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
     harness::ExecOptions options;
@@ -355,7 +358,8 @@ TEST_CASE("pi-shaped exec classifies an explicit output callback failure", "[har
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("local shell adapter classifies an exceptional process completion", "[harness][shell][process][issue484]") {
+TEST_CASE("local shell adapter classifies an exceptional process completion",
+        "[harness][shell][process][issue484][spec]") {
     tests::TempWorkspace workspace;
     auto runner = std::make_shared<ThrowingAsyncProcessRunner>();
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true, {}, {}, runner);
@@ -368,7 +372,8 @@ TEST_CASE("local shell adapter classifies an exceptional process completion", "[
 }
 #endif
 
-TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[harness][async][process][issue40]") {
+TEST_CASE("cancelling exec terminates the process group and reaps the shell",
+        "[harness][async][process][issue40][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
     std::stop_source stop_source;
@@ -417,7 +422,7 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
 }
 
 TEST_CASE("input and timer callbacks progress while a long shell command runs on the runtime",
-        "[harness][async][issue459]") {
+        "[harness][async][issue459][spec]") {
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
     harness::RuntimeRoot root(io,
@@ -462,7 +467,7 @@ TEST_CASE("input and timer callbacks progress while a long shell command runs on
 }
 
 TEST_CASE("default process runner caps newline-free output without waiting for line breaks",
-        "[harness][async][process]") {
+        "[harness][async][process][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -486,7 +491,7 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
 }
 
 TEST_CASE("default process runner bounds truncated output on UTF-8 character boundaries",
-        "[harness][async][process][issue72]") {
+        "[harness][async][process][issue72][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -512,7 +517,7 @@ TEST_CASE("default process runner bounds truncated output on UTF-8 character bou
 // U1: pi-shaped public contract compile / construction tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("pi-shaped public types compile with aggregate construction", "[harness][u1]") {
+TEST_CASE("pi-shaped public types compile with aggregate construction", "[harness][u1][spec]") {
     // FileKind
     CHECK(static_cast<int>(harness::FileKind::File) != static_cast<int>(harness::FileKind::Directory));
     CHECK(static_cast<int>(harness::FileKind::Symlink) != static_cast<int>(harness::FileKind::File));
@@ -567,7 +572,7 @@ TEST_CASE("pi-shaped public types compile with aggregate construction", "[harnes
     CHECK(std::holds_alternative<harness::BinaryData>(bytes));
 }
 
-TEST_CASE("pi-shaped error conversion helpers map to support::Error", "[harness][u1]") {
+TEST_CASE("pi-shaped error conversion helpers map to support::Error", "[harness][u1][spec]") {
     // FileError → support::Error
     auto ue = harness::to_util_error(harness::FileError{
             .code = harness::FileErrorCode::PermissionDenied, .message = "denied", .path = std::string{"/x"}});
@@ -615,7 +620,7 @@ TEST_CASE("pi-shaped error conversion helpers map to support::Error", "[harness]
 // U3: pi-shaped shell exec tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("pi-shaped exec returns split stdout and stderr streams", "[harness][u3]") {
+TEST_CASE("pi-shaped exec returns split stdout and stderr streams", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
 
@@ -626,7 +631,7 @@ TEST_CASE("pi-shaped exec returns split stdout and stderr streams", "[harness][u
     CHECK(result->exitCode == 0);
 }
 
-TEST_CASE("pi-shaped exec stdout-only and stderr-only preserve empty unused stream", "[harness][u3]") {
+TEST_CASE("pi-shaped exec stdout-only and stderr-only preserve empty unused stream", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
 
@@ -641,7 +646,7 @@ TEST_CASE("pi-shaped exec stdout-only and stderr-only preserve empty unused stre
     CHECK(stderr_only->stderr_output.find("only_err") != std::string::npos);
 }
 
-TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3]") {
+TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("sub/note.txt", "hello");
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
@@ -654,7 +659,7 @@ TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3]") {
     CHECK(result->exitCode == 0);
 }
 
-TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3]") {
+TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
 
@@ -665,7 +670,7 @@ TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3]") 
     CHECK(result.error().code == harness::ExecutionErrorCode::SpawnError);
 }
 
-TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[harness][u3]") {
+TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), false);
 
@@ -674,7 +679,7 @@ TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[ha
     CHECK(result.error().code == harness::ExecutionErrorCode::ShellUnavailable);
 }
 
-TEST_CASE("pi-shaped exec times out without blocking io context", "[harness][u3]") {
+TEST_CASE("pi-shaped exec times out without blocking io context", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
     const auto started = std::chrono::steady_clock::now();
@@ -689,7 +694,7 @@ TEST_CASE("pi-shaped exec times out without blocking io context", "[harness][u3]
     CHECK(elapsed < std::chrono::milliseconds(1500));
 }
 
-TEST_CASE("pi-shaped exec preserves nonzero exit codes", "[harness][u3]") {
+TEST_CASE("pi-shaped exec preserves nonzero exit codes", "[harness][u3][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
 
@@ -698,7 +703,7 @@ TEST_CASE("pi-shaped exec preserves nonzero exit codes", "[harness][u3]") {
     CHECK(result->exitCode == 42);
 }
 
-TEST_CASE("separate Shell executions restart from the canonical workspace", "[harness][shell][issue84]") {
+TEST_CASE("separate Shell executions restart from the canonical workspace", "[harness][shell][issue84][spec]") {
     tests::TempWorkspace workspace;
     std::filesystem::create_directory(workspace.path() / "nested");
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);

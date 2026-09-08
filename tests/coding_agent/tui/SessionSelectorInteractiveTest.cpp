@@ -213,9 +213,8 @@ void wait_replacement(Running& running,
 
 } // namespace
 
-TEST_CASE(
-    "session selector lists sessions and resumes the chosen one with the pi status",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("session selector lists sessions and resumes the chosen one with the pi status",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     // The resume target: written before boot so the boot session is newest.
     fixture.write_session(
@@ -253,9 +252,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "session selector cancels on Escape and the current session is marked",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("session selector cancels on Escape and the current session is marked",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     fixture.write_session(
         fixture.workspace.path() / "other.jsonl", {"hello from other"});
@@ -282,9 +280,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "session selector search, named filter, and scope toggle work through the input seam",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("session selector search, named filter, and scope toggle work through the input seam",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     fixture.write_session(
         fixture.workspace.path() / "other.jsonl",
@@ -335,9 +332,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "session selector renames a session through the inline input",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("session selector renames a session through the inline input",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     const auto other = fixture.workspace.path() / "other.jsonl";
     fixture.write_session(other, {"hello from other"});
@@ -383,9 +379,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "session selector deletes a session after confirmation",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("session selector deletes a session after confirmation",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     const auto other = fixture.workspace.path() / "other.jsonl";
     fixture.write_session(other, {"hello from other"});
@@ -418,9 +413,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "fork flow pre-fills selectedText, switches sessions, and reports the pi status",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("fork flow pre-fills selectedText, switches sessions, and reports the pi status",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     // The boot session itself carries three user turns.
     fixture.write_session(
@@ -486,9 +480,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "fork flow reports no messages to fork from on an empty session",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("fork flow reports no messages to fork from on an empty session",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -507,9 +500,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "resuming a session whose stored cwd is gone prompts and resumes in the current cwd",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("resuming a session whose stored cwd is gone prompts and resumes in the current cwd",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     const auto missing_cwd = fixture.workspace.path() / "vanished";
     fixture.write_session(
@@ -554,9 +546,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "declining the missing-cwd prompt reports Resume cancelled",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("declining the missing-cwd prompt reports Resume cancelled",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     const auto missing_cwd = fixture.workspace.path() / "vanished";
     fixture.write_session(
@@ -595,9 +586,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "app.session.new starts a fresh session with the pi chat line",
-    "[coding_agent][tui][session-selector][e2e][issue409]") {
+TEST_CASE("app.session.new starts a fresh session with the pi chat line",
+        "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"old turn"}, std::nullopt, "boot-session");
     Running running;

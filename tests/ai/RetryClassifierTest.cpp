@@ -28,7 +28,7 @@ namespace {
 
 TEST_CASE(
     "structured inference failures allow retry for rate limits and transient transports",
-    "[ai][retry][issue624]") {
+    "[ai][retry][issue624][spec]") {
     for (const auto kind : {
                  ai::InferenceFailureKind::RateLimited,
                  ai::InferenceFailureKind::TransientTransportFailure,
@@ -48,7 +48,7 @@ TEST_CASE(
 
 TEST_CASE(
     "structured inference failures never retry authorization overflow invalid or cancelled outcomes",
-    "[ai][retry][issue624]") {
+    "[ai][retry][issue624][spec]") {
     for (const auto kind : {
                  ai::InferenceFailureKind::Unauthorized,
                  ai::InferenceFailureKind::ContextOverflow,
@@ -61,7 +61,7 @@ TEST_CASE(
 
 TEST_CASE(
     "retry classification is unchanged when provider diagnostics are reworded",
-    "[ai][retry][issue624]") {
+    "[ai][retry][issue624][spec]") {
     // The raw provider code and human-readable diagnostic are observations;
     // the stable structured kind is the only retry input.
     const auto first_wording = failure(
@@ -78,7 +78,7 @@ TEST_CASE(
 
 TEST_CASE(
     "a started inference output is not retried even when its failure is transient",
-    "[ai][retry][issue624]") {
+    "[ai][retry][issue624][spec]") {
     CHECK_FALSE(ai::is_retryable_inference_failure(
             failure(ai::InferenceFailureKind::TransientTransportFailure, true)));
     CHECK_FALSE(ai::is_retryable_inference_failure(

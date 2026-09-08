@@ -121,9 +121,8 @@ auto run_prompt(tests::RuntimeFixture& runtime, coding_agent::AgentSession& sess
 
 } // namespace
 
-TEST_CASE(
-    "User Bash progress and committed messages preserve the raw command",
-    "[coding_agent][runtime][issue96]") {
+TEST_CASE("User Bash progress and committed messages preserve the raw command",
+        "[coding_agent][runtime][issue96][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<ImmediateChatProvider>();
@@ -161,9 +160,7 @@ TEST_CASE(
     CHECK(std::get<ai::BashExecutionMessage>(committed.front()).command == command);
 }
 
-TEST_CASE(
-    "User Bash committed messages preserve the raw full output path",
-    "[coding_agent][runtime][issue96]") {
+TEST_CASE("User Bash committed messages preserve the raw full output path", "[coding_agent][runtime][issue96][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto spill_directory =
@@ -197,9 +194,7 @@ TEST_CASE(
     CHECK(committed_bash.full_output_path == result->message.full_output_path);
 }
 
-TEST_CASE(
-    "User Bash shell error diagnostics pass through raw",
-    "[coding_agent][runtime][issue96]") {
+TEST_CASE("User Bash shell error diagnostics pass through raw", "[coding_agent][runtime][issue96][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<ImmediateChatProvider>();
@@ -232,9 +227,8 @@ TEST_CASE(
     CHECK(session.snapshot().agent_state.messages.empty());
 }
 
-TEST_CASE(
-    "idle User Bash cancellation retains partial output and commits one cancelled message",
-    "[coding_agent][runtime][issue88]") {
+TEST_CASE("idle User Bash cancellation retains partial output and commits one cancelled message",
+        "[coding_agent][runtime][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "cancel-idle.jsonl";
@@ -308,9 +302,8 @@ TEST_CASE(
     CHECK(client_pointer->requests.size() == 1);
 }
 
-TEST_CASE(
-    "repeated User Bash cancellation coalesces and a later command gets a fresh stop source",
-    "[coding_agent][runtime][issue88]") {
+TEST_CASE("repeated User Bash cancellation coalesces and a later command gets a fresh stop source",
+        "[coding_agent][runtime][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<ImmediateChatProvider>();
@@ -391,9 +384,8 @@ TEST_CASE(
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 2);
 }
 
-TEST_CASE(
-    "User Bash infrastructure failure commits no message and the Session stays usable",
-    "[coding_agent][runtime][issue88]") {
+TEST_CASE("User Bash infrastructure failure commits no message and the Session stays usable",
+        "[coding_agent][runtime][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<ImmediateChatProvider>();
@@ -437,9 +429,8 @@ TEST_CASE(
     CHECK(shell_pointer->started_count == 2);
 }
 
-TEST_CASE(
-    "User Bash cancelled during an active run defers commitment without duplicating the outcome",
-    "[coding_agent][runtime][issue88]") {
+TEST_CASE("User Bash cancelled during an active run defers commitment without duplicating the outcome",
+        "[coding_agent][runtime][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<tests::GatedChatProvider>();
@@ -503,9 +494,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::BashExecutionMessage>(messages[2]));
 }
 
-TEST_CASE(
-    "Session Close rejects new work, cancels User Bash, and finalizes after quiescence",
-    "[coding_agent][runtime][issue88]") {
+TEST_CASE("Session Close rejects new work, cancels User Bash, and finalizes after quiescence",
+        "[coding_agent][runtime][issue88][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_path = workspace.path() / "close-bash.jsonl";

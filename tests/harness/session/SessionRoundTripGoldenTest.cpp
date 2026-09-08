@@ -194,7 +194,7 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
 } // namespace
 
 TEST_CASE("pi v3 11-entry-type session golden round-trips byte-identically",
-          "[harness][session][issue356][golden]") {
+        "[harness][session][issue356][golden][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto lines = fixture_lines("session-roundtrip.jsonl");
     REQUIRE(lines.size() > 1);
@@ -235,8 +235,7 @@ TEST_CASE("pi v3 11-entry-type session golden round-trips byte-identically",
     CHECK(kinds == expected_kinds);
 }
 
-TEST_CASE("pi v3 golden parses field/null/active-path semantics",
-          "[harness][session][issue356]") {
+TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][session][issue356][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("session-roundtrip.jsonl"));
     REQUIRE(loaded);
@@ -325,7 +324,7 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics",
 }
 
 TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custom_message",
-          "[harness][session][issue356][projection]") {
+        "[harness][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-session.jsonl"));
     REQUIRE(loaded);
@@ -349,7 +348,7 @@ TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custo
 }
 
 TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message",
-          "[harness][session][issue356][projection]") {
+        "[harness][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-branch-session.jsonl"));
     REQUIRE(loaded);
@@ -372,8 +371,7 @@ TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message
     CHECK(actual_json == expected_json);
 }
 
-TEST_CASE("pi session projection: getLabel and getSessionName",
-          "[harness][session][issue356]") {
+TEST_CASE("pi session projection: getLabel and getSessionName", "[harness][session][issue356][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("session-roundtrip.jsonl"));
     REQUIRE(loaded);
@@ -396,7 +394,7 @@ TEST_CASE("pi session projection: getLabel and getSessionName",
 }
 
 TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-ModelRuntime seam",
-          "[harness][session][issue356][agent][projection]") {
+        "[harness][session][issue356][agent][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-session.jsonl"));
     REQUIRE(loaded);
@@ -451,7 +449,7 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
 }
 
 TEST_CASE("pi branch projection drives rebuilt context into the Agent",
-          "[harness][session][issue356][agent][projection]") {
+        "[harness][session][issue356][agent][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-branch-session.jsonl"));
     REQUIRE(loaded);
@@ -593,9 +591,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "derived session state golden pins thinkingLevel/model/activeToolNames",
-    "[harness][session][issue357][golden]") {
+TEST_CASE("derived session state golden pins thinkingLevel/model/activeToolNames",
+        "[harness][session][issue357][golden][compat-pi]") {
     const auto full_branch = derived_state_full_branch();
     // The assistant message lands after the model_change, so its provider/model
     // wins (pi harness test "tracks model and thinking level changes in built
@@ -639,9 +636,8 @@ TEST_CASE(
     CHECK(*serialized == expected);
 }
 
-TEST_CASE(
-    "derived thinking level and model flow into the Agent's turn options at the fake-ModelRuntime seam",
-    "[harness][session][issue357][agent][projection]") {
+TEST_CASE("derived thinking level and model flow into the Agent's turn options at the fake-ModelRuntime seam",
+        "[harness][session][issue357][agent][projection][compat-pi]") {
     // The derived state of a resumed branch feeds the Agent construction: the
     // derived model identity becomes the per-turn model and the derived
     // thinking level becomes the per-turn `reasoning` stream option.

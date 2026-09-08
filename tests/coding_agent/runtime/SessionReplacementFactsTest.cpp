@@ -45,9 +45,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "the CLI-facts merge preserves an engine-resolved trust decision over empty CLI facts",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge preserves an engine-resolved trust decision over empty CLI facts",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     // The boot prompt's session-only "trust" answer must survive the facts
     // merge even without a CLI --approve flag (the #507 discard).
     auto trusted = engine_request();
@@ -66,9 +65,8 @@ TEST_CASE(
     CHECK_FALSE(*untrusted.project_trust_override);
 }
 
-TEST_CASE(
-    "the CLI-facts merge lets an engine-resolved trust decision win over a differing CLI override",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge lets an engine-resolved trust decision win over a differing CLI override",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     // The engine already merges the CLI override into its resolution (pi
     // `projectTrustByCwd` precedence), so a set request value is always the
     // authoritative one — the raw facts must never overwrite it.
@@ -83,9 +81,8 @@ TEST_CASE(
     CHECK(*request.project_trust_override);
 }
 
-TEST_CASE(
-    "the CLI-facts merge fills an unset trust decision from the CLI facts",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge fills an unset trust decision from the CLI facts",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     auto facts = empty_facts();
     facts.project_trust_override = true;
     auto approved = engine_request();
@@ -100,9 +97,8 @@ TEST_CASE(
     CHECK_FALSE(*rejected.project_trust_override);
 }
 
-TEST_CASE(
-    "the CLI-facts merge leaves trust unresolved when neither side sets it",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge leaves trust unresolved when neither side sets it",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     // Session assembly then resolves through the trust store and the default
     // trust policy.
     auto request = engine_request();
@@ -111,9 +107,8 @@ TEST_CASE(
     CHECK_FALSE(request.project_trust_override.has_value());
 }
 
-TEST_CASE(
-    "the CLI-facts merge re-applies the CLI-owned resource prompt and model facts",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge re-applies the CLI-owned resource prompt and model facts",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     // Host-authoritative pure CLI facts: load-bearing for the fields
     // `make_session_request` deliberately omits (themes, context files,
     // system prompts) and an idempotent mirror of the engine-set ones.
@@ -156,9 +151,8 @@ TEST_CASE(
     CHECK(*request.session_facts.api_key == "sk-test");
 }
 
-TEST_CASE(
-    "the CLI-facts merge leaves the host-only capabilities to the host",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge leaves the host-only capabilities to the host",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     // Host-only capabilities (issue #507): the interactive Session's
     // independent User Shell (ADR 0026), the CLI Runtime root's target, and
     // the host-shared Models runtime (issue #466) are set by the host on the
@@ -189,9 +183,8 @@ TEST_CASE(
     CHECK(installed.model_runtime == runtime);
 }
 
-TEST_CASE(
-    "the CLI-facts merge keeps the engine session intent and workspace",
-    "[coding_agent][runtime][session-replacement][issue507][issue511]") {
+TEST_CASE("the CLI-facts merge keeps the engine session intent and workspace",
+        "[coding_agent][runtime][session-replacement][issue507][issue511][spec]") {
     // The merge never touches the per-flow fields the engine owns: the
     // workspace, the session target, and the in-session overrides.
     auto request = engine_request();

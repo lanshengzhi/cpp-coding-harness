@@ -26,7 +26,8 @@ using cch::tests::ImageEnvironmentGuard;
 
 } // namespace
 
-TEST_CASE("detect_image_capabilities defaults to conservative unknown-terminal", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities defaults to conservative unknown-terminal",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageEnvironmentGuard environment;
 
     const auto caps = cch::tui::detect_image_capabilities();
@@ -34,7 +35,7 @@ TEST_CASE("detect_image_capabilities defaults to conservative unknown-terminal",
     CHECK_FALSE(caps.hyperlinks);
 }
 
-TEST_CASE("detect_image_capabilities probes tmux OSC 8 forwarding", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities probes tmux OSC 8 forwarding", "[tui][image][terminal-image][issue385][spec]") {
     ImageEnvironmentGuard environment;
     environment.set("TMUX", "/tmp/tmux-1000/default,1234,0");
     environment.set("TERM_PROGRAM", "ghostty");
@@ -48,7 +49,8 @@ TEST_CASE("detect_image_capabilities probes tmux OSC 8 forwarding", "[tui][image
     CHECK_FALSE(blocked.hyperlinks);
 }
 
-TEST_CASE("detect_image_capabilities probes when TERM starts with tmux", "[tui][image][terminal-image][issue385]") {
+TEST_CASE(
+        "detect_image_capabilities probes when TERM starts with tmux", "[tui][image][terminal-image][issue385][spec]") {
     ImageEnvironmentGuard environment;
     environment.set("TERM", "tmux-256color");
     environment.set("TERM_PROGRAM", "iterm.app");
@@ -61,7 +63,8 @@ TEST_CASE("detect_image_capabilities probes when TERM starts with tmux", "[tui][
     CHECK_FALSE(blocked.hyperlinks);
 }
 
-TEST_CASE("detect_image_capabilities forces hyperlinks off under screen", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities forces hyperlinks off under screen",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageEnvironmentGuard environment;
     environment.set("TERM", "screen-256color");
     const auto caps = cch::tui::detect_image_capabilities([] { return true; });
@@ -69,7 +72,7 @@ TEST_CASE("detect_image_capabilities forces hyperlinks off under screen", "[tui]
     CHECK_FALSE(caps.hyperlinks);
 }
 
-TEST_CASE("detect_image_capabilities enables per-emulator protocols", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities enables per-emulator protocols", "[tui][image][terminal-image][issue385][spec]") {
     struct Fixture {
         std::string name;
         std::string value;
@@ -93,7 +96,8 @@ TEST_CASE("detect_image_capabilities enables per-emulator protocols", "[tui][ima
     }
 }
 
-TEST_CASE("detect_image_capabilities honors TERM_PROGRAM values pi pins", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities honors TERM_PROGRAM values pi pins",
+        "[tui][image][terminal-image][issue385][spec]") {
     struct Fixture {
         std::string value;
         cch::tui::InlineImageProtocol expected;
@@ -117,7 +121,8 @@ TEST_CASE("detect_image_capabilities honors TERM_PROGRAM values pi pins", "[tui]
     }
 }
 
-TEST_CASE("detect_image_capabilities keeps JetBrains and unknown terminals hyperlink-free", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities keeps JetBrains and unknown terminals hyperlink-free",
+        "[tui][image][terminal-image][issue385][spec]") {
     {
         ImageEnvironmentGuard environment;
         environment.set("TERMINAL_EMULATOR", "JetBrains-JediTerm");
@@ -136,7 +141,8 @@ TEST_CASE("detect_image_capabilities keeps JetBrains and unknown terminals hyper
     }
 }
 
-TEST_CASE("detect_image_capabilities treats set-but-empty variables as absent", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("detect_image_capabilities treats set-but-empty variables as absent",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageEnvironmentGuard environment;
     environment.set("KITTY_WINDOW_ID", "");
     environment.set("TERM_PROGRAM", "");
@@ -147,7 +153,8 @@ TEST_CASE("detect_image_capabilities treats set-but-empty variables as absent", 
     CHECK_FALSE(caps.hyperlinks);
 }
 
-TEST_CASE("image capability cache mirrors pi getCapabilities set and reset", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("image capability cache mirrors pi getCapabilities set and reset",
+        "[tui][image][terminal-image][issue385][spec]") {
     cch::tui::reset_image_capabilities_cache();
     const auto detected = cch::tui::get_image_capabilities();
     CHECK(detected == cch::tui::detect_image_capabilities());
@@ -162,7 +169,7 @@ TEST_CASE("image capability cache mirrors pi getCapabilities set and reset", "[t
     cch::tui::reset_image_capabilities_cache();
 }
 
-TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385][compat-pi]") {
     CHECK(cch::tui::hyperlink("click me", "https://example.com") ==
         "\x1b]8;;https://example.com\x1b\\click me\x1b]8;;\x1b\\");
     CHECK(cch::tui::hyperlink("", "https://example.com") ==
@@ -171,7 +178,8 @@ TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-ima
         "\x1b]8;;file:///home/user/README.md\x1b\\README.md\x1b]8;;\x1b\\");
 }
 
-TEST_CASE("image_fallback shortens home-prefixed absolute paths without hyperlinks", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("image_fallback shortens home-prefixed absolute paths without hyperlinks",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = false});
     cch::tests::EnvVarGuard home("HOME", std::string{"/tmp/home"});
 
@@ -183,7 +191,8 @@ TEST_CASE("image_fallback shortens home-prefixed absolute paths without hyperlin
     CHECK(result.find("\x1b]8;") == std::string::npos);
 }
 
-TEST_CASE("image_fallback wraps shortened absolute paths in OSC 8 file links", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("image_fallback wraps shortened absolute paths in OSC 8 file links",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = true});
     cch::tests::EnvVarGuard home("HOME", std::string{"/tmp/home"});
 
@@ -197,7 +206,8 @@ TEST_CASE("image_fallback wraps shortened absolute paths in OSC 8 file links", "
         cch::tui::visible_width("[Image: ~/.pi/agent/shot.png [image/png] 10x10]"));
 }
 
-TEST_CASE("image_fallback percent-encodes file URLs like node pathToFileURL", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("image_fallback percent-encodes file URLs like node pathToFileURL",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = true});
 
     const auto spaced = cch::tui::image_fallback(
@@ -219,7 +229,8 @@ TEST_CASE("image_fallback percent-encodes file URLs like node pathToFileURL", "[
     CHECK(utf8.find("\x1b]8;;file:///tmp/%C3%BCmlaut.png\x1b\\") != std::string::npos);
 }
 
-TEST_CASE("image_fallback leaves bare basenames unchanged and unlinked", "[tui][image][terminal-image][issue385]") {
+TEST_CASE(
+        "image_fallback leaves bare basenames unchanged and unlinked", "[tui][image][terminal-image][issue385][spec]") {
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = true});
 
     const auto result = cch::tui::image_fallback(
@@ -230,7 +241,8 @@ TEST_CASE("image_fallback leaves bare basenames unchanged and unlinked", "[tui][
     CHECK(result.find("\x1b]8;") == std::string::npos);
 }
 
-TEST_CASE("image_fallback omits filename and dimension segments when absent", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("image_fallback omits filename and dimension segments when absent",
+        "[tui][image][terminal-image][issue385][spec]") {
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None, .hyperlinks = false});
 
     CHECK(cch::tui::image_fallback(
@@ -242,7 +254,8 @@ TEST_CASE("image_fallback omits filename and dimension segments when absent", "[
               std::string_view{"clankolas.png"}) == "[Image: clankolas.png [image/png]]");
 }
 
-TEST_CASE("cell-size input parser consumes complete responses and forwards the rest", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("cell-size input parser consumes complete responses and forwards the rest",
+        "[tui][image][terminal-image][issue385][spec]") {
     auto result = cch::tui::detail::consume_cell_size_input({}, "\x1b[6;20;10t");
     CHECK(result.pending.empty());
     CHECK(result.forwarded_input.empty());
@@ -265,7 +278,8 @@ TEST_CASE("cell-size input parser consumes complete responses and forwards the r
     CHECK(result.responses[1] == (cch::tui::detail::CellSizeResponse{.height_px = 30, .width_px = 40}));
 }
 
-TEST_CASE("cell-size input parser buffers split and partial responses", "[tui][image][terminal-image][issue385]") {
+TEST_CASE(
+        "cell-size input parser buffers split and partial responses", "[tui][image][terminal-image][issue385][spec]") {
     auto result = cch::tui::detail::consume_cell_size_input({}, "\x1b[6;");
     REQUIRE(result.responses.empty());
     CHECK(result.pending == "\x1b[6;");
@@ -285,7 +299,8 @@ TEST_CASE("cell-size input parser buffers split and partial responses", "[tui][i
     CHECK(result.responses[0] == (cch::tui::detail::CellSizeResponse{.height_px = 20, .width_px = 10}));
 }
 
-TEST_CASE("cell-size input parser never swallows bare escapes or invalid data", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("cell-size input parser never swallows bare escapes or invalid data",
+        "[tui][image][terminal-image][issue385][spec]") {
     auto result = cch::tui::detail::consume_cell_size_input({}, "\x1b");
     CHECK(result.pending.empty());
     CHECK(result.forwarded_input == "\x1b");
@@ -314,7 +329,7 @@ TEST_CASE("cell-size input parser never swallows bare escapes or invalid data", 
     CHECK(result.responses[0] == (cch::tui::detail::CellSizeResponse{.height_px = 11, .width_px = 22}));
 }
 
-TEST_CASE("cell-size input parser bounds buffered fragments", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("cell-size input parser bounds buffered fragments", "[tui][image][terminal-image][issue385][spec]") {
     auto result = cch::tui::detail::consume_cell_size_input(
         {},
         std::string("\x1b[6;") + std::string(70, '1'));
@@ -323,7 +338,8 @@ TEST_CASE("cell-size input parser bounds buffered fragments", "[tui][image][term
     CHECK(result.responses.empty());
 }
 
-TEST_CASE("VirtualTerminal consumes cell-size responses protocol-aware", "[tui][image][terminal-image][issue385]") {
+TEST_CASE(
+        "VirtualTerminal consumes cell-size responses protocol-aware", "[tui][image][terminal-image][issue385][spec]") {
     cch::tui::VirtualTerminal terminal({
         .columns = 80,
         .rows = 24,
@@ -393,7 +409,8 @@ TEST_CASE("VirtualTerminal consumes cell-size responses protocol-aware", "[tui][
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("VirtualTerminal emits the cell-size query only for image-capable terminals", "[tui][image][terminal-image][issue385]") {
+TEST_CASE("VirtualTerminal emits the cell-size query only for image-capable terminals",
+        "[tui][image][terminal-image][issue385][spec]") {
     cch::tui::VirtualTerminal plain({.columns = 80, .rows = 24});
     REQUIRE(plain.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },

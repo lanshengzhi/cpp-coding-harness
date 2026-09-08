@@ -33,7 +33,7 @@ support::Expected<ai::providers::StreamResponse> run_stream(ai::providers::Strea
 
 } // namespace
 
-TEST_CASE("stream transport rejects unsupported URLs before network", "[ai][provider][transport][u3]") {
+TEST_CASE("stream transport rejects unsupported URLs before network", "[ai][provider][transport][u3][spec]") {
     ai::providers::StreamRequest request;
     request.url = "http://example.com/v1/chat/completions";
 
@@ -44,7 +44,7 @@ TEST_CASE("stream transport rejects unsupported URLs before network", "[ai][prov
     CHECK(response.error().detail.find("https") != std::string::npos);
 }
 
-TEST_CASE("stream transport rejects missing host before network", "[ai][provider][transport][u3]") {
+TEST_CASE("stream transport rejects missing host before network", "[ai][provider][transport][u3][spec]") {
     ai::providers::StreamRequest request;
     request.url = "https:///v1/chat/completions";
 
@@ -55,9 +55,8 @@ TEST_CASE("stream transport rejects missing host before network", "[ai][provider
     CHECK(response.error().detail.find("host") != std::string::npos);
 }
 
-TEST_CASE(
-    "stream transport observes cancellation before network work",
-    "[ai][provider][transport][abort][issue39]") {
+TEST_CASE("stream transport observes cancellation before network work",
+        "[ai][provider][transport][abort][issue39][spec]") {
     std::stop_source stop_source;
     CHECK(stop_source.request_stop());
 
@@ -72,7 +71,7 @@ TEST_CASE(
     CHECK(response.error().message == "stream transport cancelled");
 }
 
-TEST_CASE("stream transport rejects unsupported HTTP methods before network", "[ai][provider][transport][u3]") {
+TEST_CASE("stream transport rejects unsupported HTTP methods before network", "[ai][provider][transport][u3][spec]") {
     ai::providers::StreamRequest request;
     request.url = "https://example.com/v1/chat/completions";
     request.method = "BREW";

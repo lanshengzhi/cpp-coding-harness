@@ -13,9 +13,7 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "drain_ready returns once the loop stays quiet",
-    "[support][pump][issue553]") {
+TEST_CASE("drain_ready returns once the loop stays quiet", "[support][pump][issue553][spec]") {
     boost::asio::io_context io;
     bool ran = false;
     boost::asio::post(io, [&] { ran = true; });
@@ -28,9 +26,8 @@ TEST_CASE(
     CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds{5});
 }
 
-TEST_CASE(
-    "drain_ready returns within its backstop while slow work continually reposts",
-    "[support][pump][issue553]") {
+TEST_CASE("drain_ready returns within its backstop while slow work continually reposts",
+        "[support][pump][issue553][spec]") {
     boost::asio::io_context io;
     const auto guard = boost::asio::make_work_guard(io);
     std::atomic<bool> stop{false};

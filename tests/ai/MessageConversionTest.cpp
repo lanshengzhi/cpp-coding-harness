@@ -87,7 +87,7 @@ ai::AiContext responses_context() {
 
 } // namespace
 
-TEST_CASE("Responses conversion matches the frozen DeepSeek payload golden", "[ai][conversion][issue339]") {
+TEST_CASE("Responses conversion matches the frozen DeepSeek payload golden", "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model(
         "deepseek-v4-flash", "deepseek", "openai-responses");
     model.reasoning = true;
@@ -110,9 +110,8 @@ TEST_CASE("Responses conversion matches the frozen DeepSeek payload golden", "[a
     check_payload_fixture(*payload, "conversion/openai-responses-deepseek.json");
 }
 
-TEST_CASE(
-    "Responses conversion sanitizes malformed text and fills orphaned tool results",
-    "[ai][conversion][issue339]") {
+TEST_CASE("Responses conversion sanitizes malformed text and fills orphaned tool results",
+        "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model("text-only", "deepseek", "openai-responses");
     ai::AiContext context;
     context.messages.push_back(ai::UserMessage{
@@ -149,9 +148,8 @@ TEST_CASE(
     CHECK(serialized->find("orphan") != std::string::npos);
 }
 
-TEST_CASE(
-    "Omitted reasoning uses each scoped adapter default without a summary",
-    "[ai][conversion][issue339]") {
+TEST_CASE("Omitted reasoning uses each scoped adapter default without a summary",
+        "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model("deepseek-v4-flash", "deepseek", "openai-responses");
     model.reasoning = true;
     ai::ProviderStreamOptions options;
@@ -179,9 +177,8 @@ TEST_CASE(
     CHECK(codex->get_object().find("reasoning") == codex->get_object().end());
 }
 
-TEST_CASE(
-    "Responses replay drops empty signatures and clamps prompt cache keys",
-    "[ai][conversion][issue339]") {
+TEST_CASE("Responses replay drops empty signatures and clamps prompt cache keys",
+        "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model("deepseek-v4-flash", "deepseek", "openai-responses");
     ai::AiContext context;
     ai::AssistantMessage assistant;
@@ -214,7 +211,7 @@ TEST_CASE(
     CHECK(serialized->find("Invalid Responses thinking signature") == std::string::npos);
 }
 
-TEST_CASE("Codex conversion matches the frozen Responses payload golden", "[ai][conversion][issue339]") {
+TEST_CASE("Codex conversion matches the frozen Responses payload golden", "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model(
         "gpt-5.5", "openai-codex", "openai-codex-responses");
     model.reasoning = true;
@@ -282,7 +279,7 @@ TEST_CASE("Codex conversion matches the frozen Responses payload golden", "[ai][
     check_payload_fixture(*payload, "conversion/openai-codex-responses.json");
 }
 
-TEST_CASE("Anthropic conversion matches the frozen Kimi payload golden", "[ai][conversion][issue339]") {
+TEST_CASE("Anthropic conversion matches the frozen Kimi payload golden", "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model(
         "kimi-for-coding", "kimi-coding", "anthropic-messages");
     model.reasoning = true;
@@ -364,9 +361,7 @@ TEST_CASE("Anthropic conversion matches the frozen Kimi payload golden", "[ai][c
     check_payload_fixture(*payload, "conversion/anthropic-messages-kimi.json");
 }
 
-TEST_CASE(
-    "Anthropic history caching does not mark an earlier user turn",
-    "[ai][conversion][issue339]") {
+TEST_CASE("Anthropic history caching does not mark an earlier user turn", "[ai][conversion][issue339][compat-pi]") {
     auto model = tests::make_model("kimi-for-coding", "kimi-coding", "anthropic-messages");
     ai::AiContext context;
     context.messages.push_back(ai::user_text_message("question", 1));
@@ -391,9 +386,8 @@ TEST_CASE(
     REQUIRE(serialized);
     CHECK(serialized->find("cache_control") == std::string::npos);
 }
-TEST_CASE(
-    "String-content user messages pass the non-vision image downgrade untouched",
-    "[ai][conversion][issue365]") {
+TEST_CASE("String-content user messages pass the non-vision image downgrade untouched",
+        "[ai][conversion][issue365][compat-pi]") {
     auto model = tests::make_model("text-only", "deepseek", "openai-responses");
     ai::AiContext context;
     context.messages.push_back(ai::UserMessage{
@@ -436,9 +430,7 @@ TEST_CASE(
         std::string::npos);
 }
 
-TEST_CASE(
-    "Synthesized user messages still arrive as block arrays",
-    "[ai][conversion][issue365]") {
+TEST_CASE("Synthesized user messages still arrive as block arrays", "[ai][conversion][issue365][compat-pi]") {
     auto model = tests::make_model("text-only", "deepseek", "openai-responses");
     ai::AiContext context;
     ai::BashExecutionMessage bash;

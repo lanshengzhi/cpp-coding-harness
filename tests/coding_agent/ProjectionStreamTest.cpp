@@ -344,7 +344,7 @@ void check_converged(const coding_agent::AgentSessionSnapshot& composed,
 } // namespace
 
 TEST_CASE("Projection attach delivers a Base then ordered patches to concurrent subscribers",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -412,7 +412,7 @@ TEST_CASE("Projection attach delivers a Base then ordered patches to concurrent 
 }
 
 TEST_CASE("Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -467,7 +467,7 @@ TEST_CASE("Projection mailbox overflow resynchronizes with a fresh Base and neve
 }
 
 TEST_CASE("Projection patches converge with the Core snapshot for a message-chunk burst",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -504,7 +504,7 @@ TEST_CASE("Projection patches converge with the Core snapshot for a message-chun
 }
 
 TEST_CASE("Projection patches converge with the Core snapshot for a streaming tool partial",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][diverge][issue622]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto partial_count = std::make_shared<std::size_t>(0);
@@ -681,7 +681,7 @@ TEST_CASE("Projection observers converge on tool and run state after a stalled m
 }
 
 TEST_CASE("Projection attach after Session Close delivers the terminal snapshot as its Base",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -713,7 +713,7 @@ TEST_CASE("Projection attach after Session Close delivers the terminal snapshot 
 }
 
 TEST_CASE("Projection publishes 100 message-update chunks inside the issue cost bound over a long history",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();

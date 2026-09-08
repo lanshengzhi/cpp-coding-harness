@@ -28,7 +28,7 @@ void type(cch::tui::Input& input, std::string text) {
 
 } // namespace
 
-TEST_CASE("Input types printable text and routes submit through the sink", "[tui][input][issue380]") {
+TEST_CASE("Input types printable text and routes submit through the sink", "[tui][input][issue380][spec]") {
     std::vector<std::string> submitted;
     cch::tui::Input input(
         {},
@@ -55,7 +55,7 @@ TEST_CASE("Input types printable text and routes submit through the sink", "[tui
     REQUIRE(submitted.size() == 2);
 }
 
-TEST_CASE("Input routes escape and ctrl+c through the escape sink", "[tui][input][issue380]") {
+TEST_CASE("Input routes escape and ctrl+c through the escape sink", "[tui][input][issue380][spec]") {
     int escapes = 0;
     cch::tui::Input input({}, {}, [&escapes]() -> cch::support::ExpectedVoid { ++escapes; return {}; });
 
@@ -68,7 +68,7 @@ TEST_CASE("Input routes escape and ctrl+c through the escape sink", "[tui][input
     CHECK(escapes == 2);
 }
 
-TEST_CASE("Input resolves a key shared by two actions in dispatch order", "[tui][input]") {
+TEST_CASE("Input resolves a key shared by two actions in dispatch order", "[tui][input][spec]") {
     // f9 claims cancel and char-deletion; cancel leads pi's input.ts chain.
     auto registry = std::make_shared<const cch::tui::KeybindingRegistry>(std::vector<cch::tui::EffectiveKeybinding>{
             {.id = "tui.select.cancel", .keys = {"f9"}},
@@ -96,7 +96,7 @@ TEST_CASE("Input resolves a key shared by two actions in dispatch order", "[tui]
     CHECK(submitted[0] == "ab");
 }
 
-TEST_CASE("Input edits Unicode with grapheme-aware cursor movement", "[tui][input][issue380]") {
+TEST_CASE("Input edits Unicode with grapheme-aware cursor movement", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "A\xc3\xa9\xf0\x9f\x98\x80");
     CHECK(input.value() == "A\xc3\xa9\xf0\x9f\x98\x80");
@@ -112,7 +112,7 @@ TEST_CASE("Input edits Unicode with grapheme-aware cursor movement", "[tui][inpu
     CHECK(input.value().empty());
 }
 
-TEST_CASE("Input undo coalesces typed words and steps back through snapshots", "[tui][input][issue380]") {
+TEST_CASE("Input undo coalesces typed words and steps back through snapshots", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "abc");
     type(input, " ");
@@ -133,7 +133,7 @@ TEST_CASE("Input undo coalesces typed words and steps back through snapshots", "
     CHECK(input.value() == "ab");
 }
 
-TEST_CASE("Input kill ring accumulates consecutive kills with pi ordering", "[tui][input][issue380]") {
+TEST_CASE("Input kill ring accumulates consecutive kills with pi ordering", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
 
     // Backward kills accumulate prepended into one entry.
@@ -167,7 +167,7 @@ TEST_CASE("Input kill ring accumulates consecutive kills with pi ordering", "[tu
     CHECK(input.value() == "x four");
 }
 
-TEST_CASE("Input yank-pop cycles the kill ring after a yank", "[tui][input][issue380]") {
+TEST_CASE("Input yank-pop cycles the kill ring after a yank", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "first second");
     key(input, "home");
@@ -192,7 +192,7 @@ TEST_CASE("Input yank-pop cycles the kill ring after a yank", "[tui][input][issu
     CHECK(fresh.value() == "ab");
 }
 
-TEST_CASE("Input moves and deletes by word", "[tui][input][issue380]") {
+TEST_CASE("Input moves and deletes by word", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "one two three");
     key(input, "w", true);  // deleteWordBackward kills "three"
@@ -211,7 +211,7 @@ TEST_CASE("Input moves and deletes by word", "[tui][input][issue380]") {
     CHECK(forward.value() == "one three");
 }
 
-TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][input][issue380]") {
+TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "ab");
     key(input, "left");
@@ -229,7 +229,7 @@ TEST_CASE("Input inserts bracketed-paste text cleanly at the cursor", "[tui][inp
     CHECK(input.value() == "a[31mred[0mb");
 }
 
-TEST_CASE("Input renders with horizontal scrolling around the cursor", "[tui][input][issue380]") {
+TEST_CASE("Input renders with horizontal scrolling around the cursor", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "abcdefghijklmnop");
 
@@ -267,7 +267,7 @@ TEST_CASE("Input renders with horizontal scrolling around the cursor", "[tui][in
     CHECK(rendered->lines[0] == "> bcdefgh\x1b[7m \x1b[27m");
 }
 
-TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[tui][input][cursor]") {
+TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[tui][input][cursor][spec]") {
     // pi's input.ts renders the cursor as reverse video on the grapheme at the
     // cursor (or a highlighted space at end of line); the C++ port must match.
     cch::tui::Input input;
@@ -295,7 +295,7 @@ TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[
     }
 }
 
-TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[tui][input][issue586]") {
+TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[tui][input][issue586][spec]") {
     cch::tui::Input input({.placeholder = "Type here"});
 
     // Empty value: dimmed placeholder text after the highlighted cursor cell,
@@ -327,7 +327,7 @@ TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[
     CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m                 ");
 }
 
-TEST_CASE("Input cursor location follows the focus lifecycle and windowing", "[tui][input][issue380]") {
+TEST_CASE("Input cursor location follows the focus lifecycle and windowing", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "hi");
     CHECK_FALSE(input.cursor_location().has_value());
@@ -351,7 +351,7 @@ TEST_CASE("Input cursor location follows the focus lifecycle and windowing", "[t
     CHECK((*input.cursor_location() == cch::tui::CursorPosition{.column = 3, .row = 0}));
 }
 
-TEST_CASE("Input set_value replaces the value and clamps the cursor", "[tui][input][issue380]") {
+TEST_CASE("Input set_value replaces the value and clamps the cursor", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "abcdef");
     for (int index = 0; index < 2; ++index) key(input, "left");
@@ -363,7 +363,7 @@ TEST_CASE("Input set_value replaces the value and clamps the cursor", "[tui][inp
     CHECK((*input.cursor_location() == cch::tui::CursorPosition{.column = 4, .row = 0}));
 }
 
-TEST_CASE("Input surfaces sink failures and degenerate widths", "[tui][input][issue380][issue485]") {
+TEST_CASE("Input surfaces sink failures and degenerate widths", "[tui][input][issue380][issue485][spec]") {
     cch::tui::Input failing({}, [](std::string) -> cch::support::ExpectedVoid {
         return std::unexpected(cch::support::make_error(
             cch::support::ErrorCode::Unknown, "boom"));
@@ -381,7 +381,7 @@ TEST_CASE("Input surfaces sink failures and degenerate widths", "[tui][input][is
     CHECK(rendered->lines[0] == ">");
 }
 
-TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][input][issue380]") {
+TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][input][issue380][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 3});
     cch::tui::Tui tui(terminal);
     std::vector<std::string> submitted;
@@ -413,7 +413,7 @@ TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][i
     CHECK(input_ptr->value() == "hellopa");
 }
 
-TEST_CASE("Input outcome-based admission proves boundary no-ops and side-effect freedom", "[tui][input]") {
+TEST_CASE("Input outcome-based admission proves boundary no-ops and side-effect freedom", "[tui][input][spec]") {
     cch::tui::Input input;
 
     // 1. Recognized boundary no-op: cursorLeft at start of input is consumed.

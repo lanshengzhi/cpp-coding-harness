@@ -28,9 +28,8 @@ void append_in_chunks(
 
 } // namespace
 
-TEST_CASE(
-    "User Bash output accumulator presents one sanitized stream in callback-arrival order",
-    "[coding_agent][runtime][issue86][issue97]") {
+TEST_CASE("User Bash output accumulator presents one sanitized stream in callback-arrival order",
+        "[coding_agent][runtime][issue86][issue97][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("\x1b[31mfirst\x1b[0m\r\n");
     accumulator.append("sec\x1b[2Kond\rthird");
@@ -41,9 +40,8 @@ TEST_CASE(
     CHECK_FALSE(accumulator.artifact_error().has_value());
 }
 
-TEST_CASE(
-    "User Bash output accumulator makes invalid UTF-8 and binary bytes safe across chunk boundaries",
-    "[coding_agent][runtime][issue86][issue97]") {
+TEST_CASE("User Bash output accumulator makes invalid UTF-8 and binary bytes safe across chunk boundaries",
+        "[coding_agent][runtime][issue86][issue97][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     // é (U+00E9) is 0xC3 0xA9: a valid sequence split across two callbacks.
     accumulator.append("h\xc3");
@@ -61,9 +59,7 @@ TEST_CASE(
     CHECK_FALSE(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator filters C0 controls to pi's recipe",
-    "[coding_agent][runtime][issue97]") {
+TEST_CASE("User Bash output accumulator filters C0 controls to pi's recipe", "[coding_agent][runtime][issue97][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     // Pi's sanitizeBinaryOutput keeps tab, LF, and CR; the later
     // .replace(/\r/g, "") removes CR, so only tab and LF survive.
@@ -77,9 +73,8 @@ TEST_CASE(
     CHECK_FALSE(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator strips ANSI controls split across chunk boundaries",
-    "[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator strips ANSI controls split across chunk boundaries",
+        "[coding_agent][runtime][issue86][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("a\x1b[");
     accumulator.append("31mRED\x1b");
@@ -90,9 +85,7 @@ TEST_CASE(
     CHECK_FALSE(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator removes carriage returns like pi",
-    "[coding_agent][runtime][issue97]") {
+TEST_CASE("User Bash output accumulator removes carriage returns like pi", "[coding_agent][runtime][issue97][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     // Pi's .replace(/\r/g, ""): CRLF collapses to LF and a lone CR
     // disappears, across chunk boundaries and at end of stream.
@@ -104,9 +97,8 @@ TEST_CASE(
     CHECK_FALSE(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator passes secret-bearing output through unchanged",
-    "[coding_agent][runtime][issue97]") {
+TEST_CASE("User Bash output accumulator passes secret-bearing output through unchanged",
+        "[coding_agent][runtime][issue97][spec]") {
     // ADR 0028: no secret redaction is applied anywhere in the output path.
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     runtime::UserBashOutputAccumulator accumulator;
@@ -118,9 +110,8 @@ TEST_CASE(
     CHECK(accumulator.tail() == "launch api_key=" + secret + " done");
 }
 
-TEST_CASE(
-    "User Bash output accumulator passes quoted secret values through unchanged",
-    "[coding_agent][runtime][issue97]") {
+TEST_CASE("User Bash output accumulator passes quoted secret values through unchanged",
+        "[coding_agent][runtime][issue97][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("{\"token\": \"");
     accumulator.append("quoted sec");
@@ -129,9 +120,8 @@ TEST_CASE(
     CHECK(accumulator.tail() == "{\"token\": \"quoted secret value\"}");
 }
 
-TEST_CASE(
-    "User Bash output accumulator keeps content exactly at the line and byte limits",
-    "[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator keeps content exactly at the line and byte limits",
+        "[coding_agent][runtime][issue86][spec]") {
     const harness::OutputLimit limit{.max_bytes = 8, .max_lines = 3};
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("l1\nl2\nl3");
@@ -140,9 +130,8 @@ TEST_CASE(
     CHECK_FALSE(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator keeps the tail when lines exceed the limit",
-"[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator keeps the tail when lines exceed the limit",
+        "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
     const harness::OutputLimit limit{.max_bytes = 100, .max_lines = 3};
@@ -153,9 +142,8 @@ TEST_CASE(
     CHECK(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator keeps the tail when bytes exceed the limit",
-"[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator keeps the tail when bytes exceed the limit",
+        "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
     const harness::OutputLimit limit{.max_bytes = 8, .max_lines = 100};
@@ -166,9 +154,8 @@ TEST_CASE(
     CHECK(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator never splits a multibyte sequence at the tail cut",
-"[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator never splits a multibyte sequence at the tail cut",
+        "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
     const harness::OutputLimit limit{.max_bytes = 4, .max_lines = 100};
@@ -179,9 +166,8 @@ TEST_CASE(
     CHECK(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator matches whole-buffer tail semantics for arbitrary chunkings",
-"[coding_agent][runtime][issue86][issue97]") {
+TEST_CASE("User Bash output accumulator matches whole-buffer tail semantics for arbitrary chunkings",
+        "[coding_agent][runtime][issue86][issue97][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
     const harness::OutputLimit limit{.max_bytes = 64, .max_lines = 5};
@@ -200,9 +186,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "User Bash output accumulator bounds retained memory under arbitrarily large output",
-"[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator bounds retained memory under arbitrarily large output",
+        "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
     runtime::UserBashOutputAccumulator accumulator;
@@ -216,9 +201,8 @@ TEST_CASE(
     CHECK(accumulator.truncated());
 }
 
-TEST_CASE(
-    "User Bash output accumulator spills the complete sanitized stream to an owner-only temp file",
-    "[coding_agent][runtime][issue86][issue97]") {
+TEST_CASE("User Bash output accumulator spills the complete sanitized stream to an owner-only temp file",
+        "[coding_agent][runtime][issue86][issue97][spec]") {
     tests::TempWorkspace workspace;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
@@ -260,9 +244,8 @@ TEST_CASE(
     std::filesystem::remove(spill_path);
 }
 
-TEST_CASE(
-    "User Bash output accumulator records no spill path while output fits the retained limits",
-    "[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator records no spill path while output fits the retained limits",
+        "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
@@ -280,9 +263,8 @@ TEST_CASE(
     CHECK(std::filesystem::is_empty(spill_dir));
 }
 
-TEST_CASE(
-    "User Bash output accumulator spill failure preserves the bounded truncated result without a path",
-    "[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator spill failure preserves the bounded truncated result without a path",
+        "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{
         "TMPDIR",
@@ -303,9 +285,8 @@ TEST_CASE(
     CHECK(accumulator.artifact_error()->message.size() <= 8192);
 }
 
-TEST_CASE(
-    "User Bash output accumulator passes Authorization values through unchanged",
-    "[coding_agent][runtime][issue97]") {
+TEST_CASE("User Bash output accumulator passes Authorization values through unchanged",
+        "[coding_agent][runtime][issue97][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("Authorization: Bearer abc");
     accumulator.append(" def ghi\nnext");
@@ -313,9 +294,8 @@ TEST_CASE(
     CHECK(accumulator.tail() == "Authorization: Bearer abc def ghi\nnext");
 }
 
-TEST_CASE(
-    "User Bash output accumulator drops an over-long unterminated escape sequence",
-    "[coding_agent][runtime][issue86]") {
+TEST_CASE("User Bash output accumulator drops an over-long unterminated escape sequence",
+        "[coding_agent][runtime][issue86][spec]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("\x1b[" + std::string(5000, '0'));
     accumulator.append("plain");

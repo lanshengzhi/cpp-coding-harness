@@ -6,7 +6,7 @@ using namespace cch;
 
 namespace {
 
-TEST_CASE("Skill aggregate construction and field access", "[coding_agent][skill][u1]") {
+TEST_CASE("Skill aggregate construction and field access", "[coding_agent][skill][u1][spec]") {
     coding_agent::Skill skill{
         .name = "my-skill",
         .description = "Does useful things.",
@@ -31,7 +31,7 @@ TEST_CASE("Skill aggregate construction and field access", "[coding_agent][skill
     CHECK(skill.disableModelInvocation == false);
 }
 
-TEST_CASE("Skill with disableModelInvocation", "[coding_agent][skill][u1]") {
+TEST_CASE("Skill with disableModelInvocation", "[coding_agent][skill][u1][spec]") {
     coding_agent::Skill skill{
         .name = "hidden-skill",
         .description = "Only usable via explicit invocation.",
@@ -52,7 +52,7 @@ TEST_CASE("Skill with disableModelInvocation", "[coding_agent][skill][u1]") {
     CHECK_FALSE(skill.sourceInfo.base_dir.has_value());
 }
 
-TEST_CASE("Skill carries no preloaded content", "[coding_agent][skill][u1]") {
+TEST_CASE("Skill carries no preloaded content", "[coding_agent][skill][u1][spec]") {
     coding_agent::Skill skill{
         .name = "frontmatter-only",
         .description = "No body content.",
@@ -73,7 +73,7 @@ TEST_CASE("Skill carries no preloaded content", "[coding_agent][skill][u1]") {
     CHECK(skill.sourceInfo.base_dir == "/project/.pi");
 }
 
-TEST_CASE("SkillDiagnostic construction", "[coding_agent][skill][u1]") {
+TEST_CASE("SkillDiagnostic construction", "[coding_agent][skill][u1][spec]") {
     coding_agent::SkillDiagnostic diag{
         .type = "warning",
         .code = coding_agent::SkillDiagnosticCode::invalid_metadata,
@@ -88,7 +88,7 @@ TEST_CASE("SkillDiagnostic construction", "[coding_agent][skill][u1]") {
     CHECK(diag.path == "/some/path/SKILL.md");
 }
 
-TEST_CASE("SkillDiagnostic default values", "[coding_agent][skill][u1]") {
+TEST_CASE("SkillDiagnostic default values", "[coding_agent][skill][u1][spec]") {
     coding_agent::SkillDiagnostic diag{};
 
     CHECK(diag.type == "warning");
@@ -97,7 +97,7 @@ TEST_CASE("SkillDiagnostic default values", "[coding_agent][skill][u1]") {
     CHECK(diag.path.empty());
 }
 
-TEST_CASE("SkillLoadResult construction with provenance", "[coding_agent][skill][u1]") {
+TEST_CASE("SkillLoadResult construction with provenance", "[coding_agent][skill][u1][spec]") {
     coding_agent::SkillLoadResult result{
         .skills = {coding_agent::Skill{
             .name = "a-skill",
@@ -136,14 +136,14 @@ TEST_CASE("SkillLoadResult construction with provenance", "[coding_agent][skill]
     CHECK(result.diagnostics[0].collision.has_value());
 }
 
-TEST_CASE("SkillLoadResult empty construction", "[coding_agent][skill][u1]") {
+TEST_CASE("SkillLoadResult empty construction", "[coding_agent][skill][u1][spec]") {
     coding_agent::SkillLoadResult result{};
 
     CHECK(result.skills.empty());
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("SkillDiagnosticCode enum values are distinct", "[coding_agent][skill][u1]") {
+TEST_CASE("SkillDiagnosticCode enum values are distinct", "[coding_agent][skill][u1][spec]") {
     using SCC = coding_agent::SkillDiagnosticCode;
     // Verify no two codes are the same underlying value
     CHECK(static_cast<int>(SCC::file_info_failed) != static_cast<int>(SCC::list_failed));

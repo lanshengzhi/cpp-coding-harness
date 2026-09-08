@@ -42,9 +42,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "find_exact_model_reference_match resolves canonical, split, and bare references",
-    "[coding_agent][model-resolver][issue407]") {
+TEST_CASE("find_exact_model_reference_match resolves canonical, split, and bare references",
+        "[coding_agent][model-resolver][issue407][spec]") {
     const auto models = catalog();
 
     // Canonical provider/id reference.
@@ -77,9 +76,8 @@ TEST_CASE(
     CHECK_FALSE(coding_agent::find_exact_model_reference_match("", models).has_value());
 }
 
-TEST_CASE(
-    "parse_model_pattern prefers aliases over dated versions for partial matches",
-    "[coding_agent][model-resolver][issue407]") {
+TEST_CASE("parse_model_pattern prefers aliases over dated versions for partial matches",
+        "[coding_agent][model-resolver][issue407][spec]") {
     const auto models = catalog();
 
     // Exact match wins with no thinking level.
@@ -100,9 +98,8 @@ TEST_CASE(
     CHECK(by_name.model->id == "claude-sonnet-4-5");
 }
 
-TEST_CASE(
-    "parse_model_pattern handles :level suffixes with pi's warning semantics",
-    "[coding_agent][model-resolver][issue407]") {
+TEST_CASE("parse_model_pattern handles :level suffixes with pi's warning semantics",
+        "[coding_agent][model-resolver][issue407][spec]") {
     const auto models = catalog();
 
     // Valid level suffix.
@@ -131,9 +128,8 @@ TEST_CASE(
     CHECK_FALSE(unknown.warning.has_value());
 }
 
-TEST_CASE(
-    "resolve_model_scope_with_diagnostics matches globs with minimatch semantics and dedupes",
-    "[coding_agent][model-resolver][issue407]") {
+TEST_CASE("resolve_model_scope_with_diagnostics matches globs with minimatch semantics and dedupes",
+        "[coding_agent][model-resolver][issue407][spec]") {
     const auto models = catalog();
 
     // Id prefix glob.
@@ -183,18 +179,16 @@ TEST_CASE(
     CHECK(plain.scoped_models[0].model.provider == "beta");
 }
 
-TEST_CASE(
-    "resolve_model_scope drops diagnostics and keeps the scoped models",
-    "[coding_agent][model-resolver][issue407]") {
+TEST_CASE("resolve_model_scope drops diagnostics and keeps the scoped models",
+        "[coding_agent][model-resolver][issue407][spec]") {
     const auto models = catalog();
     const auto scoped = coding_agent::resolve_model_scope({"alpha*", "missing*"}, models);
     REQUIRE(scoped.size() == 2);
     CHECK(scoped[0].model.id == "alpha-1");
 }
 
-TEST_CASE(
-    "glob ** crosses slashes only as a full path segment like minimatch",
-    "[coding_agent][model-resolver][issue407]") {
+TEST_CASE("glob ** crosses slashes only as a full path segment like minimatch",
+        "[coding_agent][model-resolver][issue407][spec]") {
     auto models = catalog();
     models.push_back(model("alpha/sub/deep", "alpha"));
 

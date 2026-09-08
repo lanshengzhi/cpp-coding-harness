@@ -186,7 +186,7 @@ struct AsyncReloadFixture {
 } // namespace
 
 TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND and rebuilds the system prompt",
-        "[coding_agent][reload][issue418]") {
+        "[coding_agent][reload][issue418][spec]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
     auto* session = fixture.session;
@@ -263,8 +263,7 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
 }
 
 TEST_CASE(
-    "reload preserves the creation-time project trust decision",
-    "[coding_agent][reload][trust][issue418]") {
+        "reload preserves the creation-time project trust decision", "[coding_agent][reload][trust][issue418][spec]") {
     // Trusted: reload re-reads the trust-gated project resources and stays
     // trusted (pi `settingsManager.reload()` preserves `projectTrusted`).
     {
@@ -292,9 +291,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "reload returns theme documents for re-registration and reports a fatal explicit-resource failure",
-    "[coding_agent][reload][issue418]") {
+TEST_CASE("reload returns theme documents for re-registration and reports a fatal explicit-resource failure",
+        "[coding_agent][reload][issue418][spec]") {
     // A custom project theme flows back through the reload result so the TUI
     // re-runs `discover_themes` (pi `getThemes().themes`).
     {
@@ -352,7 +350,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE("reload treats removed resource roots as an empty completed refresh", "[coding_agent][reload][issue563]") {
+TEST_CASE("reload treats removed resource roots as an empty completed refresh",
+        "[coding_agent][reload][issue563][spec]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
     const auto initial_prompt = fixture.session->snapshot().agent_state.system_prompt;
@@ -374,7 +373,7 @@ TEST_CASE("reload treats removed resource roots as an empty completed refresh", 
 }
 
 TEST_CASE("reload reports an oversized resource without publishing a partial refresh",
-        "[coding_agent][reload][capacity][issue563]") {
+        "[coding_agent][reload][capacity][issue563][spec]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
     const auto initial_prompt = fixture.session->snapshot().agent_state.system_prompt;
@@ -397,7 +396,7 @@ TEST_CASE("reload reports an oversized resource without publishing a partial ref
 }
 
 TEST_CASE("reload cancellation preserves the last completed resource snapshot",
-        "[coding_agent][reload][cancellation][issue563]") {
+        "[coding_agent][reload][cancellation][issue563][spec]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
     const auto initial_prompt = fixture.session->snapshot().agent_state.system_prompt;
@@ -413,7 +412,7 @@ TEST_CASE("reload cancellation preserves the last completed resource snapshot",
 }
 
 TEST_CASE("reload cancellation during Close leaves the Session closed without a partial refresh",
-        "[coding_agent][reload][close][issue563]") {
+        "[coding_agent][reload][close][issue563][spec]") {
     AsyncReloadFixture fixture;
     fixture.create();
     auto* session = fixture.session;
@@ -474,9 +473,8 @@ TEST_CASE("reload cancellation during Close leaves the Session closed without a 
     CHECK(blocker_result.has_value());
 }
 
-TEST_CASE(
-    "reload surfaces per-kind diagnostics through the result",
-    "[coding_agent][reload][diagnostics][issue418]") {
+TEST_CASE("reload surfaces per-kind diagnostics through the result",
+        "[coding_agent][reload][diagnostics][issue418][spec]") {
     ReloadFixture fixture;
     fixture.create(/*trusted*/ true);
     // Two skills with the same name from different sources: project `.pi`
@@ -604,9 +602,8 @@ public:
 
 } // namespace
 
-TEST_CASE(
-    "manual compaction exposes is_compacting while is_streaming stays false (reload refusal signal)",
-    "[coding_agent][reload][compaction][issue418]") {
+TEST_CASE("manual compaction exposes is_compacting while is_streaming stays false (reload refusal signal)",
+        "[coding_agent][reload][compaction][issue418][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_file = workspace.path() / "session.jsonl";

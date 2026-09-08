@@ -7,33 +7,33 @@
 
 using namespace cch::tui;
 
-TEST_CASE("fuzzy_match empty query matches everything with score 0", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match empty query matches everything with score 0", "[tui][fuzzy][issue52][spec]") {
     const auto result = fuzzy_match("", "anything");
     CHECK(result.matches);
     CHECK(result.score == 0.0);
 }
 
-TEST_CASE("fuzzy_match query longer than text does not match", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match query longer than text does not match", "[tui][fuzzy][issue52][spec]") {
     CHECK_FALSE(fuzzy_match("longquery", "short").matches);
 }
 
-TEST_CASE("fuzzy_match exact match scores below zero", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match exact match scores below zero", "[tui][fuzzy][issue52][spec]") {
     const auto result = fuzzy_match("test", "test");
     CHECK(result.matches);
     CHECK(result.score < 0.0); // consecutive and exact-match bonuses
 }
 
-TEST_CASE("fuzzy_match characters must appear in order", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match characters must appear in order", "[tui][fuzzy][issue52][spec]") {
     CHECK(fuzzy_match("abc", "aXbXc").matches);
     CHECK_FALSE(fuzzy_match("abc", "cba").matches);
 }
 
-TEST_CASE("fuzzy_match is case insensitive", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match is case insensitive", "[tui][fuzzy][issue52][spec]") {
     CHECK(fuzzy_match("ABC", "abc").matches);
     CHECK(fuzzy_match("abc", "ABC").matches);
 }
 
-TEST_CASE("fuzzy_match consecutive matches score better than scattered", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match consecutive matches score better than scattered", "[tui][fuzzy][issue52][spec]") {
     const auto consecutive = fuzzy_match("foo", "foobar");
     const auto scattered = fuzzy_match("foo", "f_o_o_bar");
     REQUIRE(consecutive.matches);
@@ -41,7 +41,7 @@ TEST_CASE("fuzzy_match consecutive matches score better than scattered", "[tui][
     CHECK(consecutive.score < scattered.score);
 }
 
-TEST_CASE("fuzzy_match word boundary matches score better", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match word boundary matches score better", "[tui][fuzzy][issue52][spec]") {
     const auto at_boundary = fuzzy_match("fb", "foo-bar");
     const auto not_at_boundary = fuzzy_match("fb", "afbx");
     REQUIRE(at_boundary.matches);
@@ -49,33 +49,33 @@ TEST_CASE("fuzzy_match word boundary matches score better", "[tui][fuzzy][issue5
     CHECK(at_boundary.score < not_at_boundary.score);
 }
 
-TEST_CASE("fuzzy_match matches swapped alpha numeric tokens", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match matches swapped alpha numeric tokens", "[tui][fuzzy][issue52][spec]") {
     const auto result = fuzzy_match("codex52", "gpt-5.2-codex");
     CHECK(result.matches);
 }
 
-TEST_CASE("fuzzy_match handles accented text through case folding", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match handles accented text through case folding", "[tui][fuzzy][issue52][spec]") {
     const std::string upper_accented = "\xc3\x89"; // É
     const std::string lower_accented = "\xc3\xa9"; // é
     CHECK(fuzzy_match(upper_accented, lower_accented).matches);
     CHECK(fuzzy_match(lower_accented, upper_accented).matches);
 }
 
-TEST_CASE("fuzzy_match_indices reports matched byte offsets", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match_indices reports matched byte offsets", "[tui][fuzzy][issue52][spec]") {
     const auto indices = fuzzy_match_indices("abc", "aXbXc");
     REQUIRE(indices);
     const std::vector<std::size_t> expected{0, 2, 4};
     CHECK(*indices == expected);
 }
 
-TEST_CASE("fuzzy_match_indices reports the exact-match offset run", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match_indices reports the exact-match offset run", "[tui][fuzzy][issue52][spec]") {
     const auto indices = fuzzy_match_indices("foo", "foobar");
     REQUIRE(indices);
     const std::vector<std::size_t> expected{0, 1, 2};
     CHECK(*indices == expected);
 }
 
-TEST_CASE("fuzzy_match_indices is case insensitive and uses swapped queries", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match_indices is case insensitive and uses swapped queries", "[tui][fuzzy][issue52][spec]") {
     const auto indices = fuzzy_match_indices("CODE", "codex");
     REQUIRE(indices);
     const std::vector<std::size_t> expected{0, 1, 2, 3};
@@ -86,14 +86,14 @@ TEST_CASE("fuzzy_match_indices is case insensitive and uses swapped queries", "[
     CHECK_FALSE(swapped->empty());
 }
 
-TEST_CASE("fuzzy_match_indices returns nullopt on no match and empty on empty query", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match_indices returns nullopt on no match and empty on empty query", "[tui][fuzzy][issue52][spec]") {
     CHECK_FALSE(fuzzy_match_indices("abc", "cba"));
     const auto empty = fuzzy_match_indices("", "anything");
     REQUIRE(empty);
     CHECK(empty->empty());
 }
 
-TEST_CASE("fuzzy_match_indices offsets point into the original text", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_match_indices offsets point into the original text", "[tui][fuzzy][issue52][spec]") {
     const std::string text = "aa-bb-cc";
     const auto indices = fuzzy_match_indices("abc", text);
     REQUIRE(indices);
@@ -105,27 +105,27 @@ TEST_CASE("fuzzy_match_indices offsets point into the original text", "[tui][fuz
     CHECK(text[(*indices)[2]] == 'c');
 }
 
-TEST_CASE("fuzzy_filter empty query returns all items unchanged", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_filter empty query returns all items unchanged", "[tui][fuzzy][issue52][spec]") {
     const std::vector<std::string> items{"apple", "banana", "cherry"};
     const auto result = fuzzy_filter(items, "", [](const std::string& value) { return value; });
     CHECK(result == items);
 }
 
-TEST_CASE("fuzzy_filter filters out non-matching items", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_filter filters out non-matching items", "[tui][fuzzy][issue52][spec]") {
     const std::vector<std::string> items{"apple", "banana", "cherry"};
     const auto result = fuzzy_filter(items, "an", [](const std::string& value) { return value; });
     REQUIRE(result.size() == 1);
     CHECK(result[0] == "banana");
 }
 
-TEST_CASE("fuzzy_filter sorts results by match quality", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_filter sorts results by match quality", "[tui][fuzzy][issue52][spec]") {
     const std::vector<std::string> items{"a_p_p", "app", "application"};
     const auto result = fuzzy_filter(items, "app", [](const std::string& value) { return value; });
     REQUIRE(result.size() == 3);
     CHECK(result[0] == "app");
 }
 
-TEST_CASE("fuzzy_filter prioritizes exact matches over longer prefixes", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_filter prioritizes exact matches over longer prefixes", "[tui][fuzzy][issue52][spec]") {
     const std::vector<std::string> items{"clone", "cl"};
     const auto result = fuzzy_filter(items, "cl", [](const std::string& value) { return value; });
     REQUIRE(result.size() == 2);
@@ -133,7 +133,7 @@ TEST_CASE("fuzzy_filter prioritizes exact matches over longer prefixes", "[tui][
     CHECK(result[1] == "clone");
 }
 
-TEST_CASE("fuzzy_filter works with a custom projection", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_filter works with a custom projection", "[tui][fuzzy][issue52][spec]") {
     struct Item {
         std::string name;
         int id{0};
@@ -145,7 +145,7 @@ TEST_CASE("fuzzy_filter works with a custom projection", "[tui][fuzzy][issue52]"
     CHECK(result[1].id == 3);
 }
 
-TEST_CASE("fuzzy_filter matches slash-separated tokens against reordered text", "[tui][fuzzy][issue52]") {
+TEST_CASE("fuzzy_filter matches slash-separated tokens against reordered text", "[tui][fuzzy][issue52][spec]") {
     struct Item {
         std::string id;
         std::string provider;

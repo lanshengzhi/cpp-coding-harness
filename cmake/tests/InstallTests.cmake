@@ -12,7 +12,7 @@ include_guard(GLOBAL)
         NAME cch_install_tools_unit
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/install_tools_test.py
     )
-    set_tests_properties(cch_install_tools_unit PROPERTIES LABELS "install;issue472")
+    set_tests_properties(cch_install_tools_unit PROPERTIES LABELS "install;issue472;spec")
 
     add_test(
         NAME cch_install_gate_fixture
@@ -22,7 +22,7 @@ include_guard(GLOBAL)
             "-DCCH_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/InstallGateTest.cmake
     )
-    set_tests_properties(cch_install_gate_fixture PROPERTIES LABELS "install;issue472")
+    set_tests_properties(cch_install_gate_fixture PROPERTIES LABELS "install;issue472;spec")
 
     # Release qualification evidence (ADR 0039; issue #474). The fail-closed
     # verifier checks the artifact lane's evidence directory: presence,
@@ -34,4 +34,4 @@ include_guard(GLOBAL)
         NAME cch_release_evidence_unit
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/release_evidence_test.py
     )
-    set_tests_properties(cch_release_evidence_unit PROPERTIES LABELS "install;release;issue474")
+    set_tests_properties(cch_release_evidence_unit PROPERTIES LABELS "install;release;issue474;spec")
