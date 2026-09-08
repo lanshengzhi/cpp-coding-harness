@@ -169,6 +169,10 @@ public:
                                 .failure = support::make_error(
                                     support::ErrorCode::Cancelled,
                                     "Request was aborted"),
+                                .inference_failure = ai::InferenceFailure{
+                                    .kind = ai::InferenceFailureKind::Cancelled,
+                                    .output_started = false,
+                                },
                             });
                             !failed) {
                             co_return std::unexpected(failed.error());
@@ -203,6 +207,12 @@ public:
                                     support::ErrorCode::Stream,
                                     response.error_message.value_or(
                                         "terminal error")),
+                                .inference_failure = ai::InferenceFailure{
+                                    .kind = response.stop_reason == ai::AssistantStopReason::Aborted
+                                        ? ai::InferenceFailureKind::Cancelled
+                                        : ai::InferenceFailureKind::TransientTransportFailure,
+                                    .output_started = false,
+                                },
                             });
                             !failed) {
                             co_return std::unexpected(failed.error());

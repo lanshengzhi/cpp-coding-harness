@@ -690,7 +690,7 @@ TEST_CASE(
             .status_code = 429,
             .headers = {{"retry-after-ms", "0"}},
         },
-        .chunks = {"insufficient quota"},
+        .chunks = {R"({"error":{"code":"insufficient_quota","message":"quota exhausted"}})"},
     });
     auto terminal_models = make_models(terminal_transport, model);
     REQUIRE(terminal_models);

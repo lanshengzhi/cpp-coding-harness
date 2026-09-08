@@ -69,6 +69,9 @@ struct ScriptedProviderControl final {
     std::vector<RecordedRuntimeCall> calls;
     /// Scripted assistant responses consumed in FIFO order.
     std::deque<ai::AssistantMessage> responses;
+    /// Structured outcomes consumed for scripted error responses. A missing
+    /// entry models the common transient transport failure.
+    std::deque<ai::InferenceFailureKind> failure_kinds;
 
     /// Wake a gated stream for stop-token cancellation without recording a
     /// release permit.
@@ -135,6 +138,10 @@ public:
                                     .error = terminal,
                                     .failure =
                                             support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
+                                    .inference_failure = ai::InferenceFailure{
+                                            .kind = ai::InferenceFailureKind::Cancelled,
+                                            .output_started = false,
+                                    },
                             }));
                         }
                         co_return terminal;
@@ -173,6 +180,10 @@ public:
                                     .error = terminal,
                                     .failure =
                                             support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
+                                    .inference_failure = ai::InferenceFailure{
+                                            .kind = ai::InferenceFailureKind::Cancelled,
+                                            .output_started = false,
+                                    },
                             }));
                         }
                         co_return terminal;
@@ -191,10 +202,23 @@ public:
                                 terminal_failure =
                                         support::make_error(support::ErrorCode::Stream, *response.error_message);
                             }
+                            const auto kind = response.stop_reason == ai::AssistantStopReason::Aborted
+                                    ? ai::InferenceFailureKind::Cancelled
+                                    : control->failure_kinds.empty()
+                                        ? ai::InferenceFailureKind::TransientTransportFailure
+                                        : control->failure_kinds.front();
+                            if (!control->failure_kinds.empty() &&
+                                    response.stop_reason == ai::AssistantStopReason::Error) {
+                                control->failure_kinds.pop_front();
+                            }
                             CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                                     .reason = response.stop_reason,
                                     .error = response,
                                     .failure = std::move(terminal_failure),
+                                    .inference_failure = ai::InferenceFailure{
+                                            .kind = kind,
+                                            .output_started = false,
+                                    },
                             }));
                             co_return response;
                         }

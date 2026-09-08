@@ -5,6 +5,7 @@
 #include "Termination.hpp"
 #include "UsageNormalization.hpp"
 #include "ai/providers/ProviderError.hpp"
+#include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "ai/providers/StreamExecutionEngine.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -505,11 +506,21 @@ template <typename Headers>
     AssistantEventSink& sink,
     bool& saw_message_start,
     bool& saw_message_stop,
-    std::optional<TerminationResult>& termination) {
+    std::optional<TerminationResult>& termination,
+    std::optional<InferenceFailure>& inference_failure) {
     if (event.done || event.data.empty()) {
         return {};
     }
     if (event.event == "error") {
+        const auto provider_code = providers::provider_error_code_from_payload(event.data);
+        inference_failure = InferenceFailure{
+            .kind = provider_code
+                ? providers::inference_failure_kind_from_provider_code(*provider_code)
+                : InferenceFailureKind::InvalidRequest,
+            .output_started = false,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = provider_code,
+        };
         return std::unexpected(stream_error(event.data));
     }
     if (!known_anthropic_event(event.event)) {
@@ -599,7 +610,8 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
         return [attempt_state, &model](
             const providers::SseEvent& event,
             AssistantMessage& assistant,
-            AssistantEventSink& sink) -> support::ExpectedVoid {
+            AssistantEventSink& sink,
+            std::optional<InferenceFailure>& inference_failure) -> support::ExpectedVoid {
             return process_sse_event(
                 event,
                 model,
@@ -608,7 +620,8 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
                 sink,
                 attempt_state->saw_message_start,
                 attempt_state->saw_message_stop,
-                attempt_state->termination);
+                attempt_state->termination,
+                inference_failure);
         };
     };
 

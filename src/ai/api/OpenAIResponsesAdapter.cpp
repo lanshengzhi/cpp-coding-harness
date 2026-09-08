@@ -3,6 +3,7 @@
 #include "MessageConversion.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
 #include "ai/providers/ProviderError.hpp"
+#include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "ai/providers/StreamExecutionEngine.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -102,7 +104,11 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
 }
 
 [[nodiscard]] support::ExpectedVoid process_json_event(
-        ResponsesEventProcessor& processor, JsonObject event, AssistantMessage& assistant, AssistantEventSink& sink) {
+        ResponsesEventProcessor& processor,
+        JsonObject event,
+        AssistantMessage& assistant,
+        AssistantEventSink& sink,
+        std::optional<InferenceFailure>& inference_failure) {
     const auto type_found = event.find("type");
     const auto* type = type_found != event.end() ? type_found->second.get_if<std::string>() : nullptr;
     const bool response_failed = type && *type == "response.failed";
@@ -115,6 +121,14 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
     }
 
     const auto& provider_error = *processed->provider_error;
+    inference_failure = InferenceFailure{
+        .kind = provider_error.code
+            ? providers::inference_failure_kind_from_provider_code(*provider_error.code)
+            : InferenceFailureKind::InvalidRequest,
+        .output_started = false,
+        .suggested_backoff_ms = std::nullopt,
+        .provider_code = provider_error.code,
+    };
     if (response_failed) {
         std::string detail = provider_error.code.value_or("unknown");
         detail += ": ";
@@ -126,14 +140,25 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
     return std::unexpected(stream_error("Error Code " + std::string{code} + ": " + std::string{message}));
 }
 
-[[nodiscard]] support::ExpectedVoid process_sse_event(const providers::SseEvent& event,
+[[nodiscard]] support::ExpectedVoid process_sse_event(
+        const providers::SseEvent& event,
         ResponsesEventProcessor& processor,
         AssistantMessage& assistant,
-        AssistantEventSink& sink) {
+        AssistantEventSink& sink,
+        std::optional<InferenceFailure>& inference_failure) {
     if (event.done || event.data.empty()) {
         return {};
     }
     if (event.event == "error") {
+        const auto provider_code = providers::provider_error_code_from_payload(event.data);
+        inference_failure = InferenceFailure{
+            .kind = provider_code
+                ? providers::inference_failure_kind_from_provider_code(*provider_code)
+                : InferenceFailureKind::InvalidRequest,
+            .output_started = false,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = provider_code,
+        };
         return std::unexpected(stream_error(event.data));
     }
     auto parsed = support::read_json(event.data);
@@ -148,7 +173,12 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
         return std::unexpected(
                 stream_error("Malformed OpenAI Responses SSE event", "event data must be a JSON object"));
     }
-    return process_json_event(processor, std::move(*event_object), assistant, sink);
+    return process_json_event(
+        processor,
+        std::move(*event_object),
+        assistant,
+        sink,
+        inference_failure);
 }
 
 } // namespace
@@ -206,8 +236,14 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
                 std::make_unique<ResponsesEventProcessor>(ResponsesDialect::DeepSeek, ResponsesDelivery::Sse, model);
         return [attempt_state](const providers::SseEvent& event,
                        AssistantMessage& assistant,
-                       AssistantEventSink& sink) -> support::ExpectedVoid {
-            return process_sse_event(event, *attempt_state->processor, assistant, sink);
+                       AssistantEventSink& sink,
+                       std::optional<InferenceFailure>& inference_failure) -> support::ExpectedVoid {
+            return process_sse_event(
+                event,
+                *attempt_state->processor,
+                assistant,
+                sink,
+                inference_failure);
         };
     };
 

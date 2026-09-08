@@ -65,7 +65,9 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
 [[nodiscard]] support::Expected<AssistantMessage> complete_failure(
     AssistantMessage assistant,
     support::Error failure,
-    AssistantEventSink& sink) {
+    AssistantEventSink& sink,
+    std::optional<InferenceFailure> inference_failure = std::nullopt,
+    bool output_started = false) {
     ensure_tool_arguments_allocated(assistant);
     const auto aborted = failure.code == support::ErrorCode::Cancelled;
     assistant.stop_reason = aborted
@@ -85,10 +87,19 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
         assistant.error_message = bounded_provider_error_detail(std::move(diagnostic));
         failure = support::make_error(support::ErrorCode::Stream, *assistant.error_message);
     }
+    if (!inference_failure) {
+        inference_failure = InferenceFailure{
+            .kind = inference_failure_kind_from_transport(failure.code),
+            .output_started = output_started,
+        };
+    } else {
+        inference_failure->output_started = output_started;
+    }
     auto emitted = emit(sink, AssistantErrorEvent{
         .reason = assistant.stop_reason,
         .error = assistant,
         .failure = std::move(failure),
+        .inference_failure = std::move(inference_failure),
     });
     if (!emitted) {
         return std::unexpected(emitted.error());
@@ -99,11 +110,20 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
 [[nodiscard]] ProviderFailure response_failure(const StreamResponse& response) {
     ProviderHeaders headers;
     headers.insert(response.head.headers.begin(), response.head.headers.end());
+    const auto provider_code = provider_error_code_from_payload(response.body);
     return ProviderFailure{
         .network_error = false,
         .status = response.head.status_code,
         .headers = std::move(headers),
         .message = response.body,
+        .inference_failure = InferenceFailure{
+            .kind = provider_code
+                ? inference_failure_kind_from_provider_code(*provider_code)
+                : inference_failure_kind_from_http_status(response.head.status_code),
+            .output_started = false,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = provider_code,
+        },
     };
 }
 
@@ -114,6 +134,12 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
         .status = std::nullopt,
         .headers = {},
         .message = error.detail.empty() ? error.message : error.detail,
+        .inference_failure = InferenceFailure{
+            .kind = inference_failure_kind_from_transport(error.code),
+            .output_started = false,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = std::nullopt,
+        },
     };
 }
 
@@ -204,6 +230,7 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
         bool started = false;
         bool saw_body = false;
         std::optional<support::Error> handler_failure;
+        std::optional<InferenceFailure> inference_failure;
 
         auto handle_chunk = [&](std::string_view bytes) -> support::ExpectedVoid {
             saw_body = true;
@@ -217,7 +244,7 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                 return std::unexpected(events.error());
             }
             for (const auto& event : *events) {
-                auto processed = event_hook(event, assistant, guarded_sink);
+                auto processed = event_hook(event, assistant, guarded_sink, inference_failure);
                 if (!processed) {
                     handler_failure = processed.error();
                     return std::unexpected(processed.error());
@@ -233,7 +260,11 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
             }
             if (handler_failure) {
                 co_return complete_failure(
-                    assistant, *handler_failure, guarded_sink);
+                    assistant,
+                    *handler_failure,
+                    guarded_sink,
+                    std::move(inference_failure),
+                    started);
             }
             if (response.error().code == support::ErrorCode::Cancelled ||
                 options.stop_token.stop_requested()) {
@@ -242,7 +273,12 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                     support::make_error(
                         support::ErrorCode::Cancelled,
                         "Request was aborted"),
-                    guarded_sink);
+                    guarded_sink,
+                    InferenceFailure{
+                        .kind = InferenceFailureKind::Cancelled,
+                        .output_started = started,
+                    },
+                    started);
             }
             const auto failure = transport_failure(response.error());
             if (!saw_body) {
@@ -257,7 +293,9 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
             co_return complete_failure(
                 assistant,
                 normalize_transport_error(protocol_name, response.error()),
-                guarded_sink);
+                guarded_sink,
+                failure.inference_failure,
+                started);
         }
 
         if (response->head.status_code < 200 || response->head.status_code >= 300) {
@@ -277,7 +315,9 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                         protocol_name,
                         response->head.status_code),
                     response->body),
-                guarded_sink);
+                guarded_sink,
+                failure.inference_failure,
+                false);
         }
 
         if (!started) {
@@ -288,15 +328,23 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
         auto final_event = parser.finish();
         if (!final_event) {
             co_return complete_failure(
-                assistant, final_event.error(), guarded_sink);
+                assistant,
+                final_event.error(),
+                guarded_sink,
+                std::move(inference_failure),
+                started);
         }
         if (*final_event) {
-            if (auto processed = event_hook(**final_event, assistant, guarded_sink); !processed) {
+            if (auto processed = event_hook(**final_event, assistant, guarded_sink, inference_failure); !processed) {
                 if (sink_failure) {
                     co_return std::unexpected(*sink_failure);
                 }
                 co_return complete_failure(
-                    assistant, processed.error(), guarded_sink);
+                    assistant,
+                    processed.error(),
+                    guarded_sink,
+                    std::move(inference_failure),
+                    started);
             }
         }
         if (options.stop_token.stop_requested()) {
@@ -305,7 +353,12 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                 support::make_error(
                     support::ErrorCode::Cancelled,
                     "Request was aborted"),
-                guarded_sink);
+                guarded_sink,
+                InferenceFailure{
+                    .kind = InferenceFailureKind::Cancelled,
+                    .output_started = started,
+                },
+                started);
         }
         if (finalize_hook) {
             if (auto finalized = finalize_hook(assistant); !finalized) {
@@ -313,7 +366,11 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                     co_return std::unexpected(*sink_failure);
                 }
                 co_return complete_failure(
-                    assistant, finalized.error(), guarded_sink);
+                    assistant,
+                    finalized.error(),
+                    guarded_sink,
+                    std::move(inference_failure),
+                    started);
             }
         }
         if (assistant.stop_reason == AssistantStopReason::Error) {
@@ -321,7 +378,9 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                 assistant,
                 stream_error(assistant.error_message.value_or(
                     std::format("{} request failed", protocol_name))),
-                guarded_sink);
+                guarded_sink,
+                std::move(inference_failure),
+                started);
         }
         CCH_TRY_VOID(emit(guarded_sink, AssistantDoneEvent{
             .reason = assistant.stop_reason,

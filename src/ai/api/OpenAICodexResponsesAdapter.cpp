@@ -53,6 +53,7 @@ struct CodexFailure {
     std::string code{};
     std::string message{};
     support::Error error{};
+    std::optional<InferenceFailure> inference_failure{std::nullopt};
 };
 
 [[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
@@ -254,10 +255,19 @@ enum class WsFrameAction { Continue, Terminal };
     }
     if (processed->provider_error) {
         const auto& provider_error = *processed->provider_error;
+        const auto inference_failure = InferenceFailure{
+            .kind = provider_error.code
+                ? providers::inference_failure_kind_from_provider_code(*provider_error.code)
+                : InferenceFailureKind::InvalidRequest,
+            .output_started = false,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = provider_error.code,
+        };
         if (failure) {
             failure->kind = CodexFailureKind::Api;
             failure->code = provider_error.code.value_or("");
             failure->message = provider_error.message.value_or("");
+            failure->inference_failure = inference_failure;
         }
         std::string detail = provider_error.message.value_or("");
         if (response_failed && detail.empty()) {
@@ -274,14 +284,25 @@ enum class WsFrameAction { Continue, Terminal };
     return processed->terminal ? WsFrameAction::Terminal : WsFrameAction::Continue;
 }
 
-[[nodiscard]] support::ExpectedVoid process_codex_sse_event(const providers::SseEvent& event,
+[[nodiscard]] support::ExpectedVoid process_codex_sse_event(
+        const providers::SseEvent& event,
         ResponsesEventProcessor& processor,
         AssistantMessage& assistant,
-        AssistantEventSink& sink) {
+        AssistantEventSink& sink,
+        std::optional<InferenceFailure>& inference_failure) {
     if (event.done || event.data.empty()) {
         return {};
     }
     if (event.event == "error") {
+        const auto provider_code = providers::provider_error_code_from_payload(event.data);
+        inference_failure = InferenceFailure{
+            .kind = provider_code
+                ? providers::inference_failure_kind_from_provider_code(*provider_code)
+                : InferenceFailureKind::InvalidRequest,
+            .output_started = false,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = provider_code,
+        };
         return std::unexpected(stream_error(event.data));
     }
     auto parsed = support::read_json(event.data);
@@ -295,8 +316,15 @@ enum class WsFrameAction { Continue, Terminal };
     if (!event_object) {
         return std::unexpected(stream_error("Malformed Codex SSE event", "event data must be a JSON object"));
     }
-    auto action = process_codex_json_event(std::move(*event_object), processor, assistant, sink, nullptr);
+    CodexFailure failure;
+    auto action = process_codex_json_event(
+        std::move(*event_object),
+        processor,
+        assistant,
+        sink,
+        &failure);
     if (!action) {
+        inference_failure = failure.inference_failure;
         return std::unexpected(action.error());
     }
     return {};
@@ -320,7 +348,11 @@ void finalize_tool_arguments(ToolCallContent& tool) {
 /// this policy: the adapter owns terminal sanitization, event commitment, and
 /// transport-specific failure handling.
 [[nodiscard]] support::Expected<AssistantMessage> complete_failure(
-        AssistantMessage assistant, support::Error failure, AssistantEventSink& sink) {
+        AssistantMessage assistant,
+        support::Error failure,
+        AssistantEventSink& sink,
+        std::optional<InferenceFailure> inference_failure = std::nullopt,
+        bool output_started = false) {
     for (auto& block : assistant.content) {
         auto* tool = std::get_if<ToolCallContent>(&block);
         if (tool && !tool->arguments) {
@@ -343,11 +375,20 @@ void finalize_tool_arguments(ToolCallContent& tool) {
         assistant.error_message = providers::bounded_provider_error_detail(std::move(diagnostic));
         failure = support::make_error(support::ErrorCode::Stream, *assistant.error_message);
     }
+    if (!inference_failure) {
+        inference_failure = InferenceFailure{
+                .kind = providers::inference_failure_kind_from_transport(failure.code),
+                .output_started = output_started,
+        };
+    } else {
+        inference_failure->output_started = output_started;
+    }
     auto emitted = providers::emit(sink,
             AssistantErrorEvent{
                     .reason = assistant.stop_reason,
                     .error = assistant,
                     .failure = std::move(failure),
+                    .inference_failure = std::move(inference_failure),
             });
     if (!emitted) {
         return std::unexpected(emitted.error());
@@ -632,6 +673,7 @@ struct WsAttemptOutcome {
     support::Error error{};
     CodexFailureKind failure_kind{CodexFailureKind::Transport};
     std::string api_code{};
+    std::optional<InferenceFailure> inference_failure{std::nullopt};
 };
 
 boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
@@ -649,14 +691,32 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
     AssistantEventSink& sink) {
     websocket_started = false;
 
-    const auto finish_failed = [](support::Error error,
-                                  CodexFailureKind kind,
-                                  std::string api_code = {}) {
+    const auto finish_failed = [&started](
+            support::Error error,
+            CodexFailureKind kind,
+            std::string api_code = {},
+            std::optional<InferenceFailure> inference_failure = std::nullopt) {
+        if (!inference_failure) {
+            inference_failure = InferenceFailure{
+                    .kind = kind == CodexFailureKind::Cancelled
+                        ? InferenceFailureKind::Cancelled
+                        : kind == CodexFailureKind::Transport
+                            ? InferenceFailureKind::TransientTransportFailure
+                            : InferenceFailureKind::InvalidRequest,
+                    .output_started = started,
+                    .provider_code = api_code.empty()
+                        ? std::nullopt
+                        : std::optional<std::string>{api_code},
+            };
+        } else {
+            inference_failure->output_started = started;
+        }
         return WsAttemptOutcome{
-            .completed = false,
-            .error = std::move(error),
-            .failure_kind = kind,
-            .api_code = std::move(api_code),
+                .completed = false,
+                .error = std::move(error),
+                .failure_kind = kind,
+                .api_code = std::move(api_code),
+                .inference_failure = std::move(inference_failure),
         };
     };
 
@@ -918,14 +978,23 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
             }
             if (outcome->completed) {
                 if (options.stop_token.stop_requested()) {
-                    co_return complete_failure(assistant,
+                    co_return complete_failure(
+                            assistant,
                             support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
-                            guarded_sink);
+                            guarded_sink,
+                            InferenceFailure{
+                                    .kind = InferenceFailureKind::Cancelled,
+                                    .output_started = started,
+                            },
+                            started);
                 }
                 if (assistant.stop_reason == AssistantStopReason::Error) {
-                    co_return complete_failure(assistant,
+                    co_return complete_failure(
+                            assistant,
                             stream_error(assistant.error_message.value_or("Codex request failed")),
-                            guarded_sink);
+                            guarded_sink,
+                            std::nullopt,
+                            started);
                 }
                 CCH_TRY_VOID(providers::emit(
                     guarded_sink,
@@ -960,7 +1029,12 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
                 ((outcome->failure_kind == CodexFailureKind::Api ||
                   outcome->failure_kind == CodexFailureKind::Protocol) &&
                  !connection_limit_before_start)) {
-                co_return complete_failure(assistant, outcome->error, guarded_sink);
+                co_return complete_failure(
+                        assistant,
+                        outcome->error,
+                        guarded_sink,
+                        outcome->inference_failure,
+                        started);
             }
             append_transport_diagnostic(
                 assistant,
@@ -972,7 +1046,12 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
                 sse_fallback_sessions.insert(std::string{*cache_session_id});
             }
             if (websocket_started) {
-                co_return complete_failure(assistant, outcome->error, guarded_sink);
+                co_return complete_failure(
+                        assistant,
+                        outcome->error,
+                        guarded_sink,
+                        outcome->inference_failure,
+                        started);
             }
             break;
         }
@@ -990,8 +1069,14 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
                 std::make_unique<ResponsesEventProcessor>(ResponsesDialect::Codex, ResponsesDelivery::Sse, model);
         return [attempt_state](const providers::SseEvent& event,
                        AssistantMessage& assistant,
-                       AssistantEventSink& sink) -> support::ExpectedVoid {
-            return process_codex_sse_event(event, *attempt_state->processor, assistant, sink);
+                       AssistantEventSink& sink,
+                       std::optional<InferenceFailure>& inference_failure) -> support::ExpectedVoid {
+            return process_codex_sse_event(
+                event,
+                *attempt_state->processor,
+                assistant,
+                sink,
+                inference_failure);
         };
     };
 

@@ -1,5 +1,7 @@
 #include "RetryPolicy.hpp"
 
+#include "support/Json.hpp"
+
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -36,29 +38,17 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
     return std::nullopt;
 }
 
-[[nodiscard]] std::string ascii_lower(std::string value) {
-    std::ranges::transform(value, value.begin(), [](char character) {
-        return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-    });
-    return value;
-}
-
-[[nodiscard]] bool terminal_quota_or_billing(const ProviderFailure& failure) {
-    if (failure.terminal_quota_or_billing) {
-        return true;
+[[nodiscard]] InferenceFailureKind effective_failure_kind(const ProviderFailure& failure) noexcept {
+    if (failure.inference_failure) {
+        return failure.inference_failure->kind;
     }
-    const auto message = ascii_lower(failure.message);
-    constexpr std::string_view kPatterns[]{
-        "insufficient quota",
-        "quota exceeded",
-        "billing",
-        "available balance",
-        "monthly usage",
-        "budget exceeded",
-    };
-    return std::ranges::any_of(kPatterns, [&message](std::string_view pattern) {
-        return message.find(pattern) != std::string::npos;
-    });
+    if (failure.network_error) {
+        return InferenceFailureKind::TransientTransportFailure;
+    }
+    if (failure.status) {
+        return inference_failure_kind_from_http_status(*failure.status);
+    }
+    return InferenceFailureKind::InvalidRequest;
 }
 
 [[nodiscard]] std::optional<double> parse_number(std::string_view text) {
@@ -107,9 +97,128 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
 
 } // namespace
 
+InferenceFailureKind inference_failure_kind_from_provider_code(
+    std::string_view provider_code) noexcept {
+    if (equal_ascii_case_insensitive(provider_code, "invalid_api_key") ||
+        equal_ascii_case_insensitive(provider_code, "authentication_error") ||
+        equal_ascii_case_insensitive(provider_code, "permission_error") ||
+        equal_ascii_case_insensitive(provider_code, "unauthorized") ||
+        equal_ascii_case_insensitive(provider_code, "unauthorized_error") ||
+        equal_ascii_case_insensitive(provider_code, "invalid_token")) {
+        return InferenceFailureKind::Unauthorized;
+    }
+    if (equal_ascii_case_insensitive(provider_code, "rate_limit_exceeded") ||
+        equal_ascii_case_insensitive(provider_code, "rate_limited") ||
+        equal_ascii_case_insensitive(provider_code, "rate_limit_error") ||
+        equal_ascii_case_insensitive(provider_code, "too_many_requests")) {
+        return InferenceFailureKind::RateLimited;
+    }
+    if (equal_ascii_case_insensitive(provider_code, "context_length_exceeded") ||
+        equal_ascii_case_insensitive(provider_code, "request_too_large") ||
+        equal_ascii_case_insensitive(provider_code, "prompt_too_long") ||
+        equal_ascii_case_insensitive(provider_code, "context_window_exceeded")) {
+        return InferenceFailureKind::ContextOverflow;
+    }
+    if (equal_ascii_case_insensitive(provider_code, "insufficient_quota") ||
+        equal_ascii_case_insensitive(provider_code, "quota_exceeded") ||
+        equal_ascii_case_insensitive(provider_code, "billing_error") ||
+        equal_ascii_case_insensitive(provider_code, "budget_exceeded") ||
+        equal_ascii_case_insensitive(provider_code, "out_of_budget") ||
+        equal_ascii_case_insensitive(provider_code, "usage_limit_reached") ||
+        equal_ascii_case_insensitive(provider_code, "free_usage_limit_error") ||
+        equal_ascii_case_insensitive(provider_code, "go_usage_limit_error")) {
+        return InferenceFailureKind::InvalidRequest;
+    }
+    if (equal_ascii_case_insensitive(provider_code, "overloaded") ||
+        equal_ascii_case_insensitive(provider_code, "overloaded_error") ||
+        equal_ascii_case_insensitive(provider_code, "server_error") ||
+        equal_ascii_case_insensitive(provider_code, "internal_server_error") ||
+        equal_ascii_case_insensitive(provider_code, "service_unavailable") ||
+        equal_ascii_case_insensitive(provider_code, "resource_exhausted") ||
+        equal_ascii_case_insensitive(provider_code, "timeout") ||
+        equal_ascii_case_insensitive(provider_code, "temporarily_unavailable")) {
+        return InferenceFailureKind::TransientTransportFailure;
+    }
+    if (equal_ascii_case_insensitive(provider_code, "cancelled") ||
+        equal_ascii_case_insensitive(provider_code, "canceled")) {
+        return InferenceFailureKind::Cancelled;
+    }
+    return InferenceFailureKind::InvalidRequest;
+}
+
+InferenceFailureKind inference_failure_kind_from_http_status(int status) noexcept {
+    if (status == 401 || status == 403) {
+        return InferenceFailureKind::Unauthorized;
+    }
+    if (status == 429) {
+        return InferenceFailureKind::RateLimited;
+    }
+    if (status == 413) {
+        return InferenceFailureKind::ContextOverflow;
+    }
+    if (status == 408 || status == 409 || status >= 500) {
+        return InferenceFailureKind::TransientTransportFailure;
+    }
+    return InferenceFailureKind::InvalidRequest;
+}
+
+InferenceFailureKind inference_failure_kind_from_transport(
+    support::ErrorCode code) noexcept {
+    if (code == support::ErrorCode::Cancelled) {
+        return InferenceFailureKind::Cancelled;
+    }
+    if (code == support::ErrorCode::Network || code == support::ErrorCode::Timeout) {
+        return InferenceFailureKind::TransientTransportFailure;
+    }
+    if (code == support::ErrorCode::Auth || code == support::ErrorCode::OAuth) {
+        return InferenceFailureKind::Unauthorized;
+    }
+    return InferenceFailureKind::InvalidRequest;
+}
+
+std::optional<std::string> provider_error_code_from_payload(
+    std::string_view payload) {
+    auto parsed = support::read_json(payload);
+    if (!parsed) {
+        return std::nullopt;
+    }
+    const auto* object = parsed->get_if<support::JsonValue::object_t>();
+    if (!object) {
+        return std::nullopt;
+    }
+    const auto string_member = [](const support::JsonValue::object_t& value,
+                                  std::string_view name) -> std::optional<std::string> {
+        const auto found = value.find(std::string{name});
+        if (found == value.end()) {
+            return std::nullopt;
+        }
+        const auto* text = found->second.get_if<std::string>();
+        return text ? std::optional<std::string>{*text} : std::nullopt;
+    };
+    if (auto code = string_member(*object, "code")) {
+        return code;
+    }
+    const auto error = object->find("error");
+    if (error == object->end()) {
+        return std::nullopt;
+    }
+    const auto* error_object = error->second.get_if<support::JsonValue::object_t>();
+    if (!error_object) {
+        return std::nullopt;
+    }
+    if (auto code = string_member(*error_object, "code")) {
+        return code;
+    }
+    return string_member(*error_object, "type");
+}
+
 bool is_retryable_provider_failure(const ProviderFailure& failure) {
-    if (terminal_quota_or_billing(failure)) {
-        return false;
+    if (failure.inference_failure) {
+        const auto kind = failure.inference_failure->kind;
+        if (kind != InferenceFailureKind::RateLimited &&
+            kind != InferenceFailureKind::TransientTransportFailure) {
+            return false;
+        }
     }
     if (const auto should_retry = header(failure.headers, "x-should-retry")) {
         if (*should_retry == "true") {
@@ -119,11 +228,9 @@ bool is_retryable_provider_failure(const ProviderFailure& failure) {
             return false;
         }
     }
-    if (failure.network_error || !failure.status) {
-        return failure.network_error;
-    }
-    return *failure.status == 408 || *failure.status == 409 ||
-           *failure.status == 429 || *failure.status >= 500;
+    const auto kind = effective_failure_kind(failure);
+    return kind == InferenceFailureKind::RateLimited ||
+           kind == InferenceFailureKind::TransientTransportFailure;
 }
 
 support::Expected<std::uint64_t> provider_retry_delay_ms(

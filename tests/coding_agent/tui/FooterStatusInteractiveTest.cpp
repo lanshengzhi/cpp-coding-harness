@@ -296,6 +296,7 @@ TEST_CASE(
     fixture.config.write(
         "settings.json",
         R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 2000}})");
+    fixture.scripted.control->failure_kinds.push_back(ai::InferenceFailureKind::TransientTransportFailure);
     fixture.scripted.control->responses.push_back(retryable_error_terminal("overloaded_error"));
     fixture.scripted.control->responses.push_back(ai::assistant_text_message("Recovered after retry"));
 
@@ -361,6 +362,7 @@ TEST_CASE(
         R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
     tests::ScriptedRuntimeFixture gated;
     gated.control->gate_at = 1;
+    gated.control->failure_kinds.push_back(ai::InferenceFailureKind::ContextOverflow);
     gated.control->responses.push_back(overflow_terminal());
     gated.control->responses.push_back(summarization_response());
     gated.control->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
@@ -442,6 +444,7 @@ TEST_CASE(
         R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
     tests::ScriptedRuntimeFixture gated;
     gated.control->gate_at = 1;
+    gated.control->failure_kinds.push_back(ai::InferenceFailureKind::ContextOverflow);
     gated.control->responses.push_back(overflow_terminal());
     gated.control->responses.push_back(summarization_response());
     gated.control->responses.push_back(ai::assistant_text_message("Recovered after compaction"));

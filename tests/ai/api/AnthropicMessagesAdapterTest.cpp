@@ -917,7 +917,7 @@ TEST_CASE(
             .status_code = 429,
             .headers = {{"retry-after-ms", "0"}},
         },
-        .chunks = {"quota exceeded"},
+        .chunks = {R"({"error":{"code":"insufficient_quota","message":"quota exceeded"}})"},
     });
     auto quota_models = make_models(quota_transport, model);
     REQUIRE(quota_models);
