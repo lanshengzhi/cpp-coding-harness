@@ -32,7 +32,7 @@ _Avoid_: Development host, portable source, rolling latest, best-effort platform
 For a Supported Capability, preservation of pi's externally observable meanings and state transitions while allowing an idiomatic C++ API shape.
 _Avoid_: API-shape parity, mechanical translation
 
-**Parity Baseline**:
+**Parity Baseline** (historical; superseded by ADR 0053 — see Product Architecture Contract):
 The recorded pi revision against which Supported Capabilities, intentional differences, fixtures, and drift are evaluated until an explicit baseline advance.
 _Avoid_: Latest pi, upstream HEAD
 
@@ -45,8 +45,16 @@ The directed dependency graph among the pi package owners of Supported Capabilit
 _Avoid_: Current CMake graph, package-shape parity
 
 **Configured Package Graph**:
-The per-configuration direct target dependencies, interface visibility, project-header inclusion, and source ownership produced by CMake and classified by owner and role. It is checked against the Parity Package Graph rather than inferred from CMake source formatting or a transitive build graph.
+The per-configuration direct target dependencies, interface visibility, project-header inclusion, and source ownership produced by CMake and classified by owner and role. It is checked against the Product Architecture Contract (the Parity Package Graph before ADR 0053) rather than inferred from CMake source formatting or a transitive build graph.
 _Avoid_: CMakeLists layout, build-order graph
+
+**Product Architecture Contract**:
+The machine-readable boundary set the architecture gate enforces since ADR 0053, succeeding pi parity as the authority: the Headless core must not depend on any frontend, the execution kernel must not depend on concrete system capabilities, and product session records must not live in the AI message model. It evolves by ADR.
+_Avoid_: pi parity, ad-hoc dependency review
+
+**Compat Layer** (`compat/pi`):
+The edge layer holding pi's session format, config format, and data shapes, consumed only by the one-time import command. Never a runtime fallback, never a dual-format load path, never a design basis for the internal domain model.
+_Avoid_: Runtime dual-read, deprecation shims, shared default directories
 
 **Capability Owner Package**:
 The authoritative C++ package presenting the supported interface for one pi package owner; private implementation targets and headers may deepen it without becoming cross-owner dependencies.
