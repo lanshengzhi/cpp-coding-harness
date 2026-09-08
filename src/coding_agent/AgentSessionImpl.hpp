@@ -65,7 +65,7 @@ struct RetrySettings {
 /// construction), resources, and session presentation. Owned through the
 /// AgentSession handle's shared_ptr so a lazy coroutine admitted before the
 /// public handle moves or is destroyed keeps the implementation alive.
-struct AgentSession::Impl final {
+struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Impl> {
     explicit Impl(runtime::AgentSessionAssembly assembly);
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
@@ -247,6 +247,11 @@ struct AgentSession::Impl final {
     [[nodiscard]] std::shared_ptr<ProjectionSubscription::Impl> attach_projection(ProjectionStreamSink sink);
     void update_projection();
     void update_projection(const agent::AgentLifecycleEvent& event);
+    void update_projection(const AgentSessionEvent& event);
+    /// Record the terminal outcome of one prompt before publishing its final
+    /// projection snapshot. AgentEnd itself can precede retry or compaction,
+    /// so the session settles this state at the prompt boundary.
+    void settle_run_projection(const support::ExpectedVoid& result);
     /// Deliver one already-versioned stream message to every subscriber's
     /// bounded mailbox, pruning inactive subscribers (ADR 0052). Core
     /// serialized domain; never errors or blocks on a slow subscriber —
@@ -427,11 +432,12 @@ struct AgentSession::Impl final {
     /// Resolve the effective retry settings from the merged settings
     /// scope with pi's defaults applied to missing fields.
     [[nodiscard]] RetrySettings effective_retry_settings() const;
-    /// Whether the failed assistant message is retryable by the turn
-    /// auto-retry policy (pi `_isRetryableError`): context overflow is never
-    /// retryable (compaction owns it, T10), otherwise pi's
-    /// `isRetryableAssistantError` classification applies.
-    [[nodiscard]] bool is_retryable_error(const ai::AssistantMessage& message) const;
+    /// Whether the Provider's structured failure is retryable by the turn
+    /// RecoveryPolicy. Diagnostic assistant text is deliberately absent from
+    /// this decision; ContextOverflow belongs to compaction, while RateLimited
+    /// and TransientTransportFailure may be retried.
+    [[nodiscard]] bool is_retryable_error(
+            const std::optional<ai::InferenceFailure>& inference_failure) const;
     /// pi `_prepareRetry`: increment the attempt budget, emit
     /// `auto_retry_start`, remove the failed assistant message from live
     /// state (it stays in session history), and wait an abort-interruptible
@@ -439,7 +445,9 @@ struct AgentSession::Impl final {
     /// the agent; an aborted sleep emits `auto_retry_end` with pi's
     /// "Retry cancelled" and returns false (exactly one terminal outcome).
     [[nodiscard]] boost::asio::awaitable<bool> prepare_retry(
-            const ai::AssistantMessage& message, std::stop_token stop_token);
+            ai::AssistantMessage message,
+            std::optional<ai::InferenceFailure> inference_failure,
+            std::stop_token stop_token);
     /// Deliver one session-assembly event to every registered observer.
     void emit_session_event(const AgentSessionEvent& event);
     /// Timestamp of the latest `compaction` entry on the active branch, or
@@ -544,6 +552,15 @@ struct AgentSession::Impl final {
     /// bounded by that reducer shape — upgrade only if pending ids ever
     /// survive turn boundaries.
     std::vector<std::string> published_pending_tool_calls_{};
+    /// Recoverable presentation state for tool executions. Output is bounded
+    /// before it enters this vector or a subscriber mailbox; the full result
+    /// remains in the Agent/session history or an artifact referenced by the
+    /// value.
+    std::vector<ToolExecutionSnapshot> tool_executions_{};
+    /// Read-model state for the active prompt/run and its terminal outcome.
+    RunState run_state_{};
+    /// Read-model state for retry and compaction recovery.
+    RecoveryState recovery_state_{};
     /// The last-published serial of the Agent's bounded observer-failure
     /// diagnostics channel (rollover-safe change detection).
     std::uint64_t published_observer_diagnostic_serial_{0};

@@ -22,7 +22,7 @@ namespace {
 } // namespace
 
 TEST_CASE("AssistantMessageComponent renders interleaved thinking and text in exact content order",
-        "[coding_agent][tui][issue603]") {
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     coding_agent::tui::AssistantMessageComponent component(theme);
 
@@ -54,7 +54,7 @@ TEST_CASE("AssistantMessageComponent renders interleaved thinking and text in ex
 }
 
 TEST_CASE("AssistantMessageComponent preserves content order when interleaved blocks stream in deltas",
-        "[coding_agent][tui][issue603]") {
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     coding_agent::tui::AssistantMessageComponent component(theme);
 
@@ -86,7 +86,7 @@ TEST_CASE("AssistantMessageComponent preserves content order when interleaved bl
 }
 
 TEST_CASE("AssistantMessageComponent freezes closed fences and preserves following text order",
-        "[coding_agent][tui][issue603]") {
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     coding_agent::tui::AssistantMessageComponent component(theme);
     ai::AssistantMessage message;
@@ -110,7 +110,8 @@ TEST_CASE("AssistantMessageComponent freezes closed fences and preserves followi
     CHECK(screen.find("int value = 1;") < screen.find("after"));
 }
 
-TEST_CASE("AssistantMessageComponent renders consecutive thinking blocks as one run", "[coding_agent][tui][issue603]") {
+TEST_CASE("AssistantMessageComponent renders consecutive thinking blocks as one run",
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     coding_agent::tui::AssistantMessageComponent split(theme);
     ai::AssistantMessage split_message;
@@ -130,7 +131,7 @@ TEST_CASE("AssistantMessageComponent renders consecutive thinking blocks as one 
 }
 
 TEST_CASE("AssistantMessageComponent freezes settled list items without reparsing prior items",
-        "[coding_agent][tui][issue603]") {
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     coding_agent::tui::AssistantMessageComponent component(theme);
     ai::AssistantMessage message;
@@ -150,7 +151,8 @@ TEST_CASE("AssistantMessageComponent freezes settled list items without reparsin
     CHECK(component.open_tail_text() == "- third\n");
 }
 
-TEST_CASE("AssistantMessageComponent streamed rendering matches one-shot rendering", "[coding_agent][tui][issue603]") {
+TEST_CASE("AssistantMessageComponent streamed rendering matches one-shot rendering",
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     const std::string full_text =
             "Opening paragraph\n\n- first item\n- second item\n\n```cpp\nint answer = 42;\n```\n\nClosing paragraph";
@@ -178,7 +180,7 @@ TEST_CASE("AssistantMessageComponent streamed rendering matches one-shot renderi
 }
 
 TEST_CASE("AssistantMessageComponent append processing stays bounded across a hundred chunks",
-        "[coding_agent][tui][issue603][benchmark]") {
+        "[coding_agent][tui][issue603][benchmark][spec]") {
     auto theme = test_theme();
     // Structured stream: paragraphs, a settled list run, and a closed fence
     // recur so freeze boundaries fire throughout the chunk sequence.

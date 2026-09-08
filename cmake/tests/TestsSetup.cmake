@@ -26,7 +26,7 @@ include_guard(GLOBAL)
                 "-DCCH_DIAGNOSTIC_PATTERN=${diagnostic_pattern}"
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/SupportedBuildPolicyTest.cmake
         )
-        set_tests_properties(${test_name} PROPERTIES LABELS "architecture;build;issue441")
+        set_tests_properties(${test_name} PROPERTIES LABELS "architecture;build;issue441;spec")
     endfunction()
 
     # Package-aligned test shard executables (issue #447; CODING_STANDARDS.md

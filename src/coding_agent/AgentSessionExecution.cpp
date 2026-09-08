@@ -391,6 +391,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     // context only after every completed Bash committed.
     flush_pending_user_bash();
     prompt_active_ = false;
+    settle_run_projection(result);
     // Publish the settled run state (ADR 0052): the Agent flips its running
     // flag after the final event delivery, so the Projection Stream learns
     // the settled value — drained queues included — through the degenerate
@@ -425,25 +426,26 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session Agent is unavailable"));
     }
 
-    runtime::SessionEventCommitment commitment{persistence_, session_.store};
-    // The commitment sink also observes assistant message endings so the turn
-    // auto-retry success event fires at the first non-error assistant message
-    // (pi `_handleAgentEvent` message_end handler resets `_retryAttempt` and
-    // emits `auto_retry_end success`). Rebuilt per call because the wrapped
-    // sink is move-only and each prompt/continue takes it by value.
-    const auto make_retry_observing_sink = [&]() {
+    // Own the run commitment and retry metadata in shared state. The Agent
+    // sink can be retained across provider awaits, so no callback may borrow
+    // this coroutine's stack or an unowned Session implementation.
+    const auto self = shared_from_this();
+    const auto commitment = std::make_shared<runtime::SessionEventCommitment>(persistence_, session_.store);
+    const auto last_inference_failure = std::make_shared<std::optional<ai::InferenceFailure>>();
+    const auto make_retry_observing_sink = [self, commitment, last_inference_failure]() {
         return agent::AgentEventCommitter{
-                [this, inner = commitment.sink()](
+                [self, commitment, last_inference_failure, inner = commitment->sink()](
                         const agent::AgentLifecycleEvent& event) mutable -> support::ExpectedVoid {
-                    if (retry_attempt_ > 0) {
-                        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                    if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                        *last_inference_failure = end->inference_failure;
+                        if (self->retry_attempt_ > 0) {
                             const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message);
                             if (assistant != nullptr && assistant->stop_reason != ai::AssistantStopReason::Error) {
-                                emit_session_event(AutoRetryEndEvent{
+                                self->emit_session_event(AutoRetryEndEvent{
                                         .success = true,
-                                        .attempt = retry_attempt_,
+                                        .attempt = self->retry_attempt_,
                                 });
-                                retry_attempt_ = 0;
+                                self->retry_attempt_ = 0;
                             }
                         }
                     }
@@ -455,7 +457,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
     result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::prompt(
             *agent_, std::move(prompt), make_retry_observing_sink(), stop_source));
     if (!result) {
-        co_return co_await commitment.conclude(std::move(result));
+        co_return co_await commitment->conclude(std::move(result));
     }
 
     // Post-run loop in pi `_handlePostAgentRun` order: turn auto-retry (T12)
@@ -470,8 +472,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
             break;
         }
 
-        if (is_retryable_error(*last_assistant)) {
-            if (co_await prepare_retry(*last_assistant, stop_source.get_token())) {
+        if (is_retryable_error(*last_inference_failure)) {
+            if (co_await prepare_retry(
+                        *last_assistant,
+                        *last_inference_failure,
+                        stop_source.get_token())) {
                 result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::continue_run(
                         *agent_, make_retry_observing_sink(), stop_source));
                 if (!result) {
@@ -498,7 +503,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
             // persisted through the commitment; the prompt fails with pi's
             // verbatim recovery message (the failure the `compaction_end`
             // event carries in pi).
-            co_return co_await commitment.conclude(std::optional<support::ExpectedVoid>{std::unexpected(
+            co_return co_await commitment->conclude(std::optional<support::ExpectedVoid>{std::unexpected(
                     support::make_error(support::ErrorCode::Stream, std::string{kOverflowRecoveryFailedMessage}))});
         }
         if (outcome != AutoCompactionOutcome::OverflowRetry) {
@@ -510,10 +515,15 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
             break;
         }
     }
-    co_return co_await commitment.conclude(std::move(result));
+    co_return co_await commitment->conclude(std::move(result));
 }
 
 void AgentSession::Impl::emit_session_event(const AgentSessionEvent& event) {
+    // Session retry and compaction facts are part of the projection read
+    // model. Publish them before notifying the legacy weak observers so a
+    // frontend that consumes only the Projection Stream never depends on
+    // event delivery or event history.
+    update_projection(event);
     if (session_event_observers_.empty()) {
         return;
     }
@@ -585,20 +595,21 @@ RetrySettings AgentSession::Impl::effective_retry_settings() const {
     return settings;
 }
 
-bool AgentSession::Impl::is_retryable_error(const ai::AssistantMessage& message) const {
-    // Context overflow is handled by compaction, never by retry (pi
-    // `_isRetryableError`); the two recovery paths never interfere (T10's
-    // boundary).
-    const auto& model = agent_->state().model;
-    const std::size_t context_window = static_cast<std::size_t>(model.context_window);
-    if (harness::session::is_context_overflow(message, context_window)) {
+bool AgentSession::Impl::is_retryable_error(
+        const std::optional<ai::InferenceFailure>& inference_failure) const {
+    if (!inference_failure) {
         return false;
     }
-    return ai::is_retryable_assistant_error(message);
+    // Context overflow is handled by compaction, never by turn retry. The
+    // structured category keeps the two RecoveryPolicy paths independent
+    // without inspecting the assistant's diagnostic wording.
+    return ai::is_retryable_inference_failure(*inference_failure);
 }
 
 boost::asio::awaitable<bool> AgentSession::Impl::prepare_retry(
-        const ai::AssistantMessage& message, std::stop_token stop_token) {
+        ai::AssistantMessage message,
+        std::optional<ai::InferenceFailure> inference_failure,
+        std::stop_token stop_token) {
     const auto settings = effective_retry_settings();
     if (!settings.enabled) {
         co_return false;
@@ -612,7 +623,11 @@ boost::asio::awaitable<bool> AgentSession::Impl::prepare_retry(
         co_return false;
     }
 
-    const auto delay_ms = settings.base_delay_ms * (static_cast<std::size_t>(1) << (retry_attempt_ - 1));
+    const auto exponential_delay_ms =
+            settings.base_delay_ms * (static_cast<std::size_t>(1) << (retry_attempt_ - 1));
+    const auto delay_ms = inference_failure && inference_failure->suggested_backoff_ms
+        ? static_cast<std::size_t>(*inference_failure->suggested_backoff_ms)
+        : exponential_delay_ms;
     emit_session_event(AutoRetryStartEvent{
             .attempt = retry_attempt_,
             .max_attempts = static_cast<int>(settings.max_retries),

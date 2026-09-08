@@ -300,7 +300,8 @@ private:
 
 } // namespace
 
-TEST_CASE("Tui crops an overflowing dock to the bottom rows without failing the render", "[tui][dock][issue607]") {
+TEST_CASE(
+        "Tui crops an overflowing dock to the bottom rows without failing the render", "[tui][dock][issue607][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<DockFloodComponent>()));
@@ -318,7 +319,8 @@ TEST_CASE("Tui crops an overflowing dock to the bottom rows without failing the 
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui propagates real terminal write failures while cropping an overflowing dock", "[tui][dock][issue607]") {
+TEST_CASE("Tui propagates real terminal write failures while cropping an overflowing dock",
+        "[tui][dock][issue607][spec]") {
     FailingWriteTerminal terminal;
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<DockFloodComponent>()));
@@ -331,7 +333,7 @@ TEST_CASE("Tui propagates real terminal write failures while cropping an overflo
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui keeps a shrinking cropped dock inside the terminal rows", "[tui][dock][issue607]") {
+TEST_CASE("Tui keeps a shrinking cropped dock inside the terminal rows", "[tui][dock][issue607][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 6});
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<DockShrinkComponent>();
@@ -346,7 +348,7 @@ TEST_CASE("Tui keeps a shrinking cropped dock inside the terminal rows", "[tui][
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui places the dock below the transcript on a one-row viewport", "[tui][dock][issue611]") {
+TEST_CASE("Tui places the dock below the transcript on a one-row viewport", "[tui][dock][issue611][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<OneRowViewportDockComponent>()));
@@ -362,7 +364,7 @@ TEST_CASE("Tui places the dock below the transcript on a one-row viewport", "[tu
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][issue462]") {
+TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][issue462][spec]") {
     RenderBackpressureTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<MutableLinesComponent>();
@@ -389,7 +391,7 @@ TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][is
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][issue45]") {
+TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
     cch::tui::Tui tui(terminal);
     // Use zero padding so the rendered output is just the text
@@ -416,7 +418,7 @@ TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][i
     CHECK(terminal.modes().cursor_visible);
 }
 
-TEST_CASE("Tui clears and repaints unchanged retained content", "[tui][render][issue60]") {
+TEST_CASE("Tui clears and repaints unchanged retained content", "[tui][render][issue60][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hello", 0, 0)));
@@ -435,7 +437,7 @@ TEST_CASE("Tui clears and repaints unchanged retained content", "[tui][render][i
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][issue46][unicode]") {
+TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("\x1b[31mA", 0, 0)));
@@ -449,9 +451,7 @@ TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][iss
     CHECK(terminal.final_style() == cch::tui::VirtualTerminalStyle{});
 }
 
-TEST_CASE(
-    "Tui preserves cursor and restoration failures from partial startup",
-    "[tui][terminal][issue58]") {
+TEST_CASE("Tui preserves cursor and restoration failures from partial startup", "[tui][terminal][issue58][spec]") {
     PartialStartupFailureTerminal terminal;
     cch::tui::Tui tui(terminal);
 
@@ -463,7 +463,7 @@ TEST_CASE(
     CHECK(result.error().detail.find("terminal restoration failed") != std::string::npos);
 }
 
-TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45]") {
+TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
 
@@ -474,7 +474,7 @@ TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45]") {
     CHECK(result.error().message == "TUI cannot attach a null Component");
 }
 
-TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode]") {
+TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode][spec]") {
     cch::tui::Text text("\xc3\xa9", 0, 0); // é in UTF-8
 
     const auto result = text.render(2);
@@ -483,7 +483,7 @@ TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode]") {
     CHECK(cch::tui::visible_width(result->lines[0]) >= 1);
 }
 
-TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][issue45]") {
+TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 3, .rows = 1});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<OverwideComponent>()));
@@ -500,7 +500,7 @@ TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][is
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Tui routes focus, input, and invalidation through Component capabilities", "[tui][issue45]") {
+TEST_CASE("Tui routes focus, input, and invalidation through Component capabilities", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -518,7 +518,7 @@ TEST_CASE("Tui routes focus, input, and invalidation through Component capabilit
     CHECK(component_pointer->invalidation_count == 1);
 }
 
-TEST_CASE("Tui resolves a lone Escape key when the terminal flushes ambiguity", "[tui][input][issue47]") {
+TEST_CASE("Tui resolves a lone Escape key when the terminal flushes ambiguity", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -535,7 +535,7 @@ TEST_CASE("Tui resolves a lone Escape key when the terminal flushes ambiguity", 
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "escape");
 }
 
-TEST_CASE("Tui maps baseline terminal protocols to the same semantic key", "[tui][input][issue47]") {
+TEST_CASE("Tui maps baseline terminal protocols to the same semantic key", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -556,7 +556,7 @@ TEST_CASE("Tui maps baseline terminal protocols to the same semantic key", "[tui
     }
 }
 
-TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][input][issue47]") {
+TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][input][issue47][spec]") {
     struct RawKey {
         std::string_view raw;
         std::string_view identifier;
@@ -594,7 +594,7 @@ TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][inpu
     }
 }
 
-TEST_CASE("Tui decodes Kitty alternate keys keypad and modified navigation", "[tui][input][issue47]") {
+TEST_CASE("Tui decodes Kitty alternate keys keypad and modified navigation", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -621,7 +621,7 @@ TEST_CASE("Tui decodes Kitty alternate keys keypad and modified navigation", "[t
     CHECK(released_delete.type == cch::tui::KeyEventType::Release);
 }
 
-TEST_CASE("Tui buffers split input and separates batched terminal sequences", "[tui][input][issue47]") {
+TEST_CASE("Tui buffers split input and separates batched terminal sequences", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -642,7 +642,7 @@ TEST_CASE("Tui buffers split input and separates batched terminal sequences", "[
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[2]).key == "down");
 }
 
-TEST_CASE("Tui preserves large batches without dropping semantic keys", "[tui][input][issue47]") {
+TEST_CASE("Tui preserves large batches without dropping semantic keys", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -658,7 +658,7 @@ TEST_CASE("Tui preserves large batches without dropping semantic keys", "[tui][i
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input.back()).key == "x");
 }
 
-TEST_CASE("Tui filters key releases unless the focused Component opts in", "[tui][input][issue47]") {
+TEST_CASE("Tui filters key releases unless the focused Component opts in", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto default_component = std::make_unique<FocusableInputComponent>();
@@ -683,7 +683,8 @@ TEST_CASE("Tui filters key releases unless the focused Component opts in", "[tui
         cch::tui::KeyEventType::Release);
 }
 
-TEST_CASE("Tui delivers bracketed paste atomically with opaque control-looking content", "[tui][input][issue47]") {
+TEST_CASE(
+        "Tui delivers bracketed paste atomically with opaque control-looking content", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -707,7 +708,7 @@ TEST_CASE("Tui delivers bracketed paste atomically with opaque control-looking c
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[2]).key == "b");
 }
 
-TEST_CASE("Tui bounds large paste payloads and preserves deterministic metadata", "[tui][input][issue47]") {
+TEST_CASE("Tui bounds large paste payloads and preserves deterministic metadata", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -729,7 +730,7 @@ TEST_CASE("Tui bounds large paste payloads and preserves deterministic metadata"
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "q");
 }
 
-TEST_CASE("Tui abandons incomplete paste safely when the terminal flushes input", "[tui][input][issue47]") {
+TEST_CASE("Tui abandons incomplete paste safely when the terminal flushes input", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -747,7 +748,7 @@ TEST_CASE("Tui abandons incomplete paste safely when the terminal flushes input"
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "q");
 }
 
-TEST_CASE("Tui discards overlong terminal control payloads through their terminators", "[tui][input][issue47]") {
+TEST_CASE("Tui discards overlong terminal control payloads through their terminators", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -767,7 +768,7 @@ TEST_CASE("Tui discards overlong terminal control payloads through their termina
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "r");
 }
 
-TEST_CASE("Tui recovers after invalid unsupported and overlong input", "[tui][input][issue47]") {
+TEST_CASE("Tui recovers after invalid unsupported and overlong input", "[tui][input][issue47][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -788,7 +789,7 @@ TEST_CASE("Tui recovers after invalid unsupported and overlong input", "[tui][in
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "q");
 }
 
-TEST_CASE("VirtualTerminal injects input and resize events deterministically", "[tui][issue45]") {
+TEST_CASE("VirtualTerminal injects input and resize events deterministically", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     std::string received_input;
     std::optional<cch::tui::TerminalDimensions> received_resize;
@@ -812,7 +813,7 @@ TEST_CASE("VirtualTerminal injects input and resize events deterministically", "
     CHECK(terminal.dimensions() == expected_dimensions);
 }
 
-TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overflow", "[tui][issue45]") {
+TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overflow", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -833,7 +834,7 @@ TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overfl
     CHECK(terminal.output() == expected_output);
 }
 
-TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode]") {
+TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -846,7 +847,7 @@ TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode]") {
     CHECK_FALSE(terminal.output().empty());
 }
 
-TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue46][unicode]") {
+TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -863,7 +864,7 @@ TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue4
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][issue46][unicode]") {
+TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -881,7 +882,7 @@ TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45][issue485]") {
+TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45][issue485][spec]") {
     cch::tui::VirtualTerminal terminal;
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid {
@@ -902,7 +903,7 @@ TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45][issue485]"
     CHECK(resize_result.error().message == "resize failure");
 }
 
-TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[tui][terminal][issue378]") {
+TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[tui][terminal][issue378][spec]") {
     cch::tui::VirtualTerminal terminal;
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -922,7 +923,7 @@ TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[
     CHECK(terminal.output() == expected_output);
 }
 
-TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][terminal][issue378]") {
+TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][terminal][issue378][spec]") {
     cch::tui::VirtualTerminal terminal;
     REQUIRE(terminal.start(
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -938,7 +939,7 @@ TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][ter
     CHECK(terminal.output() == expected_output);
 }
 
-TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][terminal][issue378]") {
+TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][terminal][issue378][spec]") {
     cch::tui::VirtualTerminal terminal;
     const auto before_start = terminal.drain_input();
     REQUIRE_FALSE(before_start);
@@ -951,7 +952,7 @@ TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][termina
     REQUIRE(terminal.drain_input(std::chrono::milliseconds(100), std::chrono::milliseconds(10)));
 }
 
-TEST_CASE("Tui coalesces repeated replaceable invalidations into one render request", "[tui][render][issue465]") {
+TEST_CASE("Tui coalesces repeated replaceable invalidations into one render request", "[tui][render][issue465][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
@@ -976,10 +977,7 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
     REQUIRE(tui.stop());
 }
 
-
-TEST_CASE(
-    "Tui stop flows the cursor below the composed buffer for the shell prompt",
-    "[tui][issue476]") {
+TEST_CASE("Tui stop flows the cursor below the composed buffer for the shell prompt", "[tui][issue476][spec]") {
     // pi TuiMainScreen::beforeTerminalStop: write " ", move one row past the
     // last buffer line, then CRLF, so the shell prompt resumes below the
     // transcript instead of overwriting its last line. Under the anchored
@@ -1001,9 +999,7 @@ TEST_CASE(
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE(
-    "Tui stop scrolls the exit flow through the terminal scrollback on a full screen",
-    "[tui][issue476]") {
+TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a full screen", "[tui][issue476][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one", 0, 0)));

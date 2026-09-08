@@ -157,19 +157,21 @@ private:
 /// A custom tool that streams cumulative partial results through the update
 /// sink before completing — the session-level shape of a streaming tool
 /// partial (the built-in tools never stream partials).
-[[nodiscard]] agent::Tool make_streaming_tool(std::shared_ptr<std::size_t> partial_count) {
+[[nodiscard]] agent::Tool make_streaming_tool(std::shared_ptr<std::size_t> partial_count, std::size_t partials = 3) {
     ai::Tool definition;
     definition.name = "streamy";
     definition.description = "Stream a few partial results";
     definition.parameters = support::JsonValue::object_t{{"type", "object"}, {"additionalProperties", false}};
     return tests::make_fake_tool(std::move(definition),
             agent::ToolConcurrency::Exclusive,
-            [partial_count = std::move(partial_count)](
+            [partial_count = std::move(partial_count), partials](
                     agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink update_sink)
                     -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                for (std::size_t index = 1; index <= 3; ++index) {
+                std::string accumulated;
+                for (std::size_t index = 1; index <= partials; ++index) {
+                    accumulated += "partial " + std::to_string(index) + " " + std::string(128, 'x');
                     agent::AsyncToolExecutionResult partial;
-                    partial.content.push_back(ai::text_content("partial " + std::to_string(index)));
+                    partial.content.push_back(ai::text_content(accumulated));
                     if (partial_count) {
                         ++*partial_count;
                     }
@@ -306,6 +308,31 @@ void check_converged(const coding_agent::AgentSessionSnapshot& composed,
     CHECK(composed.topology == core.topology);
     CHECK(composed.session_path == core.session_path);
     CHECK(composed.session_event_diagnostics.size() == core.session_event_diagnostics.size());
+    REQUIRE(composed.tool_executions.size() == core.tool_executions.size());
+    for (std::size_t index = 0; index < core.tool_executions.size(); ++index) {
+        const auto& actual = composed.tool_executions[index];
+        const auto& expected = core.tool_executions[index];
+        CHECK(actual.tool_call_id == expected.tool_call_id);
+        CHECK(actual.tool_name == expected.tool_name);
+        CHECK(actual.arguments_json == expected.arguments_json);
+        CHECK(actual.status == expected.status);
+        CHECK(actual.output_tail == expected.output_tail);
+        CHECK(actual.output_truncated == expected.output_truncated);
+        CHECK(actual.artifact_reference == expected.artifact_reference);
+        CHECK(actual.error == expected.error);
+    }
+    if (compare_running) {
+        CHECK(composed.run_state.phase == core.run_state.phase);
+        CHECK(composed.run_state.terminal == core.run_state.terminal);
+        CHECK(composed.run_state.error == core.run_state.error);
+        CHECK(composed.recovery_state.retry_count == core.recovery_state.retry_count);
+        CHECK(composed.recovery_state.max_retry_count == core.recovery_state.max_retry_count);
+        CHECK(composed.recovery_state.next_retry_at_ms == core.recovery_state.next_retry_at_ms);
+        CHECK(composed.recovery_state.retry_error == core.recovery_state.retry_error);
+        CHECK(composed.recovery_state.compaction == core.recovery_state.compaction);
+        CHECK(composed.recovery_state.compaction_reason == core.recovery_state.compaction_reason);
+        CHECK(composed.recovery_state.compaction_error == core.recovery_state.compaction_error);
+    }
     // The streaming partial: presence and rendered text must agree.
     REQUIRE(composed.agent_state.streaming_message.has_value() == core.agent_state.streaming_message.has_value());
     if (core.agent_state.streaming_message) {
@@ -317,7 +344,7 @@ void check_converged(const coding_agent::AgentSessionSnapshot& composed,
 } // namespace
 
 TEST_CASE("Projection attach delivers a Base then ordered patches to concurrent subscribers",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -385,7 +412,7 @@ TEST_CASE("Projection attach delivers a Base then ordered patches to concurrent 
 }
 
 TEST_CASE("Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -440,7 +467,7 @@ TEST_CASE("Projection mailbox overflow resynchronizes with a fresh Base and neve
 }
 
 TEST_CASE("Projection patches converge with the Core snapshot for a message-chunk burst",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -477,7 +504,7 @@ TEST_CASE("Projection patches converge with the Core snapshot for a message-chun
 }
 
 TEST_CASE("Projection patches converge with the Core snapshot for a streaming tool partial",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][diverge][issue622]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto partial_count = std::make_shared<std::size_t>(0);
@@ -567,8 +594,94 @@ TEST_CASE("Projection patches converge with the Core snapshot for a streaming to
     session.close();
 }
 
+TEST_CASE("Projection observers converge on tool and run state after a stalled mailbox resync",
+        "[coding_agent][projection][issue622][spec]") {
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto partial_count = std::make_shared<std::size_t>(0);
+
+    auto tool_use = ai::assistant_text_message("Streaming a long tool run.");
+    tool_use.stop_reason = ai::AssistantStopReason::ToolUse;
+    tool_use.content.emplace_back(ai::ToolCallContent{
+            .id = "call_622",
+            .name = "streamy",
+            .arguments = support::JsonValue{support::JsonValue::object_t{}},
+            .raw_arguments = "{}",
+            .thought_signature = std::nullopt,
+            .arguments_valid = true,
+            .argument_error = std::nullopt,
+    });
+
+    auto provider = std::make_shared<ToolRoundProvider>();
+    provider->set_tool_round(std::move(tool_use));
+    provider->set_chunk_count(1);
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.request_model = tests::scripted_request_model("fake", "fake-model");
+    std::vector<agent::Tool> tools;
+    tools.push_back(make_streaming_tool(partial_count, 100));
+    options.custom_tools = std::move(tools);
+    auto models = tests::models_from_provider(std::move(provider));
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
+            std::nullopt,
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    REQUIRE(created.has_value());
+    auto& session = *created->session;
+
+    auto stalled_records = make_recorder();
+    auto stalled = session.attach_projection([stalled_records](const ProjectionStreamMessageVariant& message) {
+        stalled_records->push_back(RecordedMessage{
+                .is_base = std::holds_alternative<ProjectionStreamBase>(message),
+                .version = std::visit([](const auto& value) { return value.version; }, message),
+                .value = message,
+        });
+    });
+    REQUIRE(stalled.drain() == 1);
+
+    // Do not drain the first observer while more than one mailbox capacity of
+    // tool updates is published. It must recover through a fresh Base rather
+    // than relying on the old tool events being replayed.
+    REQUIRE(tests::run_awaitable(runtime, session.prompt("run a long tool")).has_value());
+    REQUIRE(*partial_count == 100);
+
+    auto late_records = make_recorder();
+    auto late = session.attach_projection([late_records](const ProjectionStreamMessageVariant& message) {
+        late_records->push_back(RecordedMessage{
+                .is_base = std::holds_alternative<ProjectionStreamBase>(message),
+                .version = std::visit([](const auto& value) { return value.version; }, message),
+                .value = message,
+        });
+    });
+    REQUIRE(late.drain() == 1);
+    REQUIRE(stalled.drain() >= 1);
+    REQUIRE(stalled.drain() == 0);
+
+    const auto core = session.snapshot();
+    const auto stalled_composed = compose(*stalled_records);
+    const auto late_composed = compose(*late_records);
+    check_converged(stalled_composed, core);
+    check_converged(late_composed, core);
+    REQUIRE(stalled_composed.tool_executions.size() == 1);
+    REQUIRE(late_composed.tool_executions.size() == 1);
+    const auto& tool = stalled_composed.tool_executions.front();
+    CHECK(tool.status == coding_agent::ToolExecutionStatus::Succeeded);
+    CHECK(tool.output_truncated);
+    CHECK(tool.output_tail.size() <= coding_agent::kProjectionToolOutputTailBytes);
+    CHECK(tool.output_tail == late_composed.tool_executions.front().output_tail);
+    CHECK(stalled_composed.run_state.phase == coding_agent::RunPhase::Idle);
+    CHECK(stalled_composed.run_state.terminal == coding_agent::RunTerminalState::Succeeded);
+    CHECK(stalled_composed.recovery_state.retry_count == late_composed.recovery_state.retry_count);
+    CHECK(stalled_composed.recovery_state.compaction == late_composed.recovery_state.compaction);
+    session.close();
+}
+
 TEST_CASE("Projection attach after Session Close delivers the terminal snapshot as its Base",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();
@@ -600,7 +713,7 @@ TEST_CASE("Projection attach after Session Close delivers the terminal snapshot 
 }
 
 TEST_CASE("Projection publishes 100 message-update chunks inside the issue cost bound over a long history",
-        "[coding_agent][projection][issue617]") {
+        "[coding_agent][projection][issue617][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto provider = std::make_shared<ChunkedProjectionProvider>();

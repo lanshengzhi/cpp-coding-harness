@@ -39,7 +39,7 @@ namespace {
 } // namespace
 
 TEST_CASE("ChatContainer completed messages transition to Committed state with cached lines",
-        "[coding_agent][tui][issue602]") {
+        "[coding_agent][tui][issue602][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
@@ -148,7 +148,7 @@ TEST_CASE("ChatContainer completed messages transition to Committed state with c
 }
 
 TEST_CASE("ChatContainer keeps initialized streaming assistant active for subsequent updates",
-        "[coding_agent][tui][issue603]") {
+        "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
@@ -178,7 +178,7 @@ TEST_CASE("ChatContainer keeps initialized streaming assistant active for subseq
 }
 
 TEST_CASE("ChatContainer subsequent render passes reuse cached lines without re-parsing",
-        "[coding_agent][tui][issue602]") {
+        "[coding_agent][tui][issue602][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
@@ -212,7 +212,7 @@ TEST_CASE("ChatContainer subsequent render passes reuse cached lines without re-
     CHECK(chat.cache_hit_count() == 4);   // 4 cumulative hits!
 }
 
-TEST_CASE("ChatContainer width resize invalidates cache and cleanly reflows", "[coding_agent][tui][issue602]") {
+TEST_CASE("ChatContainer width resize invalidates cache and cleanly reflows", "[coding_agent][tui][issue602][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
@@ -253,7 +253,7 @@ TEST_CASE("ChatContainer width resize invalidates cache and cleanly reflows", "[
 }
 
 TEST_CASE("ChatContainer benchmark confirms rendering 50 historical messages is sub-millisecond on repeated frames",
-        "[coding_agent][tui][issue602][benchmark]") {
+        "[coding_agent][tui][issue602][benchmark][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
@@ -308,7 +308,7 @@ TEST_CASE("ChatContainer benchmark confirms rendering 50 historical messages is 
 }
 
 TEST_CASE("Streaming assistant incremental block freeze maintains flat processing time across chunks",
-        "[coding_agent][tui][issue603][benchmark]") {
+        "[coding_agent][tui][issue603][benchmark][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 

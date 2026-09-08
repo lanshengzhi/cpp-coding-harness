@@ -44,7 +44,7 @@ struct FooterFixture {
 
 } // namespace
 
-TEST_CASE("Footer formatTokens matches pi's compact formatting", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer formatTokens matches pi's compact formatting", "[coding_agent][tui][footer][issue411][spec]") {
     CHECK(coding_agent::tui::format_tokens(0) == "0");
     CHECK(coding_agent::tui::format_tokens(999) == "999");
     CHECK(coding_agent::tui::format_tokens(1000) == "1.0k");
@@ -60,7 +60,7 @@ TEST_CASE("Footer formatTokens matches pi's compact formatting", "[coding_agent]
     CHECK(coding_agent::tui::format_tokens(12000000) == "12M");
 }
 
-TEST_CASE("Footer formatCwdForFooter replaces the home prefix with ~", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer formatCwdForFooter replaces the home prefix with ~", "[coding_agent][tui][footer][issue411][spec]") {
     const std::filesystem::path home{"/home/user"};
     CHECK(coding_agent::tui::format_cwd_for_footer("/home/user", home) == "~");
     CHECK(coding_agent::tui::format_cwd_for_footer("/home/user/projects/x", home) == "~/projects/x");
@@ -69,9 +69,8 @@ TEST_CASE("Footer formatCwdForFooter replaces the home prefix with ~", "[coding_
     CHECK(coding_agent::tui::format_cwd_for_footer("/tmp", std::nullopt) == "/tmp");
 }
 
-TEST_CASE(
-    "Footer renders pi's two lines: dim pwd with branch and the stats line with model on the right",
-    "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer renders pi's two lines: dim pwd with branch and the stats line with model on the right",
+        "[coding_agent][tui][footer][issue411][spec]") {
     auto footer = FooterFixture{};
     coding_agent::tui::FooterData data;
     data.cwd = "/home/user/projects/harness";
@@ -107,7 +106,7 @@ TEST_CASE(
     CHECK(stats_line.find("claude-sonnet \xc2\xb7 medium") > stats_line.find("CH83.3%"));
 }
 
-TEST_CASE("Footer omits zero stats parts like pi", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer omits zero stats parts like pi", "[coding_agent][tui][footer][issue411][spec]") {
     auto fixture = FooterFixture{};
     auto& footer = fixture.footer;
     coding_agent::tui::FooterData data;
@@ -124,7 +123,8 @@ TEST_CASE("Footer omits zero stats parts like pi", "[coding_agent][tui][footer][
     CHECK(stats_line.find("deepseek-chat") != std::string::npos);
 }
 
-TEST_CASE("Footer shows the kimi subscription marker and the provider prefix", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer shows the kimi subscription marker and the provider prefix",
+        "[coding_agent][tui][footer][issue411][spec]") {
     auto fixture = FooterFixture{};
     auto& footer = fixture.footer;
     coding_agent::tui::FooterData data;
@@ -143,7 +143,8 @@ TEST_CASE("Footer shows the kimi subscription marker and the provider prefix", "
     CHECK(stats_line.find("(kimi-coding) kimi-k2") != std::string::npos);
 }
 
-TEST_CASE("Footer colors the context percent by threshold and dims the stats", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer colors the context percent by threshold and dims the stats",
+        "[coding_agent][tui][footer][issue411][spec]") {
     auto fixture = FooterFixture{};
     auto& footer = fixture.footer;
     coding_agent::tui::FooterData warning_data;
@@ -179,7 +180,7 @@ TEST_CASE("Footer colors the context percent by threshold and dims the stats", "
     CHECK(rendered->lines[0].find(dim_color.substr(0, dim_color.size() - 6)) != std::string::npos);
 }
 
-TEST_CASE("Footer truncates the pwd and right side to the width", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Footer truncates the pwd and right side to the width", "[coding_agent][tui][footer][issue411][spec]") {
     auto fixture = FooterFixture{};
     auto& footer = fixture.footer;
     coding_agent::tui::FooterData data;
@@ -196,7 +197,8 @@ TEST_CASE("Footer truncates the pwd and right side to the width", "[coding_agent
     CHECK(stats_line.find("a-very-long-model-name") != std::string::npos);
 }
 
-TEST_CASE("FooterDataProvider resolves the git branch from HEAD metadata", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("FooterDataProvider resolves the git branch from HEAD metadata",
+        "[coding_agent][tui][footer][issue411][spec]") {
     tests::TempWorkspace workspace;
     const auto git_dir = workspace.path() / "repo" / ".git";
     std::filesystem::create_directories(git_dir);
@@ -220,7 +222,7 @@ TEST_CASE("FooterDataProvider resolves the git branch from HEAD metadata", "[cod
     CHECK(detached.git_branch() == std::optional<std::string>{"detached"});
 }
 
-TEST_CASE("FooterDataProvider handles worktrees and missing repos", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("FooterDataProvider handles worktrees and missing repos", "[coding_agent][tui][footer][issue411][spec]") {
     tests::TempWorkspace workspace;
     const auto repo = workspace.path() / "repo";
     const auto worktree = workspace.path() / "worktree";
@@ -244,7 +246,7 @@ TEST_CASE("FooterDataProvider handles worktrees and missing repos", "[coding_age
     CHECK_FALSE(outside.git_branch().has_value());
 }
 
-TEST_CASE("Status indicator messages match pi's wording", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("Status indicator messages match pi's wording", "[coding_agent][tui][footer][issue411][spec]") {
     cch::tui::KeybindingDefinition definition{
         .id = "app.interrupt",
         .default_keys = {"escape"},
@@ -276,7 +278,7 @@ TEST_CASE("Status indicator messages match pi's wording", "[coding_agent][tui][f
     (void)live;
 }
 
-TEST_CASE("StatusIndicator renders the loader row with the message", "[coding_agent][tui][footer][issue411]") {
+TEST_CASE("StatusIndicator renders the loader row with the message", "[coding_agent][tui][footer][issue411][spec]") {
     const auto live = coding_agent::tui::LiveTheme(
         coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::Xterm256);
     std::size_t renders = 0;

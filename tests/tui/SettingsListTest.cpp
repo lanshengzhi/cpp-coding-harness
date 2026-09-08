@@ -13,9 +13,8 @@
 #include <utility>
 #include <vector>
 
-TEST_CASE(
-    "SettingsList cycles values deterministically and reports updates",
-    "[tui][settings-list][issue52][issue57]") {
+TEST_CASE("SettingsList cycles values deterministically and reports updates",
+        "[tui][settings-list][issue52][issue57][spec]") {
     cch::tui::KeybindingResolutionRequest request;
     request.definitions = cch::tui::builtin_tui_keybinding_definitions();
     request.overrides = {{.id = "tui.select.confirm", .keys = {"enter", "space"}}};
@@ -52,7 +51,7 @@ TEST_CASE(
     CHECK(updates[1] == "theme=light");
 }
 
-TEST_CASE("SettingsList resolves a key shared by two actions in dispatch order", "[tui][settings-list]") {
+TEST_CASE("SettingsList resolves a key shared by two actions in dispatch order", "[tui][settings-list][spec]") {
     // f9 claims up and confirm; movement leads pi's settings-list chain.
     // space is bound to the LATER cancel action, yet the raw space guard at
     // confirm's chain position still activates the item (pi settings-list.ts).
@@ -93,7 +92,7 @@ TEST_CASE("SettingsList resolves a key shared by two actions in dispatch order",
     CHECK(updates[0] == "theme=dark");
 }
 
-TEST_CASE("SettingsList search and no matches render through VirtualTerminal", "[tui][settings-list][issue52]") {
+TEST_CASE("SettingsList search and no matches render through VirtualTerminal", "[tui][settings-list][issue52][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 50, .rows = 8});
     cch::tui::Tui tui(terminal);
     auto list = std::make_unique<cch::tui::SettingsList>(
@@ -119,7 +118,8 @@ TEST_CASE("SettingsList search and no matches render through VirtualTerminal", "
     CHECK(list_ptr->focused());
 }
 
-TEST_CASE("SettingsList search preserves baseline token and alphanumeric matching", "[tui][settings-list][issue52]") {
+TEST_CASE("SettingsList search preserves baseline token and alphanumeric matching",
+        "[tui][settings-list][issue52][spec]") {
     cch::tui::SettingsList token_search(
         {
             {.id = "theme", .label = "Theme", .current_value = "dark"},
@@ -155,9 +155,8 @@ TEST_CASE("SettingsList search preserves baseline token and alphanumeric matchin
     CHECK(unicode_search.selected_item()->id == "accented");
 }
 
-TEST_CASE(
-    "SettingsList delegates nested selection and restores its parent selection",
-    "[tui][settings-list][issue52]") {
+TEST_CASE("SettingsList delegates nested selection and restores its parent selection",
+        "[tui][settings-list][issue52][spec]") {
     std::vector<std::string> updates;
     cch::tui::SettingsList list(
         {
@@ -208,7 +207,8 @@ TEST_CASE(
     CHECK(updates[0] == "theme=light");
 }
 
-TEST_CASE("SettingsList renders and dispatches hints from one effective registry", "[tui][settings-list][issue57]") {
+TEST_CASE("SettingsList renders and dispatches hints from one effective registry",
+        "[tui][settings-list][issue57][spec]") {
     cch::tui::KeybindingResolutionRequest request;
     request.definitions = cch::tui::builtin_tui_keybinding_definitions();
     request.overrides = {
@@ -247,7 +247,7 @@ TEST_CASE("SettingsList renders and dispatches hints from one effective registry
     CHECK(cancellations == 1);
 }
 
-TEST_CASE("SettingsList space confirms only while the search is empty", "[tui][settings-list][issue384]") {
+TEST_CASE("SettingsList space confirms only while the search is empty", "[tui][settings-list][issue384][spec]") {
     std::vector<std::string> updates;
     cch::tui::SettingsList list(
         {
@@ -279,7 +279,7 @@ TEST_CASE("SettingsList space confirms only while the search is empty", "[tui][s
     CHECK(updates.size() == 1);
 }
 
-TEST_CASE("SettingsList search editing flows through the Input component", "[tui][settings-list][issue384]") {
+TEST_CASE("SettingsList search editing flows through the Input component", "[tui][settings-list][issue384][spec]") {
     cch::tui::SettingsList list(
         {
             {.id = "alpha", .label = "Alpha", .current_value = "off"},
@@ -312,7 +312,7 @@ TEST_CASE("SettingsList search editing flows through the Input component", "[tui
     CHECK_FALSE(list.selected_item());
 }
 
-TEST_CASE("SettingsList paste flows through the Input component's cleaning", "[tui][settings-list][issue384]") {
+TEST_CASE("SettingsList paste flows through the Input component's cleaning", "[tui][settings-list][issue384][spec]") {
     cch::tui::SettingsList list(
         {
             {.id = "alpha", .label = "Alpha beta", .current_value = "off"},
@@ -333,7 +333,8 @@ TEST_CASE("SettingsList paste flows through the Input component's cleaning", "[t
     CHECK(list.selected_item()->id == "alpha");
 }
 
-TEST_CASE("SettingsList search line renders and locates the cursor through Input", "[tui][settings-list][issue384]") {
+TEST_CASE("SettingsList search line renders and locates the cursor through Input",
+        "[tui][settings-list][issue384][spec]") {
     cch::tui::SettingsList list(
         {
             {.id = "alpha", .label = "Alpha", .current_value = "off"},
@@ -356,7 +357,8 @@ TEST_CASE("SettingsList search line renders and locates the cursor through Input
     CHECK(cursor->column == 6);
 }
 
-TEST_CASE("SettingsList cancellation invokes the callback once per semantic key", "[tui][settings-list][issue52]") {
+TEST_CASE(
+        "SettingsList cancellation invokes the callback once per semantic key", "[tui][settings-list][issue52][spec]") {
     std::size_t cancellations = 0;
     cch::tui::SettingsList list({}, cch::tui::SettingsListOptions{
         .on_cancel = [&cancellations]() -> cch::support::ExpectedVoid { ++cancellations; return {}; },

@@ -344,15 +344,8 @@ std::shared_ptr<SessionUiBinding> InteractiveEngine::make_session_ui_binding() {
         const auto self = weak.lock();
         return self != nullptr ? self->view_ : nullptr;
     };
-    hooks.prompt_active = [weak] {
-        const auto self = weak.lock();
-        return self && self->prompt_active_;
-    };
     hooks.invalidate = [weak] {
         if (const auto self = weak.lock()) self->invalidate_frame();
-    };
-    hooks.show_status = [weak](std::string text) {
-        if (const auto self = weak.lock()) self->show_status(std::move(text));
     };
     hooks.show_error = [weak](std::string text) {
         if (const auto self = weak.lock()) self->show_error(std::move(text));

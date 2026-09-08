@@ -5,7 +5,7 @@ The Native TUI keybinding format is compatible with pi parity baseline
 toolkit inventory verified the `tui.*` action table and key grammar at the frozen
 baseline). The harness performs one startup read of
 `<Agent Config Directory>/keybindings.json` (normally
-`~/.pi/agent/keybindings.json`). `PI_CODING_AGENT_DIR` changes the Agent Config
+`~/.pike/agent/keybindings.json`). `PIKE_CODING_AGENT_DIR` changes the Agent Config
 Directory. Discovery reads only that resolved user-level root and never scans a
 project-local `.pi` directory.
 

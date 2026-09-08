@@ -32,7 +32,7 @@ struct SkillDirSpec {
     /// filesystem instance created for the scan).
     std::string path;
     /// When true, root-level .md files in this directory are loaded as skills
-    /// (pi "pi" discovery mode: user `~/.pi/agent/skills`, project `.pi/skills`,
+    /// (pi "pi" discovery mode: user `~/.pike/agent/skills`, project `.pi/skills`,
     /// and explicit `--skill` paths). When false, only nested SKILL.md files
     /// within subdirectories are discovered (pi "agents" mode for the
     /// `.agents/skills` convention).

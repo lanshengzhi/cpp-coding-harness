@@ -100,7 +100,7 @@ public:
 } // namespace
 
 TEST_CASE("Interactive frame ticker coalesces a burst into one complete snapshot render",
-        "[coding_agent][tui][frame-ticker][issue601]") {
+        "[coding_agent][tui][frame-ticker][issue601][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto created = create_session(runtime, workspace);

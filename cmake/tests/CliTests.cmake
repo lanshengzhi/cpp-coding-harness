@@ -24,7 +24,7 @@ include_guard(GLOBAL)
     target_include_directories(cch_tests_cli_arch PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_cli_arch
         PRIVATE
-            cch_coding_agent
+            frontend_cli
             Boost::headers
             Catch2::Catch2
 )

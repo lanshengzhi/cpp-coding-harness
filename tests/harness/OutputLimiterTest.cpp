@@ -7,7 +7,8 @@
 
 using namespace cch;
 
-TEST_CASE("tail output limiter redacts before applying byte and line limits", "[harness][output-limiter][issue73]") {
+TEST_CASE("tail output limiter redacts before applying byte and line limits",
+        "[harness][output-limiter][issue73][spec]") {
     const auto redacted = harness::limit_output_tail_redacted("api_key=secret");
     CHECK(redacted.text == "api_key=[REDACTED]");
     CHECK_FALSE(redacted.truncated);
@@ -19,7 +20,7 @@ TEST_CASE("tail output limiter redacts before applying byte and line limits", "[
     CHECK(lines.truncated);
 }
 
-TEST_CASE("tail output limiter starts on a UTF-8 character boundary", "[harness][output-limiter][issue73]") {
+TEST_CASE("tail output limiter starts on a UTF-8 character boundary", "[harness][output-limiter][issue73][spec]") {
     const std::string accented = "xx\xc3\xa9\xc3\xa9";
     const auto result = harness::limit_output_tail_redacted(
         accented,
@@ -29,13 +30,14 @@ TEST_CASE("tail output limiter starts on a UTF-8 character boundary", "[harness]
     CHECK(result.truncated);
 }
 
-TEST_CASE("limit_output_tail preserves unredacted text when no limit is hit", "[harness][output-limiter][issue73]") {
+TEST_CASE("limit_output_tail preserves unredacted text when no limit is hit",
+        "[harness][output-limiter][issue73][spec]") {
     const auto result = harness::limit_output_tail("api_key=secret");
     CHECK(result.text == "api_key=secret");
     CHECK_FALSE(result.truncated);
 }
 
-TEST_CASE("limit_output_tail does not redact", "[harness][output-limiter][issue73]") {
+TEST_CASE("limit_output_tail does not redact", "[harness][output-limiter][issue73][spec]") {
     const auto result = harness::limit_output_tail(
         "api_key=secret",
         harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000});
@@ -43,7 +45,7 @@ TEST_CASE("limit_output_tail does not redact", "[harness][output-limiter][issue7
     CHECK_FALSE(result.truncated);
 }
 
-TEST_CASE("limit_output_tail applies byte and line limits", "[harness][output-limiter][issue73]") {
+TEST_CASE("limit_output_tail applies byte and line limits", "[harness][output-limiter][issue73][spec]") {
     const auto result = harness::limit_output_tail(
         "a\nb\nc",
         harness::OutputLimit{.max_bytes = 1024, .max_lines = 2});
@@ -51,7 +53,7 @@ TEST_CASE("limit_output_tail applies byte and line limits", "[harness][output-li
     CHECK(result.truncated);
 }
 
-TEST_CASE("limit_output passes input under the limits through unchanged", "[harness][output-limiter][issue66]") {
+TEST_CASE("limit_output passes input under the limits through unchanged", "[harness][output-limiter][issue66][spec]") {
     const auto with_newline = harness::limit_output("line1\nline2\n");
     CHECK(with_newline.text == "line1\nline2\n");
     CHECK_FALSE(with_newline.truncated);
@@ -61,19 +63,19 @@ TEST_CASE("limit_output passes input under the limits through unchanged", "[harn
     CHECK_FALSE(without_newline.truncated);
 }
 
-TEST_CASE("limit_output returns empty text for empty input", "[harness][output-limiter][issue66]") {
+TEST_CASE("limit_output returns empty text for empty input", "[harness][output-limiter][issue66][spec]") {
     const auto result = harness::limit_output("");
     CHECK(result.text.empty());
     CHECK_FALSE(result.truncated);
 }
 
-TEST_CASE("limit_output stops at the line limit and flags truncation", "[harness][output-limiter][issue66]") {
+TEST_CASE("limit_output stops at the line limit and flags truncation", "[harness][output-limiter][issue66][spec]") {
     const auto result = harness::limit_output("a\nb\nc\n", harness::OutputLimit{.max_bytes = 1024, .max_lines = 2});
     CHECK(result.truncated);
     CHECK(result.text == "a\nb\n\n[output truncated]");
 }
 
-TEST_CASE("limit_output stops at the byte limit and flags truncation", "[harness][output-limiter][issue66]") {
+TEST_CASE("limit_output stops at the byte limit and flags truncation", "[harness][output-limiter][issue66][spec]") {
     const auto result = harness::limit_output(
         "aaaa\nbbbb\n",
         harness::OutputLimit{.max_bytes = 6, .max_lines = 2000});
@@ -81,7 +83,8 @@ TEST_CASE("limit_output stops at the byte limit and flags truncation", "[harness
     CHECK(result.text == "aaaa\n\n[output truncated]");
 }
 
-TEST_CASE("limit_output falls back to a byte-bounded prefix for an oversized first line", "[harness][output-limiter][issue66]") {
+TEST_CASE("limit_output falls back to a byte-bounded prefix for an oversized first line",
+        "[harness][output-limiter][issue66][spec]") {
     const auto result = harness::limit_output(
         std::string(100, 'x'),
         harness::OutputLimit{.max_bytes = 10, .max_lines = 2000});
@@ -89,7 +92,8 @@ TEST_CASE("limit_output falls back to a byte-bounded prefix for an oversized fir
     CHECK(result.text == "xxxxxxxxxx\n[output truncated]");
 }
 
-TEST_CASE("limit_output oversized-first-line fallback never splits a multibyte sequence", "[harness][output-limiter][issue66]") {
+TEST_CASE("limit_output oversized-first-line fallback never splits a multibyte sequence",
+        "[harness][output-limiter][issue66][spec]") {
     // 21 bytes: 'a' followed by ten é (2 bytes each); a budget of 4 lands mid-sequence.
     std::string utf8_accented = "a";
     for (std::size_t i = 0; i < 10; ++i) {

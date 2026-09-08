@@ -176,7 +176,7 @@ private:
 } // namespace
 
 TEST_CASE("Process Terminal runs the private Native TUI composition and restores the PTY",
-        "[coding_agent][tui][terminal][issue58][issue530]") {
+        "[coding_agent][tui][terminal][issue58][issue530][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(60, 12);
     REQUIRE(pty);
     termios original{};
@@ -263,7 +263,7 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     CHECK(cch::tests::same_terminal_state(restored, original));
 }
 TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when history exceeds 50+ lines",
-        "[coding_agent][tui][terminal][dock][issue599]") {
+        "[coding_agent][tui][terminal][dock][issue599][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -355,7 +355,7 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
 }
 
 TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock at new bottom",
-        "[coding_agent][tui][terminal][dock][resize][issue599]") {
+        "[coding_agent][tui][terminal][dock][resize][issue599][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -454,7 +454,7 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
 }
 
 TEST_CASE("Process Terminal preserves keypresses while streaming output and restores the PTY",
-        "[coding_agent][tui][terminal][spec597][issue606]") {
+        "[coding_agent][tui][terminal][spec597][issue606][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -547,7 +547,7 @@ TEST_CASE("Process Terminal preserves keypresses while streaming output and rest
 
 TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the editor and footer docked and the "
           "session running",
-        "[coding_agent][tui][terminal][dock][resize][issue599][issue607]") {
+        "[coding_agent][tui][terminal][dock][resize][issue599][issue607][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -650,7 +650,7 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
 
 TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize keeps the footer docked and the "
           "session running",
-        "[coding_agent][tui][terminal][dock][resize][issue599][issue607]") {
+        "[coding_agent][tui][terminal][dock][resize][issue599][issue607][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};

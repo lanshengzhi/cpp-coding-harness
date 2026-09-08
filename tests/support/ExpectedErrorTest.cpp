@@ -18,7 +18,7 @@ struct ProbePayload {
 
 } // namespace detail
 
-TEST_CASE("std expected is the project failure carrier", "[support][expected][u1]") {
+TEST_CASE("std expected is the project failure carrier", "[support][expected][u1][spec]") {
     cch::support::Expected<int> ok = 42;
     REQUIRE(ok);
     CHECK(*ok == 42);
@@ -35,7 +35,7 @@ TEST_CASE("std expected is the project failure carrier", "[support][expected][u1
     CHECK(failed.error().detail == "count must be positive");
 }
 
-TEST_CASE("Glaze round-trip failures become typed project errors", "[support][glaze][u1]") {
+TEST_CASE("Glaze round-trip failures become typed project errors", "[support][glaze][u1][spec]") {
     detail::ProbePayload payload{7, "ok"};
 
     auto json = cch::support::write_json(payload);

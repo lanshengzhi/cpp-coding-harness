@@ -392,7 +392,7 @@ ai::AuthInteraction empty_interaction() {
 
 } // namespace
 
-TEST_CASE("Models installs Provider Definitions and projects passive Provider Info", "[ai][models][issue544]") {
+TEST_CASE("Models installs Provider Definitions and projects passive Provider Info", "[ai][models][issue544][spec]") {
     static_assert(std::movable<ai::ProviderDefinition>);
     static_assert(!std::copy_constructible<ai::ProviderDefinition>);
 
@@ -467,7 +467,7 @@ TEST_CASE("Models installs Provider Definitions and projects passive Provider In
     CHECK(models->provider_info().empty());
 }
 
-TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[ai][models][issue338]") {
+TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -486,7 +486,7 @@ TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[a
     CHECK(second->seen_models.front().api == "private-api");
 }
 
-TEST_CASE("Models isolates unavailable Provider catalogs per provider", "[ai][models][issue338]") {
+TEST_CASE("Models isolates unavailable Provider catalogs per provider", "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -505,7 +505,7 @@ TEST_CASE("Models isolates unavailable Provider catalogs per provider", "[ai][mo
     CHECK_FALSE(models->model("unavailable-catalog", "missing"));
 }
 
-TEST_CASE("Models normalizes provider lookup and model validation failures", "[ai][models][issue338]") {
+TEST_CASE("Models normalizes provider lookup and model validation failures", "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -530,7 +530,7 @@ TEST_CASE("Models normalizes provider lookup and model validation failures", "[a
     CHECK(provider->seen_models.empty());
 }
 
-TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai][models][auth][issue338]") {
+TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     ai::ApiKeyCredential stored;
     stored.key = "stored-key";
@@ -609,7 +609,7 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
     CHECK((resolved_keys == std::vector<std::string>{"explicit-key", "stored-key", "ambient-key"}));
 }
 
-TEST_CASE("Models never falls back after a stored credential type mismatch", "[ai][models][auth][issue338]") {
+TEST_CASE("Models never falls back after a stored credential type mismatch", "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     credentials->records.emplace("provider", ai::Credential{ai::OAuthCredential{}});
     auto auth_context = std::make_shared<FakeAuthContext>();
@@ -637,7 +637,8 @@ TEST_CASE("Models never falls back after a stored credential type mismatch", "[a
     CHECK(resolve_count == 0);
 }
 
-TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never refreshes", "[ai][models][auth][issue338]") {
+TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never refreshes",
+        "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -692,7 +693,7 @@ TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never r
     CHECK(stored.access == "new-access");
 }
 
-TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth][issue338]") {
+TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     ai::OAuthCredential original{
         .refresh = "refresh",
@@ -729,7 +730,8 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
     CHECK(std::get<ai::OAuthCredential>(credentials->records.at("provider")) == original);
 }
 
-TEST_CASE("Models merges Model headers after resolved auth headers case insensitively", "[ai][models][auth][issue338]") {
+TEST_CASE("Models merges Model headers after resolved auth headers case insensitively",
+        "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     ai::ApiKeyAuth api_key;
@@ -765,7 +767,8 @@ TEST_CASE("Models merges Model headers after resolved auth headers case insensit
     CHECK(headers.size() == 2);
 }
 
-TEST_CASE("Models prepares the complete streamSimple request before Provider dispatch", "[ai][models][issue339]") {
+TEST_CASE(
+        "Models prepares the complete streamSimple request before Provider dispatch", "[ai][models][issue339][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     ai::ApiKeyAuth api_key;
@@ -848,7 +851,7 @@ TEST_CASE("Models prepares the complete streamSimple request before Provider dis
     CHECK(prepared.auth.headers.at("x-client-request-id") == "session-1");
 }
 
-TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue339]") {
+TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue339][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     ai::ApiKeyAuth api_key;
@@ -890,9 +893,8 @@ TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue3
     CHECK(provider->seen_options.front().session_id == std::string(65, 's'));
 }
 
-TEST_CASE(
-    "Models accepts Kimi header authentication and suppresses none-retention affinity",
-    "[ai][models][auth][issue339]") {
+TEST_CASE("Models accepts Kimi header authentication and suppresses none-retention affinity",
+        "[ai][models][auth][issue339][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     ai::ApiKeyAuth api_key;
@@ -937,7 +939,8 @@ TEST_CASE(
     CHECK(provider->seen_options.front().session_id == std::nullopt);
 }
 
-TEST_CASE("Env-chain API key auth labels explicit credentials as stored credentials", "[ai][models][auth][issue338]") {
+TEST_CASE("Env-chain API key auth labels explicit credentials as stored credentials",
+        "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -952,9 +955,8 @@ TEST_CASE("Env-chain API key auth labels explicit credentials as stored credenti
     CHECK((**resolved).source == "stored credential");
 }
 
-TEST_CASE(
-    "Models converts explicit callback failures into its single error channel",
-    "[ai][models][issue338][issue483]") {
+TEST_CASE("Models converts explicit callback failures into its single error channel",
+        "[ai][models][issue338][issue483][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
 
@@ -1041,7 +1043,7 @@ TEST_CASE(
     CHECK(sink_result.error().message == "Assistant event sink failed");
 }
 
-TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[ai][models][issue338][issue483]") {
+TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[ai][models][issue338][issue483][spec]") {
     auto auth_context = std::make_shared<FakeAuthContext>();
 
     auto failing_store = std::make_shared<MemoryCredentialStore>();
@@ -1120,7 +1122,7 @@ TEST_CASE("Models categorizes explicit credential store and OAuth failures", "[a
     CHECK(derivation_terminal.failure->code == support::ErrorCode::OAuth);
 }
 
-TEST_CASE("Models normalizes Provider stream failures and propagates sink failures", "[ai][models][issue338]") {
+TEST_CASE("Models normalizes Provider stream failures and propagates sink failures", "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1149,7 +1151,7 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
     CHECK(sink_failure.events.size() == 1);
 }
 
-TEST_CASE("Models cancellation is one aborted terminal value", "[ai][models][issue338]") {
+TEST_CASE("Models cancellation is one aborted terminal value", "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1175,7 +1177,8 @@ TEST_CASE("Models cancellation is one aborted terminal value", "[ai][models][iss
     CHECK(provider->seen_models.size() == 1);
 }
 
-TEST_CASE("Models checkAuth falls back to API key resolution when no check hook exists", "[ai][models][auth][issue338]") {
+TEST_CASE("Models checkAuth falls back to API key resolution when no check hook exists",
+        "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     ai::ApiKeyAuth api_key;
@@ -1197,7 +1200,7 @@ TEST_CASE("Models checkAuth falls back to API key resolution when no check hook 
     CHECK((**checked).type == ai::AuthType::ApiKey);
 }
 
-TEST_CASE("Models sanitizes Provider-emitted terminal errors", "[ai][models][issue338]") {
+TEST_CASE("Models sanitizes Provider-emitted terminal errors", "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1219,7 +1222,8 @@ TEST_CASE("Models sanitizes Provider-emitted terminal errors", "[ai][models][iss
     CHECK(terminal.error.error_message == run.result->error_message);
 }
 
-TEST_CASE("Models suppresses duplicate Provider terminals and returns the first terminal value", "[ai][models][issue338]") {
+TEST_CASE("Models suppresses duplicate Provider terminals and returns the first terminal value",
+        "[ai][models][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1234,7 +1238,8 @@ TEST_CASE("Models suppresses duplicate Provider terminals and returns the first 
     CHECK(std::holds_alternative<ai::AssistantErrorEvent>(run.events.front()));
 }
 
-TEST_CASE("Models live lookup and logout use owned Provider and CredentialStore state", "[ai][models][auth][issue338]") {
+TEST_CASE("Models live lookup and logout use owned Provider and CredentialStore state",
+        "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     credentials->records.emplace("provider", ai::Credential{ai::ApiKeyCredential{}});
     auto auth_context = std::make_shared<FakeAuthContext>();
@@ -1253,7 +1258,8 @@ TEST_CASE("Models live lookup and logout use owned Provider and CredentialStore 
     CHECK_FALSE(credentials->records.contains("provider"));
 }
 
-TEST_CASE("Models login persists the provider OAuth credential via CredentialStore modify", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login persists the provider OAuth credential via CredentialStore modify",
+        "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1287,7 +1293,7 @@ TEST_CASE("Models login persists the provider OAuth credential via CredentialSto
     CHECK(stored->refresh == "dummy-refresh");
 }
 
-TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1314,7 +1320,8 @@ TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][mo
     CHECK(credentials->records.empty());
 }
 
-TEST_CASE("Models login wraps CredentialStore modify failures as the auth category", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login wraps CredentialStore modify failures as the auth category",
+        "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     credentials->fail_modify = true;
     auto auth_context = std::make_shared<FakeAuthContext>();
@@ -1338,7 +1345,7 @@ TEST_CASE("Models login wraps CredentialStore modify failures as the auth catego
     CHECK(result.error().message == "Credential store modify failed for login-provider");
 }
 
-TEST_CASE("Models login rejects unknown providers as a provider error", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login rejects unknown providers as a provider error", "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1351,7 +1358,7 @@ TEST_CASE("Models login rejects unknown providers as a provider error", "[ai][mo
     CHECK(result.error().message == "Unknown provider: missing");
 }
 
-TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1367,7 +1374,7 @@ TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][m
     CHECK(credentials->modify_count == 0);
 }
 
-TEST_CASE("Models login persists an api-key credential through modify", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login persists an api-key credential through modify", "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
@@ -1396,7 +1403,7 @@ TEST_CASE("Models login persists an api-key credential through modify", "[ai][mo
     CHECK(persisted->key == std::string{"dummy-api-key"});
 }
 
-TEST_CASE("Models login rejects a provider without api-key login support", "[ai][models][auth][issue343]") {
+TEST_CASE("Models login rejects a provider without api-key login support", "[ai][models][auth][issue343][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);

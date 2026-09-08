@@ -10,9 +10,7 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "in-memory Session Store accepts Runtime appends and has no path",
-    "[harness][session][in-memory]") {
+TEST_CASE("in-memory Session Store accepts Runtime appends and has no path", "[harness][session][in-memory][spec]") {
     auto store = harness::session::SessionStore::in_memory(
         harness::session::SessionMetadata{
             .session_id = "in-memory-test",

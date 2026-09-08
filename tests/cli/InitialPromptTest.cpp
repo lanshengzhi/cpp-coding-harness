@@ -26,7 +26,8 @@ cli::InitialMessageInput input_with(
 
 } // namespace
 
-TEST_CASE("Initial CLI files are content-sniffed and preserve text then image order", "[cli][initial-prompt][issue63]") {
+TEST_CASE("Initial CLI files are content-sniffed and preserve text then image order",
+        "[cli][initial-prompt][issue63][spec]") {
     tests::TempWorkspace workspace;
     workspace.write(
         "one.data", tests::bytes_as_string(tests::decode_base64(tests::kTinyPngBase64)));
@@ -68,7 +69,7 @@ TEST_CASE("Initial CLI files are content-sniffed and preserve text then image or
     CHECK(prepared->remaining_messages.empty());
 }
 
-TEST_CASE("A lone initial image still produces initial message text", "[cli][initial-prompt][issue63]") {
+TEST_CASE("A lone initial image still produces initial message text", "[cli][initial-prompt][issue63][spec]") {
     tests::TempWorkspace workspace;
     workspace.write(
         "only.png", tests::bytes_as_string(tests::decode_base64(tests::kTinyPngBase64)));
@@ -83,7 +84,8 @@ TEST_CASE("A lone initial image still produces initial message text", "[cli][ini
     CHECK(prepared->initial_message.find("only.png\"></file>\n") != std::string::npos);
 }
 
-TEST_CASE("Initial message merges piped stdin with the first CLI message into one prompt", "[cli][initial-prompt]") {
+TEST_CASE("Initial message merges piped stdin with the first CLI message into one prompt",
+        "[cli][initial-prompt][spec]") {
     tests::TempWorkspace workspace;
 
     const auto prepared = cli::build_initial_message(
@@ -94,7 +96,8 @@ TEST_CASE("Initial message merges piped stdin with the first CLI message into on
     CHECK(prepared->remaining_messages.empty());
 }
 
-TEST_CASE("Initial message uses piped stdin as the prompt when no CLI message is present", "[cli][initial-prompt]") {
+TEST_CASE("Initial message uses piped stdin as the prompt when no CLI message is present",
+        "[cli][initial-prompt][spec]") {
     tests::TempWorkspace workspace;
 
     const auto prepared = cli::build_initial_message(
@@ -105,7 +108,8 @@ TEST_CASE("Initial message uses piped stdin as the prompt when no CLI message is
     CHECK(prepared->remaining_messages.empty());
 }
 
-TEST_CASE("Initial message combines stdin, file text, and the first CLI message in pi's order", "[cli][initial-prompt]") {
+TEST_CASE("Initial message combines stdin, file text, and the first CLI message in pi's order",
+        "[cli][initial-prompt][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "file text");
 
@@ -121,7 +125,7 @@ TEST_CASE("Initial message combines stdin, file text, and the first CLI message 
     CHECK(prepared->remaining_messages[0] == "Second message");
 }
 
-TEST_CASE("Initial message omits absent stdin and message parts", "[cli][initial-prompt]") {
+TEST_CASE("Initial message omits absent stdin and message parts", "[cli][initial-prompt][spec]") {
     tests::TempWorkspace workspace;
 
     const auto none = cli::build_initial_message(input_with(workspace.path()));
@@ -137,7 +141,7 @@ TEST_CASE("Initial message omits absent stdin and message parts", "[cli][initial
     CHECK(only_message->remaining_messages[0] == "world");
 }
 
-TEST_CASE("Initial message merge preserves trailing stdin newlines exactly", "[cli][initial-prompt]") {
+TEST_CASE("Initial message merge preserves trailing stdin newlines exactly", "[cli][initial-prompt][spec]") {
     tests::TempWorkspace workspace;
 
     const auto prepared = cli::build_initial_message(

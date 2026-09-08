@@ -31,12 +31,12 @@ using namespace cch;
 namespace {
 
 /// One isolated assembly fixture: a temp workspace for the session file and a
-/// temp Agent Config Directory (`PI_CODING_AGENT_DIR`) whose models.json and
+/// temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json and
 /// settings.json drive runtime creation deterministically.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
@@ -176,9 +176,8 @@ constexpr std::string_view kNonReasoningProvider = R"({
 
 } // namespace
 
-TEST_CASE(
-    "cycle_model cycles forward and backward through the available models",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("cycle_model cycles forward and backward through the available models",
+        "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kThreeKeyedProviders);
 
@@ -231,9 +230,7 @@ TEST_CASE(
     CHECK(*model->second.get_if<std::string>() == "beta-1");
 }
 
-TEST_CASE(
-    "cycle_model returns nullopt with a single available model",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("cycle_model returns nullopt with a single available model", "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kSingleReasoningProvider);
 
@@ -248,9 +245,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "cycle_model cycles within the scoped set and drops unauthenticated scoped models",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("cycle_model cycles within the scoped set and drops unauthenticated scoped models",
+        "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedAlphaKeylessBetaKeyedGamma);
 
@@ -292,9 +288,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "a scoped model's explicit thinking level overrides the session preference on cycle",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("a scoped model's explicit thinking level overrides the session preference on cycle",
+        "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningProvider);
 
@@ -335,9 +330,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "cycle_thinking_level walks the model's supported levels and wraps",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("cycle_thinking_level walks the model's supported levels and wraps",
+        "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningProvider);
 
@@ -367,9 +361,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "cycle_thinking_level returns nullopt when the model supports no thinking",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("cycle_thinking_level returns nullopt when the model supports no thinking",
+        "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kNonReasoningProvider);
 
@@ -383,9 +376,8 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE(
-    "settings enabledModels seed the session scope and a scoped :level seeds the initial thinking level",
-    "[coding_agent][model-cycle][issue407]") {
+TEST_CASE("settings enabledModels seed the session scope and a scoped :level seeds the initial thinking level",
+        "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningProvider);
     // pi main.ts: `parsed.models ?? settingsManager.getEnabledModels()` — the

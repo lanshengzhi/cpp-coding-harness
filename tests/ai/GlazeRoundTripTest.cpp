@@ -12,7 +12,7 @@
 
 using namespace cch;
 
-TEST_CASE("tool-result message round-trips linkage details and error state", "[ai][u2][glaze]") {
+TEST_CASE("tool-result message round-trips linkage details and error state", "[ai][u2][glaze][compat-pi]") {
     auto details = support::read_json(R"({"exitCode":2,"stderr":"denied"})");
     REQUIRE(details);
 
@@ -56,7 +56,7 @@ TEST_CASE("tool-result message round-trips linkage details and error state", "[a
     CHECK(detail_object.at("stderr").get_string() == "denied");
 }
 
-TEST_CASE("assistant content round-trips text, thinking, and tool-call variants", "[ai][u2][glaze]") {
+TEST_CASE("assistant content round-trips text, thinking, and tool-call variants", "[ai][u2][glaze][compat-pi]") {
     ai::AssistantMessage msg;
     msg.content.emplace_back(ai::TextContent{
         .text = "hello",
@@ -98,7 +98,7 @@ TEST_CASE("assistant content round-trips text, thinking, and tool-call variants"
     REQUIRE(std::holds_alternative<ai::ToolCallContent>(round_trip.content[2]));
 }
 
-TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2][glaze]") {
+TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2][glaze][compat-pi]") {
     ai::AssistantMessage msg;
     msg.content.emplace_back(ai::TextContent{
         .text = "test",
@@ -151,7 +151,7 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
     CHECK(round_trip.usage.reasoning == 12);
 }
 
-TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24]") {
+TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24][compat-pi]") {
     auto expected_contract = support::read_json(tests::kComplexToolArgumentContract);
     REQUIRE(expected_contract);
 
@@ -185,7 +185,7 @@ TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", 
     CHECK(*restored_json == *expected_json);
 }
 
-TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[ai][u2][glaze]") {
+TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[ai][u2][glaze][compat-pi]") {
     ai::glaze::ContentDto dto;
     dto.type = "toolCall";
     dto.id = "call-1";
@@ -203,7 +203,7 @@ TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[ai][u2][gla
     REQUIRE(std::holds_alternative<ai::ToolCallContent>(*assistant_result));
 }
 
-TEST_CASE("assistant_content_from_dto rejects image content", "[ai][u2][glaze]") {
+TEST_CASE("assistant_content_from_dto rejects image content", "[ai][u2][glaze][compat-pi]") {
     ai::glaze::ContentDto dto;
     dto.type = "image";
     dto.data = "ZmFrZQ==";
@@ -214,7 +214,7 @@ TEST_CASE("assistant_content_from_dto rejects image content", "[ai][u2][glaze]")
     CHECK(result.error().message.find("image") != std::string::npos);
 }
 
-TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[ai][u2][glaze]") {
+TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[ai][u2][glaze][compat-pi]") {
     auto json = ai::glaze::write_message_json(
         ai::MessageVariant{ai::user_text_message("valid text")});
     REQUIRE(json);
@@ -230,7 +230,7 @@ TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[ai][u2][glaze]") {
     CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 
-TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze]") {
+TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze][compat-pi]") {
     auto json = ai::glaze::write_message_json(
         ai::MessageVariant{ai::user_text_message("hello")});
     REQUIRE(json);
@@ -247,7 +247,7 @@ TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze]") {
     CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 
-TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2][glaze]") {
+TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2][glaze][compat-pi]") {
     constexpr std::size_t kMaximumDepth = 256;
     std::string accepted_json(kMaximumDepth, '[');
     accepted_json += '0';
@@ -261,4 +261,3 @@ TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
-

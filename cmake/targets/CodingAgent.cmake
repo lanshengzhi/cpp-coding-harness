@@ -2,15 +2,9 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
-# Repository-private coding-agent Owner Package (ADR 0039; #468). One
-# authoritative compiled static library owns every coding-agent composition
-# production source exactly once: Models Runtime (Model/Models composition,
-# Agent Config Directory, auth storage), Session, Runtime, Native TUI
-# composition, and CLI composition. Its only cross-Owner dependencies are the
-# legal edges to cch_agent_core, cch_ai, and cch_tui, plus the pi-neutral
-# support package; no other Owner depends on it. The stateful Agent consumes
-# the AI-owned move-only ModelStream (ADR 0040 / #453), so no reverse
-# cch_agent_core -> cch_coding_agent edge exists (#456/#460).
+# Headless Session and Models composition. Frontend-specific sources live in
+# frontend_tui and frontend_cli below, so this library can be built and used
+# without compiling terminal interaction code (ADR 0053).
 cch_parity_declare_target(
     TARGET cch_coding_agent
     ROLE owner
@@ -22,6 +16,7 @@ cch_parity_declare_target(
         src/coding_agent/AgentSessionExecution.cpp
         src/coding_agent/AgentSessionInteraction.cpp
         src/coding_agent/AuthStorage.cpp
+        src/coding_agent/compat/pi/PiImport.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
         src/coding_agent/ModelConfig.cpp
@@ -43,7 +38,6 @@ cch_parity_declare_target(
         src/coding_agent/prompt/PromptExpansion.cpp
         src/coding_agent/prompt/PromptTemplateExpander.cpp
         src/coding_agent/prompt/SystemPromptBuilder.cpp
-        src/coding_agent/runtime/AsyncCliRuntime.cpp
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
         src/coding_agent/runtime/SessionEventCommitment.cpp
@@ -52,6 +46,39 @@ cch_parity_declare_target(
         src/coding_agent/runtime/SessionLifecycle.cpp
         src/coding_agent/runtime/SessionPersistence.cpp
         src/coding_agent/runtime/UserBashOutputAccumulator.cpp
+    DEPENDS
+        cch_agent_core
+        cch_ai
+        cch_support
+        Boost::headers@boost
+        Threads::Threads@threads
+        glaze::glaze@glaze
+        WebP::webpdecoder@webp
+    INTERFACE_DEPENDS
+        cch_agent_core
+        cch_ai
+        cch_support
+)
+cch_owner_include_roots(cch_coding_agent src/coding_agent/include)
+target_include_directories(cch_coding_agent
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
+)
+# The System Prompt's identity-adjusted documentation block resolves the C++
+# binary's own docs paths from the source tree.
+target_compile_definitions(cch_coding_agent PRIVATE
+    CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    CCH_PROJECT_VERSION="${PROJECT_VERSION}"
+)
+
+# Native terminal presentation is an independently compiled frontend. It may
+# depend on the headless application and the TUI toolkit, but the headless
+# application never depends on this target.
+cch_parity_declare_target(
+    TARGET frontend_tui
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES
         src/coding_agent/tui/AssistantMessageComponent.cpp
         src/coding_agent/tui/AuthFlowController.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp
@@ -83,13 +110,13 @@ cch_parity_declare_target(
         src/coding_agent/tui/ScopedModelsSelector.cpp
         src/coding_agent/tui/SessionFlowController.cpp
         src/coding_agent/tui/SessionFlowControllerTrust.cpp
-        src/coding_agent/tui/SlashCommandEffects.cpp
-        src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
         src/coding_agent/tui/SessionUiBinding.cpp
         src/coding_agent/tui/SettingsFlowController.cpp
         src/coding_agent/tui/SettingsSelector.cpp
+        src/coding_agent/tui/SlashCommandEffects.cpp
+        src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/StatusIndicator.cpp
         src/coding_agent/tui/SuspendController.cpp
         src/coding_agent/tui/Theme.cpp
@@ -98,6 +125,38 @@ cch_parity_declare_target(
         src/coding_agent/tui/TreeSelector.cpp
         src/coding_agent/tui/UserMessageComponent.cpp
         src/coding_agent/tui/UserMessageSelector.cpp
+    DEPENDS
+        cch_coding_agent
+        cch_agent_core
+        cch_ai
+        cch_tui
+        cch_support
+        Boost::headers@boost
+        Threads::Threads@threads
+        glaze::glaze@glaze
+    INTERFACE_DEPENDS
+        cch_coding_agent
+        cch_agent_core
+        cch_ai
+        cch_tui
+        cch_support
+)
+cch_owner_include_roots(frontend_tui src/coding_agent/include)
+target_compile_definitions(frontend_tui PRIVATE
+    CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    CCH_PROJECT_VERSION="${PROJECT_VERSION}"
+)
+
+# The CLI adapter owns argument parsing, print mode, startup selection, and
+# the bridge that chooses either the headless path or the native TUI. It links
+# frontend_tui rather than making those presentation sources part of the
+# headless Session library.
+cch_parity_declare_target(
+    TARGET frontend_cli
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES
+        src/cli/AsyncCliRuntime.cpp
         src/cli/CliParse.cpp
         src/cli/FrontendSelection.cpp
         src/cli/InitialPrompt.cpp
@@ -106,6 +165,8 @@ cch_parity_declare_target(
         src/cli/SessionFamily.cpp
         src/cli/StartupTui.cpp
     DEPENDS
+        cch_coding_agent
+        frontend_tui
         cch_agent_core
         cch_ai
         cch_tui
@@ -113,21 +174,15 @@ cch_parity_declare_target(
         Boost::headers@boost
         Threads::Threads@threads
         glaze::glaze@glaze
-        WebP::webpdecoder@webp
     INTERFACE_DEPENDS
+        cch_coding_agent
         cch_agent_core
         cch_ai
+        cch_tui
         cch_support
 )
-cch_owner_include_roots(cch_coding_agent src/coding_agent/include)
-target_include_directories(cch_coding_agent
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
-)
-# The System Prompt's identity-adjusted documentation block resolves the C++
-# binary's own docs paths from the source tree (pi `config.ts`
-# getReadmePath/getDocsPath/getExamplesPath resolve the pi package).
-target_compile_definitions(cch_coding_agent PRIVATE
+cch_owner_include_roots(frontend_cli src/coding_agent/include)
+target_compile_definitions(frontend_cli PRIVATE
     CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     CCH_PROJECT_VERSION="${PROJECT_VERSION}"
 )

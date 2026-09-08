@@ -37,13 +37,12 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "Keybindings manager reads only the Agent Config Directory and skips unavailable ids",
-    "[coding_agent][keybindings][issue57]") {
+TEST_CASE("Keybindings manager reads only the Agent Config Directory and skips unavailable ids",
+        "[coding_agent][keybindings][issue57][spec]") {
     tests::TempWorkspace config;
     tests::TempWorkspace decoy;
     config.write("keybindings.json", fixture_text("pi-864b35c.json"));
-    decoy.write(".pi/agent/keybindings.json", R"({"tui.input.submit":"f12"})");
+    decoy.write(".pike/agent/keybindings.json", R"({"tui.input.submit":"f12"})");
 
     coding_agent::tui::KeybindingsManagerRequest request;
     request.agent_config_directory = config.path();
@@ -62,7 +61,8 @@ TEST_CASE(
     CHECK(has_diagnostic(*manager, "unknown_action"));
 }
 
-TEST_CASE("Hotkey help and hints expose the exact registry used for dispatch", "[coding_agent][keybindings][issue57]") {
+TEST_CASE("Hotkey help and hints expose the exact registry used for dispatch",
+        "[coding_agent][keybindings][issue57][spec]") {
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"tui.select.confirm":["ctrl+enter","f2"]})");
 
@@ -90,9 +90,8 @@ TEST_CASE("Hotkey help and hints expose the exact registry used for dispatch", "
     }));
 }
 
-TEST_CASE(
-    "Keybindings manager diagnoses malformed values and user conflicts without installing them",
-    "[coding_agent][keybindings][issue57]") {
+TEST_CASE("Keybindings manager diagnoses malformed values and user conflicts without installing them",
+        "[coding_agent][keybindings][issue57][spec]") {
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({
         "tui.editor.cursorUp":"down",
@@ -111,9 +110,8 @@ TEST_CASE(
     CHECK(manager->registry->keys("tui.editor.cursorDown") == std::vector<std::string>{"down"});
 }
 
-TEST_CASE(
-    "Known application defaults are installed only for concretely assembled actions",
-    "[coding_agent][keybindings][issue57]") {
+TEST_CASE("Known application defaults are installed only for concretely assembled actions",
+        "[coding_agent][keybindings][issue57][spec]") {
     constexpr std::array<std::string_view, 1> kSuspend{"app.suspend"};
     const auto definitions = coding_agent::tui::app_keybinding_definitions(kSuspend);
     REQUIRE(definitions);
@@ -137,9 +135,8 @@ TEST_CASE(
     CHECK(help->keys == "ctrl+z");
 }
 
-TEST_CASE(
-    "app.message.followUp and app.message.dequeue carry pi's default keys and help text",
-    "[coding_agent][keybindings][issue401]") {
+TEST_CASE("app.message.followUp and app.message.dequeue carry pi's default keys and help text",
+        "[coding_agent][keybindings][issue401][spec]") {
     constexpr std::array<std::string_view, 2> kQueueActions{
         "app.message.followUp",
         "app.message.dequeue",
@@ -183,9 +180,8 @@ TEST_CASE(
     CHECK(dequeue->keys == "alt+up");
 }
 
-TEST_CASE(
-    "Malformed keybindings documents retain defaults with a bounded diagnostic",
-    "[coding_agent][keybindings][issue57]") {
+TEST_CASE("Malformed keybindings documents retain defaults with a bounded diagnostic",
+        "[coding_agent][keybindings][issue57][spec]") {
     tests::TempWorkspace config;
     config.write("keybindings.json", "[not an object]");
 
@@ -198,9 +194,8 @@ TEST_CASE(
     CHECK(manager->registry->keys("tui.input.submit") == std::vector<std::string>{"enter"});
 }
 
-TEST_CASE(
-    "Known-but-unassembled tui ids are diagnosed as unavailable and never installed",
-    "[coding_agent][keybindings][issue382]") {
+TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never installed",
+        "[coding_agent][keybindings][issue382][spec]") {
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({
         "tui.input.copy": "ctrl+c",
@@ -225,9 +220,8 @@ TEST_CASE(
     CHECK(manager->registry->entries().size() == 30);
 }
 
-TEST_CASE(
-    "Keybindings manager bounds diagnostics and redacts invalid key text",
-    "[coding_agent][keybindings][issue57]") {
+TEST_CASE("Keybindings manager bounds diagnostics and redacts invalid key text",
+        "[coding_agent][keybindings][issue57][spec]") {
     tests::TempWorkspace config;
     std::string json = "{";
     for (int index = 0; index < 70; ++index) {
@@ -250,9 +244,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "The app layer adopts the full 42-action AppKeybindings table with pi-verbatim descriptions",
-    "[coding_agent][keybindings][issue419]") {
+TEST_CASE("The app layer adopts the full 42-action AppKeybindings table with pi-verbatim descriptions",
+        "[coding_agent][keybindings][issue419][spec]") {
     // The full 42-action catalog (pi core/keybindings.ts at 83114817, ADR
     // 0036 G2): every action resolves with its pi-verbatim description.
     constexpr std::array<std::string_view, 42> kAllActions{
@@ -324,9 +317,8 @@ TEST_CASE(
         kUnknown));
 }
 
-TEST_CASE(
-    "/hotkeys renders only the assembled subset from the resolved registry",
-    "[coding_agent][keybindings][issue419]") {
+TEST_CASE("/hotkeys renders only the assembled subset from the resolved registry",
+        "[coding_agent][keybindings][issue419][spec]") {
     // The main-editor + selector-scoped assembled set: app.interrupt plus the
     // app.session.* recognized-but-unbound ids. Everything else stays out of
     // the registry (never a no-op binding).
@@ -370,7 +362,7 @@ TEST_CASE(
               *manager->registry, "app.interrupt", "interrupt") == "escape interrupt");
 }
 
-TEST_CASE("/hotkeys chat block follows pi sections over the effective registry", "[coding_agent][keybindings]") {
+TEST_CASE("/hotkeys chat block follows pi sections over the effective registry", "[coding_agent][keybindings][spec]") {
     // Default registry with no application actions assembled: pi sections
     // render with effective keys, app rows render Unbound.
     coding_agent::tui::KeybindingsManagerRequest request;

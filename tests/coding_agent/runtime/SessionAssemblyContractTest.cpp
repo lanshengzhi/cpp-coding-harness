@@ -15,7 +15,7 @@
 //      diagnostics (pi report order).
 //
 // No live keys or network: providers resolve from a temp Agent Config
-// Directory (`PI_CODING_AGENT_DIR`) with env-template keys guarded by
+// Directory (`PIKE_CODING_AGENT_DIR`) with env-template keys guarded by
 // `EnvVarGuard`.
 
 #include <cch/ai/Models.hpp>
@@ -53,7 +53,7 @@ namespace {
 struct AssemblyFixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard alpha_guard{"ALPHA_KEY"};
     tests::EnvVarGuard beta_guard{"BETA_KEY"};
@@ -156,9 +156,8 @@ private:
 
 } // namespace
 
-TEST_CASE(
-    "session creation writes nothing to stdout or stderr on the success path",
-    "[coding_agent][runtime][assembly-contract][issue509]") {
+TEST_CASE("session creation writes nothing to stdout or stderr on the success path",
+        "[coding_agent][runtime][assembly-contract][issue509][spec]") {
     AssemblyFixture fix;
     fix.write_models(kTwoProviderModels);
     fix.alpha_guard.set("alpha-key");
@@ -176,9 +175,8 @@ TEST_CASE(
     CHECK(capture_err.content().empty());
 }
 
-TEST_CASE(
-    "session creation reports failure through the error channel, not stdio",
-    "[coding_agent][runtime][assembly-contract][issue509]") {
+TEST_CASE("session creation reports failure through the error channel, not stdio",
+        "[coding_agent][runtime][assembly-contract][issue509][spec]") {
     AssemblyFixture fix;
     fix.write_models(kTwoProviderModels);
     fix.alpha_guard.set("alpha-key");
@@ -203,9 +201,8 @@ TEST_CASE(
     CHECK(capture_err.content().empty());
 }
 
-TEST_CASE(
-    "project settings defaults select the model only while the project is trusted",
-    "[coding_agent][runtime][assembly-contract][issue509]") {
+TEST_CASE("project settings defaults select the model only while the project is trusted",
+        "[coding_agent][runtime][assembly-contract][issue509][spec]") {
     AssemblyFixture fix;
     fix.write_models(kTwoProviderModels);
     fix.alpha_guard.set("alpha-key");
@@ -230,9 +227,8 @@ TEST_CASE(
     CHECK(untrusted->resolved_identity.model != "beta-2");
 }
 
-TEST_CASE(
-    "Request Authentication precedence survives assembly unchanged",
-    "[coding_agent][runtime][assembly-contract][issue509]") {
+TEST_CASE("Request Authentication precedence survives assembly unchanged",
+        "[coding_agent][runtime][assembly-contract][issue509][spec]") {
     AssemblyFixture fix;
     fix.write_models(R"({
       "providers": {
@@ -300,9 +296,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "settings load errors surface as diagnostics ahead of resource diagnostics",
-    "[coding_agent][runtime][assembly-contract][issue509]") {
+TEST_CASE("settings load errors surface as diagnostics ahead of resource diagnostics",
+        "[coding_agent][runtime][assembly-contract][issue509][spec]") {
     AssemblyFixture fix;
     fix.write_models(kTwoProviderModels);
     fix.alpha_guard.set("alpha-key");

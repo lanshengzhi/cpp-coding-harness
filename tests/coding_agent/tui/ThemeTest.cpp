@@ -130,9 +130,8 @@ void write_render_result(tui::VirtualTerminal& terminal, const tui::RenderResult
 
 } // namespace
 
-TEST_CASE(
-    "Built-in themes match baseline fixtures and resolve every semantic token",
-    "[coding_agent][theme][issue55]") {
+TEST_CASE("Built-in themes match baseline fixtures and resolve every semantic token",
+        "[coding_agent][theme][issue55][spec]") {
     const auto dark_fixture = coding_agent::tui::load_theme_file(fixture_path("dark.json"));
     const auto light_fixture = coding_agent::tui::load_theme_file(fixture_path("light.json"));
 
@@ -157,7 +156,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE("Built-in themes keep content readable against semantic backgrounds", "[coding_agent][theme][issue55]") {
+TEST_CASE(
+        "Built-in themes keep content readable against semantic backgrounds", "[coding_agent][theme][issue55][spec]") {
     constexpr std::array pairs{
         std::pair{coding_agent::tui::ThemeToken::UserMessageText, coding_agent::tui::ThemeToken::UserMessageBg},
         std::pair{coding_agent::tui::ThemeToken::CustomMessageText, coding_agent::tui::ThemeToken::CustomMessageBg},
@@ -173,9 +173,8 @@ TEST_CASE("Built-in themes keep content readable against semantic backgrounds", 
     }
 }
 
-TEST_CASE(
-    "Theme parsing accepts schema variables RGB xterm defaults references and fallbacks",
-    "[coding_agent][theme][issue55]") {
+TEST_CASE("Theme parsing accepts schema variables RGB xterm defaults references and fallbacks",
+        "[coding_agent][theme][issue55][spec]") {
     const auto parsed = coding_agent::tui::parse_theme_json("custom fixture", valid_custom_theme());
 
     REQUIRE(parsed);
@@ -217,9 +216,8 @@ TEST_CASE(
     CHECK(thumb_rgb->blue == 0x56);
 }
 
-TEST_CASE(
-    "Theme parsing accepts empty names and rejects names containing a slash with pi's error",
-    "[coding_agent][theme][issue400]") {
+TEST_CASE("Theme parsing accepts empty names and rejects names containing a slash with pi's error",
+        "[coding_agent][theme][issue400][spec]") {
     // pi's Type.String() name accepts the empty string; only the '/' rule
     // applies (assertThemeNameIsValid).
     auto empty_name = valid_custom_theme();
@@ -235,7 +233,7 @@ TEST_CASE(
     check_parse_error_golden("name-slash-rejection.txt", named.error());
 }
 
-TEST_CASE("Theme parsing reports missing required tokens with pi's wording", "[coding_agent][theme][issue400]") {
+TEST_CASE("Theme parsing reports missing required tokens with pi's wording", "[coding_agent][theme][issue400][spec]") {
     auto missing = valid_custom_theme();
     replace_once(missing, "\t\t\"accent\": \"#010203\",\n\t\t\"border\": \"blue\",\n", "");
     const auto required = coding_agent::tui::parse_theme_json("missing-colors", missing);
@@ -256,9 +254,8 @@ TEST_CASE("Theme parsing reports missing required tokens with pi's wording", "[c
     CHECK(dim_position < success_position);
 }
 
-TEST_CASE(
-    "Theme parsing reports unresolved cyclic malformed and out-of-range colors",
-    "[coding_agent][theme][issue55]") {
+TEST_CASE("Theme parsing reports unresolved cyclic malformed and out-of-range colors",
+        "[coding_agent][theme][issue55][spec]") {
     auto unresolved_json = valid_custom_theme();
     replace_once(unresolved_json, "\"accent\": \"#010203\"", "\"accent\": \"missingRef\"");
     const auto unresolved = coding_agent::tui::parse_theme_json("unresolved fixture", unresolved_json);
@@ -318,7 +315,7 @@ TEST_CASE(
         "  - /colors/selectedBg: must match a schema in anyOf");
 }
 
-TEST_CASE("Theme parsing accepts unknown schema members like pi", "[coding_agent][theme][issue400]") {
+TEST_CASE("Theme parsing accepts unknown schema members like pi", "[coding_agent][theme][issue400][spec]") {
     // pi's runtime TypeBox schema does not reject additional properties at
     // any level; unknown members are accepted and ignored.
     auto top_level_json = valid_custom_theme();
@@ -364,7 +361,7 @@ TEST_CASE("Theme parsing accepts unknown schema members like pi", "[coding_agent
     CHECK(bad_ref.error().message == "Variable reference not found: missingRef");
 }
 
-TEST_CASE("Theme diagnostics redact secret-shaped user keys", "[coding_agent][theme][issue400]") {
+TEST_CASE("Theme diagnostics redact secret-shaped user keys", "[coding_agent][theme][issue400][spec]") {
     // Schema error lines embed user-controlled key names; secret-shaped keys
     // are redacted before the pi-verbatim message is composed.
     auto secret_key = valid_custom_theme();
@@ -378,7 +375,7 @@ TEST_CASE("Theme diagnostics redact secret-shaped user keys", "[coding_agent][th
     CHECK(secret.error().message.find("[REDACTED]") != std::string::npos);
 }
 
-TEST_CASE("Theme export section is validated and retained as passive data", "[coding_agent][theme][issue400]") {
+TEST_CASE("Theme export section is validated and retained as passive data", "[coding_agent][theme][issue400][spec]") {
     auto no_export = valid_custom_theme();
     replace_once(
         no_export,
@@ -431,7 +428,7 @@ TEST_CASE("Theme export section is validated and retained as passive data", "[co
     check_parse_error_golden("export-bad-value.txt", invalid_value.error());
 }
 
-TEST_CASE("Malformed theme JSON produces a bounded redacted diagnostic", "[coding_agent][theme][issue55]") {
+TEST_CASE("Malformed theme JSON produces a bounded redacted diagnostic", "[coding_agent][theme][issue55][spec]") {
     const auto malformed = coding_agent::tui::parse_theme_json(
         "malformed fixture",
         std::string{"{\"name\":\"sk-abcdefghijklmnopqrstuvwxyz123456\","} + std::string(10000, 'x'));
@@ -444,7 +441,7 @@ TEST_CASE("Malformed theme JSON produces a bounded redacted diagnostic", "[codin
     CHECK(malformed.error().message.find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
 }
 
-TEST_CASE("Theme styling selects safe built-ins and maps color capability", "[coding_agent][theme][issue55]") {
+TEST_CASE("Theme styling selects safe built-ins and maps color capability", "[coding_agent][theme][issue55][spec]") {
     const tui::TerminalCapabilities unknown;
     CHECK(coding_agent::tui::select_builtin_theme(unknown).name == "dark");
     const tui::TerminalCapabilities light{.appearance = tui::TerminalAppearance::Light};
@@ -469,7 +466,7 @@ TEST_CASE("Theme styling selects safe built-ins and maps color capability", "[co
         "\x1b[38;5;244mx\x1b[39m");
 }
 
-TEST_CASE("Theme adapters resolve the current palette at callback time", "[coding_agent][theme][issue55]") {
+TEST_CASE("Theme adapters resolve the current palette at callback time", "[coding_agent][theme][issue55][spec]") {
     coding_agent::tui::LiveTheme live(
         coding_agent::tui::builtin_dark_theme(),
         tui::TerminalColorCapability::TrueColor);

@@ -125,6 +125,10 @@ public:
                     .error = terminal,
                     .failure = support::make_error(
                         support::ErrorCode::Cancelled, "Request was aborted"),
+                    .inference_failure = ai::InferenceFailure{
+                        .kind = ai::InferenceFailureKind::Cancelled,
+                        .output_started = false,
+                    },
                 }));
             }
             co_return terminal;
@@ -134,6 +138,24 @@ public:
         }
         auto response = std::move(responses.front());
         responses.pop_front();
+        std::optional<ai::InferenceFailure> inference_failure;
+        if (response.stop_reason == ai::AssistantStopReason::Error ||
+                response.stop_reason == ai::AssistantStopReason::Aborted) {
+            const auto kind = failure_kinds.empty()
+                ? response.stop_reason == ai::AssistantStopReason::Aborted
+                    ? ai::InferenceFailureKind::Cancelled
+                    : ai::InferenceFailureKind::TransientTransportFailure
+                : failure_kinds.front();
+            if (!failure_kinds.empty()) {
+                failure_kinds.pop_front();
+            }
+            inference_failure = ai::InferenceFailure{
+                    .kind = kind,
+                    .output_started = false,
+                    .suggested_backoff_ms = std::nullopt,
+                    .provider_code = std::nullopt,
+            };
+        }
         response.provider = "sdk-host";
         response.api = "fake";
         response.model = model.id;
@@ -149,6 +171,7 @@ public:
                     .failure = support::make_error(
                         support::ErrorCode::Stream,
                         response.error_message.value_or("terminal error")),
+                    .inference_failure = std::move(inference_failure),
                 }));
             } else {
                 CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
@@ -161,10 +184,13 @@ public:
     int request_count{0};
     std::vector<tests::RecordedProviderRequest> requests;
     std::deque<ai::AssistantMessage> responses;
+    /// Scripted failures are transient by default; tests that model an
+    /// authorization/overflow/invalid outcome provide an explicit category.
+    std::deque<ai::InferenceFailureKind> failure_kinds;
 };
 
-/// An `error` terminal with the given provider message (the classification
-/// input for `isRetryableAssistantError`).
+/// An `error` terminal with the given provider diagnostic. The scripted
+/// Provider supplies its structured failure category separately.
 [[nodiscard]] ai::AssistantMessage error_terminal(std::string message) {
     auto terminal = ai::assistant_text_message("");
     terminal.stop_reason = ai::AssistantStopReason::Error;
@@ -214,20 +240,20 @@ struct RetrySessionUnderTest {
 [[nodiscard]] RetrySessionUnderTest make_retry_session(TestPaths& paths,
         std::deque<ai::AssistantMessage> responses,
         std::string settings_json = {},
-        std::vector<agent::Tool> custom_tools = {}) {
+        std::vector<agent::Tool> custom_tools = {},
+        std::deque<ai::InferenceFailureKind> failure_kinds = {}) {
     // Every retry test isolates its settings scope under a fresh agent
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
     // creation, when the SettingsManager snapshot is read.
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR",
-        (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
     if (!settings_json.empty()) {
         paths.write_settings(settings_json);
     }
     auto client = std::make_shared<RetryScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses = std::move(responses);
+    client_ptr->failure_kinds = std::move(failure_kinds);
 
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
@@ -293,7 +319,7 @@ struct RecordedSessionEvents {
 
 TEST_CASE(
     "turn auto-retry retries a transient error and succeeds, emitting start and end events",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     // baseDelayMs 1 keeps the test deterministic and fast; pi's own retry
     // tests use the same override.
@@ -332,7 +358,7 @@ TEST_CASE(
 
 TEST_CASE(
     "session-event observers grow reentrantly without invalidating delivery",
-    "[coding_agent][retry][subscription][issue452]") {
+    "[coding_agent][retry][subscription][issue452][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -381,7 +407,7 @@ TEST_CASE(
 
 TEST_CASE(
     "session-event observer failures deactivate and bound diagnostics",
-    "[coding_agent][retry][subscription][issue452]") {
+    "[coding_agent][retry][subscription][issue452][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -434,7 +460,7 @@ TEST_CASE(
 
 TEST_CASE(
     "session-event subscription handle outlives its session as a benign drop",
-    "[coding_agent][retry][subscription][issue452]") {
+    "[coding_agent][retry][subscription][issue452][spec]") {
     std::unique_ptr<coding_agent::SessionEventSubscription> handle;
     {
         TestPaths paths;
@@ -460,7 +486,7 @@ TEST_CASE(
 
 TEST_CASE(
     "turn auto-retry exhausts max retries and emits the final failure event",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -505,7 +531,7 @@ TEST_CASE(
 
 TEST_CASE(
     "turn auto-retry uses pi defaults: enabled, maxRetries 3, baseDelayMs 2000, exponential backoff",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     // One retry on the default settings: the first `auto_retry_start` must
     // carry pi's `maxAttempts` 3 and `delayMs = 2000 * 2^0`.
@@ -555,7 +581,7 @@ TEST_CASE(
 
 TEST_CASE(
     "turn auto-retry retryability follows isRetryableAssistantError: transient patterns retry, quota never",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     // A network/transport pattern retries (pi "retries provider network_error
     // failures").
     TestPaths network_paths;
@@ -582,7 +608,9 @@ TEST_CASE(
         auto under_test = make_retry_session(
             paths,
             {error_terminal(message)},
-            R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})");
+            R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})",
+            {},
+            {ai::InferenceFailureKind::InvalidRequest});
         auto* session = under_test.session.get();
         auto* client = under_test.client;
         RecordedSessionEvents events;
@@ -596,8 +624,30 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "turn auto-retry follows structured failure kind despite diagnostic wording",
+    "[coding_agent][retry][issue624][spec]") {
+    TestPaths paths;
+    auto under_test = make_retry_session(
+            paths,
+            {
+                    error_terminal("the provider changed this diagnostic wording"),
+                    success_message("recovered"),
+            },
+            R"({"retry": {"enabled": true, "maxRetries": 1, "baseDelayMs": 1}})",
+            {},
+            {ai::InferenceFailureKind::TransientTransportFailure});
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    REQUIRE(session->prompt_blocking("Test").has_value());
+    CHECK(client->request_count == 2);
+    CHECK(session->last_assistant_text() == std::optional<std::string>{"recovered"});
+    session->close();
+}
+
+TEST_CASE(
     "context overflow routes to compaction and never enters the retry path",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -610,7 +660,9 @@ TEST_CASE(
             // returning undefined).
             error_terminal("overloaded_error"),
         },
-        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})");
+        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})",
+        {},
+        {ai::InferenceFailureKind::ContextOverflow});
     auto* session = under_test.session.get();
     auto* client = under_test.client;
 
@@ -661,7 +713,7 @@ TEST_CASE(
 
 TEST_CASE(
     "the failed assistant message is removed from live state but retained in session history",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -729,7 +781,7 @@ TEST_CASE(
 
 TEST_CASE(
     "abort during the backoff sleep cancels the retry with exactly one auto_retry_end",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     // A long backoff so the abort deterministically lands inside the sleep.
     auto under_test = make_retry_session(
@@ -830,7 +882,7 @@ TEST_CASE(
 
 TEST_CASE(
     "disabled retry settings suppress turn auto-retry entirely",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -853,7 +905,7 @@ TEST_CASE(
 
 TEST_CASE(
     "turn auto-retry lifecycle golden matches pi's retry event sequence",
-    "[coding_agent][retry][issue361][golden]") {
+    "[coding_agent][retry][issue361][golden][compat-pi]") {
     TestPaths paths;
     auto under_test = make_retry_session(
         paths,
@@ -901,7 +953,7 @@ TEST_CASE(
 
 TEST_CASE(
     "the retry continuation runs the full agent loop when it produces tool calls",
-    "[coding_agent][retry][issue361]") {
+    "[coding_agent][retry][issue361][spec]") {
     // pi agent-session-retry.test.ts "prompt waits for full agent loop when
     // retry produces tool calls": after the retry response includes a tool
     // call, session.prompt() must wait for the entire tool loop and the

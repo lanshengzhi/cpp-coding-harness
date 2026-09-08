@@ -416,9 +416,8 @@ template <typename T> std::size_t count_events(const std::vector<agent::AgentLif
 
 } // namespace
 
-TEST_CASE(
-    "streamSimple option-forwarding golden matches pi's harness consumer (full set)",
-    "[agent][fixture][issue351]") {
+TEST_CASE("streamSimple option-forwarding golden matches pi's harness consumer (full set)",
+        "[agent][fixture][issue351][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
@@ -455,9 +454,8 @@ TEST_CASE(
         "stream-simple-options.json");
 }
 
-TEST_CASE(
-    "streamSimple option-forwarding golden matches pi's harness consumer (default turn)",
-    "[agent][fixture][issue351]") {
+TEST_CASE("streamSimple option-forwarding golden matches pi's harness consumer (default turn)",
+        "[agent][fixture][issue351][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
@@ -480,9 +478,8 @@ TEST_CASE(
         "stream-simple-options-default.json");
 }
 
-TEST_CASE(
-    "loop lifecycle ordering golden covers the pi turn lifecycle end to end",
-    "[agent][fixture][issue351]") {
+TEST_CASE("loop lifecycle ordering golden covers the pi turn lifecycle end to end",
+        "[agent][fixture][issue351][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(read_tool_call_message());
     runtime->responses.push_back(ai::assistant_text_message("after tool"));
@@ -557,8 +554,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "loop lifecycle ordering golden covers the error terminal",
-    "[agent][fixture][terminal][issue351]") {
+        "loop lifecycle ordering golden covers the error terminal", "[agent][fixture][terminal][issue351][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     auto terminal = ai::assistant_text_message("");
     terminal.stop_reason = ai::AssistantStopReason::Error;
@@ -579,9 +575,8 @@ TEST_CASE(
         lifecycle_events_to_json(run.events), "loop-terminal-error.json");
 }
 
-TEST_CASE(
-    "loop lifecycle ordering golden covers the aborted terminal",
-    "[agent][fixture][terminal][abort][issue351]") {
+TEST_CASE("loop lifecycle ordering golden covers the aborted terminal",
+        "[agent][fixture][terminal][abort][issue351][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("unused"));
 
@@ -619,9 +614,8 @@ TEST_CASE(
     expect_json_equal(lifecycle_events_to_json(events), "loop-terminal-aborted.json");
 }
 
-TEST_CASE(
-    "thinking-level clamp golden covers creation and model-switch clamping",
-    "[agent][fixture][issue352]") {
+TEST_CASE("thinking-level clamp golden covers creation and model-switch clamping",
+        "[agent][fixture][issue352][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("first reply"));
     runtime->responses.push_back(ai::assistant_text_message("second reply"));
@@ -727,9 +721,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "tool-result shape golden groups is_error exactly as pi's toolResult message",
-    "[agent][fixture][tool-result][issue354]") {
+TEST_CASE("tool-result shape golden groups is_error exactly as pi's toolResult message",
+        "[agent][fixture][tool-result][issue354][compat-pi]") {
     // One assistant message carrying three tool calls: a success, a call whose
     // arguments fail JSON Schema validation, and a sibling success. The batch
     // result groups each call's ToolResultMessage with is_error, and the
@@ -928,9 +921,8 @@ struct SchedulingSerializer {
 
 } // namespace
 
-TEST_CASE(
-    "tool scheduling golden covers parallel default, sequential override, truncated fail-all, and terminate hint",
-    "[agent][fixture][issue355]") {
+TEST_CASE("tool scheduling golden covers parallel default, sequential override, truncated fail-all, and terminate hint",
+        "[agent][fixture][issue355][compat-pi]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(tool_call_message({
         {"call-1", "alpha"},

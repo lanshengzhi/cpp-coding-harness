@@ -53,7 +53,7 @@ public:
 } // namespace
 
 TEST_CASE("Executor-composed autocomplete delivery lands provider results on the serialized executor",
-        "[coding_agent][tui][autocomplete][issue609]") {
+        "[coding_agent][tui][autocomplete][issue609][spec]") {
     boost::asio::io_context io;
     auto work = boost::asio::make_work_guard(io);
     std::optional<std::thread::id> executor_thread;

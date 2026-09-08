@@ -7,6 +7,7 @@
 
 #include <array>
 #include <optional>
+#include <string>
 #include <string_view>
 
 using namespace cch;
@@ -34,8 +35,7 @@ std::string_view stop_reason_name(ai::AssistantStopReason reason) {
 } // namespace
 
 TEST_CASE(
-    "Provider termination mapping follows the committed terminal matrix",
-    "[ai][provider-policy][issue339]") {
+        "Provider termination mapping follows the committed terminal matrix", "[ai][provider-policy][issue339][spec]") {
     const auto fixture = tests::read_pi_fixture("termination/matrix.json");
     REQUIRE(fixture);
 
@@ -68,9 +68,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Provider retry policy classifies transient failures and bounds server delays",
-    "[ai][provider-policy][issue339]") {
+TEST_CASE("Provider retry policy classifies transient failures and bounds server delays",
+        "[ai][provider-policy][issue339][spec]") {
     CHECK(ai::SimpleStreamOptions{}.max_retries == 0);
     CHECK(ai::SimpleStreamOptions{}.max_retry_delay_ms == std::nullopt);
 
@@ -86,13 +85,19 @@ TEST_CASE(
     CHECK_FALSE(ai::providers::is_retryable_provider_failure(
         ai::providers::ProviderFailure{
             .status = 429,
-            .message = "insufficient quota: update billing",
+            .message = "provider wording may change",
+            .inference_failure = ai::InferenceFailure{
+                .kind = ai::InferenceFailureKind::InvalidRequest,
+                .provider_code = std::string{"quota_exhausted"},
+            },
         }));
     CHECK_FALSE(ai::providers::is_retryable_provider_failure(
         ai::providers::ProviderFailure{
             .status = 500,
             .headers = {{"x-should-retry", "true"}},
-            .terminal_quota_or_billing = true,
+            .inference_failure = ai::InferenceFailure{
+                .kind = ai::InferenceFailureKind::InvalidRequest,
+            },
         }));
     CHECK(ai::providers::is_retryable_provider_failure(
         ai::providers::ProviderFailure{
@@ -104,6 +109,23 @@ TEST_CASE(
             .status = 500,
             .headers = {{"x-should-retry", "false"}},
         }));
+
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "rate_limit_exceeded") == ai::InferenceFailureKind::RateLimited);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "context_length_exceeded") == ai::InferenceFailureKind::ContextOverflow);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "authentication_error") == ai::InferenceFailureKind::Unauthorized);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "provider_wording_changed") == ai::InferenceFailureKind::InvalidRequest);
+    CHECK(ai::providers::inference_failure_kind_from_http_status(413) ==
+          ai::InferenceFailureKind::ContextOverflow);
+    CHECK(ai::providers::provider_error_code_from_payload(
+                  R"({"error":{"type":"rate_limit_error"}})") ==
+          std::optional<std::string>{"rate_limit_error"});
+    CHECK(ai::providers::provider_backoff_hint_ms(R"({"error":{"type":"rate_limit_error","retry_after_ms":2500}})",
+                  0) == std::optional<std::uint64_t>{2500});
+    CHECK(ai::providers::provider_backoff_hint_ms(R"({"retry_after":2.5})", 0) == std::optional<std::uint64_t>{2500});
 
     const auto exponential = ai::providers::provider_retry_delay_ms(
         ai::providers::ProviderFailure{}, 2, std::nullopt, 0);

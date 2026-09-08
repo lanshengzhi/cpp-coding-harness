@@ -286,9 +286,8 @@ void check_tool_lifecycle(
 
 } // namespace
 
-TEST_CASE(
-    "scripted fake emits complete text lifecycles for every text-only response path",
-    "[ai][provider][fake][issue23]") {
+TEST_CASE("scripted fake emits complete text lifecycles for every text-only response path",
+        "[ai][provider][fake][issue23][spec]") {
     auto prompt_run = run_fake(request_with(ai::user_text_message("hello")));
     check_text_lifecycle(prompt_run, "fake: hello");
 
@@ -297,9 +296,8 @@ TEST_CASE(
     check_text_lifecycle(tool_result_run, "fake observed: file contents");
 }
 
-TEST_CASE(
-    "scripted fake Provider owns execution identity while Models selects it by provider",
-    "[ai][provider][fake][issue336][issue338]") {
+TEST_CASE("scripted fake Provider owns execution identity while Models selects it by provider",
+        "[ai][provider][fake][issue336][issue338][spec]") {
     auto request = request_with(ai::user_text_message("hello"));
     request.model.api = "private-fake-adapter";
 
@@ -311,9 +309,8 @@ TEST_CASE(
     CHECK(run.result->model == "fake-model");
 }
 
-TEST_CASE(
-    "scripted fake emits complete ordered read and bash tool lifecycles",
-    "[ai][provider][fake][issue23][issue30]") {
+TEST_CASE("scripted fake emits complete ordered read and bash tool lifecycles",
+        "[ai][provider][fake][issue23][issue30][spec]") {
     auto read_run = run_fake(request_with(ai::user_text_message("read README.md")));
     check_tool_lifecycle(
         read_run,
@@ -335,9 +332,8 @@ TEST_CASE(
         "echo hi");
 }
 
-TEST_CASE(
-    "scripted fake Models normalizes static request failures into a terminal value",
-    "[ai][provider][fake][issue23][issue338]") {
+TEST_CASE("scripted fake Models normalizes static request failures into a terminal value",
+        "[ai][provider][fake][issue23][issue338][spec]") {
     FakeRequest request;
     auto run = run_fake(std::move(request));
 
@@ -347,9 +343,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::AssistantErrorEvent>(run.events.front()));
 }
 
-TEST_CASE(
-    "scripted fake Models observes cancellation as one aborted terminal value",
-    "[ai][provider][fake][issue338]") {
+TEST_CASE("scripted fake Models observes cancellation as one aborted terminal value",
+        "[ai][provider][fake][issue338][spec]") {
     std::stop_source stop_source;
     CHECK(stop_source.request_stop());
     auto request = request_with(ai::user_text_message("hello"));
@@ -367,9 +362,7 @@ TEST_CASE(
     CHECK(terminal.failure->code == support::ErrorCode::Cancelled);
 }
 
-TEST_CASE(
-    "scripted fake Models preserves all six Models error categories",
-    "[ai][provider][fake][issue338]") {
+TEST_CASE("scripted fake Models preserves all six Models error categories", "[ai][provider][fake][issue338][spec]") {
     struct FailureCase {
         std::string_view name;
         support::ErrorCode code;
@@ -398,9 +391,7 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "scripted fake stops at and propagates every sink failure",
-    "[ai][provider][fake][issue23]") {
+TEST_CASE("scripted fake stops at and propagates every sink failure", "[ai][provider][fake][issue23][spec]") {
     constexpr std::size_t kExpectedEventCount = 8;
     for (std::size_t fail_at = 0; fail_at < kExpectedEventCount; ++fail_at) {
         auto run = run_fake(

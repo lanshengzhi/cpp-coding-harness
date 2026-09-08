@@ -60,20 +60,25 @@ public:
         }
 
         const std::pair<const char*, const std::filesystem::path*> environment[] = {
-            {"HOME", &*home},
-            {"PI_CODING_AGENT_DIR", &*agent_config},
-            {"TMPDIR", &*temporary},
-            {"XDG_CONFIG_HOME", &*xdg_config},
-            {"XDG_CACHE_HOME", &*xdg_cache},
-            {"XDG_DATA_HOME", &*xdg_data},
+                {"HOME", &*home},
+                {"PIKE_CODING_AGENT_DIR", &*agent_config},
+                {"TMPDIR", &*temporary},
+                {"XDG_CONFIG_HOME", &*xdg_config},
+                {"XDG_CACHE_HOME", &*xdg_cache},
+                {"XDG_DATA_HOME", &*xdg_data},
         };
         for (const auto& [name, value] : environment) {
             if (auto result = set_environment(name, *value); !result) {
                 return std::unexpected(std::move(result.error()));
             }
         }
-        if (auto result = unset_environment("PI_CODING_AGENT_SESSION_DIR"); !result) {
-            return std::unexpected(std::move(result.error()));
+        for (const auto* name : {"PIKE_CODING_AGENT_SESSION_DIR",
+                     "PI_CODING_AGENT_DIR",
+                     "PI_CODING_AGENT_SESSION_DIR",
+                     "CCH_CODING_AGENT_DIR"}) {
+            if (auto result = unset_environment(name); !result) {
+                return std::unexpected(std::move(result.error()));
+            }
         }
         return isolation;
     }

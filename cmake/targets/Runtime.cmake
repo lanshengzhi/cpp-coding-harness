@@ -2,9 +2,9 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
-# The executable is a thin closure over the repository-private
-# cch_coding_agent library (#468): it compiles only the entry point and links
-# the one authoritative Owner library.
+# The executable is a thin closure over the repository-private CLI frontend:
+# it compiles only the entry point and links the frontend adapter, which in
+# turn composes the headless Session library with the optional TUI frontend.
 cch_parity_declare_target(
     TARGET pike
     ROLE composition
@@ -13,12 +13,11 @@ cch_parity_declare_target(
     SOURCES
         src/main.cpp
     DEPENDS
-        cch_coding_agent
+        frontend_cli
 )
-# main.cpp compiles against the Owner's private runtime headers (the src
-# root); those headers reference the cch_tui interface, which is a legal
-# private cch_coding_agent edge and therefore not interface-published, so the
-# composition target adds the tui interface root privately.
+# main.cpp includes the private CLI runtime header through the repository
+# source root. Its transitive TUI interface headers remain private to the
+# composition target.
 target_include_directories(pike PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include

@@ -207,9 +207,8 @@ struct SessionUnderTest {
 
 } // namespace
 
-TEST_CASE(
-    "manual compaction on an idle session persists a CompactionEntry and rebuilds context",
-    "[coding_agent][compaction][issue358]") {
+TEST_CASE("manual compaction on an idle session persists a CompactionEntry and rebuilds context",
+        "[coding_agent][compaction][issue358][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     auto under_test = make_big_session(paths, runtime);
@@ -283,9 +282,7 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "manual compaction aborts an in-flight run before compacting",
-    "[coding_agent][compaction][issue358]") {
+TEST_CASE("manual compaction aborts an in-flight run before compacting", "[coding_agent][compaction][issue358][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     const std::string big(20000, 'x');
@@ -384,9 +381,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "manual compaction rejects sessions too small to compact and in-memory sessions",
-    "[coding_agent][compaction][issue358]") {
+TEST_CASE("manual compaction rejects sessions too small to compact and in-memory sessions",
+        "[coding_agent][compaction][issue358][spec]") {
     // A small session fits the keepRecentTokens budget: nothing to summarize.
     TestPaths paths;
     tests::RuntimeFixture runtime;
@@ -587,9 +583,8 @@ struct TriggerSessionUnderTest {
         std::istreambuf_iterator<char>{}};
 }
 
-TEST_CASE(
-    "overflow terminal compacts and retries the turn exactly once; success continues normally",
-    "[coding_agent][compaction][issue359]") {
+TEST_CASE("overflow terminal compacts and retries the turn exactly once; success continues normally",
+        "[coding_agent][compaction][issue359][compat-pi]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
@@ -647,9 +642,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "a second overflow after the compact-and-retry fails with pi's verbatim recovery message",
-    "[coding_agent][compaction][issue359]") {
+TEST_CASE("a second overflow after the compact-and-retry fails with pi's verbatim recovery message",
+        "[coding_agent][compaction][issue359][compat-pi]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
@@ -690,9 +684,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "threshold compaction fires over contextWindow - reserveTokens and never retries",
-    "[coding_agent][compaction][issue359]") {
+TEST_CASE("threshold compaction fires over contextWindow - reserveTokens and never retries",
+        "[coding_agent][compaction][issue359][compat-pi]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');
@@ -732,17 +725,14 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "disabled compaction settings suppress both automatic triggers",
-    "[coding_agent][compaction][issue359]") {
+TEST_CASE("disabled compaction settings suppress both automatic triggers",
+        "[coding_agent][compaction][issue359][compat-pi]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     paths.workspace.write(
         "agent/settings.json",
         R"({"compaction": {"enabled": false}})");
-    const tests::EnvVarGuard agent_dir{
-        "PI_CODING_AGENT_DIR",
-        (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
 
     auto under_test = make_trigger_session(paths, runtime, {overflow_terminal()});
     auto* session = under_test.session.get();
@@ -757,9 +747,8 @@ TEST_CASE(
     session->close();
 }
 
-TEST_CASE(
-    "pre-prompt compaction check catches an aborted response over the threshold",
-    "[coding_agent][compaction][issue359]") {
+TEST_CASE("pre-prompt compaction check catches an aborted response over the threshold",
+        "[coding_agent][compaction][issue359][compat-pi]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
     const std::string big(19600, 'x');

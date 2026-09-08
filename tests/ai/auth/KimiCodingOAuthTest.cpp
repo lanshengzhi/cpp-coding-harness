@@ -167,7 +167,8 @@ ai::OAuthAuth make_auth(
 
 } // namespace
 
-TEST_CASE("Kimi login runs the RFC 8628 device flow with the frozen notify content", "[ai][auth][issue344]") {
+TEST_CASE(
+        "Kimi login runs the RFC 8628 device flow with the frozen notify content", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, device_authorization_json()},
@@ -219,7 +220,7 @@ TEST_CASE("Kimi login runs the RFC 8628 device flow with the frozen notify conte
     CHECK(accept->second == "application/json");
 }
 
-TEST_CASE("Kimi login waits for the interval before the first poll", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login waits for the interval before the first poll", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, device_authorization_json()},
@@ -240,7 +241,7 @@ TEST_CASE("Kimi login waits for the interval before the first poll", "[ai][auth]
     CHECK(elapsed >= std::chrono::milliseconds{900});
 }
 
-TEST_CASE("Kimi login applies interval and expires defaults of 5s and 15min", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login applies interval and expires defaults of 5s and 15min", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, R"({"user_code":"U","device_code":"D",)"
@@ -263,7 +264,7 @@ TEST_CASE("Kimi login applies interval and expires defaults of 5s and 15min", "[
     CHECK(device->expires_in_seconds == 15 * 60);
 }
 
-TEST_CASE("Kimi login rejects a non-http(s) verification_uri_complete", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login rejects a non-http(s) verification_uri_complete", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, R"({"user_code":"ABCD-1234","device_code":"device-code-123",)"
@@ -282,7 +283,7 @@ TEST_CASE("Kimi login rejects a non-http(s) verification_uri_complete", "[ai][au
     CHECK(http->requests.size() == 1);
 }
 
-TEST_CASE("Kimi login fails when the device code expires and when denied", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login fails when the device code expires and when denied", "[ai][auth][issue344][compat-pi]") {
     auto expired_http = std::make_shared<FakeOAuthHttpClient>();
     expired_http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, device_authorization_json()},
@@ -309,7 +310,8 @@ TEST_CASE("Kimi login fails when the device code expires and when denied", "[ai]
     CHECK(denied.error().message == "Kimi Code login was denied.");
 }
 
-TEST_CASE("Kimi login honors the KIMI_CODE_OAUTH_HOST override with trailing slash stripped", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login honors the KIMI_CODE_OAUTH_HOST override with trailing slash stripped",
+        "[ai][auth][issue344][compat-pi]") {
     tests::EnvVarGuard host("KIMI_CODE_OAUTH_HOST", "https://auth.example.com/");
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.example.com/api/oauth/device_authorization"] = {
@@ -326,7 +328,7 @@ TEST_CASE("Kimi login honors the KIMI_CODE_OAUTH_HOST override with trailing sla
           "https://auth.example.com/api/oauth/device_authorization");
 }
 
-TEST_CASE("Kimi login cancellation normalizes to Login cancelled", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login cancellation normalizes to Login cancelled", "[ai][auth][issue344][compat-pi]") {
     std::stop_source login_stop;
     login_stop.request_stop();
     auto http = std::make_shared<FakeOAuthHttpClient>();
@@ -340,7 +342,7 @@ TEST_CASE("Kimi login cancellation normalizes to Login cancelled", "[ai][auth][i
     CHECK(result.error().message == "Login cancelled");
 }
 
-TEST_CASE("Kimi login honors a slow_down server interval and then completes", "[ai][auth][issue344]") {
+TEST_CASE("Kimi login honors a slow_down server interval and then completes", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, device_authorization_json()},
@@ -359,7 +361,8 @@ TEST_CASE("Kimi login honors a slow_down server interval and then completes", "[
     REQUIRE(http->requests.size() == 3);
 }
 
-TEST_CASE("device poll helper surfaces the frozen slow_down timeout message verbatim", "[ai][auth][issue344]") {
+TEST_CASE("device poll helper surfaces the frozen slow_down timeout message verbatim",
+        "[ai][auth][issue344][compat-pi]") {
     // Reaching the deadline with one or more slow_down responses must fail with
     // pi's frozen WSL/VM clock-drift message, byte for byte.
     auto result = run_awaitable(ai::auth::poll_device_flow<int>(
@@ -381,7 +384,7 @@ TEST_CASE("device poll helper surfaces the frozen slow_down timeout message verb
           "restart the VM clock and try again.");
 }
 
-TEST_CASE("Kimi per-request timeout composes with the login cancellation token", "[ai][auth][issue344]") {
+TEST_CASE("Kimi per-request timeout composes with the login cancellation token", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/device_authorization"] = {
         {200, device_authorization_json()},
@@ -402,7 +405,8 @@ TEST_CASE("Kimi per-request timeout composes with the login cancellation token",
     CHECK(result.error().message == "Kimi Code OAuth request timed out");
 }
 
-TEST_CASE("Kimi refresh rotates the credential and toAuth derives the Bearer header", "[ai][auth][issue344]") {
+TEST_CASE(
+        "Kimi refresh rotates the credential and toAuth derives the Bearer header", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/token"] = {
         {200, R"({"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600})"},
@@ -435,7 +439,7 @@ TEST_CASE("Kimi refresh rotates the credential and toAuth derives the Bearer hea
     CHECK(request_auth->headers.at("Authorization") == "Bearer new-access");
 }
 
-TEST_CASE("Kimi refresh retries 429 with exponential backoff and succeeds", "[ai][auth][issue344]") {
+TEST_CASE("Kimi refresh retries 429 with exponential backoff and succeeds", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/token"] = {
         {429, R"({"error":"temporarily_unavailable"})"},
@@ -459,7 +463,7 @@ TEST_CASE("Kimi refresh retries 429 with exponential backoff and succeeds", "[ai
     CHECK(std::chrono::steady_clock::now() - started >= std::chrono::milliseconds{9});
 }
 
-TEST_CASE("Kimi refresh fails unauthorized immediately on invalid_grant", "[ai][auth][issue344]") {
+TEST_CASE("Kimi refresh fails unauthorized immediately on invalid_grant", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/token"] = {
         {400, R"({"error":"invalid_grant","error_description":"bad token"})"},
@@ -479,7 +483,7 @@ TEST_CASE("Kimi refresh fails unauthorized immediately on invalid_grant", "[ai][
     CHECK(http->requests.size() == 1);
 }
 
-TEST_CASE("Kimi refresh fails unauthorized immediately on 401 and 403", "[ai][auth][issue344]") {
+TEST_CASE("Kimi refresh fails unauthorized immediately on 401 and 403", "[ai][auth][issue344][compat-pi]") {
     for (const int status : {401, 403}) {
         auto http = std::make_shared<FakeOAuthHttpClient>();
         http->responses["https://auth.kimi.com/api/oauth/token"] = {
@@ -500,7 +504,7 @@ TEST_CASE("Kimi refresh fails unauthorized immediately on 401 and 403", "[ai][au
     }
 }
 
-TEST_CASE("Kimi refresh gives up after the retry ceiling on persistent 5xx", "[ai][auth][issue344]") {
+TEST_CASE("Kimi refresh gives up after the retry ceiling on persistent 5xx", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->responses["https://auth.kimi.com/api/oauth/token"] = {
         {500, R"({"error":"oops"})"},
@@ -528,7 +532,7 @@ TEST_CASE("Kimi refresh gives up after the retry ceiling on persistent 5xx", "[a
     CHECK(http->requests.size() == 4);
 }
 
-TEST_CASE("Kimi refresh retries transport failures up to the retry ceiling", "[ai][auth][issue344]") {
+TEST_CASE("Kimi refresh retries transport failures up to the retry ceiling", "[ai][auth][issue344][compat-pi]") {
     auto http = std::make_shared<FakeOAuthHttpClient>();
     http->fail_first_n_requests = 3;
     http->failure_error = support::make_error(

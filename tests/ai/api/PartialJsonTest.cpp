@@ -25,9 +25,7 @@ struct StreamingJsonCase {
 
 } // namespace
 
-TEST_CASE(
-    "streaming tool arguments parse with pi partial-json semantics",
-    "[ai][api][issue370]") {
+TEST_CASE("streaming tool arguments parse with pi partial-json semantics", "[ai][api][issue370][spec]") {
     // Expected values are the exact outputs of pi's `parseStreamingJson`
     // (the `partial-json` package, Allow.ALL) captured from the frozen pi
     // checkout; see fixtures/pi-ai/capture/capture-ts-events.mts.
@@ -57,9 +55,7 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "streaming tool arguments repair malformed escapes like pi repairJson",
-    "[ai][api][issue370]") {
+TEST_CASE("streaming tool arguments repair malformed escapes like pi repairJson", "[ai][api][issue370][spec]") {
     // A raw tab inside a string and an invalid `\H` escape are repaired by
     // pi's `repairJson` before the tolerant parse (kimi fixture case). The
     // parsed values are asserted directly; glaze re-escapes them on write.

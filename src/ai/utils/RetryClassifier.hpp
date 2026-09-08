@@ -1,20 +1,18 @@
 #pragma once
 
-#include <cch/ai/Message.hpp>
+#include <cch/ai/InferenceFailure.hpp>
 
 namespace cch::ai {
 
-/// Classify whether a failed assistant message looks like a transient provider
-/// or transport error (pi `isRetryableAssistantError` in
-/// `packages/ai/src/utils/retry.ts`), so callers can decide if the last
-/// assistant turn should be restarted. This does not implement retry policy:
-/// callers first handle context overflow separately, then apply their own
-/// retry budget, backoff, and reporting before restarting the assistant turn.
-///
-/// Retryable iff the message is an `error` terminal carrying an error message
-/// that matches a transient provider/network pattern without also matching a
-/// non-retryable quota/billing/provider-limit pattern.
-[[nodiscard]] bool is_retryable_assistant_error(
-    const ai::AssistantMessage& message);
+/// Decide whether the session RecoveryPolicy may retry a failed model turn.
+/// This is intentionally a pure decision over the structured Provider outcome;
+/// diagnostic text and raw Provider codes do not affect the result. A stream
+/// that already emitted output is not safe for turn-level replay.
+[[nodiscard]] bool is_retryable_inference_failure(
+    const InferenceFailure& failure) noexcept;
+
+/// Unauthorized is terminal for the current request and requires the session
+/// to surface its re-authentication guidance instead of retrying blindly.
+[[nodiscard]] bool requires_reauthentication(const InferenceFailure& failure) noexcept;
 
 } // namespace cch::ai

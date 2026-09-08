@@ -114,37 +114,37 @@ TestTask<support::Expected<int>> try_moved_value() {
 
 } // namespace
 
-TEST_CASE("CCH_TRY unwraps successful expected and continues", "[support][expected][macros]") {
+TEST_CASE("CCH_TRY unwraps successful expected and continues", "[support][expected][macros][spec]") {
     auto result = run_async(try_success());
     REQUIRE(result);
     CHECK(*result == 84);
 }
 
-TEST_CASE("CCH_TRY propagates failed expected and short-circuits", "[support][expected][macros]") {
+TEST_CASE("CCH_TRY propagates failed expected and short-circuits", "[support][expected][macros][spec]") {
     auto result = run_async(try_failure());
     REQUIRE_FALSE(result);
     CHECK(result.error().message == "int failure");
 }
 
-TEST_CASE("CCH_TRY_VOID continues on successful expected void", "[support][expected][macros]") {
+TEST_CASE("CCH_TRY_VOID continues on successful expected void", "[support][expected][macros][spec]") {
     auto result = run_async(try_void_success());
     REQUIRE(result);
     CHECK(*result == 100);
 }
 
-TEST_CASE("CCH_TRY_VOID propagates failed expected void", "[support][expected][macros]") {
+TEST_CASE("CCH_TRY_VOID propagates failed expected void", "[support][expected][macros][spec]") {
     auto result = run_async(try_void_failure());
     REQUIRE_FALSE(result);
     CHECK(result.error().message == "void failure");
 }
 
-TEST_CASE("multiple CCH_TRY in same scope compile without collision", "[support][expected][macros]") {
+TEST_CASE("multiple CCH_TRY in same scope compile without collision", "[support][expected][macros][spec]") {
     auto result = run_async(multiple_try_same_scope());
     REQUIRE(result);
     CHECK(*result == 84);
 }
 
-TEST_CASE("CCH_TRY moved value does not collide with subsequent uses", "[support][expected][macros]") {
+TEST_CASE("CCH_TRY moved value does not collide with subsequent uses", "[support][expected][macros][spec]") {
     auto result = run_async(try_moved_value());
     REQUIRE(result);
     CHECK(*result == 84);

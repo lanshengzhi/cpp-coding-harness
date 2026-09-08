@@ -7,9 +7,8 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "builtin slash autocomplete carries pi's 17 verbatim entries",
-    "[coding_agent][slash-commands][issue419]") {
+TEST_CASE("builtin slash autocomplete carries pi's 17 verbatim entries",
+        "[coding_agent][slash-commands][issue419][spec]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
 
     // Exactly the 17 autocomplete entries of pi's 22-command catalog.
@@ -60,9 +59,8 @@ TEST_CASE(
     CHECK(quit->description == "Quit pike");
 }
 
-TEST_CASE(
-    "deferred and router-only commands are absent from the autocomplete catalog",
-    "[coding_agent][slash-commands][issue419]") {
+TEST_CASE("deferred and router-only commands are absent from the autocomplete catalog",
+        "[coding_agent][slash-commands][issue419][spec]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
     for (const auto& command : commands) {
         const std::string_view name = command.name;

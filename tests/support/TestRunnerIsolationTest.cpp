@@ -4,11 +4,10 @@
 #include <filesystem>
 #include <system_error>
 
-TEST_CASE(
-    "Formal Catch2 runner isolates HOME, Agent Config Directory, and temporary files",
-    "[support][test-runner][issue442]") {
+TEST_CASE("Formal Catch2 runner isolates HOME, Agent Config Directory, and temporary files",
+        "[support][test-runner][issue442][spec]") {
     const auto* home_value = std::getenv("HOME");
-    const auto* agent_config_value = std::getenv("PI_CODING_AGENT_DIR");
+    const auto* agent_config_value = std::getenv("PIKE_CODING_AGENT_DIR");
     const auto* temporary_value = std::getenv("TMPDIR");
 
     REQUIRE(home_value != nullptr);
@@ -33,5 +32,5 @@ TEST_CASE(
     CHECK(home != agent_config);
     CHECK(home != temporary);
     CHECK(agent_config != temporary);
-    CHECK(std::getenv("PI_CODING_AGENT_SESSION_DIR") == nullptr);
+    CHECK(std::getenv("PIKE_CODING_AGENT_SESSION_DIR") == nullptr);
 }

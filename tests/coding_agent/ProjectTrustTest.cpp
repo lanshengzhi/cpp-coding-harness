@@ -10,7 +10,7 @@
 
 using namespace cch;
 
-TEST_CASE("ProjectTrustStore round-trips decisions and ancestor lookup", "[coding_agent][project-trust]") {
+TEST_CASE("ProjectTrustStore round-trips decisions and ancestor lookup", "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto trust_path = workspace.path() / "trust.json";
     coding_agent::ProjectTrustStore store{trust_path};
@@ -29,7 +29,7 @@ TEST_CASE("ProjectTrustStore round-trips decisions and ancestor lookup", "[codin
     CHECK((*entry)->path == std::filesystem::weakly_canonical(parent).string());
 }
 
-TEST_CASE("ProjectTrustStore child override and removal exposes parent", "[coding_agent][project-trust]") {
+TEST_CASE("ProjectTrustStore child override and removal exposes parent", "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto trust_path = workspace.path() / "trust.json";
     coding_agent::ProjectTrustStore store{trust_path};
@@ -55,7 +55,7 @@ TEST_CASE("ProjectTrustStore child override and removal exposes parent", "[codin
     CHECK((*child_entry)->decision == coding_agent::ProjectTrustDecision::Trusted);
 }
 
-TEST_CASE("ProjectTrustStore malformed values fail closed", "[coding_agent][project-trust]") {
+TEST_CASE("ProjectTrustStore malformed values fail closed", "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto trust_path = workspace.path() / "trust.json";
     std::ofstream(trust_path) << R"({"/tmp/project":"yes"})";
@@ -65,7 +65,7 @@ TEST_CASE("ProjectTrustStore malformed values fail closed", "[coding_agent][proj
     CHECK_FALSE(entry.has_value());
 }
 
-TEST_CASE("ProjectTrustStore rejects symlinked trust store", "[coding_agent][project-trust]") {
+TEST_CASE("ProjectTrustStore rejects symlinked trust store", "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto real_path = workspace.path() / "real-trust.json";
     auto link_path = workspace.path() / "trust.json";
@@ -77,7 +77,8 @@ TEST_CASE("ProjectTrustStore rejects symlinked trust store", "[coding_agent][pro
     CHECK_FALSE(entry.has_value());
 }
 
-TEST_CASE("resolve_project_trust follows override no-resource store default order", "[coding_agent][project-trust]") {
+TEST_CASE("resolve_project_trust follows override no-resource store default order",
+        "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto trust_path = workspace.path() / "trust.json";
     coding_agent::ProjectTrustStore store{trust_path};
@@ -121,7 +122,8 @@ TEST_CASE("resolve_project_trust follows override no-resource store default orde
     CHECK(resolved.source == coding_agent::ProjectTrustSource::DefaultAskNoUi);
 }
 
-TEST_CASE("resolve_project_trust fails closed on malformed store unless overridden", "[coding_agent][project-trust]") {
+TEST_CASE("resolve_project_trust fails closed on malformed store unless overridden",
+        "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto trust_path = workspace.path() / "trust.json";
     std::ofstream(trust_path) << "{not json";
@@ -144,7 +146,8 @@ TEST_CASE("resolve_project_trust fails closed on malformed store unless overridd
     CHECK(resolved.source == coding_agent::ProjectTrustSource::CliOverride);
 }
 
-TEST_CASE("get_project_trust_options mirrors pi choices with session-only variants", "[coding_agent][project-trust]") {
+TEST_CASE("get_project_trust_options mirrors pi choices with session-only variants",
+        "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto repo = workspace.path() / "repo";
     std::filesystem::create_directories(repo);
@@ -171,7 +174,8 @@ TEST_CASE("get_project_trust_options mirrors pi choices with session-only varian
     CHECK(options[2].updates[0].decision == coding_agent::ProjectTrustDecision::Untrusted);
 }
 
-TEST_CASE("get_project_trust_options includes session-only variants on request", "[coding_agent][project-trust]") {
+TEST_CASE(
+        "get_project_trust_options includes session-only variants on request", "[coding_agent][project-trust][spec]") {
     tests::TempWorkspace workspace;
     auto options = coding_agent::get_project_trust_options(workspace.path(), /*include_session_only*/ true);
     REQUIRE(options.size() == 5);
@@ -188,7 +192,8 @@ TEST_CASE("get_project_trust_options includes session-only variants on request",
     CHECK(options[4].updates.empty());
 }
 
-TEST_CASE("get_project_trust_options at the filesystem root has no parent option", "[coding_agent][project-trust]") {
+TEST_CASE("get_project_trust_options at the filesystem root has no parent option",
+        "[coding_agent][project-trust][spec]") {
     auto options = coding_agent::get_project_trust_options("/", /*include_session_only*/ false);
     REQUIRE(options.size() == 2);
     CHECK(options[0].label == "Trust");

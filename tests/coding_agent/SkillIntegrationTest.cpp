@@ -54,7 +54,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("formatSkillsForPrompt integration with steering", "[coding_agent][skill-integration][u4]") {
+TEST_CASE("formatSkillsForPrompt integration with steering", "[coding_agent][skill-integration][u4][spec]") {
     tests::TempWorkspace workspace;
     std::vector<coding_agent::Skill> skills = {
         test_skill_on_disk(workspace, "int-skill", ""),
@@ -64,7 +64,8 @@ TEST_CASE("formatSkillsForPrompt integration with steering", "[coding_agent][ski
     CHECK(block.find("int-skill") != std::string::npos);
 }
 
-TEST_CASE("prompt expansion expands a skill by reading its file at invocation", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion expands a skill by reading its file at invocation",
+        "[coding_agent][skill-integration][u5][spec]") {
     tests::TempWorkspace workspace;
     const auto expanded = expand_with_skills(
         "/skill:int-skill",
@@ -75,7 +76,7 @@ TEST_CASE("prompt expansion expands a skill by reading its file at invocation", 
     CHECK(expanded.find("</skill>") != std::string::npos);
 }
 
-TEST_CASE("prompt expansion appends skill invocation arguments", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion appends skill invocation arguments", "[coding_agent][skill-integration][u5][spec]") {
     tests::TempWorkspace workspace;
     const auto expanded = expand_with_skills(
         "/skill:arg-skill extra args here",
@@ -84,7 +85,8 @@ TEST_CASE("prompt expansion appends skill invocation arguments", "[coding_agent]
     CHECK(expanded.find("</skill>\n\nextra args here") != std::string::npos);
 }
 
-TEST_CASE("prompt expansion trims skill invocation arguments like pi", "[coding_agent][skill-integration][u5][issue412]") {
+TEST_CASE("prompt expansion trims skill invocation arguments like pi",
+        "[coding_agent][skill-integration][u5][issue412][spec]") {
     tests::TempWorkspace workspace;
     // pi `_expandSkillCommand`: `args = text.slice(spaceIndex + 1).trim()`.
     const auto expanded = expand_with_skills(
@@ -95,7 +97,8 @@ TEST_CASE("prompt expansion trims skill invocation arguments like pi", "[coding_
     CHECK(expanded.find("padded args here \t") == std::string::npos);
 }
 
-TEST_CASE("prompt expansion passes through unknown skill input without printing", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion passes through unknown skill input without printing",
+        "[coding_agent][skill-integration][u5][spec]") {
     std::stringstream stderr_capture;
     auto* old_stderr = std::cerr.rdbuf(stderr_capture.rdbuf());
     const auto result = expand_with_skills("/skill:unknown-skill", {});
@@ -105,7 +108,8 @@ TEST_CASE("prompt expansion passes through unknown skill input without printing"
     CHECK(stderr_capture.str().empty());
 }
 
-TEST_CASE("prompt expansion passes through malformed and non-skill input", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion passes through malformed and non-skill input",
+        "[coding_agent][skill-integration][u5][spec]") {
     CHECK(expand_with_skills("/skill:", {}) == "/skill:");
     CHECK(expand_with_skills("regular text", {}) == "regular text");
     CHECK(expand_with_skills("/skills", {}) == "/skills");

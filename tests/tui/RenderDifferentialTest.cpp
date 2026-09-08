@@ -77,7 +77,7 @@ private:
 
 } // namespace
 
-TEST_CASE("First render writes visible content without clearing scrollback", "[tui][render][issue49]") {
+TEST_CASE("First render writes visible content without clearing scrollback", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hello", 0, 0)));
@@ -92,7 +92,7 @@ TEST_CASE("First render writes visible content without clearing scrollback", "[t
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Normal updates begin at first changed visible line", "[tui][render][issue49]") {
+TEST_CASE("Normal updates begin at first changed visible line", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -123,7 +123,7 @@ TEST_CASE("Normal updates begin at first changed visible line", "[tui][render][i
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Shrinking content clears stale rows below new content", "[tui][render][issue49]") {
+TEST_CASE("Shrinking content clears stale rows below new content", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 4});
     cch::tui::Tui tui(terminal);
 
@@ -153,7 +153,7 @@ TEST_CASE("Shrinking content clears stale rows below new content", "[tui][render
     CHECK(screen[3] == "     ");
 }
 
-TEST_CASE("Width change triggers full redraw with clear screen", "[tui][render][issue49]") {
+TEST_CASE("Width change triggers full redraw with clear screen", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hello", 0, 0)));
@@ -173,7 +173,8 @@ TEST_CASE("Width change triggers full redraw with clear screen", "[tui][render][
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Resize full redraw emits the pi-exact clear-screen and scrollback bytes", "[tui][render][issue49][issue435]") {
+TEST_CASE("Resize full redraw emits the pi-exact clear-screen and scrollback bytes",
+        "[tui][render][issue49][issue435][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("top\nmiddle\nbottom", 0, 0)));
@@ -196,7 +197,8 @@ TEST_CASE("Resize full redraw emits the pi-exact clear-screen and scrollback byt
     CHECK(output.back() == "\x1b[?2026l");
 }
 
-TEST_CASE("Tui clamps the IME cursor to the visible viewport over scrolled content", "[tui][render][issue49][issue435]") {
+TEST_CASE("Tui clamps the IME cursor to the visible viewport over scrolled content",
+        "[tui][render][issue49][issue435][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0)));
@@ -224,7 +226,7 @@ TEST_CASE("Tui clamps the IME cursor to the visible viewport over scrolled conte
     CHECK(terminal.cursor() == expected_clamped);
 }
 
-TEST_CASE("Changes at the viewport top diff in place without clearing", "[tui][render][issue49][issue435]") {
+TEST_CASE("Changes at the viewport top diff in place without clearing", "[tui][render][issue49][issue435][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 3});
     cch::tui::Tui tui(terminal);
 
@@ -249,7 +251,7 @@ TEST_CASE("Changes at the viewport top diff in place without clearing", "[tui][r
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Changes above the tracked viewport trigger a full redraw", "[tui][render][issue49][issue435]") {
+TEST_CASE("Changes above the tracked viewport trigger a full redraw", "[tui][render][issue49][issue435][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 3});
     cch::tui::Tui tui(terminal);
 
@@ -280,7 +282,7 @@ TEST_CASE("Changes above the tracked viewport trigger a full redraw", "[tui][ren
     CHECK(terminal.screen() == reflowed_screen);
 }
 
-TEST_CASE("Supported synchronized output wraps a render atomically", "[tui][render][issue49]") {
+TEST_CASE("Supported synchronized output wraps a render atomically", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
@@ -294,7 +296,7 @@ TEST_CASE("Supported synchronized output wraps a render atomically", "[tui][rend
     CHECK(output.back() == "\x1b[?2026l");
 }
 
-TEST_CASE("Render requests coalesce until render and include resize", "[tui][render][issue58]") {
+TEST_CASE("Render requests coalesce until render and include resize", "[tui][render][issue58][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 7, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("initial", 0, 0)));
@@ -315,7 +317,7 @@ TEST_CASE("Render requests coalesce until render and include resize", "[tui][ren
     CHECK(requests == 3);
 }
 
-TEST_CASE("Repeated invalidate coalesces without losing latest state", "[tui][render][issue49]") {
+TEST_CASE("Repeated invalidate coalesces without losing latest state", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 7, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("initial", 0, 0)));
@@ -331,7 +333,7 @@ TEST_CASE("Repeated invalidate coalesces without losing latest state", "[tui][re
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Empty content renders zero lines correctly", "[tui][render][issue49]") {
+TEST_CASE("Empty content renders zero lines correctly", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 2});
     cch::tui::Tui tui(terminal);
     // No children means no content
@@ -346,7 +348,7 @@ TEST_CASE("Empty content renders zero lines correctly", "[tui][render][issue49]"
     CHECK(screen[1].empty());
 }
 
-TEST_CASE("Shrink to empty content clears stale rows", "[tui][render][issue49]") {
+TEST_CASE("Shrink to empty content clears stale rows", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 2});
     cch::tui::Tui tui(terminal);
 
@@ -370,7 +372,7 @@ TEST_CASE("Shrink to empty content clears stale rows", "[tui][render][issue49]")
     CHECK(screen[1] == "    ");
 }
 
-TEST_CASE("Viewport height change triggers a full redraw with clear", "[tui][render][issue49][issue435]") {
+TEST_CASE("Viewport height change triggers a full redraw with clear", "[tui][render][issue49][issue435][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("line1\nline2", 0, 0)));
@@ -396,7 +398,7 @@ TEST_CASE("Viewport height change triggers a full redraw with clear", "[tui][ren
     CHECK(screen[2].size() == 0);
 }
 
-TEST_CASE("Pending render request is consumed on render call", "[tui][render][issue49]") {
+TEST_CASE("Pending render request is consumed on render call", "[tui][render][issue49][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 2});
     cch::tui::Tui tui(terminal);
 

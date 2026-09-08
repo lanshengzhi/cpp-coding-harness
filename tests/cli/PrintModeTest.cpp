@@ -215,9 +215,7 @@ int run_print(
 
 } // namespace
 
-TEST_CASE(
-    "print mode prints only the final assistant text blocks and exits 0",
-    "[cli][print]") {
+TEST_CASE("print mode prints only the final assistant text blocks and exits 0", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -237,9 +235,7 @@ TEST_CASE(
     CHECK(error.str().empty());
 }
 
-TEST_CASE(
-    "print mode reports a terminal error outcome on stderr and exits 1",
-    "[cli][print]") {
+TEST_CASE("print mode reports a terminal error outcome on stderr and exits 1", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -261,9 +257,7 @@ TEST_CASE(
     CHECK(error.str() == "host transport lost\n");
 }
 
-TEST_CASE(
-    "print mode falls back to Request <stopReason> without an error message",
-    "[cli][print]") {
+TEST_CASE("print mode falls back to Request <stopReason> without an error message", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -284,9 +278,7 @@ TEST_CASE(
     CHECK(error.str() == "Request error\n");
 }
 
-TEST_CASE(
-    "print mode reports a terminal aborted outcome on stderr and exits 1",
-    "[cli][print]") {
+TEST_CASE("print mode reports a terminal aborted outcome on stderr and exits 1", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -309,9 +301,7 @@ TEST_CASE(
     CHECK(error.str() == "host cancelled the request\n");
 }
 
-TEST_CASE(
-    "print mode redacts and bounds a terminal diagnostic on stderr",
-    "[cli][print]") {
+TEST_CASE("print mode redacts and bounds a terminal diagnostic on stderr", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -340,9 +330,7 @@ TEST_CASE(
     CHECK(error.str().size() < diagnostic.size());
 }
 
-TEST_CASE(
-    "print mode prompts remaining positionals sequentially and outputs the last response",
-    "[cli][print]") {
+TEST_CASE("print mode prompts remaining positionals sequentially and outputs the last response", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -376,9 +364,7 @@ TEST_CASE(
     CHECK(user_text(probe->messages[2]) == "third");
 }
 
-TEST_CASE(
-    "print mode with no prompt prints nothing and exits 0",
-    "[cli][print]") {
+TEST_CASE("print mode with no prompt prints nothing and exits 0", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -397,9 +383,7 @@ TEST_CASE(
     CHECK(error.str().empty());
 }
 
-TEST_CASE(
-    "print mode reports a prompt preflight rejection as loop failed and exits 1",
-    "[cli][print]") {
+TEST_CASE("print mode reports a prompt preflight rejection as loop failed and exits 1", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -420,9 +404,7 @@ TEST_CASE(
     CHECK(error.str().find("loop failed: ") != std::string::npos);
 }
 
-TEST_CASE(
-    "print mode disposes the session and exits 143 on SIGTERM",
-    "[cli][print][signals]") {
+TEST_CASE("print mode disposes the session and exits 143 on SIGTERM", "[cli][print][signals][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -453,9 +435,7 @@ TEST_CASE(
     CHECK(error.str().empty());
 }
 
-TEST_CASE(
-    "print mode disposes the session and exits 129 on SIGHUP",
-    "[cli][print][signals]") {
+TEST_CASE("print mode disposes the session and exits 129 on SIGHUP", "[cli][print][signals][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -486,9 +466,7 @@ TEST_CASE(
     CHECK(error.str().empty());
 }
 
-TEST_CASE(
-    "print mode keeps the session open after a normal run",
-    "[cli][print]") {
+TEST_CASE("print mode keeps the session open after a normal run", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the
@@ -507,9 +485,7 @@ TEST_CASE(
     CHECK(session.created.session->is_open());
 }
 
-TEST_CASE(
-    "print mode output failure surfaces as exit 1",
-    "[cli][print]") {
+TEST_CASE("print mode output failure surfaces as exit 1", "[cli][print][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // The print plan prompts through the session's runtime target: the

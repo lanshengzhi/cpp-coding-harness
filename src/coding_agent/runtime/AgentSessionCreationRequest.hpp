@@ -117,7 +117,7 @@ struct AgentSessionCreationRequest {
     /// `InMemorySessionTarget`; production callers never set it.
     std::optional<InMemoryBranchSeed> in_memory_branch_seed;
     /// Raw --session-dir value: the highest-priority CLI automatic-directory
-    /// override, ahead of PI_CODING_AGENT_SESSION_DIR and settings
+    /// override, ahead of PIKE_CODING_AGENT_SESSION_DIR and settings
     /// sessionDir. Consulted only for default persisted creation.
     std::optional<std::string> session_dir;
     /// Private test seam: an explicit request Model for the injected-Models

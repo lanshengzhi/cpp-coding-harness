@@ -14,7 +14,7 @@
 
 using namespace cch;
 
-TEST_CASE("JsonValue serializes numbers byte-identically to the Glaze path", "[support][json][t6]") {
+TEST_CASE("JsonValue serializes numbers byte-identically to the Glaze path", "[support][json][t6][compat-pi]") {
     // Glaze (zmij) number rules: shortest round-trip digits; fixed notation
     // while the first digit's decimal exponent is in [-4, 15]; scientific
     // (uppercase `E`, no `+`, no leading zero) outside that range.
@@ -43,7 +43,7 @@ TEST_CASE("JsonValue serializes numbers byte-identically to the Glaze path", "[s
     }
 }
 
-TEST_CASE("JsonValue serializes only the Glaze escape set, raw otherwise", "[support][json][t6]") {
+TEST_CASE("JsonValue serializes only the Glaze escape set, raw otherwise", "[support][json][t6][compat-pi]") {
     const auto escaped = support::write_json(support::JsonValue{std::string{"a\"b\\c\n\r\t\b\f"}});
     REQUIRE(escaped);
     CHECK(*escaped == R"("a\"b\\c\n\r\t\b\f")");
@@ -62,7 +62,7 @@ TEST_CASE("JsonValue serializes only the Glaze escape set, raw otherwise", "[sup
     CHECK(*slash == "\"/\"");
 }
 
-TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[support][json][t6]") {
+TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[support][json][t6][compat-pi]") {
     const support::JsonValue value = support::JsonValue::object_t{
         {"b", support::JsonValue::array_t{1.0, 2.0}},
         {"a", true},
@@ -73,7 +73,7 @@ TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[supp
     CHECK(*serialized == R"({"a":true,"b":[1,2],"c":null})");
 }
 
-TEST_CASE("JsonValue parser handles whitespace-only containers like Glaze", "[support][json][t6]") {
+TEST_CASE("JsonValue parser handles whitespace-only containers like Glaze", "[support][json][t6][compat-pi]") {
     const std::pair<std::string, std::string> cases[] = {
         {"[ ]", "[]"},
         {"[\n\t]", "[]"},
@@ -90,7 +90,7 @@ TEST_CASE("JsonValue parser handles whitespace-only containers like Glaze", "[su
     }
 }
 
-TEST_CASE("JsonValue parser accepts trailing content like Glaze", "[support][json][t6]") {
+TEST_CASE("JsonValue parser accepts trailing content like Glaze", "[support][json][t6][compat-pi]") {
     for (const std::string input : {"{}x", "42 zz", "{} garbage", "  {\n \"a\" : 1\n}  "}) {
         const auto parsed = support::read_json(input);
         REQUIRE(parsed);
@@ -102,7 +102,7 @@ TEST_CASE("JsonValue parser accepts trailing content like Glaze", "[support][jso
     CHECK(*serialized == R"({"a":1})");
 }
 
-TEST_CASE("JsonValue parser applies strict JSON grammar and Glaze tolerances", "[support][json][t6]") {
+TEST_CASE("JsonValue parser applies strict JSON grammar and Glaze tolerances", "[support][json][t6][compat-pi]") {
     // Rejected forms.
     for (const std::string input : {"", "   ", ".5", "5.", "007", "[1,2,]", "{\"a\":1,}",
                                     "\"abc", "\"\\q\"", "\"\\u12\"", "{\"a\":}", "{\"a\" 1}"}) {
@@ -118,7 +118,7 @@ TEST_CASE("JsonValue parser applies strict JSON grammar and Glaze tolerances", "
     CHECK(*serialized == R"({"a":2})");
 }
 
-TEST_CASE("JsonValue parser decodes Unicode escapes with surrogate pairs", "[support][json][t6]") {
+TEST_CASE("JsonValue parser decodes Unicode escapes with surrogate pairs", "[support][json][t6][compat-pi]") {
     const auto escaped = support::read_json(R"("\u00e9\uD83D\uDE00\u001b")");
     REQUIRE(escaped);
     const auto serialized = support::write_json(*escaped);
@@ -130,7 +130,7 @@ TEST_CASE("JsonValue parser decodes Unicode escapes with surrogate pairs", "[sup
     CHECK_FALSE(support::read_json(R"("\uD83D\u0041")"));
 }
 
-TEST_CASE("JsonValue parse errors are typed and carry context", "[support][json][t6]") {
+TEST_CASE("JsonValue parse errors are typed and carry context", "[support][json][t6][compat-pi]") {
     const auto malformed = support::read_json(R"({"a":1,})");
     REQUIRE_FALSE(malformed);
     CHECK(malformed.error().code == support::ErrorCode::JsonParse);
@@ -140,7 +140,7 @@ TEST_CASE("JsonValue parse errors are typed and carry context", "[support][json]
     CHECK(malformed.error().context->find("a") != std::string::npos);
 }
 
-TEST_CASE("JsonValue round-trips nested structures byte-identically", "[support][json][t6]") {
+TEST_CASE("JsonValue round-trips nested structures byte-identically", "[support][json][t6][compat-pi]") {
     // Object keys are map-sorted (matching the Glaze path), so the input uses
     // sorted keys for a byte-identical round-trip.
     const std::string input =

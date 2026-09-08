@@ -74,7 +74,8 @@ cch::ai::Credential api_key_credential(std::string key) {
 
 } // namespace
 
-TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records", "[coding_agent][auth][issue337]") {
+TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records",
+        "[coding_agent][auth][issue337][compat-pi]") {
     cch::tests::TempWorkspace workspace;
     const auto path = workspace.path() / "auth.json";
     write_text(path, read_fixture("round-trip-input.json"));
@@ -136,7 +137,8 @@ TEST_CASE("AuthStorage round-trips pi auth.json without losing unrelated records
     CHECK(std::get<cch::ai::OAuthCredential>(**persisted).access == "dummy-new-access-token");
 }
 
-TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding_agent][auth][locking][issue337]") {
+TEST_CASE(
+        "AuthStorage serializes concurrent whole-file modifications", "[coding_agent][auth][locking][issue337][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto path = workspace.path() / "auth.json";
     write_text(path, "{}");
@@ -202,9 +204,7 @@ TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding
     CHECK_FALSE(lock_exists);
 }
 
-TEST_CASE(
-    "AuthStorage does not steal a live proper-lockfile lock",
-    "[coding_agent][auth][locking][issue337]") {
+TEST_CASE("AuthStorage does not steal a live proper-lockfile lock", "[coding_agent][auth][locking][issue337][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto path = workspace.path() / "auth.json";
     const auto lock_path = std::filesystem::path{path.string() + ".lock"};
@@ -233,9 +233,7 @@ TEST_CASE(
     REQUIRE(loaded->has_value());
 }
 
-TEST_CASE(
-    "AuthStorage reclaims a stale proper-lockfile lock",
-    "[coding_agent][auth][locking][issue337]") {
+TEST_CASE("AuthStorage reclaims a stale proper-lockfile lock", "[coding_agent][auth][locking][issue337][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto path = workspace.path() / "auth.json";
     const auto lock_path = std::filesystem::path{path.string() + ".lock"};
@@ -259,9 +257,8 @@ TEST_CASE(
     REQUIRE(loaded->has_value());
 }
 
-TEST_CASE(
-    "AuthStorage detects a replaced proper-lockfile lease without writing or unlocking it",
-    "[coding_agent][auth][locking][issue337]") {
+TEST_CASE("AuthStorage detects a replaced proper-lockfile lease without writing or unlocking it",
+        "[coding_agent][auth][locking][issue337][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto path = workspace.path() / "auth.json";
     const auto lock_path = std::filesystem::path{path.string() + ".lock"};
@@ -311,9 +308,8 @@ TEST_CASE(
     REQUIRE_FALSE(lock_error);
 }
 
-TEST_CASE(
-    "AuthStorage preserves its last valid snapshot and never overwrites invalid JSON",
-    "[coding_agent][auth][issue337]") {
+TEST_CASE("AuthStorage preserves its last valid snapshot and never overwrites invalid JSON",
+        "[coding_agent][auth][issue337][spec]") {
     cch::tests::TempWorkspace workspace;
     const auto path = workspace.path() / "auth.json";
     write_text(path, R"({"deepseek":{"type":"api_key","key":"dummy-stored-key"}})");
@@ -340,9 +336,8 @@ TEST_CASE(
     CHECK(read_text(path) == "{invalid-json");
 }
 
-TEST_CASE(
-    "AuthStorage creates private pi-compatible paths and delete preserves other records",
-    "[coding_agent][auth][permissions][issue337]") {
+TEST_CASE("AuthStorage creates private pi-compatible paths and delete preserves other records",
+        "[coding_agent][auth][permissions][issue337][compat-pi]") {
     cch::tests::TempWorkspace workspace;
     const auto agent_dir = workspace.path() / "nested" / "agent";
     const auto path = agent_dir / "auth.json";

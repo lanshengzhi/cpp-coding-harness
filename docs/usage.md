@@ -25,7 +25,7 @@ Provider-bound images at most 2000×2000 with base64 payloads below 4.5 MiB are 
 
 ## Sessions
 
-Without a session-family flag, each run persists a session under the workspace-keyed user directory in `~/.pi/agent/sessions/`.
+Without a session-family flag, each run persists a session under the workspace-keyed user directory in `~/.pike/agent/sessions/`.
 
 ```bash
 $BIN --no-session                              # in-memory Native TUI
@@ -39,20 +39,29 @@ $BIN --fork PATH_OR_ID                         # copy history into a new session
 `--session-dir DIR` redirects automatic storage. Its precedence is:
 
 1. `--session-dir`;
-2. `PI_CODING_AGENT_SESSION_DIR`;
-3. `sessionDir` in `~/.pi/agent/settings.json`;
+2. `PIKE_CODING_AGENT_SESSION_DIR`;
+3. `sessionDir` in `~/.pike/agent/settings.json`;
 4. the workspace-keyed default.
 
 ```bash
 $BIN --session-dir /data/sessions --print "hello"
-PI_CODING_AGENT_SESSION_DIR=/data/sessions $BIN --print "hello"
+PIKE_CODING_AGENT_SESSION_DIR=/data/sessions $BIN --print "hello"
 ```
 
 `--no-session` leaves no transcript and takes precedence over create/resume/continue inputs; it cannot be combined with `--fork`. Session files remain sensitive even though persisted message content is redacted.
 
+To migrate an existing pi installation once, use the explicit importer. It reads the old tree and refuses to overwrite an existing Pike tree:
+
+```bash
+$BIN import                         # ~/.pi/agent -> ~/.pike/agent
+$BIN import --from /backup/pi-agent --to ~/.pike/agent
+```
+
+Normal Pike startup never consults the old pi directory or its environment overrides.
+
 ## Models and authentication
 
-Built-in and custom models are composed from the runtime catalog and `~/.pi/agent/models.json`. Select with `--model`, optionally qualified as `provider/model`; use `--provider` to narrow an unqualified model pattern.
+Built-in and custom models are composed from the runtime catalog and `~/.pike/agent/models.json`. Select with `--model`, optionally qualified as `provider/model`; use `--provider` to narrow an unqualified model pattern.
 
 Kimi Code is built in as provider `kimi-coding`, model `kimi-for-coding`:
 
@@ -60,7 +69,7 @@ Kimi Code is built in as provider `kimi-coding`, model `kimi-for-coding`:
 KIMI_API_KEY=... $BIN --model kimi-for-coding "summarize README.md"
 ```
 
-Credentials can instead be stored in the pi-compatible `~/.pi/agent/auth.json`:
+Credentials can instead be stored in `~/.pike/agent/auth.json`:
 
 ```json
 {
@@ -75,11 +84,11 @@ Kimi's `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` examples target Anthropic-sh
 
 ## Agent configuration
 
-User state defaults to `~/.pi/agent/`; set `PI_CODING_AGENT_DIR` to replace that root.
+User state defaults to `~/.pike/agent/`; set `PIKE_CODING_AGENT_DIR` to replace that root.
 
 | Path | Purpose |
 | --- | --- |
-| `auth.json` | API-key and OAuth credentials shared with pi |
+| `auth.json` | API-key and OAuth credentials |
 | `settings.json` | model, thinking, session, shell, trust, theme, and presentation settings |
 | `models.json` | custom providers and model definitions |
 | `keybindings.json` | Native TUI bindings |

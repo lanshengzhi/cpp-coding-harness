@@ -49,9 +49,8 @@ public:
 
 } // namespace
 
-TEST_CASE(
-    "InteractiveSessionRun carries facts, run-intent values, and capability injections",
-    "[coding_agent][tui][session_run][issue518]") {
+TEST_CASE("InteractiveSessionRun carries facts, run-intent values, and capability injections",
+        "[coding_agent][tui][session_run][issue518][spec]") {
     coding_agent::runtime::InteractiveSessionFacts facts;
     facts.no_skills = true;
     facts.no_prompt_templates = true;
@@ -85,9 +84,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<coding_agent::tui::BindExistingSession>(run.session_intent()));
 }
 
-TEST_CASE(
-    "InteractiveSessionRunBuilder assembles BindExistingSession and DeferBoot intents",
-    "[coding_agent][tui][session_run][issue518]") {
+TEST_CASE("InteractiveSessionRunBuilder assembles BindExistingSession and DeferBoot intents",
+        "[coding_agent][tui][session_run][issue518][spec]") {
     tests::TempWorkspace workspace;
     auto options = coding_agent::runtime::AgentSessionCreationRequest{};
     options.workspace = workspace.path();
@@ -133,7 +131,7 @@ TEST_CASE(
 }
 
 TEST_CASE("InteractiveSessionRun's asynchronous replacement sink installs runtime capabilities",
-        "[coding_agent][tui][session_run][issue517]") {
+        "[coding_agent][tui][session_run][issue517][spec]") {
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, harness::RuntimeLimits{});
@@ -177,9 +175,8 @@ TEST_CASE("InteractiveSessionRun's asynchronous replacement sink installs runtim
     tests::drain_ready(*io);
 }
 
-TEST_CASE(
-    "InteractiveSessionRun dispatches host effects for ReportBootCreationFailureAction",
-    "[coding_agent][tui][session_run][issue517]") {
+TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootCreationFailureAction",
+        "[coding_agent][tui][session_run][issue517][spec]") {
     std::ostringstream error_stream;
 
     auto run = InteractiveSessionRunBuilder{}
@@ -204,9 +201,8 @@ TEST_CASE(
     CHECK(text.find("Permission denied") != std::string::npos);
 }
 
-TEST_CASE(
-    "InteractiveSessionRun dispatches host effects for ReportBootDiagnosticsAction",
-    "[coding_agent][tui][session_run][issue517]") {
+TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootDiagnosticsAction",
+        "[coding_agent][tui][session_run][issue517][spec]") {
     std::ostringstream error_stream;
 
     auto run = InteractiveSessionRunBuilder{}
@@ -244,9 +240,8 @@ TEST_CASE(
     CHECK(text.find("[skills:error] syntax: Invalid skill definition (SKILL.md)") != std::string::npos);
 }
 
-TEST_CASE(
-    "InteractiveSessionRun supports custom action sink override",
-    "[coding_agent][tui][session_run][issue517]") {
+TEST_CASE("InteractiveSessionRun supports custom action sink override",
+        "[coding_agent][tui][session_run][issue517][spec]") {
     auto recorder = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
 
     auto run = InteractiveSessionRunBuilder{}

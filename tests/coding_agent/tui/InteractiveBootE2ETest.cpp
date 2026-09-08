@@ -219,9 +219,8 @@ struct E2eSession {
 
 } // namespace
 
-TEST_CASE(
-    "E2E: interactive boot renders pi's main-screen composition and the initial snapshot",
-    "[coding_agent][tui][e2e][issue399]") {
+TEST_CASE("E2E: interactive boot renders pi's main-screen composition and the initial snapshot",
+        "[coding_agent][tui][e2e][issue399][compat-pi]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
     tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
@@ -267,7 +266,7 @@ TEST_CASE(
 }
 
 TEST_CASE("E2E: a focused-editor submission streams a scripted-runtime turn in the pi shape",
-        "[coding_agent][tui][e2e][issue399]") {
+        "[coding_agent][tui][e2e][issue399][compat-pi]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
     tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
     const auto& control = *fixture->scripted.control;
@@ -365,9 +364,8 @@ TEST_CASE("E2E: a focused-editor submission streams a scripted-runtime turn in t
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "E2E: app.interrupt aborts the active Agent run with the stale-generation guard",
-    "[coding_agent][tui][e2e][issue399]") {
+TEST_CASE("E2E: app.interrupt aborts the active Agent run with the stale-generation guard",
+        "[coding_agent][tui][e2e][issue399][compat-pi]") {
     tests::ScriptedRuntimeFixture gated;
     gated.control->gate_at = 0;
     gated.control->emit_partial_before_gate = true;
@@ -429,9 +427,8 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "E2E: the model fallback message renders as a boot warning line",
-    "[coding_agent][tui][e2e][issue404]") {
+TEST_CASE("E2E: the model fallback message renders as a boot warning line",
+        "[coding_agent][tui][e2e][issue404][compat-pi]") {
     auto fixture = make_e2e_session(scripted_turn_runtime());
     tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 

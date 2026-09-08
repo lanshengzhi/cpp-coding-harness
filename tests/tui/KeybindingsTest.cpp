@@ -9,7 +9,8 @@
 
 using namespace cch;
 
-TEST_CASE("Keybinding resolution replaces defaults with canonical user alternatives", "[tui][keybindings][issue57]") {
+TEST_CASE("Keybinding resolution replaces defaults with canonical user alternatives",
+        "[tui][keybindings][issue57][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {
@@ -31,9 +32,8 @@ TEST_CASE("Keybinding resolution replaces defaults with canonical user alternati
         "tui.input.newLine"));
 }
 
-TEST_CASE(
-    "User key conflicts preserve context defaults and resolve by candidate order",
-    "[tui][keybindings][issue57]") {
+TEST_CASE("User key conflicts preserve context defaults and resolve by candidate order",
+        "[tui][keybindings][issue57][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {
@@ -64,8 +64,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Invalid overrides retain defaults and key display follows the registry",
-    "[tui][keybindings][issue57]") {
+        "Invalid overrides retain defaults and key display follows the registry", "[tui][keybindings][issue57][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {{.id = "tui.editor.cursorWordLeft", .keys = {"super+left"}}};
@@ -81,9 +80,7 @@ TEST_CASE(
         "alt+left/ctrl+left/alt+b");
 }
 
-TEST_CASE(
-    "Builtin table is exactly the frozen pi default table at 83114817",
-    "[tui][keybindings][issue382]") {
+TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[tui][keybindings][issue382][spec]") {
     // Re-verified action-for-action against pi 83114817
     // packages/tui/src/keybindings.ts TUI_KEYBINDINGS: 21 tui.editor.*,
     // 3 tui.input.*, and 6 tui.select.* with pi's default keys and
@@ -153,9 +150,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Known-but-unassembled IDs are recognized and never become no-op bindings",
-    "[tui][keybindings][issue382]") {
+TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindings",
+        "[tui][keybindings][issue382][spec]") {
     constexpr std::array<std::string_view, 7> kUnassembled{
         "tui.input.copy",
         "tui.altScreen.pageUp",
@@ -189,9 +185,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Known-but-unassembled overrides diagnose as unavailable, unknown ids stay unknown",
-    "[tui][keybindings][issue382]") {
+TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown ids stay unknown",
+        "[tui][keybindings][issue382][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {

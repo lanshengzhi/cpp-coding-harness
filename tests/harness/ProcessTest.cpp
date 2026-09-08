@@ -46,7 +46,7 @@ support::Expected<T> run_awaitable(Start start) {
 
 } // namespace
 
-TEST_CASE("process exit probe treats an unreaped zombie as exited", "[harness][process][issue524]") {
+TEST_CASE("process exit probe treats an unreaped zombie as exited", "[harness][process][issue524][spec]") {
     // The Arch pinned CI container's PID 1 (`tail -f /dev/null`) never reaps,
     // so a terminated descendant stays visible as a zombie and kill(pid, 0)
     // keeps succeeding after the exit (#524). Model that corpse here by killing
@@ -71,7 +71,7 @@ TEST_CASE("process exit probe treats an unreaped zombie as exited", "[harness][p
     REQUIRE(::waitpid(victim, &status, 0) == victim);
 }
 
-TEST_CASE("process runner drains both pipes beyond kernel buffer capacity", "[harness][process][issue458]") {
+TEST_CASE("process runner drains both pipes beyond kernel buffer capacity", "[harness][process][issue458][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -113,7 +113,8 @@ wait)"};
     CHECK(result->output.find("[output truncated]") != std::string::npos);
 }
 
-TEST_CASE("process runner contains a failing callback and keeps both pipes draining", "[harness][process][issue458]") {
+TEST_CASE("process runner contains a failing callback and keeps both pipes draining",
+        "[harness][process][issue458][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -154,7 +155,8 @@ wait)"};
 }
 
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("process runner contains a throwing callback and keeps both pipes draining", "[harness][process][issue484]") {
+TEST_CASE("process runner contains a throwing callback and keeps both pipes draining",
+        "[harness][process][issue484][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -191,7 +193,8 @@ wait)"};
 }
 #endif
 
-TEST_CASE("process runner timeout includes inherited output pipes after child exit", "[harness][process][issue484]") {
+TEST_CASE("process runner timeout includes inherited output pipes after child exit",
+        "[harness][process][issue484][spec]") {
     tests::TempWorkspace workspace;
     const auto descendant_file = (workspace.path() / "descendant.pid").string();
 
@@ -218,7 +221,8 @@ TEST_CASE("process runner timeout includes inherited output pipes after child ex
     CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
-TEST_CASE("process runner caps newline-free stderr output without stopping the drain", "[harness][process][issue458]") {
+TEST_CASE("process runner caps newline-free stderr output without stopping the drain",
+        "[harness][process][issue458][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -246,7 +250,8 @@ TEST_CASE("process runner caps newline-free stderr output without stopping the d
     CHECK(stderr_bytes == 60000);
 }
 
-TEST_CASE("process runner truncates at the line limit and keeps draining to EOF", "[harness][process][issue458]") {
+TEST_CASE(
+        "process runner truncates at the line limit and keeps draining to EOF", "[harness][process][issue458][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -276,7 +281,7 @@ TEST_CASE("process runner truncates at the line limit and keeps draining to EOF"
     CHECK(result->output.find("[output truncated]") != std::string::npos);
 }
 
-TEST_CASE("process runner timeout terminates and reaps the child", "[harness][process][issue458]") {
+TEST_CASE("process runner timeout terminates and reaps the child", "[harness][process][issue458][spec]") {
     tests::TempWorkspace workspace;
     const auto pid_file = (workspace.path() / "shell.pid").string();
 
@@ -301,7 +306,7 @@ TEST_CASE("process runner timeout terminates and reaps the child", "[harness][pr
     CHECK(tests::await_process_reaped(workspace.read("shell.pid")));
 }
 
-TEST_CASE("process runner reports the terminating signal as exit code", "[harness][process][issue484]") {
+TEST_CASE("process runner reports the terminating signal as exit code", "[harness][process][issue484][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";
@@ -323,7 +328,7 @@ TEST_CASE("process runner reports the terminating signal as exit code", "[harnes
     CHECK(result->exit_code == SIGTERM);
 }
 
-TEST_CASE("process runner cancellation terminates and reaps the process group", "[harness][process][issue458]") {
+TEST_CASE("process runner cancellation terminates and reaps the process group", "[harness][process][issue458][spec]") {
     tests::TempWorkspace workspace;
     const auto pid_file = (workspace.path() / "shell.pid").string();
     const auto descendant_file = (workspace.path() / "descendant.pid").string();
@@ -373,7 +378,8 @@ TEST_CASE("process runner cancellation terminates and reaps the process group", 
     CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
-TEST_CASE("process runner cancellation terminates descendants holding output pipes", "[harness][process][issue484]") {
+TEST_CASE("process runner cancellation terminates descendants holding output pipes",
+        "[harness][process][issue484][spec]") {
     tests::TempWorkspace workspace;
     const auto descendant_file = (workspace.path() / "descendant.pid").string();
 
@@ -422,7 +428,8 @@ TEST_CASE("process runner cancellation terminates descendants holding output pip
     CHECK(tests::await_process_exit(workspace.read("descendant.pid")));
 }
 
-TEST_CASE("process runner keeps stdout and stderr independent for mixed traffic", "[harness][process][issue458]") {
+TEST_CASE(
+        "process runner keeps stdout and stderr independent for mixed traffic", "[harness][process][issue458][spec]") {
     harness::DefaultAsyncProcessRunner runner;
     harness::ProcessRequest request;
     request.executable = "/bin/bash";

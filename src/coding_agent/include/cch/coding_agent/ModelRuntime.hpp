@@ -28,9 +28,9 @@ struct ModelRuntimeTransportTestOptions;
 /// subset). Every field is optional; defaults derive from the Agent Config
 /// Directory.
 struct ModelRuntimeOptions {
-    /// Agent Config Directory override (pi `agentDir`). When empty, the
-    /// default `agent_config_dir()` applies (`PI_CODING_AGENT_DIR`, then
-    /// `~/.pi/agent`).
+    /// Product Config Directory override. When empty, the default
+    /// `agent_config_dir()` applies (`PIKE_CODING_AGENT_DIR`, then
+    /// `~/.pike/agent`).
     std::filesystem::path agent_dir{};
     /// models.json path. When unset, `<agentDir>/models.json`. An explicitly
     /// empty path disables the models.json surface (empty user config).

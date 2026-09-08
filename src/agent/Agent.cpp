@@ -171,6 +171,7 @@ struct RunPolicy {
 
 struct StreamEventState {
     bool assistant_start_emitted{false};
+    std::optional<ai::InferenceFailure> inference_failure{std::nullopt};
 };
 
 [[nodiscard]] ai::AiContext context_from_snapshot(AgentExecutionSnapshot snapshot) {
@@ -782,8 +783,11 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
                                         .assistant_event = event,
                                 });
                     }
-                    if (std::holds_alternative<ai::AssistantDoneEvent>(event) ||
-                            std::holds_alternative<ai::AssistantErrorEvent>(event)) {
+                    if (const auto* error = std::get_if<ai::AssistantErrorEvent>(&event)) {
+                        stream_event_state->inference_failure = error->inference_failure;
+                        return {};
+                    }
+                    if (std::holds_alternative<ai::AssistantDoneEvent>(event)) {
                         return {};
                     }
                     return {};
@@ -802,7 +806,11 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             // complete assistant lifecycle.
             CCH_TRY_VOID(emit_agent_event(*emit, MessageStartEvent{context.messages.back()}));
         }
-        CCH_TRY_VOID(emit_agent_event(*emit, MessageEndEvent{context.messages.back()}));
+        CCH_TRY_VOID(emit_agent_event(*emit,
+                MessageEndEvent{
+                        .message = context.messages.back(),
+                        .inference_failure = stream_event_state->inference_failure,
+                }));
 
         if (assistant->stop_reason == ai::AssistantStopReason::Error ||
                 assistant->stop_reason == ai::AssistantStopReason::Aborted) {

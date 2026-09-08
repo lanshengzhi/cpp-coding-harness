@@ -252,9 +252,8 @@ struct RunResult {
 
 } // namespace
 
-TEST_CASE(
-    "Kimi catalog carries the frozen Anthropic Messages compat values",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi catalog carries the frozen Anthropic Messages compat values",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     const auto models = ai::providers::kimi_coding_models();
 
     REQUIRE(models.size() == 4);
@@ -278,9 +277,8 @@ TEST_CASE(
     CHECK(models[3].compat->allow_empty_signature == std::nullopt);
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages streams the frozen request and repaired SSE sequence through Models",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages streams the frozen request and repaired SSE sequence through Models",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
     REQUIRE_FALSE(sse.empty());
@@ -352,9 +350,8 @@ TEST_CASE(
     CHECK(request.body == expected_request);
 }
 
-TEST_CASE(
-    "Kimi sends a non-blank string user message as a raw JSON string",
-    "[ai][provider][anthropic][issue367]") {
+TEST_CASE("Kimi sends a non-blank string user message as a raw JSON string",
+        "[ai][provider][anthropic][issue367][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
     REQUIRE_FALSE(sse.empty());
@@ -397,9 +394,7 @@ TEST_CASE(
     CHECK_FALSE(body->at("system").get_array()[0].get_object().contains("cache_control"));
 }
 
-TEST_CASE(
-    "Kimi drops a blank string user message",
-    "[ai][provider][anthropic][issue367]") {
+TEST_CASE("Kimi drops a blank string user message", "[ai][provider][anthropic][issue367][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
     REQUIRE_FALSE(sse.empty());
@@ -437,9 +432,8 @@ TEST_CASE(
     CHECK(body->at("messages").get_array().empty());
 }
 
-TEST_CASE(
-    "Kimi promotes a trailing string user message under cache retention",
-    "[ai][provider][anthropic][issue367]") {
+TEST_CASE("Kimi promotes a trailing string user message under cache retention",
+        "[ai][provider][anthropic][issue367][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
     REQUIRE_FALSE(sse.empty());
@@ -486,9 +480,8 @@ TEST_CASE(
     CHECK(cache.at("type").get_string() == "ephemeral");
 }
 
-TEST_CASE(
-    "Kimi raw stop reason capture: rejected refusal matches the frozen TS snapshot",
-    "[ai][provider][anthropic][issue374][issue375]") {
+TEST_CASE("Kimi raw stop reason capture: rejected refusal matches the frozen TS snapshot",
+        "[ai][provider][anthropic][issue374][issue375][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     const auto sse =
         read_fixture_text("wire/anthropic-messages-kimi-refusal.sse");
@@ -531,9 +524,8 @@ TEST_CASE(
     CHECK(transport->requests.front().body == expected_request);
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages keeps adaptive thinking and k3 off-null semantics",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages keeps adaptive thinking and k3 off-null semantics",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto enabled_transport = std::make_shared<ScriptedTransport>();
     enabled_transport->attempts.push_back(TransportAttempt{
         .chunks = {terminal_sse("end_turn")},
@@ -574,9 +566,8 @@ TEST_CASE(
     CHECK(off_body.contains("\"temperature\":0.4"));
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages enforces the strict termination matrix",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages enforces the strict termination matrix",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     struct Case {
         std::string sse;
         ai::AssistantStopReason expected;
@@ -654,9 +645,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages partials carry the pending stop reason",
-    "[ai][provider][anthropic][issue374]") {
+TEST_CASE("Kimi Anthropic Messages partials carry the pending stop reason",
+        "[ai][provider][anthropic][issue374][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pending\","
@@ -688,9 +678,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages captures the raw stop reason before mapping",
-    "[ai][provider][anthropic][issue374]") {
+TEST_CASE("Kimi Anthropic Messages captures the raw stop reason before mapping",
+        "[ai][provider][anthropic][issue374][compat-pi]") {
     struct Case {
         std::string sse;
         ai::AssistantStopReason mapped;
@@ -734,9 +723,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages stream ending still pending is a terminal error",
-    "[ai][provider][anthropic][issue374]") {
+TEST_CASE("Kimi Anthropic Messages stream ending still pending is a terminal error",
+        "[ai][provider][anthropic][issue374][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pending\","
@@ -763,9 +751,8 @@ TEST_CASE(
     CHECK(*terminal.error.error_message == *run.result->error_message);
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages missing message_stop carries the partial message",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages missing message_stop carries the partial message",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_partial\","
@@ -789,9 +776,8 @@ TEST_CASE(
     CHECK(std::get<ai::TextContent>(run.result->content.front()).text == "partial");
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages ignores unknown SSE events and throws SSE error data",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages ignores unknown SSE events and throws SSE error data",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "event: future.event\ndata: not-json\n\n"
@@ -811,9 +797,8 @@ TEST_CASE(
     CHECK(event_names(run.events) == expected);
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages removes tool scratch state from partial failures",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages removes tool scratch state from partial failures",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,"
@@ -843,9 +828,8 @@ TEST_CASE(
     CHECK_FALSE(tool->argument_error);
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages retries only eligible setup failures",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages retries only eligible setup failures",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts = {
         TransportAttempt{
@@ -917,7 +901,7 @@ TEST_CASE(
             .status_code = 429,
             .headers = {{"retry-after-ms", "0"}},
         },
-        .chunks = {"quota exceeded"},
+        .chunks = {R"({"error":{"code":"insufficient_quota","message":"quota exceeded"}})"},
     });
     auto quota_models = make_models(quota_transport, model);
     REQUIRE(quota_models);
@@ -931,9 +915,8 @@ TEST_CASE(
     CHECK(quota_transport->requests.size() == 1);
 }
 
-TEST_CASE(
-    "Kimi Anthropic Messages cancellation yields one aborted terminal",
-    "[ai][provider][anthropic][issue341]") {
+TEST_CASE("Kimi Anthropic Messages cancellation yields one aborted terminal",
+        "[ai][provider][anthropic][issue341][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{
         .chunks = {},

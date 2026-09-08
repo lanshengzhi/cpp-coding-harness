@@ -133,9 +133,8 @@ struct RuntimeFixture {
 
 } // namespace
 
-TEST_CASE(
-    "ModelSelector renders the scope text, search input, and sorted list with the current marker",
-    "[coding_agent][tui][model-selector][issue407]") {
+TEST_CASE("ModelSelector renders the scope text, search input, and sorted list with the current marker",
+        "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);
@@ -190,7 +189,7 @@ TEST_CASE(
 }
 
 TEST_CASE("ModelSelector initially selects the current model inside a scoped list",
-        "[coding_agent][tui][model-selector][issue407]") {
+        "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);
@@ -225,9 +224,8 @@ TEST_CASE("ModelSelector initially selects the current model inside a scoped lis
     CHECK(selected->id == "beta-1");
 }
 
-TEST_CASE(
-    "ModelSelector fuzzy search filters, moves the selection to the top match, and selects on Enter",
-    "[coding_agent][tui][model-selector][issue407]") {
+TEST_CASE("ModelSelector fuzzy search filters, moves the selection to the top match, and selects on Enter",
+        "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);
@@ -281,8 +279,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "ModelSelector up/down wrap and Escape/Ctrl+C cancel",
-    "[coding_agent][tui][model-selector][issue407]") {
+        "ModelSelector up/down wrap and Escape/Ctrl+C cancel", "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);
@@ -321,9 +318,8 @@ TEST_CASE(
     CHECK(cancellations == 2);
 }
 
-TEST_CASE(
-    "ModelSelector toggles the all/scoped scope on Tab when scoped models exist",
-    "[coding_agent][tui][model-selector][issue407]") {
+TEST_CASE("ModelSelector toggles the all/scoped scope on Tab when scoped models exist",
+        "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);
@@ -383,9 +379,8 @@ static void check_all_lines_bounded(const tui::RenderResult& rendered, std::size
     }
 }
 
-TEST_CASE(
-    "ModelSelector never emits a line wider than the render width",
-    "[coding_agent][tui][model-selector][issue426]") {
+TEST_CASE("ModelSelector never emits a line wider than the render width",
+        "[coding_agent][tui][model-selector][issue426][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);
@@ -420,7 +415,7 @@ TEST_CASE(
 }
 
 TEST_CASE("ModelSelector delegates search editing to the SelectList and reports its cursor on the search row",
-        "[coding_agent][tui][model-selector][issue589]") {
+        "[coding_agent][tui][model-selector][issue589][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
     fixture.prime(io);

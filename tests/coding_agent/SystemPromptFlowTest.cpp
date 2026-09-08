@@ -84,7 +84,8 @@ public:
 
 } // namespace
 
-TEST_CASE("system prompt is built at session construction and flows through AgentContext.system_prompt", "[coding_agent][system-prompt][issue414]") {
+TEST_CASE("system prompt is built at session construction and flows through AgentContext.system_prompt",
+        "[coding_agent][system-prompt][issue414][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     const auto session_file = workspace.path() / "session.jsonl";
@@ -166,9 +167,8 @@ namespace {
 
 } // namespace
 
-TEST_CASE(
-    "system prompt default branch renders project context files in pi's order",
-    "[coding_agent][system-prompt][context-files][issue416]") {
+TEST_CASE("system prompt default branch renders project context files in pi's order",
+        "[coding_agent][system-prompt][context-files][issue416][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     // Controlled ancestor chain: parent (AGENTS.md) and child (CLAUDE.md),
@@ -219,9 +219,8 @@ TEST_CASE(
     created->session->close();
 }
 
-TEST_CASE(
-    "system prompt custom branch renders the custom prompt, joined appends, and context files",
-    "[coding_agent][system-prompt][context-files][issue416]") {
+TEST_CASE("system prompt custom branch renders the custom prompt, joined appends, and context files",
+        "[coding_agent][system-prompt][context-files][issue416][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     workspace.write("parent/AGENTS.md", "parent instructions\n");
@@ -275,9 +274,8 @@ TEST_CASE(
     created->session->close();
 }
 
-TEST_CASE(
-    "system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md through the custom branch",
-    "[coding_agent][system-prompt][context-files][issue416]") {
+TEST_CASE("system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md through the custom branch",
+        "[coding_agent][system-prompt][context-files][issue416][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     workspace.write(".pi/SYSTEM.md", "custom system prompt from SYSTEM.md\n");
@@ -316,9 +314,8 @@ TEST_CASE(
     created->session->close();
 }
 
-TEST_CASE(
-    "system prompt drops project context files under --no-context-files",
-    "[coding_agent][system-prompt][context-files][issue416]") {
+TEST_CASE("system prompt drops project context files under --no-context-files",
+        "[coding_agent][system-prompt][context-files][issue416][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     workspace.write("AGENTS.md", "should not appear\n");

@@ -62,12 +62,13 @@ coding_agent::PromptTemplate make_template(std::string name, std::string content
 
 } // namespace
 
-TEST_CASE("prompt expansion returns ordinary and empty input unchanged", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion returns ordinary and empty input unchanged", "[coding_agent][prompt][expansion][spec]") {
     CHECK(expand("hello") == "hello");
     CHECK(expand("").empty());
 }
 
-TEST_CASE("prompt expansion bypasses skill and template expansion when requested", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion bypasses skill and template expansion when requested",
+        "[coding_agent][prompt][expansion][spec]") {
     tests::TempWorkspace workspace;
     CHECK(expand(
               "/skill:cached",
@@ -81,7 +82,7 @@ TEST_CASE("prompt expansion bypasses skill and template expansion when requested
               /*expand_templates=*/false) == "/review target");
 }
 
-TEST_CASE("prompt expansion expands skills before templates", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion expands skills before templates", "[coding_agent][prompt][expansion][spec]") {
     tests::TempWorkspace workspace;
     const auto skill = expand(
         "/skill:same raw instructions",
@@ -97,7 +98,7 @@ TEST_CASE("prompt expansion expands skills before templates", "[coding_agent][pr
     CHECK(skill.find("template won") == std::string::npos);
 }
 
-TEST_CASE("prompt expansion reads the skill file at invocation time", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion reads the skill file at invocation time", "[coding_agent][prompt][expansion][spec]") {
     tests::TempWorkspace workspace;
     auto skill = make_skill_on_disk(workspace, "late", "initial body");
 
@@ -116,7 +117,8 @@ TEST_CASE("prompt expansion reads the skill file at invocation time", "[coding_a
     CHECK(expanded.find("initial body") == std::string::npos);
 }
 
-TEST_CASE("prompt expansion expands templates once and preserves unmatched slash input", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion expands templates once and preserves unmatched slash input",
+        "[coding_agent][prompt][expansion][spec]") {
     CHECK(expand("/handoff\nfirst second third", {}, {make_template("handoff", "/quit $1 ${@:2}")}) ==
           "/quit first second third");
 
@@ -125,7 +127,8 @@ TEST_CASE("prompt expansion expands templates once and preserves unmatched slash
     }
 }
 
-TEST_CASE("prompt expansion ignores skill and template content that is not a slash invocation", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion ignores skill and template content that is not a slash invocation",
+        "[coding_agent][prompt][expansion][spec]") {
     tests::TempWorkspace workspace;
     const auto help = expand(
         "/help",
@@ -136,13 +139,15 @@ TEST_CASE("prompt expansion ignores skill and template content that is not a sla
     CHECK(help.find("template-only") == std::string::npos);
 }
 
-TEST_CASE("prompt expansion treats slash input at column zero as potential skill or template", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion treats slash input at column zero as potential skill or template",
+        "[coding_agent][prompt][expansion][spec]") {
     CHECK(expand(" /args", {}, {make_template("args", "expanded")}) == " /args");
     CHECK(expand("\t/args", {}, {make_template("args", "expanded")}) == "\t/args");
     CHECK(expand("/args", {}, {make_template("args", "expanded")}) == "expanded");
 }
 
-TEST_CASE("prompt expansion passes through unknown or unreadable skill invocation", "[coding_agent][prompt][expansion]") {
+TEST_CASE("prompt expansion passes through unknown or unreadable skill invocation",
+        "[coding_agent][prompt][expansion][spec]") {
     tests::TempWorkspace workspace;
     auto skill = make_skill_on_disk(workspace, "missing-file", "body");
 

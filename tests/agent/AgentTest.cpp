@@ -468,7 +468,8 @@ public:
 
 } // namespace
 
-TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive snapshot", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive snapshot",
+        "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -495,9 +496,7 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
     CHECK(subject.state().messages.size() == 2);
 }
 
-TEST_CASE(
-    "stateful Agent gives awaitable policies its active run stop token",
-    "[agent][stateful][issue82]") {
+TEST_CASE("stateful Agent gives awaitable policies its active run stop token", "[agent][stateful][issue82][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -520,9 +519,8 @@ TEST_CASE(
     CHECK_FALSE(stop_requested);
 }
 
-TEST_CASE(
-    "stateful Agent abort requests the same token observed by policies and provider",
-    "[agent][stateful][abort][issue39]") {
+TEST_CASE("stateful Agent abort requests the same token observed by policies and provider",
+        "[agent][stateful][abort][issue39][spec]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
     std::optional<std::stop_token> transform_stop_token;
@@ -572,7 +570,8 @@ TEST_CASE(
     subject.abort();
 }
 
-TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers",
+        "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -634,8 +633,7 @@ TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only obser
 }
 
 TEST_CASE(
-    "stateful Agent commits after live state and weak observers",
-    "[agent][stateful][commitment][issue36]") {
+        "stateful Agent commits after live state and weak observers", "[agent][stateful][commitment][issue36][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -673,9 +671,8 @@ TEST_CASE(
     CHECK(subscription);
 }
 
-TEST_CASE(
-    "stateful Agent weak observer failure cannot veto strong commitment",
-    "[agent][stateful][commitment][issue36]") {
+TEST_CASE("stateful Agent weak observer failure cannot veto strong commitment",
+        "[agent][stateful][commitment][issue36][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -718,9 +715,8 @@ TEST_CASE(
     CHECK(committed_events == 11);
 }
 
-TEST_CASE(
-    "stateful Agent returns strong commitment failure with retained live state and recovers",
-    "[agent][stateful][commitment][issue36]") {
+TEST_CASE("stateful Agent returns strong commitment failure with retained live state and recovers",
+        "[agent][stateful][commitment][issue36][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -750,9 +746,8 @@ TEST_CASE(
     CHECK(subject.state().messages.size() == 3);
 }
 
-TEST_CASE(
-    "stateful Agent keeps reported weak observer failure from vetoing a prompt",
-    "[agent][stateful][issue35][issue483]") {
+TEST_CASE("stateful Agent keeps reported weak observer failure from vetoing a prompt",
+        "[agent][stateful][issue35][issue483][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -809,7 +804,7 @@ TEST_CASE(
     CHECK(snapshot.diagnostics[1].detail.find("explicit observer failure") != std::string::npos);
 }
 
-TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -840,9 +835,8 @@ TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent
     }
 }
 
-TEST_CASE(
-    "stateful Agent suppresses an observer unsubscribed before its turn",
-    "[agent][stateful][subscription][issue452]") {
+TEST_CASE("stateful Agent suppresses an observer unsubscribed before its turn",
+        "[agent][stateful][subscription][issue452][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -884,9 +878,8 @@ TEST_CASE(
     CHECK_FALSE(*second);
 }
 
-TEST_CASE(
-    "stateful Agent begins a reentrant subscription with the next event",
-    "[agent][stateful][subscription][issue452]") {
+TEST_CASE("stateful Agent begins a reentrant subscription with the next event",
+        "[agent][stateful][subscription][issue452][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -938,9 +931,8 @@ TEST_CASE(
     CHECK(*late);
 }
 
-TEST_CASE(
-    "stateful Agent subscription handle outlives its owner as a benign drop",
-    "[agent][stateful][subscription][issue452]") {
+TEST_CASE("stateful Agent subscription handle outlives its owner as a benign drop",
+        "[agent][stateful][subscription][issue452][spec]") {
     std::unique_ptr<agent::AgentEventSubscription> handle;
     {
         auto client = std::make_shared<ScriptedFakeRuntime>();
@@ -967,7 +959,7 @@ TEST_CASE(
     handle.reset();
 }
 
-TEST_CASE("stateful Agent retains history while agent_end stays invocation-local", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent retains history while agent_end stays invocation-local", "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -998,7 +990,8 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
     CHECK(subscription);
 }
 
-TEST_CASE("stateful Agent rejects a second prompt while its active run is suspended", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent rejects a second prompt while its active run is suspended",
+        "[agent][stateful][issue35][spec]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
     agent::ToolRegistry tools;
@@ -1048,7 +1041,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     REQUIRE(subject.state().messages.size() == 2);
 }
 
-TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved", "[agent][stateful][issue35][spec]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
     agent::ToolRegistry tools;
@@ -1079,9 +1072,8 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
     REQUIRE(moved.state().messages.size() == 2);
 }
 
-TEST_CASE(
-    "stateful Agent releases its active run after an explicit provider failure",
-    "[agent][stateful][issue35][issue483]") {
+TEST_CASE("stateful Agent releases its active run after an explicit provider failure",
+        "[agent][stateful][issue35][issue483][spec]") {
     auto client = std::make_shared<FailingThenRecoveringRuntime>();
     agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -1102,7 +1094,8 @@ TEST_CASE(
     CHECK(client->calls == 2);
 }
 
-TEST_CASE("stateful Agent retains applied run-state updates after a later policy failure", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent retains applied run-state updates after a later policy failure",
+        "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(read_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("first run reply"));
@@ -1159,7 +1152,7 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     CHECK(subject.state().thinking_level == "high");
 }
 
-TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     REQUIRE(tools.add(make_read_tool()));
@@ -1185,7 +1178,7 @@ TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "
           "file contents");
 }
 
-TEST_CASE("stateful Agent retains its configured thinking state across a run", "[agent][stateful][issue35]") {
+TEST_CASE("stateful Agent retains its configured thinking state across a run", "[agent][stateful][issue35][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::ToolRegistry tools;
     agent::AgentInitialState initial_state;
@@ -1205,9 +1198,8 @@ TEST_CASE("stateful Agent retains its configured thinking state across a run", "
     CHECK(subject.state().thinking_level == "high");
 }
 
-TEST_CASE(
-    "stateful Agent admits bounded queues and drains steering before follow-up in pi order",
-    "[agent][stateful][issue44]") {
+TEST_CASE("stateful Agent admits bounded queues and drains steering before follow-up in pi order",
+        "[agent][stateful][issue44][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(ai::assistant_text_message("first"));
     client->responses.push_back(ai::assistant_text_message("second"));
@@ -1241,9 +1233,8 @@ TEST_CASE(
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[5])) == "follow-up");
 }
 
-TEST_CASE(
-    "stateful Agent queue admission is atomic at UTF-8 byte and item boundaries",
-    "[agent][stateful][issue44]") {
+TEST_CASE("stateful Agent queue admission is atomic at UTF-8 byte and item boundaries",
+        "[agent][stateful][issue44][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
@@ -1277,9 +1268,8 @@ TEST_CASE(
     CHECK(subject.state().input_queues.follow_up.messages.empty());
 }
 
-TEST_CASE(
-    "stateful Agent accepts steering and follow-up while streaming without disrupting the active run",
-    "[agent][stateful][issue44]") {
+TEST_CASE("stateful Agent accepts steering and follow-up while streaming without disrupting the active run",
+        "[agent][stateful][issue44][spec]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
     agent::AsyncAgentOptions options;
@@ -1322,7 +1312,7 @@ TEST_CASE(
     REQUIRE(subject.state().messages.size() == 6);
 }
 
-TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][stateful][issue44]") {
+TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][stateful][issue44][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncAgentOptions options;
@@ -1342,7 +1332,7 @@ TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][statefu
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "second");
 }
 
-TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order", "[agent][stateful][issue44]") {
+TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order", "[agent][stateful][issue44][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(ai::assistant_text_message("first"));
     client->responses.push_back(ai::assistant_text_message("second"));
@@ -1361,9 +1351,8 @@ TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order",
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[3])) == "second follow-up");
 }
 
-TEST_CASE(
-    "Agent::set_system_prompt reaches live state and the next stream request",
-    "[agent][stateful][issue418]") {
+TEST_CASE("Agent::set_system_prompt reaches live state and the next stream request",
+        "[agent][stateful][issue418][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.max_turns = 1;

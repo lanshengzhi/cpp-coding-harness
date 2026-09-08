@@ -67,7 +67,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_coding_agent
     SOURCES ${CCH_PARITY_FIXTURE_SRC}/coding_agent/compose.cpp
-    DEPENDS cch_agent_core cch_ai cch_tui cch_support
+    DEPENDS cch_agent_core cch_ai cch_support
 )
 
 cch_parity_run_gate("${CCH_PARITY_MANIFEST}" PROJECT_ROOT "${CCH_PARITY_FIXTURE_ROOT}")

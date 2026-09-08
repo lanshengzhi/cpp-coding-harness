@@ -30,9 +30,7 @@ using SlashCommandRouteErrorKind = tui::SlashCommandRouteErrorKind;
 
 } // namespace
 
-TEST_CASE(
-    "Slash command parsing trims input and resolves aliases",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Slash command parsing trims input and resolves aliases", "[coding_agent][tui][commands][issue502][spec]") {
     using enum SlashCommandId;
 
     struct Case {
@@ -68,9 +66,8 @@ TEST_CASE(
     CHECK(std::holds_alternative<coding_agent::tui::SlashCommandPassThrough>(ordinary));
 }
 
-TEST_CASE(
-    "Slash command parsing rejects unknown and invalid submissions",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Slash command parsing rejects unknown and invalid submissions",
+        "[coding_agent][tui][commands][issue502][spec]") {
     auto unknown = coding_agent::tui::SlashCommandRouter::parse("/missing");
     const auto* unknown_error = std::get_if<coding_agent::tui::SlashCommandRouteError>(&unknown);
     REQUIRE(unknown_error != nullptr);
@@ -98,9 +95,8 @@ TEST_CASE(
     CHECK(missing_name_error->kind == SlashCommandRouteErrorKind::Invalid);
 }
 
-TEST_CASE(
-    "Slash command routing executes every immediate command synchronously",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Slash command routing executes every immediate command synchronously",
+        "[coding_agent][tui][commands][issue502][spec]") {
     using enum SlashCommandId;
 
     std::vector<SlashCommandId> executed;
@@ -131,9 +127,8 @@ TEST_CASE(
     CHECK(executed[7] == Name);
 }
 
-TEST_CASE(
-    "Slash command routing returns structured modal requests with arguments",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Slash command routing returns structured modal requests with arguments",
+        "[coding_agent][tui][commands][issue502][spec]") {
     using enum SlashCommandId;
 
     tui::SlashCommandExecutionContext context;
@@ -170,9 +165,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Slash command routing preserves host-recognized resources and paths",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Slash command routing preserves host-recognized resources and paths",
+        "[coding_agent][tui][commands][issue502][spec]") {
     tui::SlashCommandExecutionContext context;
     context.allow_unrecognized = [](std::string_view command) {
         return command == "project-prompt" || command == "skill:review" ||
@@ -195,9 +189,8 @@ TEST_CASE(
     CHECK(error->kind == SlashCommandRouteErrorKind::UnknownCommand);
 }
 
-TEST_CASE(
-    "Slash command routing reports immediate execution failures as user-visible errors",
-    "[coding_agent][tui][commands][issue502]") {
+TEST_CASE("Slash command routing reports immediate execution failures as user-visible errors",
+        "[coding_agent][tui][commands][issue502][spec]") {
     tui::SlashCommandExecutionContext context;
     context.execute_immediate = [](const tui::SlashCommandInvocation&) {
         return support::ExpectedVoid{std::unexpected(support::make_error(

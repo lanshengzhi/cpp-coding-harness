@@ -33,7 +33,7 @@ namespace {
 struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::RuntimeFixture runtime;
 
     Fixture() { agent_dir_guard.set(agent_dir.path().string()); }
@@ -98,9 +98,8 @@ struct Fixture {
 
 } // namespace
 
-TEST_CASE(
-    "a host-shared ModelRuntime survives Session close and is reused by the replacement",
-    "[coding_agent][runtime][reuse][issue466]") {
+TEST_CASE("a host-shared ModelRuntime survives Session close and is reused by the replacement",
+        "[coding_agent][runtime][reuse][issue466][spec]") {
     Fixture fixture;
     const auto path = fixture.session_file();
     tests::ScriptedRuntimeFixture scripted;
@@ -143,9 +142,8 @@ TEST_CASE(
     session_b.close();
 }
 
-TEST_CASE(
-    "a Session-created runtime is released on close while a host-shared runtime is retained",
-    "[coding_agent][runtime][reuse][issue466]") {
+TEST_CASE("a Session-created runtime is released on close while a host-shared runtime is retained",
+        "[coding_agent][runtime][reuse][issue466][spec]") {
     Fixture fixture;
     const auto path = fixture.session_file();
 

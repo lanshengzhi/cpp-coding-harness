@@ -15,9 +15,7 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "stream decoder demuxes a cursor position report out of the byte stream",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder demuxes a cursor position report out of the byte stream", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     const auto result = decoder.feed("a\x1b[8;3Rz");
 
@@ -36,9 +34,7 @@ TEST_CASE(
     CHECK(result.forwarded_input == "az");
 }
 
-TEST_CASE(
-    "stream decoder demuxes a cell-size response without leaking bytes",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder demuxes a cell-size response without leaking bytes", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     const auto result = decoder.feed("\x1b[6;20;10t");
 
@@ -50,9 +46,7 @@ TEST_CASE(
     CHECK(result.forwarded_input.empty());
 }
 
-TEST_CASE(
-    "stream decoder demuxes keyboard protocol negotiation responses",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder demuxes keyboard protocol negotiation responses", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto kitty = decoder.feed("\x1b[?7u");
@@ -74,9 +68,7 @@ TEST_CASE(
     CHECK(attributes.events.empty());
 }
 
-TEST_CASE(
-    "stream decoder demuxes color scheme and background appearance reports",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder demuxes color scheme and background appearance reports", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto dark = decoder.feed("\x1b[?997;1n");
@@ -104,9 +96,7 @@ TEST_CASE(
     CHECK(terminated->appearance == tui::TerminalAppearance::Dark);
 }
 
-TEST_CASE(
-    "stream decoder drops malformed appearance responses instead of forwarding them",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder drops malformed appearance responses instead of forwarding them", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto malformed = decoder.feed("\x1b]11;not-a-color\x07typed");
@@ -119,9 +109,7 @@ TEST_CASE(
     CHECK(unknown_value.forwarded_input.empty());
 }
 
-TEST_CASE(
-    "stream decoder forwards malformed response-shaped sequences as in-band bytes",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder forwards malformed response-shaped sequences as in-band bytes", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     // A CPR-shaped sequence that fails validation (0-based overflow) is not a
@@ -133,9 +121,7 @@ TEST_CASE(
     CHECK(result.forwarded_input == "\x1b[0;0R");
 }
 
-TEST_CASE(
-    "stream decoder reassembles responses split across chunk boundaries",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder reassembles responses split across chunk boundaries", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     std::vector<tui::detail::TerminalResponseVariant> responses;
@@ -156,9 +142,7 @@ TEST_CASE(
     CHECK(forwarded.empty());
 }
 
-TEST_CASE(
-    "stream decoder reassembles key sequences split across chunk boundaries",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder reassembles key sequences split across chunk boundaries", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     std::vector<tui::InputEventVariant> events;
@@ -180,9 +164,7 @@ TEST_CASE(
     CHECK(forwarded == stream);
 }
 
-TEST_CASE(
-    "stream decoder flush resolves a lone escape as the escape key",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder flush resolves a lone escape as the escape key", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto pending = decoder.feed("\x1b");
@@ -199,9 +181,7 @@ TEST_CASE(
     CHECK(key->key == "escape");
 }
 
-TEST_CASE(
-    "stream decoder flush drops appearance response fragments",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder flush drops appearance response fragments", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     CHECK(decoder.feed("\x1b]11;unterminated").forwarded_input.empty());
@@ -216,9 +196,7 @@ TEST_CASE(
     CHECK(scheme_flush.events.empty());
 }
 
-TEST_CASE(
-    "stream decoder flush forwards fragments that could still be user input",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder flush forwards fragments that could still be user input", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     // A partial modifier sequence is not response-shaped: it forwards
@@ -229,9 +207,7 @@ TEST_CASE(
     CHECK(flushed.events.empty());
 }
 
-TEST_CASE(
-    "stream decoder completes a fragmented appearance response before the flush window",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder completes a fragmented appearance response before the flush window", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     CHECK(decoder.feed("\x1b[?997;").responses.empty());
@@ -244,9 +220,7 @@ TEST_CASE(
     CHECK(completed.forwarded_input == "late");
 }
 
-TEST_CASE(
-    "stream decoder passes bracketed paste through verbatim with one paste event",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder passes bracketed paste through verbatim with one paste event", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const std::string_view framed = "\x1b[200~hello\nworld\x1b[201~";
@@ -263,9 +237,7 @@ TEST_CASE(
     CHECK(result.responses.empty());
 }
 
-TEST_CASE(
-    "stream decoder protects response-shaped bytes inside bracketed paste",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder protects response-shaped bytes inside bracketed paste", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto result = decoder.feed("\x1b[200~line \x1b[?997;1n text\x1b[201~");
@@ -276,9 +248,7 @@ TEST_CASE(
     CHECK(paste->text == "line \x1b[?997;1n text");
 }
 
-TEST_CASE(
-    "stream decoder reset clears a buffered fragment",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder reset clears a buffered fragment", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     CHECK(decoder.feed("\x1b[6;20").responses.empty());
@@ -292,9 +262,7 @@ TEST_CASE(
     CHECK(result.forwarded_input == "q");
 }
 
-TEST_CASE(
-    "stream decoder bounds and discards a malformed oversized escape sequence",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder bounds and discards a malformed oversized escape sequence", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const std::string oversized = "\x1b]52;" + std::string(300, 'y');
@@ -311,9 +279,7 @@ TEST_CASE(
     CHECK(recovered.forwarded_input == "q");
 }
 
-TEST_CASE(
-    "stream decoder interleaves responses and user input in stream order",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder interleaves responses and user input in stream order", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto result = decoder.feed("x\x1b[?997;2n\x1b[A");
@@ -330,9 +296,7 @@ TEST_CASE(
     CHECK(result.forwarded_input == "x\x1b[A");
 }
 
-TEST_CASE(
-    "stream decoder forwards kitty image protocol acknowledgements without events",
-    "[tui][decoder]") {
+TEST_CASE("stream decoder forwards kitty image protocol acknowledgements without events", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     // APC image acknowledgements are not demuxed responses: they pass through

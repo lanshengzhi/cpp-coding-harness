@@ -250,7 +250,7 @@ struct ModelFixture {
     std::filesystem::path workspace;
     tests::TempWorkspace agent_dir;
     tests::RuntimeFixture runtime;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
@@ -340,9 +340,8 @@ struct InterruptSession {
 
 } // namespace
 
-TEST_CASE(
-    "rendering golden: the full message pipeline renders in pi's shapes",
-    "[coding_agent][tui][rendering][issue422]") {
+TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",
+        "[coding_agent][tui][rendering][issue422][compat-pi]") {
     auto fixture = make_pipeline_session();
     tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
 
@@ -393,10 +392,9 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE(
-    "rendering golden: Ctrl+L model selector switches the model with the pi "
-    "status",
-    "[coding_agent][tui][rendering][issue422]") {
+TEST_CASE("rendering golden: Ctrl+L model selector switches the model with the pi "
+          "status",
+        "[coding_agent][tui][rendering][issue422][compat-pi]") {
     ModelFixture fixture;
     Running running;
 
@@ -457,12 +455,11 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "rendering golden: the fork flow's user-message selector overlay",
-    "[coding_agent][tui][rendering][issue422]") {
+TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
+        "[coding_agent][tui][rendering][issue422][compat-pi]") {
     auto workspace = rendering_workspace_path("fork");
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     dir_guard.set(agent_dir.path().string());
@@ -568,10 +565,9 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "rendering golden: app.interrupt aborts the active run and renders the "
-    "aborted entry",
-    "[coding_agent][tui][rendering][issue422]") {
+TEST_CASE("rendering golden: app.interrupt aborts the active run and renders the "
+          "aborted entry",
+        "[coding_agent][tui][rendering][issue422][compat-pi]") {
     tests::ScriptedRuntimeFixture gated;
     gated.control->gate_at = 0;
     gated.control->emit_partial_before_gate = true;

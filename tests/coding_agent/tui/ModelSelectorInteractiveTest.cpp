@@ -36,12 +36,12 @@ using tests::drain_ready;
 namespace {
 
 /// One isolated assembly fixture: a temp workspace for the session file and a
-/// temp Agent Config Directory (`PI_CODING_AGENT_DIR`) whose models.json and
+/// temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json and
 /// settings.json drive runtime creation deterministically.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
@@ -139,9 +139,8 @@ struct Running {
 
 } // namespace
 
-TEST_CASE(
-    "Ctrl+L opens the model selector and Enter selects a model with the Model status",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("Ctrl+L opens the model selector and Enter selects a model with the Model status",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -182,9 +181,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "Ctrl+P and Shift+Ctrl+P cycle models with pi statuses; Shift+Tab cycles thinking",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("Ctrl+P and Shift+Ctrl+P cycle models with pi statuses; Shift+Tab cycles thinking",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -231,9 +229,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "/model switches on an exact reference and opens the selector pre-filtered otherwise",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("/model switches on an exact reference and opens the selector pre-filtered otherwise",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -271,9 +268,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "/model argument completion lists the candidate models through model-search",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("/model argument completion lists the candidate models through model-search",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;
@@ -308,9 +304,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "/scoped-models enables a session scope, saves enabledModels, and cycling honors it",
-    "[coding_agent][tui][model-selector][e2e][issue407]") {
+TEST_CASE("/scoped-models enables a session scope, saves enabledModels, and cycling honors it",
+        "[coding_agent][tui][model-selector][e2e][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
     Running running;

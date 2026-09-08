@@ -129,7 +129,7 @@ private:
 /// Deterministic agent config directory with a settings.json override.
 struct SettingsFixture {
   tests::TempWorkspace agent_dir;
-  tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+  tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
 
   explicit SettingsFixture(std::string_view json) {
     dir_guard.set(agent_dir.path().string());
@@ -401,7 +401,7 @@ void check_snapshot(std::string_view name, const support::JsonValue &actual) {
 } // namespace
 
 TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
-        "[coding_agent][runtime][golden][issue421]") {
+        "[coding_agent][runtime][golden][issue421][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "lifecycle.jsonl";
 
@@ -462,7 +462,7 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
 }
 
 TEST_CASE("session resume golden: persisted history restores at message level",
-        "[coding_agent][runtime][golden][issue421]") {
+        "[coding_agent][runtime][golden][issue421][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "resume.jsonl";
     tests::RuntimeFixture runtime;
@@ -542,7 +542,7 @@ TEST_CASE("session resume golden: persisted history restores at message level",
 
 TEST_CASE("session compaction golden: manual compaction pins summary and "
           "rebuilt context",
-        "[coding_agent][runtime][golden][issue421]") {
+        "[coding_agent][runtime][golden][issue421][compat-pi]") {
     tests::TempWorkspace workspace;
     // keepRecentTokens: 0 forces a full cut so the split-turn compaction
     // exercise is deterministic on both engines (same settings on the TS side).
@@ -611,7 +611,7 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
 
 TEST_CASE("session model-switch golden: setModel pins entries, thinking "
           "re-clamp, settings default",
-        "[coding_agent][runtime][golden][issue421]") {
+        "[coding_agent][runtime][golden][issue421][compat-pi]") {
     tests::TempWorkspace workspace;
     SettingsFixture settings(R"({})");
     const auto path = workspace.path() / "model-switch.jsonl";
@@ -675,8 +675,8 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     session->close();
 }
 
-TEST_CASE(
-        "session-family golden: most-recent selection and header values", "[coding_agent][runtime][golden][issue421]") {
+TEST_CASE("session-family golden: most-recent selection and header values",
+        "[coding_agent][runtime][golden][issue421][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto dir = workspace.path() / "sessions";
     std::filesystem::create_directories(dir);

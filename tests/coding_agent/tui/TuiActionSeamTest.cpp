@@ -78,7 +78,7 @@ struct Running {
 struct Fixture {
     tests::TempWorkspace workspace;
     tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::RuntimeFixture runtime;
     tests::RuntimeLoopDriver runtime_driver;
 
@@ -165,7 +165,7 @@ void wait_for_screen(Running& running, const std::string& text) {
 } // namespace
 
 TEST_CASE("boot and in-session replacement cross the one asynchronous replacement sink",
-        "[coding_agent][tui][actions][issue461]") {
+        "[coding_agent][tui][actions][issue461][spec]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -196,9 +196,8 @@ TEST_CASE("boot and in-session replacement cross the one asynchronous replacemen
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "session replacement retires the action generation so later actions are re-stamped",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("session replacement retires the action generation so later actions are re-stamped",
+        "[coding_agent][tui][actions][issue461][spec]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -234,9 +233,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "close retires the action generation and every admitted action is delivered once",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("close retires the action generation and every admitted action is delivered once",
+        "[coding_agent][tui][actions][issue461][spec]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -263,9 +261,8 @@ TEST_CASE(
     CHECK(actions->generations.size() == 2);
 }
 
-TEST_CASE(
-    "a rejected replacement surfaces through the seam and the TUI keeps running",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("a rejected replacement surfaces through the seam and the TUI keeps running",
+        "[coding_agent][tui][actions][issue461][spec]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -307,9 +304,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "a null action sink reports session replacement unavailable and keeps the run alive",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("a null action sink reports session replacement unavailable and keeps the run alive",
+        "[coding_agent][tui][actions][issue461][spec]") {
     Fixture fixture;
     Running running;
     // No action sink: the TUI-local default applies and replacement reports
@@ -346,9 +342,8 @@ TEST_CASE(
     CHECK_FALSE(*running.run_result);
 }
 
-TEST_CASE(
-    "boot reports trust diagnostics as one ReportBootDiagnosticsAction through the sink",
-    "[coding_agent][tui][actions][issue461]") {
+TEST_CASE("boot reports trust diagnostics as one ReportBootDiagnosticsAction through the sink",
+        "[coding_agent][tui][actions][issue461][spec]") {
     Fixture fixture;
     // A trust-requiring project resource (a `.pi` skill document) makes the
     // boot resolve trust; an unreadable trust store (a directory where

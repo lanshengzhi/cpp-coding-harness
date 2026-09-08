@@ -7,6 +7,7 @@
 #include "cli/SessionFamily.hpp"
 #include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/compat/pi/PiImport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
@@ -554,6 +555,24 @@ void print_session_diagnostics(
     }
     if (config.version) {
         streams.output << project_version() << '\n';
+        return 0;
+    }
+    if (config.import_command) {
+        auto imported = coding_agent::compat::pi::import_state({
+                .source_directory = config.import_source.value_or(coding_agent::compat::pi::default_source_directory()),
+                .destination_directory = config.import_destination.value_or(coding_agent::agent_config_dir()),
+        });
+        if (!imported) {
+            streams.error << "pi import failed: " << imported.error().message;
+            if (!imported.error().detail.empty()) {
+                streams.error << ": " << imported.error().detail;
+            }
+            streams.error << '\n';
+            return 1;
+        }
+        streams.output << "Imported " << imported->files_copied << " files and " << imported->directories_copied
+                       << " directories into " << config.import_destination.value_or(coding_agent::agent_config_dir())
+                       << '\n';
         return 0;
     }
 

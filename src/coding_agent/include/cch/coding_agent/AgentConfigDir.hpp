@@ -4,13 +4,16 @@
 
 namespace cch::coding_agent {
 
-/// User-level state root shared directly with pi (`~/.pi/agent/`). All
-/// user-level state files (auth, settings, trust) live under this single root,
-/// separate from project-level `.pi/` resources.
+/// Product-owned user-level state root (`~/.pike/agent/`). All user-level
+/// state files (auth, settings, trust) live under this single root, separate
+/// from project-level `.pi/` resources.
 ///
 /// Resolution order:
-///   1. `PI_CODING_AGENT_DIR` environment override,
-///   2. `$HOME/.pi/agent`.
+///   1. `PIKE_CODING_AGENT_DIR` environment override,
+///   2. `$HOME/.pike/agent`.
+///
+/// The former pi environment variable and directory are never consulted. Use
+/// the explicit `pike import` command to copy state from a pi installation.
 ///
 /// Returns an empty path when no home directory can be determined; derived
 /// file paths are then empty as well, and loaders treat them as missing.

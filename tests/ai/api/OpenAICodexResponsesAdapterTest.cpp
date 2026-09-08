@@ -267,9 +267,8 @@ struct CodexHarness {
 
 } // namespace
 
-TEST_CASE(
-    "Codex streams the frozen WS request and event sequence through Models",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex streams the frozen WS request and event sequence through Models",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     const auto ws_fixture = tests::read_pi_fixture("wire/openai-codex-responses-ws.json");
     REQUIRE(ws_fixture);
@@ -362,9 +361,8 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex emits a string user message as one input_text and omits an empty block array (WS)",
-    "[ai][provider][codex][issue366]") {
+TEST_CASE("Codex emits a string user message as one input_text and omits an empty block array (WS)",
+        "[ai][provider][codex][issue366][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     const auto ws_fixture = tests::read_pi_fixture(
         "wire/openai-codex-responses-string-content-ws.json");
@@ -426,9 +424,8 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex emits an empty string user message as one input_text (WS)",
-    "[ai][provider][codex][issue366]") {
+TEST_CASE("Codex emits an empty string user message as one input_text (WS)",
+        "[ai][provider][codex][issue366][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     const auto ws_fixture = tests::read_pi_fixture(
         "wire/openai-codex-responses-empty-string-ws.json");
@@ -488,9 +485,8 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex falls back to SSE with a diagnostic when WebSocket connect fails",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex falls back to SSE with a diagnostic when WebSocket connect fails",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
@@ -559,9 +555,8 @@ TEST_CASE(
     REQUIRE(support::read_json(request.body));
 }
 
-TEST_CASE(
-    "Codex falls back to SSE when the WebSocket is idle before the first event",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex falls back to SSE when the WebSocket is idle before the first event",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     harness.ws->connect_scripts.push_back(
@@ -592,9 +587,8 @@ TEST_CASE(
     REQUIRE(session->sent_frames.size() == 1);
 }
 
-TEST_CASE(
-    "Codex surfaces WebSocket failures after the first event without SSE fallback",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex surfaces WebSocket failures after the first event without SSE fallback",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     session->on_send = [](ScriptedWebSocket& socket, std::string_view) {
@@ -631,7 +625,8 @@ TEST_CASE(
     CHECK(run.events.size() >= 2);
 }
 
-TEST_CASE("Codex retries previous_response_not_found once on WebSocket", "[ai][provider][codex][issue342][issue536]") {
+TEST_CASE("Codex retries previous_response_not_found once on WebSocket",
+        "[ai][provider][codex][issue342][issue536][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto first = std::make_shared<ScriptedWebSocket::Session>();
     auto second = std::make_shared<ScriptedWebSocket::Session>();
@@ -714,7 +709,7 @@ TEST_CASE("Codex retries previous_response_not_found once on WebSocket", "[ai][p
 }
 
 TEST_CASE("Codex retries websocket_connection_limit_reached once before start",
-        "[ai][provider][codex][issue342][issue536]") {
+        "[ai][provider][codex][issue342][issue536][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto first = std::make_shared<ScriptedWebSocket::Session>();
     auto second = std::make_shared<ScriptedWebSocket::Session>();
@@ -742,9 +737,7 @@ TEST_CASE("Codex retries websocket_connection_limit_reached once before start",
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex marks a session SSE-only after a WebSocket failure",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex marks a session SSE-only after a WebSocket failure", "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
@@ -778,9 +771,8 @@ TEST_CASE(
     CHECK(harness.http->requests.size() == 2);
 }
 
-TEST_CASE(
-    "Codex reuses session sockets and sends previous_response_id input deltas",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex reuses session sockets and sends previous_response_id input deltas",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     session->on_send = [](ScriptedWebSocket& socket, std::string_view) {
@@ -838,9 +830,7 @@ TEST_CASE(
     CHECK(delta_input[0].at("content").get_array()[0].at("text").get_string() == "Now finish");
 }
 
-TEST_CASE(
-    "Codex opens a fresh socket after the idle close window",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex opens a fresh socket after the idle close window", "[ai][provider][codex][issue342][compat-pi]") {
     ai::providers::CodexWebSocketCacheConfig config;
     config.idle_close = std::chrono::milliseconds{0};
     auto harness = make_codex_harness(codex_model(), config);
@@ -890,9 +880,7 @@ TEST_CASE(
     CHECK(age_harness.ws->requests.size() == 2);
 }
 
-TEST_CASE(
-    "Codex closes one-shot sockets when cacheRetention is none",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex closes one-shot sockets when cacheRetention is none", "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     const auto make_session = [] {
         auto session = std::make_shared<ScriptedWebSocket::Session>();
@@ -930,9 +918,7 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex WebSocket termination matrix maps statuses",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex WebSocket termination matrix maps statuses", "[ai][provider][codex][issue342][compat-pi]") {
     struct Case {
         std::string frame;
         ai::AssistantStopReason expected;
@@ -987,9 +973,8 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex cancellation closes the socket and yields one aborted terminal",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex cancellation closes the socket and yields one aborted terminal",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     std::stop_source stop;
@@ -1017,9 +1002,7 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex rejects tokens without a chatgpt_account_id claim",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex rejects tokens without a chatgpt_account_id claim", "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     ai::SimpleStreamOptions options;
     options.api_key = "not-a-jwt-token";
@@ -1035,9 +1018,8 @@ TEST_CASE(
     CHECK(event_names(run.events) == expected_events);
 }
 
-TEST_CASE(
-    "Codex SSE retries per the shared policy and never retries quota failures",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex SSE retries per the shared policy and never retries quota failures",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
@@ -1078,7 +1060,7 @@ TEST_CASE(
             .status_code = 429,
             .headers = {{"retry-after-ms", "0"}},
         },
-        .chunks = {"insufficient quota"},
+        .chunks = {R"({"error":{"code":"insufficient_quota","message":"insufficient quota"}})"},
     });
     ai::SimpleStreamOptions quota_options;
     quota_options.api_key = std::string{kCodexToken};
@@ -1090,7 +1072,7 @@ TEST_CASE(
     CHECK(quota_harness.http->requests.size() == 1);
 }
 
-TEST_CASE("Codex API errors never fall back to SSE", "[ai][provider][codex][issue342][issue536]") {
+TEST_CASE("Codex API errors never fall back to SSE", "[ai][provider][codex][issue342][issue536][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     session->frames.push_back(error_frame("server_error", "upstream exploded"));
@@ -1124,9 +1106,7 @@ TEST_CASE("Codex API errors never fall back to SSE", "[ai][provider][codex][issu
     CHECK(failed_harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex scopes cached sockets to the authenticated account",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex scopes cached sockets to the authenticated account", "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto make_session = [] {
         auto session = std::make_shared<ScriptedWebSocket::Session>();
@@ -1163,9 +1143,8 @@ TEST_CASE(
     CHECK(harness.ws->requests[1].headers.at("chatgpt-account-id") == "acc_b");
 }
 
-TEST_CASE(
-    "Codex preserves post-merge transformed headers on the SSE fallback",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex preserves post-merge transformed headers on the SSE fallback",
+        "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
@@ -1198,9 +1177,7 @@ TEST_CASE(
     CHECK(headers.at("chatgpt-account-id") == kCodexAccountId);
 }
 
-TEST_CASE(
-    "Codex protocol errors never fall back to SSE",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex protocol errors never fall back to SSE", "[ai][provider][codex][issue342][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     session->frames.push_back("this is not json");
@@ -1218,9 +1195,8 @@ TEST_CASE(
     CHECK(harness.http->requests.empty());
 }
 
-TEST_CASE(
-    "Codex WS partials start pending and flip to stop at final_answer",
-    "[ai][provider][codex][issue374][issue370]") {
+TEST_CASE("Codex WS partials start pending and flip to stop at final_answer",
+        "[ai][provider][codex][issue374][issue370][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     const auto message_item = [](std::string_view status, bool with_content) {
@@ -1291,9 +1267,7 @@ TEST_CASE(
     CHECK(partial_stop_reasons(run.events) == expected_partials);
 }
 
-TEST_CASE(
-    "Codex SSE stream ending still pending is a terminal error",
-    "[ai][provider][codex][issue374]") {
+TEST_CASE("Codex SSE stream ending still pending is a terminal error", "[ai][provider][codex][issue374][compat-pi]") {
     auto harness = make_codex_harness(codex_model());
     harness.ws->connect_scripts.push_back(
         ScriptedWebSocketTransport::ConnectScript{
@@ -1323,9 +1297,8 @@ TEST_CASE(
     CHECK(*terminal.error.error_message == *run.result->error_message);
 }
 
-TEST_CASE(
-    "Codex SSE terminal matrix maps statuses and treats DONE as non-terminal",
-    "[ai][provider][codex][issue342]") {
+TEST_CASE("Codex SSE terminal matrix maps statuses and treats DONE as non-terminal",
+        "[ai][provider][codex][issue342][compat-pi]") {
     struct Case {
         std::string sse;
         ai::AssistantStopReason expected;

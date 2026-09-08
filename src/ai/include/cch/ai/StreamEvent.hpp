@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Content.hpp"
+#include "InferenceFailure.hpp"
 #include "Message.hpp"
 #include "Usage.hpp"
 
@@ -80,6 +81,9 @@ struct AssistantErrorEvent {
     /// Models-category enrichment for request/runtime failures. Provider
     /// terminal events may omit it when no Models category applies.
     std::optional<cch::support::Error> failure{std::nullopt};
+    /// Provider/transport classification used by the session RecoveryPolicy.
+    /// The diagnostic `error_message` is never consulted for this decision.
+    std::optional<InferenceFailure> inference_failure{std::nullopt};
 };
 
 using AssistantStreamEvent = std::variant<

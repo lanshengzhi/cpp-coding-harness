@@ -121,9 +121,8 @@ struct Recorder {
 
 } // namespace
 
-TEST_CASE(
-    "ScopedModelsSelector renders the configuration header, list, and all-enabled footer",
-    "[coding_agent][tui][scoped-models][issue407]") {
+TEST_CASE("ScopedModelsSelector renders the configuration header, list, and all-enabled footer",
+        "[coding_agent][tui][scoped-models][issue407][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     auto selector = make_selector(theme, recorder);
@@ -142,9 +141,8 @@ TEST_CASE(
     CHECK_FALSE(recorder.persisted);
 }
 
-TEST_CASE(
-    "ScopedModelsSelector toggles on Enter starting an explicit list, with counts and the unsaved marker",
-    "[coding_agent][tui][scoped-models][issue407]") {
+TEST_CASE("ScopedModelsSelector toggles on Enter starting an explicit list, with counts and the unsaved marker",
+        "[coding_agent][tui][scoped-models][issue407][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     auto selector = make_selector(theme, recorder);
@@ -185,9 +183,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "ScopedModelsSelector enable-all and clear-all act on the filtered set when searching",
-    "[coding_agent][tui][scoped-models][issue407]") {
+TEST_CASE("ScopedModelsSelector enable-all and clear-all act on the filtered set when searching",
+        "[coding_agent][tui][scoped-models][issue407][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     // Start with only alpha-1 enabled.
@@ -227,9 +224,8 @@ TEST_CASE(
     CHECK(recorder.last_change->empty());
 }
 
-TEST_CASE(
-    "ScopedModelsSelector toggles whole providers and reorders enabled models",
-    "[coding_agent][tui][scoped-models][issue407]") {
+TEST_CASE("ScopedModelsSelector toggles whole providers and reorders enabled models",
+        "[coding_agent][tui][scoped-models][issue407][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     auto selector = make_selector(theme, recorder, std::vector<std::string>{"alpha/alpha-1"});
@@ -274,7 +270,7 @@ TEST_CASE(
 }
 
 TEST_CASE("ScopedModelsSelector preserves dispatch order for shared selection actions",
-        "[coding_agent][tui][scoped-models][issue555]") {
+        "[coding_agent][tui][scoped-models][issue555][spec]") {
     auto theme = test_theme();
     bool changed = false;
     auto registry = std::make_shared<const tui::KeybindingRegistry>(std::vector<tui::EffectiveKeybinding>{
@@ -299,7 +295,7 @@ TEST_CASE("ScopedModelsSelector preserves dispatch order for shared selection ac
 }
 
 TEST_CASE("ScopedModelsSelector preserves reorder-up precedence for shared reorder actions",
-        "[coding_agent][tui][scoped-models][issue555]") {
+        "[coding_agent][tui][scoped-models][issue555][spec]") {
     auto theme = test_theme();
     std::optional<std::vector<std::string>> changed;
     auto registry = std::make_shared<const tui::KeybindingRegistry>(std::vector<tui::EffectiveKeybinding>{
@@ -324,9 +320,8 @@ TEST_CASE("ScopedModelsSelector preserves reorder-up precedence for shared reord
     CHECK((*changed)[1] == "alpha/alpha-1");
 }
 
-TEST_CASE(
-    "ScopedModelsSelector cancels on Escape and Ctrl+C clears the search first",
-    "[coding_agent][tui][scoped-models][issue407]") {
+TEST_CASE("ScopedModelsSelector cancels on Escape and Ctrl+C clears the search first",
+        "[coding_agent][tui][scoped-models][issue407][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     auto selector = make_selector(theme, recorder);
@@ -362,9 +357,8 @@ static void check_all_lines_bounded(const tui::RenderResult& rendered, std::size
     }
 }
 
-TEST_CASE(
-    "ScopedModelsSelector never emits a line wider than the render width",
-    "[coding_agent][tui][scoped-models][issue426]") {
+TEST_CASE("ScopedModelsSelector never emits a line wider than the render width",
+        "[coding_agent][tui][scoped-models][issue426][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     auto selector = make_selector(theme, recorder);
@@ -379,7 +373,7 @@ TEST_CASE(
 }
 
 TEST_CASE("ScopedModelsSelector reports the search cursor on the real search row",
-        "[coding_agent][tui][scoped-models][issue588]") {
+        "[coding_agent][tui][scoped-models][issue588][spec]") {
     auto theme = test_theme();
     Recorder recorder;
     auto selector = make_selector(theme, recorder);

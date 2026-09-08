@@ -55,12 +55,12 @@ constexpr std::string_view kKeyedModels = R"({
 })";
 
 /// One isolated assembly fixture: a temp workspace for the session files and
-/// a temp Agent Config Directory (`PI_CODING_AGENT_DIR`) whose models.json
+/// a temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json
 /// drives runtime creation deterministically.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PI_CODING_AGENT_DIR"};
+    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
@@ -211,9 +211,8 @@ void double_escape(Running& running) {
 
 } // namespace
 
-TEST_CASE(
-    "double-escape with an empty editor opens the session tree overlay",
-    "[coding_agent][tui][tree-selector][e2e][issue410]") {
+TEST_CASE("double-escape with an empty editor opens the session tree overlay",
+        "[coding_agent][tui][tree-selector][e2e][issue410][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1"});
     Running running;
@@ -239,9 +238,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "tree navigation switches the active path, pre-fills the editor, and reports the pi status",
-    "[coding_agent][tui][tree-selector][e2e][issue410]") {
+TEST_CASE("tree navigation switches the active path, pre-fills the editor, and reports the pi status",
+        "[coding_agent][tui][tree-selector][e2e][issue410][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1", "user-2"});
     Running running;
@@ -288,9 +286,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "selecting the current leaf reports Already at this point",
-    "[coding_agent][tui][tree-selector][e2e][issue410]") {
+TEST_CASE("selecting the current leaf reports Already at this point",
+        "[coding_agent][tui][tree-selector][e2e][issue410][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1"});
     Running running;
@@ -329,9 +326,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "a fresh in-memory session opens the tree on its initial thinking entry",
-    "[coding_agent][tui][tree-selector][e2e][issue491]") {
+TEST_CASE("a fresh in-memory session opens the tree on its initial thinking entry",
+        "[coding_agent][tui][tree-selector][e2e][issue491][spec]") {
     Fixture fixture;
     // An in-memory session (no file, no messages). pi's createAgentSession
     // appends the initial thinking-level change to every new session, so the
@@ -408,9 +404,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "shift+l edits a label and persists the label entry",
-    "[coding_agent][tui][tree-selector][e2e][issue410]") {
+TEST_CASE("shift+l edits a label and persists the label entry",
+        "[coding_agent][tui][tree-selector][e2e][issue410][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1"});
     Running running;
@@ -467,9 +462,8 @@ TEST_CASE(
     CHECK(*running.run_result);
 }
 
-TEST_CASE(
-    "tree copy reports pi statuses through the clipboard writer",
-    "[coding_agent][tui][tree-selector][e2e][issue410]") {
+TEST_CASE("tree copy reports pi statuses through the clipboard writer",
+        "[coding_agent][tui][tree-selector][e2e][issue410][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"user-0", "user-1"});
     Running running;

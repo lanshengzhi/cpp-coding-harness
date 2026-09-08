@@ -15,7 +15,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <set>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -91,6 +90,10 @@ support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
     // not re-append the diagnostics the bind-time initialize renders.
     displayed_agent_diagnostics_.clear();
     displayed_session_event_diagnostics_.clear();
+    displayed_run_error_.reset();
+    displayed_retry_error_.reset();
+    displayed_compaction_error_.reset();
+    displayed_compaction_state_ = CompactionState::Idle;
     session_status_ = SessionStatus::Idle;
     // ADR 0052: attach the Projection Stream subscription. The Base seeds
     // the composed snapshot immediately (drained here, executor-confined
@@ -103,38 +106,46 @@ support::ExpectedVoid SessionUiBinding::bind(AgentSession& session) {
     // The Base seeded the composed snapshot; the engine's bind flow renders
     // the initial view itself, so this drain consumes no counted frame.
     pending_counted_frame_ = false;
-    if (auto subscribed = session.subscribe(
-            [weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
-                if (const auto self = weak.lock()) self->on_event(event);
-                return {};
-            });
-        !subscribed) {
+
+    // The pull stream owns all business-state translation. These weak event
+    // subscriptions are only wakeups: they discard their payload and ask the
+    // host to run the normal projection drain/render path. Keeping wakeups
+    // separate from the state channel preserves low-latency status updates
+    // without making event history part of attach or overflow recovery.
+    if (auto subscribed = session.subscribe([weak](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+            if (const auto self = weak.lock()) self->request_projection_frame();
+            return {};
+        });
+            !subscribed) {
         detach();
         return std::unexpected(subscribed.error());
     } else {
-        subscription_.emplace(std::move(*subscribed));
+        projection_activity_subscription_.emplace(std::move(*subscribed));
     }
-    if (auto subscribed = session.subscribe_session(
-            [weak](const AgentSessionEvent& event) -> support::ExpectedVoid {
-                if (const auto self = weak.lock()) self->on_session_event(event);
-                return {};
-            });
-        !subscribed) {
+    if (auto subscribed = session.subscribe_session([weak](const AgentSessionEvent&) -> support::ExpectedVoid {
+            if (const auto self = weak.lock()) self->request_projection_frame();
+            return {};
+        });
+            !subscribed) {
         detach();
         return std::unexpected(subscribed.error());
     } else {
-        session_event_subscription_.emplace(std::move(*subscribed));
+        projection_recovery_subscription_.emplace(std::move(*subscribed));
     }
     return {};
 }
 
 void SessionUiBinding::detach() noexcept {
     projection_subscription_.unsubscribe();
+    projection_activity_subscription_.reset();
+    projection_recovery_subscription_.reset();
     composed_ = AgentSessionSnapshot{};
     pending_counted_frame_ = false;
     cancel_retry_countdown();
-    subscription_.reset();
-    session_event_subscription_.reset();
+    displayed_run_error_.reset();
+    displayed_retry_error_.reset();
+    displayed_compaction_error_.reset();
+    displayed_compaction_state_ = CompactionState::Idle;
     session_ = nullptr;
     session_status_ = SessionStatus::Idle;
 }
@@ -153,34 +164,20 @@ void SessionUiBinding::append_snapshot_diagnostics(
 void SessionUiBinding::sync_pending_input() {
     if (!is_live()) return;
     auto* const active_view = view();
-    if (active_view == nullptr || session_ == nullptr || !session_->is_open()) return;
-    active_view->set_pending_input(session_->snapshot().agent_state.input_queues);
+    if (active_view == nullptr || !projection_subscription_) return;
+    (void)drain_composed_snapshot();
+    active_view->set_pending_input(composed_.agent_state.input_queues);
 }
 
 void SessionUiBinding::sync_session_observations() {
-    if (!is_live()) return;
-    auto* const active_view = view();
-    if (active_view == nullptr || session_ == nullptr || !session_->is_open()) return;
-    const auto snapshot = session_->snapshot();
-    active_view->set_pending_input(snapshot.agent_state.input_queues);
-
-    std::vector<std::string> current;
-    current.reserve(snapshot.agent_state.diagnostics.size());
-    for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
-        current.push_back(combined_error_text(diagnostic));
-    }
-
-    auto overlap = std::min(displayed_agent_diagnostics_.size(), current.size());
-    while (overlap > 0 && !std::equal(
-            displayed_agent_diagnostics_.end() - static_cast<std::ptrdiff_t>(overlap),
-            displayed_agent_diagnostics_.end(),
-            current.begin())) {
-        --overlap;
-    }
-    for (auto index = overlap; index < current.size(); ++index) {
-        active_view->append_diagnostic(current[index]);
-    }
-    displayed_agent_diagnostics_ = std::move(current);
+    if (!is_live() || view() == nullptr || !projection_subscription_) return;
+    const bool dirty = drain_composed_snapshot();
+    // Prompt completion is an immediate observation boundary. Reconcile here
+    // as well as from the frame ticker so a settled answer is visible before
+    // the caller's completion callback returns; the ticker remains the normal
+    // path for streaming updates.
+    (void)reconcile_snapshot(composed_);
+    if (dirty && hooks_.invalidate != nullptr) hooks_.invalidate();
 }
 
 void SessionUiBinding::on_projection_message(const ProjectionStreamMessageVariant& message) {
@@ -197,6 +194,11 @@ void SessionUiBinding::on_projection_message(const ProjectionStreamMessageVarian
             },
             message);
     pending_counted_frame_ = true;
+}
+
+void SessionUiBinding::request_projection_frame() {
+    if (session_ == nullptr || !is_live() || hooks_.invalidate == nullptr) return;
+    hooks_.invalidate();
 }
 
 bool SessionUiBinding::drain_composed_snapshot() {
@@ -233,96 +235,83 @@ bool SessionUiBinding::reconcile_snapshot(const AgentSessionSnapshot& snapshot) 
     append_new_diagnostics(snapshot.agent_state.diagnostics, displayed_agent_diagnostics_);
     append_new_diagnostics(snapshot.session_event_diagnostics, displayed_session_event_diagnostics_);
 
-    // Status stays event-owned: shows follow the authoritative AgentStart /
-    // MessageStart broadcasts. The composed snapshot only confirms the clear
-    // once the settled run published its post-settle state (ADR 0052: the
-    // settled whole-snapshot patch carries is_running=false).
-    if (!snapshot.agent_state.is_running && session_status_ == SessionStatus::Working) {
+    // A successful compaction replaces the transcript rather than appending
+    // to it. Its terminal state is projection-backed, so rebuild only on the
+    // Running -> Succeeded transition and let the normal reconciliation path
+    // preserve the same snapshot-owned business state thereafter.
+    const auto compaction_state = snapshot.recovery_state.compaction;
+    if (compaction_state != displayed_compaction_state_ && compaction_state == CompactionState::Succeeded &&
+            displayed_compaction_state_ == CompactionState::Running) {
+        active_view->initialize(snapshot);
+    }
+    displayed_compaction_state_ = compaction_state;
+
+    // Run and recovery status is read-model state. The countdown is only
+    // created when the phase changes into retry, so each later frame observes
+    // the same deadline without resetting the timer.
+    if (snapshot.run_state.phase == RunPhase::Running) {
+        if (session_status_ != SessionStatus::Working) {
+            cancel_retry_countdown();
+            session_status_ = SessionStatus::Working;
+            active_view->show_status_working();
+        }
+    } else if (snapshot.run_state.phase == RunPhase::Retrying) {
+        const auto attempt = static_cast<int>(snapshot.recovery_state.retry_count);
+        const auto max_attempts = static_cast<int>(snapshot.recovery_state.max_retry_count);
+        auto seconds = 1;
+        if (snapshot.recovery_state.next_retry_at_ms) {
+            const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                                     .count();
+            const auto remaining = std::max<std::int64_t>(0, *snapshot.recovery_state.next_retry_at_ms - now);
+            seconds = static_cast<int>(std::max<std::int64_t>(1, (remaining + 999) / 1000));
+        }
+        if (session_status_ != SessionStatus::Retry || !retry_countdown_) {
+            cancel_retry_countdown();
+            session_status_ = SessionStatus::Retry;
+            active_view->show_status_retry(attempt, max_attempts, seconds);
+            start_retry_countdown(attempt, max_attempts, seconds);
+        }
+    } else if (snapshot.run_state.phase == RunPhase::Compacting) {
+        if (session_status_ != SessionStatus::Compaction) {
+            cancel_retry_countdown();
+            session_status_ = SessionStatus::Compaction;
+            active_view->show_status_compaction(snapshot.recovery_state.compaction_reason.value_or("manual"));
+        }
+    } else if (session_status_ != SessionStatus::Idle) {
+        cancel_retry_countdown();
         session_status_ = SessionStatus::Idle;
         active_view->clear_status_indicator();
+    }
+
+    if (snapshot.run_state.error != displayed_run_error_) {
+        if (snapshot.run_state.error && hooks_.show_error != nullptr) {
+            hooks_.show_error(*snapshot.run_state.error);
+        }
+        displayed_run_error_ = snapshot.run_state.error;
+    }
+    const auto retry_error = snapshot.run_state.terminal == RunTerminalState::Failed
+                                     ? snapshot.recovery_state.retry_error
+                                     : std::nullopt;
+    if (retry_error != displayed_retry_error_) {
+        if (retry_error && hooks_.show_error != nullptr) {
+            hooks_.show_error(std::format(
+                    "Retry failed after {} attempts: {}", snapshot.recovery_state.retry_count, *retry_error));
+        }
+        displayed_retry_error_ = retry_error;
+    }
+    if (snapshot.recovery_state.compaction_error != displayed_compaction_error_) {
+        if (snapshot.recovery_state.compaction_error) {
+            const auto reason = snapshot.recovery_state.compaction_reason.value_or("manual");
+            if (reason == "manual" && hooks_.show_error != nullptr) {
+                hooks_.show_error(*snapshot.recovery_state.compaction_error);
+            } else {
+                active_view->append_diagnostic(*snapshot.recovery_state.compaction_error);
+            }
+        }
+        displayed_compaction_error_ = snapshot.recovery_state.compaction_error;
     }
     return true;
-}
-
-void SessionUiBinding::on_event(const agent::AgentLifecycleEvent& event) {
-    if (!is_live()) return;
-    auto* const active_view = view();
-    if (active_view == nullptr) return;
-    active_view->apply_event(event);
-    if (std::holds_alternative<agent::AgentStartEvent>(event)) {
-        session_status_ = SessionStatus::Working;
-        active_view->show_status_working();
-    } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
-        session_status_ = SessionStatus::Idle;
-        active_view->clear_status_indicator();
-    } else if (std::holds_alternative<agent::MessageStartEvent>(event) && prompt_active()) {
-        session_status_ = SessionStatus::Working;
-        active_view->show_status_working();
-    }
-    sync_session_observations();
-    if (hooks_.invalidate != nullptr) hooks_.invalidate();
-}
-
-/// pi's `session.on("auto_retry_start"...` / `compaction_start...`
-/// handlers: the Retry indicator with the backoff countdown, the
-/// Compaction indicator with the reason wording, and the end-event
-/// cleanup with pi's statuses.
-void SessionUiBinding::on_session_event(const AgentSessionEvent& event) {
-    if (!is_live()) return;
-    auto* const active_view = view();
-    if (active_view == nullptr) return;
-    if (const auto* retry = std::get_if<AutoRetryStartEvent>(&event)) {
-        session_status_ = SessionStatus::Retry;
-        cancel_retry_countdown();
-        const auto seconds = static_cast<int>(std::max<std::int64_t>(
-            1, (retry->delay_ms + 999) / 1000));
-        active_view->show_status_retry(
-            retry->attempt, retry->max_attempts, seconds);
-        start_retry_countdown(retry->attempt, retry->max_attempts, seconds);
-    } else if (const auto* retry_end = std::get_if<AutoRetryEndEvent>(&event)) {
-        session_status_ = SessionStatus::Idle;
-        cancel_retry_countdown();
-        active_view->clear_status_indicator();
-        // pi auto_retry_end: only the final failure reports (success
-        // shows the ordinary response).
-        if (!retry_end->success && hooks_.show_error != nullptr) {
-            hooks_.show_error(std::format(
-                "Retry failed after {} attempts: {}",
-                retry_end->attempt,
-                retry_end->final_error.value_or("Unknown error")));
-        }
-    } else if (const auto* compaction = std::get_if<CompactionStartEvent>(&event)) {
-        session_status_ = SessionStatus::Compaction;
-        active_view->show_status_compaction(compaction->reason);
-    } else if (const auto* compaction_end = std::get_if<CompactionEndEvent>(&event)) {
-        session_status_ = SessionStatus::Idle;
-        active_view->clear_status_indicator();
-        if (compaction_end->aborted) {
-            if (compaction_end->reason == "manual") {
-                if (hooks_.show_error != nullptr) {
-                    hooks_.show_error("Compaction cancelled");
-                }
-            } else if (hooks_.show_status != nullptr) {
-                hooks_.show_status("Auto-compaction cancelled");
-            }
-        } else if (compaction_end->error_message) {
-            if (compaction_end->reason == "manual") {
-                if (hooks_.show_error != nullptr) {
-                    hooks_.show_error(*compaction_end->error_message);
-                }
-            } else {
-                active_view->append_diagnostic(*compaction_end->error_message);
-            }
-        } else {
-            // pi compaction_end with a result: rebuild the chat from the
-            // fresh snapshot (the compaction summary renders as the
-            // latest entry) and refresh the footer's usage totals.
-            const auto snapshot = session_->snapshot();
-            active_view->initialize(snapshot);
-            active_view->set_pending_input(snapshot.agent_state.input_queues);
-        }
-    }
-    if (hooks_.invalidate != nullptr) hooks_.invalidate();
 }
 
 /// pi `CountdownTimer` for the retry indicator: one-second ticks rewrite
@@ -366,8 +355,8 @@ FooterData SessionUiBinding::compute_footer_data() {
         return data;
     }
     FooterData data;
-    const auto snapshot = session_->snapshot();
-    data.cwd = session_->workspace();
+    const auto& snapshot = composed_;
+    data.cwd = snapshot.workspace;
     footer_data_provider_.set_cwd(data.cwd);
     data.git_branch = footer_data_provider_.git_branch();
 
@@ -441,28 +430,11 @@ FooterData SessionUiBinding::compute_footer_data() {
         }
     }
 
-    // pi `usingSubscription`: kimi-coding, or any provider authenticating
-    // through an OAuth credential. The runtime may be absent on
-    // focused-test sessions; both markers stay off then.
-    const auto runtime = session_->model_runtime();
-    if (!model.id.empty() && runtime) {
-        data.using_subscription =
-            model.provider == "kimi-coding" ||
-            runtime->is_using_oauth(model.provider);
-    }
-
-    // pi `updateAvailableProviderCount`: unique providers in the scoped
-    // set, or in the runtime's availability snapshot.
-    const auto& scoped = session_->scoped_models();
-    std::set<std::string> providers;
-    if (!scoped.empty()) {
-        for (const auto& entry : scoped) providers.insert(entry.model.provider);
-    } else if (runtime) {
-        for (const auto& available : runtime->get_available_snapshot()) {
-            providers.insert(available.provider);
-        }
-    }
-    data.available_provider_count = providers.size();
+    // Subscription and provider availability are read-model values. The
+    // binding deliberately does not reach into AgentSession or ModelRuntime;
+    // attach and overflow recovery therefore render the same footer state.
+    data.using_subscription = snapshot.using_subscription;
+    data.available_provider_count = snapshot.available_provider_count;
 
     if (hooks_.auto_compact_enabled != nullptr) {
         if (const auto enabled = hooks_.auto_compact_enabled(); enabled) {
@@ -479,7 +451,5 @@ bool SessionUiBinding::is_live() {
 InteractiveView* SessionUiBinding::view() {
     return hooks_.view != nullptr ? hooks_.view() : nullptr;
 }
-
-bool SessionUiBinding::prompt_active() { return hooks_.prompt_active != nullptr && hooks_.prompt_active(); }
 
 } // namespace cch::coding_agent::tui

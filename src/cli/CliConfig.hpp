@@ -17,6 +17,11 @@ namespace cch::cli {
 /// creation semantic for it (workspace, provider readiness, Agent Session
 /// targets, Session Resume compatibility).
 struct CliConfig {
+    /// Explicit one-time migration command. Import options bypass normal
+    /// frontend/session startup and are handled by the compat/pi edge.
+    bool import_command{false};
+    std::optional<std::filesystem::path> import_source;
+    std::optional<std::filesystem::path> import_destination;
     bool print{false};
     /// The CLI-owned session facts value: Project Trust override, resource
     /// flags, Skill/Prompt Template/Theme paths, system-prompt values, model
@@ -48,7 +53,7 @@ struct CliConfig {
     std::optional<std::string> fork;
     std::optional<std::string> name;
     /// Raw --session-dir value: the highest-priority automatic-directory
-    /// override (pi: --session-dir, then PI_CODING_AGENT_SESSION_DIR, then
+    /// override (pi: --session-dir, then PIKE_CODING_AGENT_SESSION_DIR, then
     /// settings sessionDir). Consulted for default persisted creation and for
     /// session listing during session-family resolution.
     std::optional<std::string> session_dir;

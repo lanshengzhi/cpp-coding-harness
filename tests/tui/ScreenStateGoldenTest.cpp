@@ -487,7 +487,8 @@ public:
 
 } // namespace
 
-TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots", "[tui][differential][issue386]") {
+TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots",
+        "[tui][differential][issue386][compat-pi]") {
     const auto fixture = read_screen_state();
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();

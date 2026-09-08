@@ -7,6 +7,7 @@
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "ai/providers/ComposedProvider.hpp"
 #include "ai/providers/ProviderTestAccess.hpp"
+#include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -359,6 +360,10 @@ ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string pr
                                             .reason = assistant.stop_reason,
                                             .error = assistant,
                                             .failure = std::move(failure),
+                                            .inference_failure = ai::InferenceFailure{
+                                                    .kind = ai::InferenceFailureKind::Cancelled,
+                                                    .output_started = false,
+                                            },
                                     });
                                 !emitted) {
                             co_return std::unexpected(emitted.error());
@@ -393,6 +398,10 @@ ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string pr
                                             .reason = assistant.stop_reason,
                                             .error = assistant,
                                             .failure = std::move(failure),
+                                            .inference_failure = ai::InferenceFailure{
+                                                    .kind = providers::inference_failure_kind_from_transport(*failure_code),
+                                                    .output_started = false,
+                                            },
                                     });
                                 !emitted) {
                             co_return std::unexpected(emitted.error());

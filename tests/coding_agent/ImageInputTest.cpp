@@ -11,9 +11,8 @@
 
 using namespace cch;
 
-TEST_CASE(
-    "Image input resizing follows baseline bounds and emits the coordinate hint",
-    "[coding_agent][image-input][issue63]") {
+TEST_CASE("Image input resizing follows baseline bounds and emits the coordinate hint",
+        "[coding_agent][image-input][issue63][spec]") {
     const auto bytes = tests::decode_base64(tests::kTinyPngBase64);
     coding_agent::ImageProcessingLimits limits;
     limits.max_width = 1;
@@ -30,9 +29,8 @@ TEST_CASE(
     CHECK(processed->image->data.size() < limits.max_base64_bytes);
 }
 
-TEST_CASE(
-    "Oversized WebP input is decoded and resized with the same baseline policy",
-    "[coding_agent][image-input][webp][issue63]") {
+TEST_CASE("Oversized WebP input is decoded and resized with the same baseline policy",
+        "[coding_agent][image-input][webp][issue63][spec]") {
     const auto bytes = tests::decode_base64(tests::kTinyWebpBase64);
     coding_agent::ImageProcessingLimits limits;
     limits.max_width = 1;
@@ -48,9 +46,8 @@ TEST_CASE(
     CHECK(processed->image->mime_type == "image/png");
 }
 
-TEST_CASE(
-    "JPEG and WebP EXIF orientation is applied before dimensions and coordinate hints",
-    "[coding_agent][image-input][orientation][issue63]") {
+TEST_CASE("JPEG and WebP EXIF orientation is applied before dimensions and coordinate hints",
+        "[coding_agent][image-input][orientation][issue63][spec]") {
     const std::array fixtures{
         std::pair{tests::kOrientedJpegBase64, std::string_view{"image/jpeg"}},
         std::pair{tests::kOrientedWebpBase64, std::string_view{"image/webp"}},
@@ -72,9 +69,8 @@ TEST_CASE(
     }
 }
 
-TEST_CASE(
-    "Invalid WebP data is omitted instead of becoming provider image content",
-    "[coding_agent][image-input][webp][issue63]") {
+TEST_CASE("Invalid WebP data is omitted instead of becoming provider image content",
+        "[coding_agent][image-input][webp][issue63][spec]") {
     const std::array<std::uint8_t, 16> invalid{
         'R', 'I', 'F', 'F', 0xff, 0xff, 0xff, 0x7f,
         'W', 'E', 'B', 'P', 'V', 'P', '8', ' ',

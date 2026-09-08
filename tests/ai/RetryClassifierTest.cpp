@@ -1,115 +1,88 @@
-// T12 retryability classification evidence (#361): the C++ port of pi's
-// `isRetryableAssistantError` (`packages/ai/src/utils/retry.ts`) — transient
-// provider/network patterns retry, quota/billing/provider-limit patterns never
-// retry, non-error terminals and empty error messages never retry, and the
-// non-retryable limit check wins over a matching retryable pattern.
-
-#include <cch/ai/Message.hpp>
 #include "ai/utils/RetryClassifier.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
 #include <string>
-#include <vector>
+#include <utility>
 
 using namespace cch;
 
 namespace {
 
-[[nodiscard]] ai::AssistantMessage error_terminal(std::string message) {
-    auto terminal = ai::assistant_text_message("");
-    terminal.stop_reason = ai::AssistantStopReason::Error;
-    terminal.error_message = std::move(message);
-    return terminal;
+[[nodiscard]] ai::InferenceFailure failure(
+        ai::InferenceFailureKind kind,
+        bool output_started = false,
+        std::string provider_code = {}) {
+    return ai::InferenceFailure{
+            .kind = kind,
+            .output_started = output_started,
+            .suggested_backoff_ms = std::nullopt,
+            .provider_code = provider_code.empty()
+                ? std::nullopt
+                : std::optional<std::string>{std::move(provider_code)},
+    };
 }
 
 } // namespace
 
 TEST_CASE(
-    "isRetryableAssistantError retries transient provider and network patterns",
-    "[ai][retry][issue361]") {
-    // Generic provider load / HTTP status / server-side transients.
-    for (const std::string message :
-         {"overloaded", "model overloaded; retry later",
-          "Rate limit reached", "rate-limit hit", "rate_limit exceeded",
-          "too many requests", "HTTP 429 Too Many Requests", "429",
-          "500 Internal Server Error", "502 Bad Gateway", "503",
-          "504 Gateway Timeout", "524 A Timeout Occurred",
-          "service unavailable", "service_unavailable",
-          "server error", "internal error"}) {
-        CHECK(ai::is_retryable_assistant_error(error_terminal(message)));
+    "structured inference failures allow retry for rate limits and transient transports",
+    "[ai][retry][issue624][spec]") {
+    for (const auto kind : {
+                 ai::InferenceFailureKind::RateLimited,
+                 ai::InferenceFailureKind::TransientTransportFailure,
+         }) {
+        CHECK(ai::is_retryable_inference_failure(failure(kind)));
     }
-    // Network / proxy / fetch / WebSocket transport failures.
-    for (const std::string message :
-         {"network error", "network_error", "connection error",
-          "connection refused", "connection lost",
-          "the other side closed the connection", "fetch failed",
-          "getaddrinfo ENOTFOUND", "ENOTFOUND host", "EAI_AGAIN",
-          "upstream connect error", "upstream_connect",
-          "reset before headers", "socket hang up",
-          "socket connection was closed", "timed out", "time out",
-          "request timeout", "connection terminated",
-          "websocket closed", "websocket error"}) {
-        CHECK(ai::is_retryable_assistant_error(error_terminal(message)));
-    }
-    // Premature stream endings and explicit retry guidance.
-    for (const std::string message :
-         {"stream ended without a stop reason",
-          "Anthropic stream ended before message_stop",
-          "stream ended before a terminal response event",
-          "http2 request did not get a response",
-          "retry delay requested by provider",
-          "you can retry your request", "please retry your request",
-          "try your request again", "ResourceExhausted"}) {
-        CHECK(ai::is_retryable_assistant_error(error_terminal(message)));
-    }
-    // Case-insensitive matching (pi `i` flag).
-    CHECK(ai::is_retryable_assistant_error(
-        error_terminal("UPSTREAM CONNECT FAILED")));
-    CHECK(ai::is_retryable_assistant_error(
-        error_terminal("Socket Hang Up")));
+
+    // A Provider may attach a server hint and a raw code without changing the
+    // RecoveryPolicy category.
+    auto rate_limited = failure(
+            ai::InferenceFailureKind::RateLimited,
+            false,
+            "rate_limit_exceeded");
+    rate_limited.suggested_backoff_ms = 2500;
+    CHECK(ai::is_retryable_inference_failure(rate_limited));
 }
 
 TEST_CASE(
-    "isRetryableAssistantError never retries quota, billing, or provider-limit patterns",
-    "[ai][retry][issue361]") {
-    for (const std::string message :
-         {"GoUsageLimitError", "FreeUsageLimitError",
-          "Monthly usage limit reached", "available balance",
-          "insufficient_quota", "out of budget", "quota exceeded",
-          "billing error", "billing", "You have exceeded your billing limit"}) {
-        CHECK_FALSE(ai::is_retryable_assistant_error(
-            error_terminal(message)));
+    "structured inference failures never retry authorization overflow invalid or cancelled outcomes",
+    "[ai][retry][issue624][spec]") {
+    for (const auto kind : {
+                 ai::InferenceFailureKind::Unauthorized,
+                 ai::InferenceFailureKind::ContextOverflow,
+                 ai::InferenceFailureKind::InvalidRequest,
+                 ai::InferenceFailureKind::Cancelled,
+         }) {
+        CHECK_FALSE(ai::is_retryable_inference_failure(failure(kind)));
     }
-    // The non-retryable limit check wins even when a retryable pattern also
-    // matches (pi checks NON_RETRYABLE first).
-    CHECK_FALSE(ai::is_retryable_assistant_error(
-        error_terminal("insufficient_quota: 429 quota exceeded")));
-    CHECK_FALSE(ai::is_retryable_assistant_error(
-        error_terminal("Monthly usage limit reached (503)")));
+    CHECK(ai::requires_reauthentication(failure(ai::InferenceFailureKind::Unauthorized)));
+    CHECK_FALSE(ai::requires_reauthentication(failure(ai::InferenceFailureKind::Unauthorized, true)));
 }
 
 TEST_CASE(
-    "isRetryableAssistantError requires an error terminal with an error message",
-    "[ai][retry][issue361]") {
-    auto stopped = ai::assistant_text_message("fine");
-    stopped.stop_reason = ai::AssistantStopReason::Stop;
-    CHECK_FALSE(ai::is_retryable_assistant_error(stopped));
+    "retry classification is unchanged when provider diagnostics are reworded",
+    "[ai][retry][issue624][spec]") {
+    // The raw provider code and human-readable diagnostic are observations;
+    // the stable structured kind is the only retry input.
+    const auto first_wording = failure(
+            ai::InferenceFailureKind::TransientTransportFailure,
+            false,
+            "temporary_network_failure_a");
+    const auto second_wording = failure(
+            ai::InferenceFailureKind::TransientTransportFailure,
+            false,
+            "temporary_network_failure_b");
+    CHECK(ai::is_retryable_inference_failure(first_wording));
+    CHECK(ai::is_retryable_inference_failure(second_wording));
+}
 
-    auto aborted = ai::assistant_text_message("");
-    aborted.stop_reason = ai::AssistantStopReason::Aborted;
-    aborted.error_message = "overloaded";
-    CHECK_FALSE(ai::is_retryable_assistant_error(aborted));
-
-    auto tool_use = ai::assistant_text_message("");
-    tool_use.stop_reason = ai::AssistantStopReason::ToolUse;
-    tool_use.error_message = "overloaded";
-    CHECK_FALSE(ai::is_retryable_assistant_error(tool_use));
-
-    auto no_message = error_terminal("");
-    CHECK_FALSE(ai::is_retryable_assistant_error(no_message));
-
-    // Unmatched error text is not retryable.
-    CHECK_FALSE(ai::is_retryable_assistant_error(
-        error_terminal("model returned an unexpected response")));
+TEST_CASE(
+    "a started inference output is not retried even when its failure is transient",
+    "[ai][retry][issue624][spec]") {
+    CHECK_FALSE(ai::is_retryable_inference_failure(
+            failure(ai::InferenceFailureKind::TransientTransportFailure, true)));
+    CHECK_FALSE(ai::is_retryable_inference_failure(
+            failure(ai::InferenceFailureKind::RateLimited, true)));
 }

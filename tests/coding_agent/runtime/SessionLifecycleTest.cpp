@@ -67,7 +67,7 @@ support::Expected<runtime::OpenSession> open_resumed_session(
 
 } // namespace
 
-TEST_CASE("resumed session uses tree context for linear sessions", "[coding_agent][runtime][session]") {
+TEST_CASE("resumed session uses tree context for linear sessions", "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "linear.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -89,7 +89,7 @@ TEST_CASE("resumed session uses tree context for linear sessions", "[coding_agen
     CHECK_FALSE(opened->context_thinking_level.has_value());
 }
 
-TEST_CASE("resumed session uses compaction tree context", "[coding_agent][runtime][session]") {
+TEST_CASE("resumed session uses compaction tree context", "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "compact.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -124,7 +124,7 @@ TEST_CASE("resumed session uses compaction tree context", "[coding_agent][runtim
     CHECK(user_text_at(opened->history, 2) == "msg4");
 }
 
-TEST_CASE("resumed session uses active leaf path", "[coding_agent][runtime][session]") {
+TEST_CASE("resumed session uses active leaf path", "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "active-leaf.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -149,7 +149,8 @@ TEST_CASE("resumed session uses active leaf path", "[coding_agent][runtime][sess
     CHECK(user_text_at(opened->history, 0) == "first");
 }
 
-TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point", "[coding_agent][runtime][session]") {
+TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
+        "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
     auto path = workspace.path() / "leaf-continuation.jsonl";
@@ -199,7 +200,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
 }
 
 TEST_CASE("resumed AgentSession recovers when the message write succeeds but its leaf write fails",
-        "[coding_agent][runtime][session][persistence-failure]") {
+        "[coding_agent][runtime][session][persistence-failure][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
     auto path = workspace.path() / "leaf-partial-append.jsonl";
@@ -273,7 +274,7 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     session.close();
 }
 
-TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime][session]") {
+TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "invalid-leaf.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -293,7 +294,7 @@ TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime
     CHECK(user_text_at(opened->history, 1) == "second");
 }
 
-TEST_CASE("resumed session topology follows active path only", "[coding_agent][runtime][session]") {
+TEST_CASE("resumed session topology follows active path only", "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "inactive-tree-data.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -329,7 +330,7 @@ TEST_CASE("resumed session topology follows active path only", "[coding_agent][r
     CHECK(user_text_at(opened->history, 2) == "third");
 }
 
-TEST_CASE("resumed session carries effective model and thinking level", "[coding_agent][runtime][session]") {
+TEST_CASE("resumed session carries effective model and thinking level", "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "context-state.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));

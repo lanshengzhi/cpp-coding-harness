@@ -7,7 +7,7 @@ using namespace cch;
 
 namespace {
 
-TEST_CASE("parseFrontmatter extracts name and description", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter extracts name and description", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
@@ -24,7 +24,7 @@ TEST_CASE("parseFrontmatter extracts name and description", "[coding_agent][skil
     CHECK(result->body == "# Body content\nInstructions here.");
 }
 
-TEST_CASE("parseFrontmatter handles boolean disable-model-invocation", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter handles boolean disable-model-invocation", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: hidden-skill\n"
@@ -39,7 +39,7 @@ TEST_CASE("parseFrontmatter handles boolean disable-model-invocation", "[coding_
     CHECK(result->fields.at("disable-model-invocation") == "true");
 }
 
-TEST_CASE("parseFrontmatter tolerates unknown keys", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter tolerates unknown keys", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
@@ -56,7 +56,7 @@ TEST_CASE("parseFrontmatter tolerates unknown keys", "[coding_agent][skill][u2]"
     CHECK(result->fields.at("metadata") == "{}");
 }
 
-TEST_CASE("parseFrontmatter returns empty frontmatter for content without ---", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter returns empty frontmatter for content without ---", "[coding_agent][skill][u2][spec]") {
     std::string_view content = "# Just a heading\n\nSome text.\n";
 
     auto result = coding_agent::parseFrontmatter(content);
@@ -66,7 +66,7 @@ TEST_CASE("parseFrontmatter returns empty frontmatter for content without ---", 
     CHECK(result->body == "# Just a heading\n\nSome text.");
 }
 
-TEST_CASE("parseFrontmatter treats no closing --- as body-only", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter treats no closing --- as body-only", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
@@ -79,7 +79,7 @@ TEST_CASE("parseFrontmatter treats no closing --- as body-only", "[coding_agent]
     CHECK(result->body == "---\nname: my-skill\ndescription: No closing delimiter");
 }
 
-TEST_CASE("parseFrontmatter handles empty YAML block", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter handles empty YAML block", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "---\n"
@@ -92,7 +92,7 @@ TEST_CASE("parseFrontmatter handles empty YAML block", "[coding_agent][skill][u2
     CHECK(result->body == "Body content here.");
 }
 
-TEST_CASE("parseFrontmatter normalizes \\r\\n line endings", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter normalizes \\r\\n line endings", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\r\n"
         "name: my-skill\r\n"
@@ -108,7 +108,7 @@ TEST_CASE("parseFrontmatter normalizes \\r\\n line endings", "[coding_agent][ski
     CHECK(result->body == "Body with CRLF.");
 }
 
-TEST_CASE("parseFrontmatter strips quotes from values", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter strips quotes from values", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
@@ -122,7 +122,7 @@ TEST_CASE("parseFrontmatter strips quotes from values", "[coding_agent][skill][u
     CHECK(result->fields.at("description") == "Does things with quotes.");
 }
 
-TEST_CASE("parseFrontmatter preserves value with colon", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter preserves value with colon", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
@@ -136,7 +136,7 @@ TEST_CASE("parseFrontmatter preserves value with colon", "[coding_agent][skill][
     CHECK(result->fields.at("description") == "Check this: important detail");
 }
 
-TEST_CASE("parseFrontmatter fails on malformed line with no colon", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter fails on malformed line with no colon", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
@@ -150,7 +150,7 @@ TEST_CASE("parseFrontmatter fails on malformed line with no colon", "[coding_age
     CHECK(result.error().code == support::ErrorCode::Validation);
 }
 
-TEST_CASE("parseFrontmatter handles content starting with --- but not \\n", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter handles content starting with --- but not \\n", "[coding_agent][skill][u2][spec]") {
     // "---" without a following newline on the first line is not valid frontmatter
     std::string_view content = "---some markdown\nNot frontmatter.\n";
 
@@ -161,7 +161,7 @@ TEST_CASE("parseFrontmatter handles content starting with --- but not \\n", "[co
     CHECK(result->body == "---some markdown\nNot frontmatter.");
 }
 
-TEST_CASE("parseFrontmatter trims whitespace around body", "[coding_agent][skill][u2]") {
+TEST_CASE("parseFrontmatter trims whitespace around body", "[coding_agent][skill][u2][spec]") {
     std::string_view content =
         "---\n"
         "name: my-skill\n"
