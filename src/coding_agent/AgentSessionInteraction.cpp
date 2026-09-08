@@ -29,6 +29,7 @@
 #include <exception>
 #include <format>
 #include <optional>
+#include <set>
 #include <string_view>
 #include <utility>
 
@@ -828,7 +829,10 @@ support::Expected<std::optional<std::string>> AgentSession::Impl::cycle_thinking
     return std::optional<std::string>{*applied};
 }
 
-void AgentSession::Impl::set_scoped_models(std::vector<ScopedModel> models) { scoped_models_ = std::move(models); }
+void AgentSession::Impl::set_scoped_models(std::vector<ScopedModel> models) {
+    scoped_models_ = std::move(models);
+    update_projection();
+}
 
 // ── Tree navigation (pi navigateTree, G2 decision 13) ──────────────────────
 
@@ -1001,11 +1005,29 @@ support::ExpectedVoid AgentSession::Impl::set_entry_label(std::string_view entry
 }
 
 AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
+    const auto state = agent_ ? agent_->state() : agent::AgentState{};
+    const auto runtime = services_.model_runtime;
+    std::set<std::string> providers;
+    if (!scoped_models_.empty()) {
+        for (const auto& scoped : scoped_models_) {
+            providers.insert(scoped.model.provider);
+        }
+    } else if (runtime) {
+        for (const auto& available : runtime->get_available_snapshot()) {
+            providers.insert(available.provider);
+        }
+    }
+
     return AgentSessionSnapshot{
-            .agent_state = agent_ ? agent_->state() : agent::AgentState{},
+            .agent_state = state,
             .metadata = session_.metadata,
             .topology = session_.topology,
             .session_path = session_path_,
+            .workspace = session_.workspace,
+            .using_subscription =
+                    !state.model.id.empty() && runtime &&
+                    (state.model.provider == "kimi-coding" || runtime->is_using_oauth(state.model.provider)),
+            .available_provider_count = providers.size(),
             .tool_executions = tool_executions_,
             .run_state = run_state_,
             .recovery_state = recovery_state_,

@@ -15,7 +15,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <set>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -357,7 +356,7 @@ FooterData SessionUiBinding::compute_footer_data() {
     }
     FooterData data;
     const auto& snapshot = composed_;
-    data.cwd = session_->workspace();
+    data.cwd = snapshot.workspace;
     footer_data_provider_.set_cwd(data.cwd);
     data.git_branch = footer_data_provider_.git_branch();
 
@@ -431,28 +430,11 @@ FooterData SessionUiBinding::compute_footer_data() {
         }
     }
 
-    // pi `usingSubscription`: kimi-coding, or any provider authenticating
-    // through an OAuth credential. The runtime may be absent on
-    // focused-test sessions; both markers stay off then.
-    const auto runtime = session_->model_runtime();
-    if (!model.id.empty() && runtime) {
-        data.using_subscription =
-            model.provider == "kimi-coding" ||
-            runtime->is_using_oauth(model.provider);
-    }
-
-    // pi `updateAvailableProviderCount`: unique providers in the scoped
-    // set, or in the runtime's availability snapshot.
-    const auto& scoped = session_->scoped_models();
-    std::set<std::string> providers;
-    if (!scoped.empty()) {
-        for (const auto& entry : scoped) providers.insert(entry.model.provider);
-    } else if (runtime) {
-        for (const auto& available : runtime->get_available_snapshot()) {
-            providers.insert(available.provider);
-        }
-    }
-    data.available_provider_count = providers.size();
+    // Subscription and provider availability are read-model values. The
+    // binding deliberately does not reach into AgentSession or ModelRuntime;
+    // attach and overflow recovery therefore render the same footer state.
+    data.using_subscription = snapshot.using_subscription;
+    data.available_provider_count = snapshot.available_provider_count;
 
     if (hooks_.auto_compact_enabled != nullptr) {
         if (const auto enabled = hooks_.auto_compact_enabled(); enabled) {
