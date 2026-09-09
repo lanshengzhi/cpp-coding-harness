@@ -41,6 +41,7 @@ Flaky or runner-sensitive tests have one standard home instead of ad-hoc per-PR 
 - At the test site, add the `[quarantine]` Catch2 tag — surfaced as the `quarantine` CTest label through `ADD_TAGS_AS_LABELS` — next to a comment naming the reason, the owner issue, and the re-enable condition.
 - In `.github/workflows/linux-toolchain.yml`, the `build-and-test` matrix `ctest_label_exclude` field excludes that label per lane via `ctest -LE`. Only lanes that cannot run the test reliably exclude it; each non-empty entry cites the owner issue and the re-enable condition.
 - First entry: the projection 100-chunk cost-bound test in `tests/coding_agent/ProjectionStreamTest.cpp`, excluded on the GCC 16 Release lane only (owner #632; re-enable when dedicated-runner measurements clear the 100us contract with headroom). The Debug 2ms bound still runs on every other lane.
+- Second entry: the ChatContainer 100-chunk streaming flat-time benchmark in `tests/coding_agent/tui/ChatContainerTest.cpp`, excluded on unoptimized lanes (owner #632; re-enable when dedicated runners are provisioned or runner headroom is established).
 
 Quarantine is for resource-caused failures; bounds are never loosened silently to fit the runner.
 

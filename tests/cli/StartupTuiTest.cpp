@@ -81,18 +81,18 @@ namespace {
         coding_agent::session_paths::encode_workspace_key(workspace);
     std::filesystem::create_directories(directory);
     const auto path = directory / (id + ".jsonl");
-    auto created = harness::session::SessionStore::create_new(
-        path,
-        {
-            .session_id = id,
-            .created_at = "2026-08-01T00:00:00Z",
-            .workspace = workspace.string(),
-            .provider = "fake",
-            .model = "fake-model",
-        });
+    auto created = harness::session::SessionStore::create_new(path,
+            {
+                    .session_id = id,
+                    .created_at = "2020-01-01T00:00:00Z",
+                    .workspace = workspace.string(),
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
     REQUIRE(created);
     auto user = ai::user_text_message(std::move(first_message));
-    user.timestamp = 1'750'000'000'000;
+    const auto sys_time = std::chrono::file_clock::to_sys(modified);
+    user.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(sys_time.time_since_epoch()).count();
     REQUIRE(created->append(ai::MessageVariant{user}));
     std::error_code ec;
     std::filesystem::last_write_time(path, modified, ec);
