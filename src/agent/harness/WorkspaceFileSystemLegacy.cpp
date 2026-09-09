@@ -14,8 +14,10 @@ namespace cch::harness {
 
 WorkspaceFileSystem::WorkspaceFileSystem() : temporary_state_(std::make_shared<TemporaryState>()) {}
 
-WorkspaceFileSystem::WorkspaceFileSystem(std::filesystem::path workspace)
-    : root_(canonicalized(std::move(workspace))), temporary_state_(std::make_shared<TemporaryState>()) {}
+WorkspaceFileSystem::WorkspaceFileSystem(
+        std::filesystem::path workspace, std::shared_ptr<const AuthorizedSkillRoots> skill_read_roots)
+    : root_(canonicalized(std::move(workspace))), skill_read_roots_(std::move(skill_read_roots)),
+      temporary_state_(std::make_shared<TemporaryState>()) {}
 
 support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::filesystem::path& workspace) {
     std::error_code ec;
@@ -73,6 +75,51 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_
     return target;
 }
 
+const std::filesystem::path* WorkspaceFileSystem::authorizing_skill_root(
+        const std::filesystem::path& target, const std::vector<std::filesystem::path>& roots) const {
+    const std::filesystem::path* best = nullptr;
+    std::size_t best_length = 0;
+    for (const auto& root : roots) {
+        const auto relative = target.lexically_relative(root);
+        if (relative.empty() || relative == "." || relative.is_absolute()) {
+            continue;
+        }
+        if (*relative.begin() == "..") {
+            continue;
+        }
+        // Longest authorizing root wins when roots nest.
+        const auto length = root.string().size();
+        if (best == nullptr || length > best_length) {
+            best = &root;
+            best_length = length;
+        }
+    }
+    return best;
+}
+
+support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_read_path(const std::string& requested) const {
+    if (auto addressed = resolve_addressed_path(requested); addressed) {
+        return addressed;
+    } else {
+        auto error = std::move(addressed.error());
+        const std::filesystem::path queried(requested);
+        if (!queried.is_absolute()) {
+            return std::unexpected(std::move(error));
+        }
+        auto target = queried.lexically_normal();
+        if (target.filename().empty()) {
+            target = target.parent_path();
+        }
+        if (skill_read_roots_ != nullptr && authorizing_skill_root(target, *skill_read_roots_->snapshot()) != nullptr) {
+            return target;
+        }
+        return std::unexpected(
+                workspace_error("path is outside the workspace and no loaded skill directory: " + requested +
+                                "; use a workspace-relative path, an absolute path under " + root_.string() +
+                                ", or an absolute path under a loaded skill directory"));
+    }
+}
+
 std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_for_read(
         const std::string& requested, std::uintmax_t* size, std::stop_token stop_token) const {
     if (stop_token.stop_requested()) {
@@ -83,13 +130,15 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
         });
     }
 
-    auto target = resolve_addressed_path(requested);
+    auto target = resolve_read_path(requested);
     if (!target) {
         return std::unexpected(util_error_to_file_error(target.error(), requested));
     }
 
     int parent_errno = 0;
-    auto parent_guard = open_parent_directory(*target, false, &parent_errno);
+    support::Expected<support::UniqueFd> parent_guard = inside_lexically(*target)
+                                                                ? open_parent_directory(*target, false, &parent_errno)
+                                                                : open_authorized_skill_parent(*target, &parent_errno);
     if (!parent_guard) {
         if (parent_errno == ENOENT) {
             return std::unexpected(FileError{

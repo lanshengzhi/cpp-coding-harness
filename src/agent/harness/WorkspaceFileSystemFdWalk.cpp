@@ -54,7 +54,13 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
         return std::unexpected(workspace_error("parent path escapes workspace"));
     }
 
-    support::UniqueFd current_guard(root_guard->release());
+    return walk_child_directories(support::UniqueFd(root_guard->release()), relative, create_missing, failure_errno);
+}
+
+support::Expected<support::UniqueFd> WorkspaceFileSystem::walk_child_directories(support::UniqueFd current_guard,
+        const std::filesystem::path& relative,
+        bool create_missing,
+        int* failure_errno) const {
     for (const auto& part : relative) {
         if (part == "." || part.empty()) {
             continue;
@@ -90,6 +96,35 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
     }
 
     return current_guard;
+}
+
+support::Expected<support::UniqueFd> WorkspaceFileSystem::open_authorized_skill_parent(
+        const std::filesystem::path& target, int* failure_errno) const {
+    if (failure_errno != nullptr) {
+        *failure_errno = 0;
+    }
+    const std::filesystem::path* authorizing = nullptr;
+    if (skill_read_roots_ != nullptr) {
+        authorizing = authorizing_skill_root(target, *skill_read_roots_->snapshot());
+    }
+    if (authorizing == nullptr) {
+        return std::unexpected(workspace_error("no loaded skill directory authorizes: " + target.string()));
+    }
+    // The authorizing root opens without following a final symlink, so a
+    // symlinked skill directory fails closed here; intermediate components
+    // stay no-follow through the shared walk below.
+    support::UniqueFd base_guard(::open(authorizing->c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    if (!base_guard) {
+        remember_errno(failure_errno, errno);
+        return std::unexpected(workspace_error("could not open skill directory: " + std::string(std::strerror(errno))));
+    }
+    const auto relative = target.parent_path().lexically_relative(*authorizing);
+    if (relative.is_absolute() || (!relative.empty() && relative != "." && *relative.begin() == "..")) {
+        return std::unexpected(workspace_error("parent path escapes skill directory"));
+    }
+    // Reads never create directories: missing skill content surfaces as
+    // NotFound through the caller's parent_errno handling.
+    return walk_child_directories(std::move(base_guard), relative, /* create_missing */ false, failure_errno);
 }
 
 support::Expected<void> WorkspaceFileSystem::validate_directory(const std::filesystem::path& target) const {
