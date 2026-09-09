@@ -16,6 +16,13 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      # Per-lane CTest label exclusion (issue #634): `ctest_label_exclude`
+      # names a CTest label regex excluded from that lane's offline-test run
+      # via `ctest -LE`. It stays empty unless a quarantined test (a
+      # `[quarantine]` Catch2 tag at the test site, surfaced as the
+      # `quarantine` CTest label) cannot run reliably on the lane. Every
+      # non-empty entry must cite the owner issue and the re-enable condition
+      # next to it.
       matrix:
         include:
           - name: GCC 16 Debug
@@ -24,30 +31,43 @@ jobs:
             cxx: g++-16
             compiler: gcc
             sanitizer: ""
+            ctest_label_exclude: ""
           - name: GCC 16 Release
             preset: vcpkg-release
             cc: gcc-16
             cxx: g++-16
             compiler: gcc
             sanitizer: ""
+            # First quarantine entry (issue #632, owner: #632): the
+            # projection 100-chunk cost-bound test enforces the #617/ADR 0052
+            # 100us contract, but shared CI runners measure consistently ~2%
+            # over it in Release. That is runner resourcing, not a
+            # regression, so this lane excludes the quarantined test instead
+            # of re-tuning the bound. Debug still enforces the 2ms bound.
+            # Re-enable when dedicated-runner measurements clear 100us with
+            # headroom.
+            ctest_label_exclude: "quarantine"
           - name: Clang 22 conformance
             preset: clang-conformance
             cc: clang-22
             cxx: clang++-22
             compiler: clang
             sanitizer: ""
+            ctest_label_exclude: ""
           - name: GCC 16 ASan+UBSan
             preset: vcpkg-asan-ubsan
             cc: gcc-16
             cxx: g++-16
             compiler: gcc
             sanitizer: asan-ubsan
+            ctest_label_exclude: ""
           - name: GCC 16 TSan scenarios
             preset: vcpkg-tsan
             cc: gcc-16
             cxx: g++-16
             compiler: gcc
             sanitizer: tsan
+            ctest_label_exclude: ""
     env:
       CCH_LIVE_KIMI: "0"
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
@@ -160,23 +180,19 @@ jobs:
       - name: Build
         run: cmake --build --preset "${{ matrix.preset }}"
 
+      # Quarantined tests (issue #634) are excluded per lane through the
+      # matrix `ctest_label_exclude` field above; adding a lane exclusion
+      # requires naming the owner issue and the re-enable condition there.
       - name: Run offline tests
         if: matrix.sanitizer == ''
         env:
           KIMI_API_KEY: ""
           OPENAI_API_KEY: ""
           ANTHROPIC_API_KEY: ""
-        # Quarantine (issue #632, owner: #632): the projection cost-bound test
-        # enforces the #617/ADR 0052 100us contract, but shared CI runners
-        # measure consistently ~2% over it in Release (102242ns min-of-5).
-        # That is runner resourcing, not a regression, so the Release lane
-        # excludes this one test instead of re-tuning the bound. Debug still
-        # enforces the 2ms bound and ASan lanes scope timing out in-test.
-        # Re-enable when dedicated-runner measurements clear 100us with headroom.
         run: |
           exclude=()
-          if [[ "${{ matrix.preset }}" == 'vcpkg-release' ]]; then
-            exclude=(-E '^Projection publishes 100 message-update chunks inside the issue cost bound over a long history$')
+          if [[ -n "${{ matrix.ctest_label_exclude }}" ]]; then
+            exclude=(-LE "${{ matrix.ctest_label_exclude }}")
           fi
           ctest --preset "${{ matrix.preset }}" "${exclude[@]}" --no-tests=error
 

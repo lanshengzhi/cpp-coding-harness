@@ -205,7 +205,14 @@ TEST_CASE("AssistantMessageComponent append processing stays bounded across a hu
         const auto started = std::chrono::steady_clock::now();
         component.update_content(message);
         const auto elapsed = std::chrono::steady_clock::now() - started;
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+        // Wall-clock bound only (CODING_STANDARDS.md section 11.9): meaningless
+        // under sanitizer overhead.
+        (void)elapsed;
+        (void)kMaxChunkTime;
+#else
         CHECK(elapsed < kMaxChunkTime);
+#endif
     }
     // Closed blocks froze mid-stream; only the trailing segment stays dynamic.
     CHECK(component.frozen_block_count() > 0);

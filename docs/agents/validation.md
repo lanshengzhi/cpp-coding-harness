@@ -34,6 +34,16 @@ Added or modified lines must conform to `.clang-format`. `scripts/format-check.s
 
 Fresh Validation is the environment-level tier: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`. Reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. Do not run it for ordinary code edits. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039), not the per-change default.
 
+### Test quarantine
+
+Flaky or runner-sensitive tests have one standard home instead of ad-hoc per-PR exclusions (issues #632, #634):
+
+- At the test site, add the `[quarantine]` Catch2 tag — surfaced as the `quarantine` CTest label through `ADD_TAGS_AS_LABELS` — next to a comment naming the reason, the owner issue, and the re-enable condition.
+- In `.github/workflows/linux-toolchain.yml`, the `build-and-test` matrix `ctest_label_exclude` field excludes that label per lane via `ctest -LE`. Only lanes that cannot run the test reliably exclude it; each non-empty entry cites the owner issue and the re-enable condition.
+- First entry: the projection 100-chunk cost-bound test in `tests/coding_agent/ProjectionStreamTest.cpp`, excluded on the GCC 16 Release lane only (owner #632; re-enable when dedicated-runner measurements clear the 100us contract with headroom). The Debug 2ms bound still runs on every other lane.
+
+Quarantine is for resource-caused failures; bounds are never loosened silently to fit the runner.
+
 ## Architecture-sensitive changes
 
 Run architecture tests when Owner Interface headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change:

@@ -302,7 +302,13 @@ TEST_CASE("ChatContainer benchmark confirms rendering 50 historical messages is 
     const double avg_microseconds_per_frame = static_cast<double>(total_microseconds) / kFrames;
 
     // Issue #602 acceptance criterion: <0.5ms (<500 microseconds) on repeated frames!
+    // Wall-clock bound only (CODING_STANDARDS.md section 11.9): meaningless under
+    // sanitizer overhead.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    (void)avg_microseconds_per_frame;
+#else
     CHECK(avg_microseconds_per_frame < 500.0);
+#endif
     // Cold render count must NOT have increased at all!
     CHECK(chat.cold_render_count() == 50);
     // Exactly 50 items * 100 frames = 5000 cache hits!
@@ -375,10 +381,11 @@ TEST_CASE("Streaming assistant incremental block freeze maintains flat processin
     }
     // Verify single-chunk processing time is flat and bounded under 2ms (2000 microseconds)
     // eliminating O(N^2) whole-document reparsing degradation (issue #603 criterion)
-#if defined(__SANITIZE_ADDRESS__)
-    // AddressSanitizer slows single chunks ~2.5x on CI (5109us against the 2000us
-    // criterion), so the wall-clock bound is meaningless under instrumentation. The
-    // functional assertions in each pass still execute on sanitizer lanes.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Sanitizers slow single chunks systematically on CI (~2.5x under ASan: 5109us
+    // against the 2000us criterion), so the wall-clock bound is meaningless under
+    // instrumentation. The functional assertions in each pass still execute on
+    // sanitizer lanes (CODING_STANDARDS.md section 11.9).
 #else
     CHECK(max_chunk_us < 2000.0);
 #endif
