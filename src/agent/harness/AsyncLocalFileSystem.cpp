@@ -23,6 +23,10 @@ void AuthorizedSkillRoots::set(std::vector<std::filesystem::path> roots) {
         if (candidate.filename().empty()) {
             candidate = candidate.parent_path();
         }
+        if (candidate == candidate.root_path()) {
+            // A filesystem root would authorize every absolute path.
+            continue;
+        }
         if (std::ranges::find(normalized, candidate) == normalized.end()) {
             normalized.push_back(std::move(candidate));
         }

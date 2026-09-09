@@ -604,3 +604,74 @@ TEST_CASE("WorkspaceFileSystem revokes skill roots on refresh", "[harness][files
     REQUIRE_FALSE(after);
     CHECK(after.error().code == harness::FileErrorCode::PermissionDenied);
 }
+
+TEST_CASE("WorkspaceFileSystem rejections name the accepted path form", "[harness][filesystem][u2][spec][issue618]") {
+    tests::TempWorkspace workspace;
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto outside = fs->readTextFile("/etc/hostname");
+    REQUIRE_FALSE(outside);
+    CHECK(outside.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK(outside.error().message.find("workspace-relative path") != std::string::npos);
+
+    auto escaped = fs->readTextFile("../outside.txt");
+    REQUIRE_FALSE(escaped);
+    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK(escaped.error().message.find("workspace-relative path") != std::string::npos);
+}
+
+TEST_CASE("WorkspaceFileSystem rejects NUL bytes before skill-root authorization",
+        "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    skill_home.write("my-skill/SKILL.md", "skill body");
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "my-skill"});
+    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+
+    std::string poisoned = (skill_home.path() / "my-skill" / "SKILL.md").string();
+    poisoned.push_back('\0');
+    poisoned += "suffix";
+    auto read = fs.readTextFile(poisoned);
+    REQUIRE_FALSE(read);
+    CHECK(read.error().code == harness::FileErrorCode::PermissionDenied);
+}
+
+TEST_CASE(
+        "WorkspaceFileSystem normalizes and filters skill-root entries", "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace skill_home;
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({
+            skill_home.path() / "my-skill",
+            std::filesystem::path{"relative/skill"},
+            std::filesystem::path{},
+            skill_home.path() / "my-skill" / ".",
+            std::filesystem::path{"/"},
+    });
+    const auto snapshot = roots->snapshot();
+    REQUIRE(snapshot);
+    REQUIRE(snapshot->size() == 1);
+    CHECK((*snapshot)[0] == skill_home.path() / "my-skill");
+}
+
+TEST_CASE("WorkspaceFileSystem longest skill root wins and fails closed on symlinks",
+        "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    skill_home.write("target/file.md", "elsewhere");
+    skill_home.write("outer/placeholder.txt", "local");
+    std::filesystem::create_symlink(skill_home.path() / "target", skill_home.path() / "outer" / "link");
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "outer", skill_home.path() / "outer" / "link"});
+    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+
+    // Both roots authorize the target lexically; the longest (symlinked)
+    // root must win and fail closed instead of falling back to the outer one.
+    auto linked = fs.readTextFile((skill_home.path() / "outer" / "link" / "file.md").string());
+    REQUIRE_FALSE(linked);
+    CHECK(linked.error().code == harness::FileErrorCode::PermissionDenied);
+}
