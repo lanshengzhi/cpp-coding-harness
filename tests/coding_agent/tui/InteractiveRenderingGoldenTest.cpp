@@ -595,7 +595,12 @@ TEST_CASE("rendering golden: app.interrupt aborts the active run and renders the
     REQUIRE(fixture->scripted.control->calls.size() == 1);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.inject_input(""));
-    drain_ready(io);
+    // The interrupt crosses runtime worker hops and clears the spinner; wait
+    // on the painted outcome itself before capturing the settled screen.
+    REQUIRE(tests::pump_until(io, [&] {
+        const auto s = visible_screen(terminal);
+        return s.find("Operation aborted") != std::string::npos && s.find("Working...") == std::string::npos;
+    }));
 
     const auto screen = visible_screen(terminal);
     capture_golden("interrupt.txt", screen);

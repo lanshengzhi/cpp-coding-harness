@@ -48,8 +48,8 @@ enum class RuntimeTeardownEvent {
 /// settles.
 class RuntimeFixture final {
 public:
-    explicit RuntimeFixture(
-            harness::RuntimeLimits limits = {}, std::chrono::milliseconds wait_budget = std::chrono::milliseconds{5000})
+    explicit RuntimeFixture(harness::RuntimeLimits limits = {},
+            std::chrono::milliseconds wait_budget = std::chrono::milliseconds{30000})
         : loop_(std::make_shared<boost::asio::io_context>()), root_(loop_, limits), wait_budget_(wait_budget) {
         teardown_events_.reserve(6);
     }

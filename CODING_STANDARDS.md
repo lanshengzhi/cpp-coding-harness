@@ -174,6 +174,21 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.8. Hold-and-release test doubles gate on the counted, latched `tests::ReleaseGate` (`tests/support/ReleaseGate.hpp`) — never a hand-rolled max-expiry `steady_timer` cancel. A `release()` that arrives before the double arms the gate is stored and consumed by the next wait, so release/arm ordering races cannot hang a test; one permit releases one waiter, preserving per-operation re-arming. Cancellation wake-ups use `interrupt()`, which records no permit, and the wait is guarded by a `stop_requested()` check.
 
+11.9. Functional assertions run on every lane; wall-clock performance assertions run only on non-instrumented lanes. A wall-clock performance assertion is a `CHECK`/`REQUIRE` comparing a measured elapsed time against a tight bound to enforce speed (benchmark and cost contracts, e.g. sub-millisecond render or microsecond publication bounds). Generous liveness backstops that prove completion or hang-freedom (second-scale timeouts, prompt-shutdown bounds, PTY drain completion) are not performance assertions and stay on every lane. Scope the performance check under the sanitizer compiler macros and keep every functional assertion outside the guard so sanitizer lanes still execute the behavior:
+
+```cpp
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Sanitizers impose systematic overhead (measured ~55x/~2.5x on CI, issue #632), so
+    // wall-clock bounds are meaningless under instrumentation. The functional assertions
+    // above still execute on sanitizer lanes; only the timing contract is scoped out.
+    (void)elapsed;
+#else
+    CHECK(elapsed < kBound);
+#endif
+```
+
+The approved pattern is the #632 scoping (ProjectionStreamTest 100-chunk cost bound, ChatContainerTest flat-time bound). Bounds are never loosened silently: a threshold change cites measured evidence, and runner-resourcing failures are quarantined via the workflow exclusion with owner and rationale (the #632 workflow comment), not re-tuned to the runner.
+
 ## 12. CMake
 
 12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` (authoritative Owner libraries: `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library). The only direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai, cch_tui}`. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets (ADR 0039).
