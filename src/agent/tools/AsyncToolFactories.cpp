@@ -418,15 +418,18 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
 agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem) {
     agent::Tool tool;
     tool.definition = ai::Tool{
-        "read",
-        "Read a text file inside the workspace",
-        object_schema(
-            {
-                {"path", typed_schema("string", "Workspace-relative file path")},
-                {"offset", typed_schema("integer", "1-based line offset")},
-                {"limit", typed_schema("integer", "Maximum number of lines to read")},
-            },
-            {"path"}),
+            "read",
+            "Read a text file inside the workspace or under a loaded skill directory",
+            object_schema(
+                    {
+                            {"path",
+                                    typed_schema("string",
+                                            "Workspace-relative path, absolute path in the workspace, "
+                                            "or absolute path under a loaded skill directory")},
+                            {"offset", typed_schema("integer", "1-based line offset")},
+                            {"limit", typed_schema("integer", "Maximum number of lines to read")},
+                    },
+                    {"path"}),
     };
     // pi `core/tools/read.ts` promptSnippet/promptGuidelines (verbatim).
     tool.prompt_snippet = "Read file contents";
@@ -444,14 +447,16 @@ agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncFileSystem> 
 agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncFileSystem> filesystem) {
     agent::Tool tool;
     tool.definition = ai::Tool{
-        "write",
-        "Create or overwrite a text file inside the workspace. Parent directories are created automatically.",
-        object_schema(
-            {
-                {"path", typed_schema("string", "Workspace-relative file path")},
-                {"content", typed_schema("string", "File content")},
-            },
-            {"path", "content"}),
+            "write",
+            "Create or overwrite a text file inside the workspace. Parent directories are created automatically.",
+            object_schema(
+                    {
+                            {"path",
+                                    typed_schema(
+                                            "string", "Workspace-relative path, or absolute path in the workspace")},
+                            {"content", typed_schema("string", "File content")},
+                    },
+                    {"path", "content"}),
     };
     // pi `core/tools/write.ts` promptSnippet/promptGuidelines (verbatim).
     tool.prompt_snippet = "Create or overwrite files";
@@ -487,17 +492,19 @@ agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncFileSystem> files
         return schema;
     }();
     tool.definition = ai::Tool{
-        "edit",
-        "Edit a single file using exact text replacement. Every edits[].oldText must match a "
-        "unique, non-overlapping region of the original file. If two changes affect the same "
-        "block or nearby lines, merge them into one edit instead of emitting overlapping edits. "
-        "Do not include large unchanged regions just to connect distant changes.",
-        object_schema(
-            {
-                {"path", typed_schema("string", "Path to the file to edit (relative or absolute)")},
-                {"edits", edits_schema},
-            },
-            {"path", "edits"}),
+            "edit",
+            "Edit a single file using exact text replacement. Every edits[].oldText must match a "
+            "unique, non-overlapping region of the original file. If two changes affect the same "
+            "block or nearby lines, merge them into one edit instead of emitting overlapping edits. "
+            "Do not include large unchanged regions just to connect distant changes.",
+            object_schema(
+                    {
+                            {"path",
+                                    typed_schema(
+                                            "string", "Path to edit (workspace-relative, or absolute in workspace)")},
+                            {"edits", edits_schema},
+                    },
+                    {"path", "edits"}),
     };
     // pi `core/tools/edit.ts` promptSnippet/promptGuidelines (verbatim): the
     // snippet plus the four edit guidelines.

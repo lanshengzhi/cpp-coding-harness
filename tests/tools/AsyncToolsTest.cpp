@@ -636,3 +636,41 @@ TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", 
     REQUIRE(result);
     CHECK(result->is_error);
 }
+
+TEST_CASE("async read tool serves absolute paths inside the workspace and under skill roots",
+        "[tools][async][issue618][issue629][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    workspace.write("local.txt", "local body");
+    skill_home.write("my-skill/SKILL.md", "skill body");
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "my-skill"});
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path(), roots);
+    auto tool = tools::make_async_read_file_tool(env);
+
+    const auto inside = (workspace.path() / "local.txt").string();
+    auto local = run_tool([&]() {
+        return tool.execute(
+                invocation("read", "{\"path\":\"" + inside + "\"}"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+    REQUIRE(local);
+    CHECK_FALSE(local->is_error);
+    CHECK(ai::text_from_content(local->content).find("local body") != std::string::npos);
+
+    const auto skill_file = (skill_home.path() / "my-skill" / "SKILL.md").string();
+    auto skill = run_tool([&]() {
+        return tool.execute(
+                invocation("read", "{\"path\":\"" + skill_file + "\"}"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+    REQUIRE(skill);
+    CHECK_FALSE(skill->is_error);
+    CHECK(ai::text_from_content(skill->content).find("skill body") != std::string::npos);
+
+    auto outside = run_tool([&]() {
+        return tool.execute(
+                invocation("read", R"({"path":"/etc/hostname"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+    REQUIRE(outside);
+    CHECK(outside->is_error);
+}

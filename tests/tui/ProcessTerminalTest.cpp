@@ -547,6 +547,68 @@ TEST_CASE("Process Terminal detects a resize with no input activity", "[tui][ter
     REQUIRE(terminal.stop());
 }
 
+TEST_CASE("Process Terminal never dispatches a resize after teardown begins", "[tui][terminal][issue628][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::mutex events_mutex;
+    std::atomic<bool> teardown_started{false};
+    std::size_t dispatched{0};
+    std::size_t dispatched_after_teardown{0};
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = test_io().io.get_executor(),
+    });
+    // The resize sink runs on the worker thread; the captured locals must
+    // outlive it (CODING_STANDARDS.md §6.2/§7.5). They do: the terminal is
+    // stopped and every worker operation joined before this test scope exits.
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [&events_mutex, &dispatched, &teardown_started, &dispatched_after_teardown](
+                    cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(events_mutex);
+                ++dispatched;
+                if (teardown_started.load(std::memory_order_acquire)) ++dispatched_after_teardown;
+                return {};
+            }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Deliver an initial shrink resize so delivery is confirmed to work.
+    const winsize first{
+            .ws_row = 6,
+            .ws_col = 60,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
+    };
+    REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &first) == 0);
+    REQUIRE(cch::tests::wait_until([&events_mutex, &dispatched] {
+        std::lock_guard lock(events_mutex);
+        return dispatched > 0;
+    }, std::chrono::seconds(2)));
+
+    // Race a second shrink resize against teardown: the resize sink must be
+    // safely neutralized so that once teardown has begun it never dispatches
+    // again (issue #628) - otherwise a resize handler could invoke through a
+    // vtable whose owning component is already being torn down.
+    const winsize second{
+            .ws_row = 7,
+            .ws_col = 61,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
+    };
+    REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &second) == 0);
+    teardown_started.store(true, std::memory_order_release);
+    // The stopper thread is joined below, so `terminal` outlives it (§6.2).
+    std::jthread stopper([&terminal] { (void)terminal.stop(); });
+    stopper.join();
+    // Let any in-flight io work settle before asserting no late dispatch.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    {
+        std::lock_guard lock(events_mutex);
+        CHECK(dispatched_after_teardown == 0);
+    }
+    REQUIRE(terminal.stop());
+}
+
 TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][terminal][issue54][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);

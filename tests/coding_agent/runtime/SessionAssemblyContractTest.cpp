@@ -20,7 +20,10 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
+#include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"

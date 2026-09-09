@@ -4,6 +4,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/FileSystem.hpp>
+#include <cch/agent/harness/LocalFileSystem.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 
@@ -42,6 +43,10 @@ struct RuntimeServices {
     /// cleanup after Tool work quiesces. The Shell capability has no
     /// Close-time obligation and needs no Runtime owner.
     std::shared_ptr<harness::AsyncFileSystem> filesystem;
+    /// Live set of out-of-workspace skill base directories the session tool
+    /// filesystem serves reads from (#629). Replaced at construction and on
+    /// every `/reload` skill refresh; null keeps reads workspace-contained.
+    std::shared_ptr<harness::AuthorizedSkillRoots> skill_read_roots;
     /// The session's serialized Runtime mailbox target (ADR 0040): the
     /// Session Event Commitment channel admits persistence work through it
     /// so journal I/O runs off the interaction loop and outcomes return in

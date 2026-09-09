@@ -499,6 +499,15 @@ template <typename T> void invoke_input(T& impl, std::string input) {
 #endif
 }
 
+/// True while the terminal session is still live, i.e. teardown has not begun.
+/// A resize may be dispatched only while the session is alive: this mirrors the
+/// input/output drain paths' weak lifetime guard so an in-flight resize is
+/// neutralized once stop() clears session_alive and started, before the owning
+/// component tree is destroyed (issue #628).
+template <typename T> [[nodiscard]] bool session_active(T& impl) {
+    return impl.session_alive && impl.session_alive->load() && impl.modes.started;
+}
+
 template <typename T> void deliver_resize_if_changed(T& impl) {
     // The watchdog base advances on every check so the poll timeout stays in
     // the future and the worker never spins on an immediate resize deadline.
@@ -517,6 +526,7 @@ template <typename T> void deliver_resize_if_changed(T& impl) {
     std::shared_ptr<TerminalResizeSink> sink;
     {
         std::lock_guard lock(impl.mutex);
+        if (!session_active(impl)) return;
         if (impl.dimensions == dimensions) return;
         impl.dimensions = dimensions;
         sink = impl.resize_sink;
@@ -739,6 +749,9 @@ template <typename T> void apply_cell_size_response(T& impl, const detail::CellS
     TerminalDimensions dimensions;
     {
         std::lock_guard lock(impl.mutex);
+        // Same lifetime guard as deliver_resize_if_changed (issue #628): never
+        // dispatch a resize once teardown has begun.
+        if (!session_active(impl)) return;
         const CellPixelDimensions updated{
                 .width = response.width_px,
                 .height = response.height_px,
