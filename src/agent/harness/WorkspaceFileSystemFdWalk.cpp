@@ -104,8 +104,14 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_authorized_skill_
         *failure_errno = 0;
     }
     const std::filesystem::path* authorizing = nullptr;
+    // The snapshot is bound to a local so the borrowed authorizing pointer
+    // stays valid across the open below even if a concurrent skill refresh
+    // replaces the set; resolve-time and open-time authorization then also
+    // observe the same roots.
+    std::shared_ptr<const std::vector<std::filesystem::path>> skill_snapshot;
     if (skill_read_roots_ != nullptr) {
-        authorizing = authorizing_skill_root(target, *skill_read_roots_->snapshot());
+        skill_snapshot = skill_read_roots_->snapshot();
+        authorizing = authorizing_skill_root(target, *skill_snapshot);
     }
     if (authorizing == nullptr) {
         return std::unexpected(workspace_error("no loaded skill directory authorizes: " + target.string()));

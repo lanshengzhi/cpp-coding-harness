@@ -98,6 +98,9 @@ const std::filesystem::path* WorkspaceFileSystem::authorizing_skill_root(
 }
 
 support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_read_path(const std::string& requested) const {
+    if (requested.find('\0') != std::string::npos) {
+        return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
+    }
     if (auto addressed = resolve_addressed_path(requested); addressed) {
         return addressed;
     } else {
