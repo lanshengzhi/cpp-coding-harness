@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/agent/harness/FileSystem.hpp>
+#include <cch/agent/harness/LocalFileSystem.hpp>
 #include <cch/support/Error.hpp>
 #include "support/UniqueFd.hpp"
 
@@ -17,16 +18,20 @@ namespace cch::harness {
 
 /// Workspace-scoped filesystem operations with containment and symlink safety.
 ///
-/// All addressed-path operations reject absolute paths, ".." escapes, and
-/// symlinks that resolve outside the workspace. Metadata and listing use
-/// lstat-equivalent no-follow semantics.
+/// Addressed-path operations accept workspace-relative paths and absolute
+/// paths normalizing inside the workspace root, and reject ".." escapes and
+/// symlinks that resolve outside the workspace. Read operations additionally
+/// accept absolute paths under the session's authorized skill roots; writes
+/// stay workspace-contained. Metadata and listing use lstat-equivalent
+/// no-follow semantics.
 class AsyncLocalFileSystem;
 class AsyncLocalShell;
 
 class WorkspaceFileSystem {
 public:
     WorkspaceFileSystem();
-    explicit WorkspaceFileSystem(std::filesystem::path workspace);
+    explicit WorkspaceFileSystem(
+            std::filesystem::path workspace, std::shared_ptr<const AuthorizedSkillRoots> skill_read_roots = nullptr);
 
     static support::Expected<WorkspaceFileSystem> create(const std::filesystem::path& workspace);
 
@@ -35,6 +40,11 @@ public:
     /// Resolve a workspace-relative path to an absolute addressed path,
     /// validating containment. Does not require the path to exist.
     [[nodiscard]] support::Expected<std::filesystem::path> resolve_addressed_path(const std::string& requested) const;
+
+    /// Read-scoped resolution: the addressed-path contract plus absolute
+    /// paths under the authorized skill roots. Writes keep using
+    /// `resolve_addressed_path` so they stay workspace-contained.
+    [[nodiscard]] support::Expected<std::filesystem::path> resolve_read_path(const std::string& requested) const;
 
     // Legacy tool-shaped operations used by private project-resource adapters.
     [[nodiscard]] support::Expected<std::string> read_existing_file(
@@ -97,6 +107,15 @@ private:
     [[nodiscard]] support::Expected<support::UniqueFd> open_workspace_root() const;
     [[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
             const std::filesystem::path& target, bool create_missing, int* failure_errno = nullptr) const;
+    // The returned pointer borrows the roots argument.
+    [[nodiscard]] const std::filesystem::path* authorizing_skill_root(
+            const std::filesystem::path& target, const std::vector<std::filesystem::path>& roots) const;
+    [[nodiscard]] support::Expected<support::UniqueFd> walk_child_directories(support::UniqueFd base,
+            const std::filesystem::path& relative,
+            bool create_missing,
+            int* failure_errno) const;
+    [[nodiscard]] support::Expected<support::UniqueFd> open_authorized_skill_parent(
+            const std::filesystem::path& target, int* failure_errno = nullptr) const;
     [[nodiscard]] support::Expected<void> validate_directory(const std::filesystem::path& target) const;
     [[nodiscard]] std::expected<support::UniqueFd, FileError> open_regular_file_for_read(
             const std::string& requested, std::uintmax_t* size, std::stop_token stop_token = {}) const;
@@ -119,6 +138,7 @@ private:
     [[nodiscard]] static std::filesystem::path default_root();
 
     std::filesystem::path root_{default_root()};
+    std::shared_ptr<const AuthorizedSkillRoots> skill_read_roots_;
     std::shared_ptr<TemporaryState> temporary_state_;
 };
 

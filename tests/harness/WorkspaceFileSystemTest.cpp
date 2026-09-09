@@ -1,11 +1,13 @@
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/agent/harness/LocalFileSystem.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 
 #include <sys/stat.h>
 
@@ -515,4 +517,90 @@ TEST_CASE("WorkspaceFileSystem enforces reviewed path and file contracts", "[har
     REQUIRE(root_entries);
     CHECK(std::none_of(
             root_entries->begin(), root_entries->end(), [](const auto& entry) { return entry.name == "fifo"; }));
+}
+
+TEST_CASE("WorkspaceFileSystem reads absolute paths under authorized skill roots",
+        "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    skill_home.write("my-skill/SKILL.md", "skill body");
+    skill_home.write("my-skill/refs/extra.md", "extra");
+    workspace.write("local.txt", "local");
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "my-skill"});
+    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+
+    auto skill = fs.readTextFile((skill_home.path() / "my-skill" / "SKILL.md").string());
+    REQUIRE(skill);
+    CHECK(*skill == "skill body");
+
+    auto nested = fs.readTextFile((skill_home.path() / "my-skill" / "refs" / "extra.md").string());
+    REQUIRE(nested);
+    CHECK(*nested == "extra");
+
+    auto local = fs.readTextFile("local.txt");
+    REQUIRE(local);
+    CHECK(*local == "local");
+}
+
+TEST_CASE("WorkspaceFileSystem rejects non-skill outside paths and skill-root writes",
+        "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    skill_home.write("my-skill/SKILL.md", "skill body");
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "my-skill"});
+    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+
+    auto other = fs.readTextFile((skill_home.path() / "unrelated.md").string());
+    REQUIRE_FALSE(other);
+    CHECK(other.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto escaped = fs.readTextFile((skill_home.path() / "my-skill" / ".." / "unrelated.md").string());
+    REQUIRE_FALSE(escaped);
+    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto write = fs.writeFile((skill_home.path() / "my-skill" / "written.md").string(), std::string{"x"});
+    REQUIRE_FALSE(write);
+    CHECK(write.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK_FALSE(std::filesystem::exists(skill_home.path() / "my-skill" / "written.md"));
+}
+
+TEST_CASE("WorkspaceFileSystem refuses symlinks under authorized skill roots",
+        "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    skill_home.write("outside-target.txt", "secret");
+    skill_home.write("my-skill/SKILL.md", "skill body");
+    std::filesystem::create_symlink(
+            skill_home.path() / "outside-target.txt", skill_home.path() / "my-skill" / "link.md");
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "my-skill"});
+    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+
+    auto linked = fs.readTextFile((skill_home.path() / "my-skill" / "link.md").string());
+    REQUIRE_FALSE(linked);
+    CHECK(linked.error().code == harness::FileErrorCode::PermissionDenied);
+}
+
+TEST_CASE("WorkspaceFileSystem revokes skill roots on refresh", "[harness][filesystem][u2][spec][issue629]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace skill_home;
+    skill_home.write("my-skill/SKILL.md", "skill body");
+    const auto skill_file = (skill_home.path() / "my-skill" / "SKILL.md").string();
+
+    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
+    roots->set({skill_home.path() / "my-skill"});
+    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+
+    auto before = fs.readTextFile(skill_file);
+    REQUIRE(before);
+
+    roots->set({});
+    auto after = fs.readTextFile(skill_file);
+    REQUIRE_FALSE(after);
+    CHECK(after.error().code == harness::FileErrorCode::PermissionDenied);
 }

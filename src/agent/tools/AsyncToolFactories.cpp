@@ -419,12 +419,13 @@ agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncFileSystem> 
     agent::Tool tool;
     tool.definition = ai::Tool{
             "read",
-            "Read a text file inside the workspace",
+            "Read a text file inside the workspace or under a loaded skill directory",
             object_schema(
                     {
                             {"path",
-                                    typed_schema(
-                                            "string", "Workspace-relative path, or absolute path in the workspace")},
+                                    typed_schema("string",
+                                            "Workspace-relative path, absolute path in the workspace, "
+                                            "or absolute path under a loaded skill directory")},
                             {"offset", typed_schema("integer", "1-based line offset")},
                             {"limit", typed_schema("integer", "Maximum number of lines to read")},
                     },

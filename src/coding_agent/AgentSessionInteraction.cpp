@@ -245,6 +245,10 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         // filesystem operation completed above, so cancellation and Close cannot
         // publish a partial refresh.
         skills_ = std::move(loading->resources.skills);
+        // Retired skill directories lose read authorization with the refresh (#629).
+        if (services_.skill_read_roots) {
+            services_.skill_read_roots->set(runtime::collect_skill_read_roots(skills_));
+        }
         templates_ = std::move(loading->resources.prompt_templates);
         config_.custom_prompt = std::move(loading->resources.system_prompt);
         config_.append_system_prompt = std::move(loading->resources.append_system_prompt);
