@@ -62,10 +62,11 @@ if(CCH_SANITIZER)
     message(STATUS "Sanitizer coverage: ${sanitizer_commas}")
 endif()
 
-# Distribution binary size optimization (issue #636).
+# Distribution binary size optimization (issues #636, #639).
 # All Release targets compile with size optimization (-Os), section splitting
-# (-ffunction-sections, -fdata-sections), and hidden symbol visibility
-# (-fvisibility=hidden, -fvisibility-inlines-hidden). The link stage utilizes
+# (-ffunction-sections, -fdata-sections), hidden symbol visibility
+# (-fvisibility=hidden, -fvisibility-inlines-hidden), and unwind-table
+# suppression (-fno-unwind-tables, -fno-asynchronous-unwind-tables). The link stage utilizes
 # GNU gold (-fuse-ld=gold) with dead-code collection (-Wl,--gc-sections),
 # identical code folding (-Wl,--icf=all), and link-time stripping (-Wl,-s).
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -77,12 +78,17 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         -fdata-sections
         -fvisibility=hidden
         -fvisibility-inlines-hidden
+        -fno-unwind-tables
+        -fno-asynchronous-unwind-tables
     )
     add_link_options(
         -fuse-ld=gold
         -Wl,--gc-sections
         -Wl,--icf=all
         -Wl,-s
+        -Wl,--no-eh-frame-hdr
     )
-    message(STATUS "Release size optimization (-Os, sections, hidden visibility, gold, gc-sections, icf, strip) enabled")
+    message(STATUS
+        "Release size optimization (-Os, sections, hidden visibility, "
+        "no unwind tables, gold, gc-sections, icf, strip) enabled")
 endif()

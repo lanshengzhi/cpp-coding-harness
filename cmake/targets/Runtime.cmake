@@ -22,3 +22,12 @@ target_include_directories(pike PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
 )
+
+# Release distribution size optimization (issue #639): strip residual unwind
+# tables from third-party static dependencies.
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(TARGET pike POST_BUILD
+        COMMAND "${CMAKE_STRIP}" --remove-section=.eh_frame "$<TARGET_FILE:pike>"
+        COMMENT "Stripping .eh_frame from Release runtime executable"
+    )
+endif()
