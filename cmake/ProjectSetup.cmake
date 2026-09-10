@@ -61,3 +61,28 @@ if(CCH_SANITIZER)
     add_link_options("-fsanitize=${sanitizer_commas}")
     message(STATUS "Sanitizer coverage: ${sanitizer_commas}")
 endif()
+
+# Distribution binary size optimization (issue #636).
+# All Release targets compile with size optimization (-Os), section splitting
+# (-ffunction-sections, -fdata-sections), and hidden symbol visibility
+# (-fvisibility=hidden, -fvisibility-inlines-hidden). The link stage utilizes
+# GNU gold (-fuse-ld=gold) with dead-code collection (-Wl,--gc-sections),
+# identical code folding (-Wl,--icf=all), and link-time stripping (-Wl,-s).
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(CMAKE_CXX_FLAGS_RELEASE MATCHES "-O3")
+        string(REGEX REPLACE "-O3" "-Os" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+    endif()
+    add_compile_options(
+        -ffunction-sections
+        -fdata-sections
+        -fvisibility=hidden
+        -fvisibility-inlines-hidden
+    )
+    add_link_options(
+        -fuse-ld=gold
+        -Wl,--gc-sections
+        -Wl,--icf=all
+        -Wl,-s
+    )
+    message(STATUS "Release size optimization (-Os, sections, hidden visibility, gold, gc-sections, icf, strip) enabled")
+endif()
