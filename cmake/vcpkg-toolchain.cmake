@@ -25,6 +25,9 @@ if(NOT DEFINED ENV{VCPKG_ROOT} OR "$ENV{VCPKG_ROOT}" STREQUAL "")
     set(ENV{VCPKG_ROOT} "${_cch_vcpkg_root}")
 endif()
 
+if(NOT DEFINED VCPKG_OVERLAY_PORTS OR "${VCPKG_OVERLAY_PORTS}" STREQUAL "")
+    set(VCPKG_OVERLAY_PORTS "${_cch_repo_root}/cmake/vcpkg-ports" CACHE STRING "In-tree vcpkg overlay ports" FORCE)
+endif()
 set(CMAKE_TOOLCHAIN_FILE "${_cch_vcpkg_root}/scripts/buildsystems/vcpkg.cmake" CACHE FILEPATH "The CMake toolchain file" FORCE)
 set(CMAKE_TOOLCHAIN_FILE "${_cch_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
 

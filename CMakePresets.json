@@ -17,6 +17,7 @@
         "VCPKG_HOST_TRIPLET": "x64-linux",
         "VCPKG_MANIFEST_INSTALL": true,
         "VCPKG_MANIFEST_MODE": true,
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
         "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
     },

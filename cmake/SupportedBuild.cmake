@@ -169,12 +169,34 @@ function(cch_validate_vcpkg_options
         message(FATAL_ERROR
             "Unsupported vcpkg host triplet '${host_triplet}'. Use native x64-linux tools.")
     endif()
-    if(NOT "${overlay_ports}" STREQUAL "" OR
-       NOT "${overlay_triplets}" STREQUAL "" OR
-       NOT "${chainload_toolchain}" STREQUAL "")
+    if(NOT "${overlay_triplets}" STREQUAL "")
         message(FATAL_ERROR
-            "vcpkg overlay ports, overlay triplets, and chainloaded toolchains are unsupported; "
-            "use only the pinned manifest dependency graph.")
+            "vcpkg overlay triplets are unsupported: '${overlay_triplets}'. "
+            "Use only the pinned manifest dependency graph.")
+    endif()
+
+    if(NOT "${chainload_toolchain}" STREQUAL "")
+        message(FATAL_ERROR
+            "vcpkg chainloaded toolchains are unsupported: '${chainload_toolchain}'. "
+            "Use only the pinned manifest dependency graph.")
+    endif()
+
+    if(DEFINED CCH_SOURCE_DIR AND NOT "${CCH_SOURCE_DIR}" STREQUAL "")
+        set(repo_root "${CCH_SOURCE_DIR}")
+    else()
+        set(repo_root "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+    get_filename_component(expected_overlay_ports "${repo_root}/cmake/vcpkg-ports" ABSOLUTE)
+
+    if(NOT "${overlay_ports}" STREQUAL "")
+        foreach(entry IN LISTS overlay_ports)
+            get_filename_component(normalized_entry "${entry}" ABSOLUTE BASE_DIR "${repo_root}")
+            if(NOT normalized_entry STREQUAL expected_overlay_ports)
+                message(FATAL_ERROR
+                    "External or unmanaged vcpkg overlay ports are unsupported: '${entry}'. "
+                    "Only the repository-managed in-tree overlay ports directory '${expected_overlay_ports}' is permitted.")
+            endif()
+        endforeach()
     endif()
 endfunction()
 

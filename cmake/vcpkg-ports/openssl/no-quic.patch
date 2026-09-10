@@ -1,0 +1,50 @@
+diff -r a/include/internal/quic_tls.h b/include/internal/quic_tls.h
+--- a/include/internal/quic_tls.h	2026-09-10 15:19:03.935379842 +0900
++++ b/include/internal/quic_tls.h	2026-09-10 15:19:04.308888319 +0900
+@@ -87,28 +87,24 @@
+     int ossl_quic;
+ } QUIC_TLS_ARGS;
+ 
++#ifndef OPENSSL_NO_QUIC
+ QUIC_TLS *ossl_quic_tls_new(const QUIC_TLS_ARGS *args);
+-
+ void ossl_quic_tls_free(QUIC_TLS *qtls);
+-
+ int ossl_quic_tls_configure(QUIC_TLS *qtls);
+-
+-/* Advance the state machine */
+ int ossl_quic_tls_tick(QUIC_TLS *qtls);
+-
+ void ossl_quic_tls_clear(QUIC_TLS *qtls);
+-
+ int ossl_quic_tls_set_transport_params(QUIC_TLS *qtls,
+     const unsigned char *transport_params,
+     size_t transport_params_len);
+-
+ int ossl_quic_tls_get_error(QUIC_TLS *qtls,
+     uint64_t *error_code,
+     const char **error_msg,
+     ERR_STATE **error_state);
+-
+ int ossl_quic_tls_is_cert_request(QUIC_TLS *qtls);
+ int ossl_quic_tls_has_bad_max_early_data(QUIC_TLS *qtls);
+-
+ int ossl_quic_tls_set_early_data_enabled(QUIC_TLS *qtls, int enabled);
++#else
++#define ossl_quic_tls_clear(qtls) ((void)0)
++#define ossl_quic_tls_free(qtls) ((void)0)
++#endif
+ #endif
+diff -r a/ssl/quic/build.info b/ssl/quic/build.info
+--- a/ssl/quic/build.info	2026-09-10 15:19:03.955580304 +0900
++++ b/ssl/quic/build.info	2026-09-10 15:19:04.308930932 +0900
+@@ -1,8 +1,7 @@
+ $LIBSSL=../../libssl
+ 
+-#QUIC TLS API is available even in the event of no-quic
+-SOURCE[$LIBSSL]=quic_tls.c quic_tls_api.c
+ IF[{- !$disabled{quic} -}]
++    SOURCE[$LIBSSL]=quic_tls.c quic_tls_api.c
+     SOURCE[$LIBSSL]=quic_method.c quic_impl.c quic_wire.c quic_ackm.c quic_statm.c
+     SOURCE[$LIBSSL]=cc_newreno.c quic_demux.c quic_record_rx.c
+     SOURCE[$LIBSSL]=quic_record_tx.c quic_record_util.c quic_record_shared.c quic_wire_pkt.c

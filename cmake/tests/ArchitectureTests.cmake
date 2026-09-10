@@ -24,7 +24,10 @@ include_guard(GLOBAL)
     cch_add_supported_build_policy_test("reject-missing-vcpkg-toolchain" FALSE "pinned vcpkg toolchain")
     cch_add_supported_build_policy_test("reject-vcpkg-manifest-install" FALSE "manifest installation is required")
     cch_add_supported_build_policy_test("reject-vcpkg-host-triplet" FALSE "host triplet")
+    cch_add_supported_build_policy_test("accept-vcpkg-in-tree-overlays" TRUE "")
     cch_add_supported_build_policy_test("reject-vcpkg-overlays" FALSE "overlay ports")
+    cch_add_supported_build_policy_test("reject-vcpkg-overlay-triplets" FALSE "overlay triplets")
+    cch_add_supported_build_policy_test("reject-vcpkg-chainload-toolchain" FALSE "chainloaded toolchains")
 
     # Parity Architecture Gate (ADR 0039). The Python validator uses only the
     # standard library and Python 3.12+; it is a system tool, not a vcpkg
