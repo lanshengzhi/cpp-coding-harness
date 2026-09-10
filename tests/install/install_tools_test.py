@@ -305,6 +305,24 @@ class CheckFreshnessTest(unittest.TestCase):
                 }
             )
         )
+    def write_evidence_v2(self, entries, deps_log=None):
+        doc = {
+            "producer": "cch-compiler-depfile",
+            "schema_version": 2,
+            "config_digest": "0" * 64,
+            "deps_log": str(deps_log) if deps_log else None,
+            "deps_log_digest": "0" * 64 if deps_log else None,
+            "entries": [
+                {
+                    "source": str(source),
+                    "output": str(output),
+                    "dependencies": [str(p) for p in prereqs],
+                    "digest": "0" * 64,
+                }
+                for source, output, prereqs in entries
+            ],
+        }
+        self.depfiles.write_text(json.dumps(doc))
 
     def check(self):
         return freshness.check_freshness(
@@ -377,6 +395,52 @@ class CheckFreshnessTest(unittest.TestCase):
         self.binary.unlink()
         diagnostics = self.check()
         self.assertTrue(any("missing Runtime binary" in d for d in diagnostics))
+
+    def test_schema_2_fresh_tree_passes(self):
+        header = self.root / "Header.hpp"
+        header.write_text("#pragma once\n")
+        source = self.root / "Agent.cpp"
+        source.write_text("// source\n")
+        output = self.root / "Agent.o"
+        output.write_bytes(b"obj")
+        base = 1_700_000_000
+        os.utime(source, (base, base))
+        os.utime(header, (base, base))
+        os.utime(output, (base + 100, base + 100))
+        deps_log = self.root / ".ninja_deps"
+        deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+        os.utime(deps_log, (base + 100, base + 100))
+        self.write_evidence_v2([(source, "Agent.o", [source, header])], deps_log=deps_log)
+        binary_mtime = base + 200
+        os.utime(self.binary, (binary_mtime, binary_mtime))
+        self.assertEqual(self.check(), [])
+
+    def test_schema_2_missing_object_fails(self):
+        source = self.root / "Agent.cpp"
+        source.write_text("// source\n")
+        deps_log = self.root / ".ninja_deps"
+        deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+        self.write_evidence_v2([(source, "Agent.o", [source])], deps_log=deps_log)
+        diagnostics = self.check()
+        self.assertTrue(any("missing compiled object" in d for d in diagnostics))
+
+    def test_schema_2_source_newer_than_object_fails(self):
+        header = self.root / "Header.hpp"
+        header.write_text("#pragma once\n")
+        source = self.root / "Agent.cpp"
+        source.write_text("// source\n")
+        output = self.root / "Agent.o"
+        output.write_bytes(b"obj")
+        base = 1_700_000_000
+        os.utime(source, (base + 200, base + 200))
+        os.utime(output, (base + 100, base + 100))
+        deps_log = self.root / ".ninja_deps"
+        deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+        self.write_evidence_v2([(source, "Agent.o", [source, header])], deps_log=deps_log)
+        binary_mtime = base + 300
+        os.utime(self.binary, (binary_mtime, binary_mtime))
+        diagnostics = self.check()
+        self.assertTrue(any("stale build products" in d for d in diagnostics))
 
 
 class FreshnessCliTest(unittest.TestCase):

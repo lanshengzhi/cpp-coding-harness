@@ -12,6 +12,8 @@ During implementation, run the smallest focused test that can fail: build the ow
 
 Configure presets require `VCPKG_ROOT` pointing at a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline; after Fresh Validation it is `.deps/vcpkg` in the repository root. If `build/` is not configured (no `cmake --build --preset vcpkg` target tree), configure once with `cmake --preset vcpkg` first. Any edit to a compiled source can make the build-phase Parity Gate reject with PARITY-4011 (include evidence older than the source): this is staleness, not an architecture violation — reconfigure once (`VCPKG_ROOT=<root> cmake --preset <preset>`) to rescan the direct-include evidence, then build.
 
+The build-phase Parity Architecture Gate sources active transitive-conformance depfile evidence directly from `.ninja_deps` (schema version 2; issue #551, ADR 0039 addendum). CMake C++ module scanning is disabled globally (`CMAKE_CXX_SCAN_FOR_MODULES OFF`), ensuring that `compile_commands.json` carries no `-fmodules-ts` / `-fmodule-mapper` flags and every translation unit remains cacheable under ccache across all presets.
+
 ```bash
 cmake --build --preset vcpkg --target cch_tests_coding_agent   # owning shard
 ctest --preset vcpkg -LE architecture -R 'session assembly'    # focused name

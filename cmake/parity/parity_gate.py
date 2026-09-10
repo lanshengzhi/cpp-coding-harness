@@ -21,8 +21,9 @@ The Gate consumes four evidence classes produced by the build:
 * ``compile-commands`` (producer ``cmake-file-api``) - the generated
   compilation database proving each production source compiles exactly once
   with a supported compiler and only declared forced-include/PCH context.
-* ``depfiles`` (producer ``cch-compiler-depfile``) - active transitive-closure
-  evidence required at the build phase; it never authorizes a direct include.
+* ``depfiles`` (producer ``cch-compiler-depfile``, schema version 2) - active
+  transitive-closure evidence sourced from ``.ninja_deps`` required at the
+  build phase; it never authorizes a direct include.
 
 Project-header includes resolve canonically against the declared interface
 roots and reject quote, basename, relative, macro-generated, ambiguous,
@@ -39,6 +40,8 @@ import datetime
 import hashlib
 import json
 import os
+import re
+import struct
 import shlex
 import sys
 from dataclasses import dataclass
@@ -255,8 +258,10 @@ class CompileCommands:
 @dataclass(frozen=True)
 class DepfileEntry:
     source: str
-    depfile: str
     digest: str
+    output: Optional[str] = None
+    depfile: Optional[str] = None
+    dependencies: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -265,7 +270,8 @@ class DepfileEvidence:
     schema_version: int
     config_digest: str
     entries: tuple[DepfileEntry, ...]
-
+    deps_log: Optional[str] = None
+    deps_log_digest: Optional[str] = None
 
 def _fail(rule_id: str, message: str) -> None:
     raise SchemaViolation(rule_id, message)
@@ -1276,7 +1282,7 @@ def parse_depfile_evidence(data: Any) -> DepfileEvidence:
     _require_object(data, "depfiles", RULE_MALFORMED_EVIDENCE)
     _check_unknown_keys(
         data,
-        frozenset({"producer", "schema_version", "config_digest", "entries"}),
+        frozenset({"producer", "schema_version", "config_digest", "entries", "deps_log", "deps_log_digest"}),
         "depfiles",
         RULE_MALFORMED_EVIDENCE,
     )
@@ -1298,6 +1304,15 @@ def parse_depfile_evidence(data: Any) -> DepfileEvidence:
         "depfiles",
         RULE_MALFORMED_EVIDENCE,
     )
+    deps_log = None
+    if "deps_log" in data and data["deps_log"] is not None:
+        deps_log = _require_string(data["deps_log"], "deps_log", "depfiles", RULE_MALFORMED_EVIDENCE)
+    deps_log_digest = None
+    if "deps_log_digest" in data and data["deps_log_digest"] is not None:
+        deps_log_digest = _require_string(
+            data["deps_log_digest"], "deps_log_digest", "depfiles", RULE_MALFORMED_EVIDENCE
+        )
+
     entries_raw = _require_member(data, "entries", "depfiles", RULE_MALFORMED_EVIDENCE)
     if not isinstance(entries_raw, list):
         _fail(RULE_MALFORMED_EVIDENCE, "field 'entries' at depfiles must be a list")
@@ -1307,17 +1322,14 @@ def parse_depfile_evidence(data: Any) -> DepfileEvidence:
         context = f"depfiles.entries[{position}]"
         _require_object(entry, context, RULE_MALFORMED_EVIDENCE)
         _check_unknown_keys(
-            entry, frozenset({"source", "depfile", "digest"}), context, RULE_MALFORMED_EVIDENCE
+            entry,
+            frozenset({"source", "output", "digest", "dependencies", "depfile"}),
+            context,
+            RULE_MALFORMED_EVIDENCE,
         )
         source = _require_string(
             _require_member(entry, "source", context, RULE_MALFORMED_EVIDENCE),
             "source",
-            context,
-            RULE_MALFORMED_EVIDENCE,
-        )
-        depfile = _require_string(
-            _require_member(entry, "depfile", context, RULE_MALFORMED_EVIDENCE),
-            "depfile",
             context,
             RULE_MALFORMED_EVIDENCE,
         )
@@ -1327,11 +1339,43 @@ def parse_depfile_evidence(data: Any) -> DepfileEvidence:
             context,
             RULE_MALFORMED_EVIDENCE,
         )
+        output: Optional[str] = None
+        if "output" in entry and entry["output"] is not None:
+            output = _require_string(entry["output"], "output", context, RULE_MALFORMED_EVIDENCE)
+        depfile: Optional[str] = None
+        if "depfile" in entry and entry["depfile"] is not None:
+            depfile = _require_string(entry["depfile"], "depfile", context, RULE_MALFORMED_EVIDENCE)
+        if output is None and depfile is None:
+            _fail(RULE_MALFORMED_EVIDENCE, f"field 'output' is required at {context}")
+        dependencies: tuple[str, ...] = ()
+        if "dependencies" in entry and entry["dependencies"] is not None:
+            deps_raw = entry["dependencies"]
+            if not isinstance(deps_raw, list):
+                _fail(RULE_MALFORMED_EVIDENCE, f"field 'dependencies' at {context} must be a list")
+            dependencies = tuple(
+                _require_string(d, f"dependencies[{i}]", context, RULE_MALFORMED_EVIDENCE)
+                for i, d in enumerate(deps_raw)
+            )
         if source in seen:
             _fail(RULE_MALFORMED_EVIDENCE, f"depfile entry for '{source}' is declared more than once")
         seen.add(source)
-        entries.append(DepfileEntry(source, depfile, digest))
-    return DepfileEvidence(producer, schema_version, config_digest, tuple(entries))
+        entries.append(
+            DepfileEntry(
+                source=source,
+                digest=digest,
+                output=output,
+                depfile=depfile,
+                dependencies=dependencies,
+            )
+        )
+    return DepfileEvidence(
+        producer=producer,
+        schema_version=schema_version,
+        config_digest=config_digest,
+        entries=tuple(entries),
+        deps_log=deps_log,
+        deps_log_digest=deps_log_digest,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2162,26 +2206,56 @@ def _check_depfiles(
                 )
             )
 
-    for entry in depfiles.entries:
-        if not os.path.exists(entry.depfile):
+    # Validate deps_log integrity in schema 2
+    if depfiles.schema_version >= 2:
+        if not depfiles.deps_log or not os.path.exists(depfiles.deps_log):
             diagnostics.append(
                 Diagnostic(
                     RULE_STALE_DEPFILE_EVIDENCE,
-                    f"depfile '{entry.depfile}' is missing",
-                    path=entry.source,
+                    f"deps log '{depfiles.deps_log or '.ninja_deps'}' is missing",
                 )
             )
-        else:
-            actual = hashlib.sha256(_read_bytes(entry.depfile)).hexdigest()
-            if actual != entry.digest:
+        elif depfiles.deps_log_digest is not None:
+            actual = hashlib.sha256(_read_bytes(depfiles.deps_log)).hexdigest()
+            if actual != depfiles.deps_log_digest:
                 diagnostics.append(
                     Diagnostic(
                         RULE_STALE_DEPFILE_EVIDENCE,
-                        f"depfile '{entry.depfile}' changed since it was recorded",
-                        path=entry.source,
+                        f"deps log '{depfiles.deps_log}' changed since it was recorded",
                     )
                 )
 
+    # Validate individual entries
+    for entry in depfiles.entries:
+        if entry.depfile is not None:
+            if not os.path.exists(entry.depfile):
+                diagnostics.append(
+                    Diagnostic(
+                        RULE_STALE_DEPFILE_EVIDENCE,
+                        f"depfile '{entry.depfile}' is missing",
+                        path=entry.source,
+                    )
+                )
+            else:
+                actual = hashlib.sha256(_read_bytes(entry.depfile)).hexdigest()
+                if actual != entry.digest:
+                    diagnostics.append(
+                        Diagnostic(
+                            RULE_STALE_DEPFILE_EVIDENCE,
+                            f"depfile '{entry.depfile}' changed since it was recorded",
+                            path=entry.source,
+                        )
+                    )
+        elif entry.dependencies:
+            expected_digest = hashlib.sha256("\n".join(sorted(entry.dependencies)).encode("utf-8")).hexdigest()
+            if entry.digest != expected_digest:
+                diagnostics.append(
+                    Diagnostic(
+                        RULE_STALE_DEPFILE_EVIDENCE,
+                        f"depfile entry digest mismatch for source '{entry.source}'",
+                        path=entry.source,
+                    )
+                )
 
 def check(
     manifest: Manifest,
@@ -2508,61 +2582,109 @@ def _split_command_tokens(command: str) -> list[str]:
     return _split_command(command)
 
 
-def _depfile_for_command(command: str, directory: str) -> Optional[str]:
-    """Derive the compiler depfile a compile command writes.
-
-    Deterministic over the compile command, which is configured evidence:
-
-    * With the GCC/CMake C++ modules pipeline (`-fmodule-mapper=<base>.modmap`)
-      the dependency file is `<base>.ddi.d`.
-    * With the Clang/CMake C++ modules pipeline (`@<base>.modmap` response
-      file) the dependency file is the same `<base>.ddi.d`.
-    * With an explicit `-MF <path>` the dependency file is that path.
-    * Otherwise the traditional Ninja depfile is `<output>.d`, where `<output>`
-      comes from `-o <output>`.
-
-    Returns an absolute path; a source whose depfile does not exist is simply
-    omitted from the evidence, and the validator reports the missing entry as
-    contradictory evidence (PARITY-6003).
-    """
+def _output_for_command(command: str, directory: str) -> Optional[str]:
+    """Derive the compiled object output path from a compile command."""
     tokens = _split_command_tokens(command)
-    mapper_base: Optional[str] = None
-    explicit_mf: Optional[str] = None
     output: Optional[str] = None
     i = 0
     n = len(tokens)
     while i < n:
         token = tokens[i]
-        if token.startswith("-fmodule-mapper=") and not token.startswith("-fmodule-mapper=:"):
-            mapper_base = token[len("-fmodule-mapper="):]
-        elif token.startswith("@") and token.endswith(".modmap"):
-            # Clang/CMake passes the module mapper through a response file
-            # (`@<base>.modmap`); the produced dependency file is still the
-            # `<base>.ddi.d` of the C++ modules pipeline.
-            mapper_base = token[1:]
-        elif token == "-MF" and i + 1 < n:
-            explicit_mf = tokens[i + 1]
-        elif token == "-o" and i + 1 < n:
+        if token == "-o" and i + 1 < n:
             output = tokens[i + 1]
+            break
         elif token.startswith("-o") and len(token) > 2:
             output = token[2:]
+            break
         i += 1
+    return output
 
-    if mapper_base is not None:
-        # <base>.modmap -> <base>.ddi.d (the dependency file of the .ddi
-        # intermediate in the GCC modules pipeline).
-        base = mapper_base[:-len(".modmap")] if mapper_base.endswith(".modmap") else mapper_base
-        candidate = os.path.join(directory, base + ".ddi.d")
-        return os.path.normpath(candidate) if os.path.exists(candidate) else None
-    if explicit_mf is not None:
-        candidate = explicit_mf if os.path.isabs(explicit_mf) else os.path.join(directory, explicit_mf)
-        return os.path.normpath(candidate) if os.path.exists(candidate) else None
-    if output is not None:
-        candidate = output if os.path.isabs(output) else os.path.join(directory, output)
-        candidate = os.path.normpath(candidate) + ".d"
-        return candidate if os.path.exists(candidate) else None
-    return None
 
+def _parse_ninja_deps_binary(ninja_deps_path: str) -> dict[str, tuple[int, list[str]]]:
+    """Parse Ninja's binary .ninja_deps log format (versions 3 and 4)."""
+    with open(ninja_deps_path, "rb") as handle:
+        magic = handle.read(12)
+        if magic != b"# ninjadeps\n":
+            raise ValueError(f"invalid .ninja_deps signature: {magic!r}")
+        version_bytes = handle.read(4)
+        if len(version_bytes) < 4:
+            raise ValueError("truncated .ninja_deps header")
+        version = struct.unpack("<I", version_bytes)[0]
+        if version not in (3, 4):
+            raise ValueError(f"unsupported .ninja_deps version: {version}")
+
+        nodes: list[str] = []
+        deps_by_out: dict[int, tuple[int, list[int]]] = {}
+
+        while True:
+            size_raw = handle.read(4)
+            if not size_raw or len(size_raw) < 4:
+                break
+            size_word = struct.unpack("<I", size_raw)[0]
+            is_deps = bool(size_word & 0x80000000)
+            size = size_word & 0x7FFFFFFF
+            data = handle.read(size)
+            if len(data) < size:
+                break
+            if is_deps:
+                if version == 4:
+                    if size < 12 or (size % 4) != 0:
+                        break
+                    out_id, mtime_low, mtime_high = struct.unpack("<III", data[:12])
+                    mtime = (mtime_high << 32) | mtime_low
+                    dep_count = (size - 12) // 4
+                    node_ids = list(struct.unpack(f"<{dep_count}I", data[12:]))
+                else:  # version 3 uses 32-bit mtime
+                    if size < 8 or (size % 4) != 0:
+                        break
+                    out_id, mtime = struct.unpack("<II", data[:8])
+                    dep_count = (size - 8) // 4
+                    node_ids = list(struct.unpack(f"<{dep_count}I", data[8:]))
+                deps_by_out[out_id] = (mtime, node_ids)
+            else:
+                if size < 4:
+                    break
+                path_size = size - 4
+                raw_path = data[:path_size].rstrip(b"\0")
+                checksum = struct.unpack("<I", data[-4:])[0]
+                expected_id = (~checksum) & 0xFFFFFFFF
+                if expected_id != len(nodes):
+                    break
+                nodes.append(raw_path.decode("utf-8", errors="replace"))
+
+        result: dict[str, tuple[int, list[str]]] = {}
+        for out_id, (mtime, dep_ids) in deps_by_out.items():
+            if out_id < len(nodes):
+                out_node = nodes[out_id]
+                dep_nodes = [nodes[did] for did in dep_ids if did < len(nodes)]
+                result[out_node] = (mtime, dep_nodes)
+        return result
+
+
+def _load_ninja_deps(
+    ninja_deps_path: Optional[str], build_dir: Optional[str] = None
+) -> tuple[Optional[str], Optional[str], dict[str, tuple[int, list[str]]]]:
+    """Load active dependency entries from .ninja_deps.
+
+    Returns (resolved_path, file_digest, entries_by_output).
+    """
+    candidates: list[str] = []
+    if ninja_deps_path is not None:
+        candidates.append(ninja_deps_path)
+    if build_dir is not None:
+        candidates.append(os.path.join(build_dir, ".ninja_deps"))
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            resolved_path = os.path.normpath(os.path.abspath(candidate))
+            digest = hashlib.sha256(_read_bytes(resolved_path)).hexdigest()
+            try:
+                entries = _parse_ninja_deps_binary(resolved_path)
+                return resolved_path, digest, entries
+            except Exception:
+                return resolved_path, digest, {}
+
+    return None, None, {}
 
 def _record_depfiles(
     manifest: Manifest,
@@ -2572,15 +2694,16 @@ def _record_depfiles(
     index_path: str,
     compile_commands_path: str,
     output_path: str,
+    ninja_deps_path: Optional[str] = None,
 ) -> None:
-    """Produce the active dependency (depfile) evidence JSON.
+    """Produce the active dependency (depfile) evidence JSON from .ninja_deps.
 
     The evidence carries the configuration identity (config_digest) that ties
-    the depfiles to the current manifest, ownership index, and compile
-    commands, and one entry per compiled project source whose depfile exists.
-    A compiled source with no depfile (not yet compiled, or a depfile the
-    producer cannot locate) is omitted; the validator fails closed on the
-    missing entry with PARITY-6003.
+    the depfile evidence to the current manifest, ownership index, and compile
+    commands, and one entry per compiled project source whose compilation has
+    an active dependency record in .ninja_deps. A compiled source with no entry
+    in the deps log is omitted; the validator fails closed on the missing entry
+    with PARITY-6003.
     """
     compiled_sources: set[str] = set()
     for target in index.targets:
@@ -2590,43 +2713,84 @@ def _record_depfiles(
             if _is_compiled_source(source):
                 compiled_sources.add(_norm_path(source))
 
-    entry_by_source: dict[str, str] = {}  # source -> depfile
+    build_dir: Optional[str] = None
+    if compile_commands_path and os.path.exists(compile_commands_path):
+        build_dir = os.path.dirname(os.path.abspath(compile_commands_path))
+    elif compile_commands.commands:
+        build_dir = compile_commands.commands[0].directory
+
+    resolved_deps_path, deps_log_digest, ninja_deps = _load_ninja_deps(
+        ninja_deps_path, build_dir
+    )
+
+    normalized_deps: dict[str, tuple[int, list[str]]] = {}
+    for out_key, val in ninja_deps.items():
+        normalized_deps[out_key] = val
+        norm_k = os.path.normpath(out_key)
+        normalized_deps[norm_k] = val
+        if build_dir is not None:
+            if not os.path.isabs(out_key):
+                normalized_deps[os.path.normpath(os.path.join(build_dir, out_key))] = val
+            else:
+                try:
+                    normalized_deps[os.path.normpath(os.path.relpath(out_key, build_dir))] = val
+                except ValueError:
+                    pass
+
+    entry_by_source: dict[str, dict[str, Any]] = {}
     for command in compile_commands.commands:
         source = _norm_path(command.file)
         if source not in compiled_sources:
             continue
-        depfile = _depfile_for_command(command.command, command.directory)
-        if depfile is None:
+        output = _output_for_command(command.command, command.directory)
+        if output is None:
             continue
-        # A source compiled more than once is itself a violation; record the
-        # first depfile deterministically and let the validator report the
-        # duplicate compilation (PARITY-5001).
-        entry_by_source.setdefault(source, depfile)
+
+        cmd_dir = command.directory
+        candidates = [output, os.path.normpath(output)]
+        if not os.path.isabs(output):
+            candidates.append(os.path.normpath(os.path.join(cmd_dir, output)))
+        else:
+            try:
+                candidates.append(os.path.normpath(os.path.relpath(output, cmd_dir)))
+            except ValueError:
+                pass
+
+        matched_val: Optional[tuple[int, list[str]]] = None
+        for candidate in candidates:
+            if candidate in normalized_deps:
+                matched_val = normalized_deps[candidate]
+                break
+
+        if matched_val is None:
+            continue
+
+        mtime, raw_deps = matched_val
+        deps_list = [d for d in raw_deps]
+        deps_digest = hashlib.sha256("\n".join(sorted(deps_list)).encode("utf-8")).hexdigest()
+        entry_data = {
+            "source": source,
+            "output": output,
+            "digest": deps_digest,
+            "dependencies": deps_list,
+        }
+        entry_by_source.setdefault(source, entry_data)
 
     config_digest = _compute_config_digest(
         manifest_digest, index_path, compile_commands_path
     )
-    entries: list[dict[str, str]] = []
-    for source in sorted(entry_by_source):
-        depfile = entry_by_source[source]
-        if os.path.exists(depfile):
-            entries.append(
-                {
-                    "source": source,
-                    "depfile": depfile,
-                    "digest": hashlib.sha256(_read_bytes(depfile)).hexdigest(),
-                }
-            )
+    entries = [entry_by_source[source] for source in sorted(entry_by_source)]
     document = {
         "producer": PRODUCER_DEPFILES,
-        "schema_version": 1,
+        "schema_version": 2,
         "config_digest": config_digest,
+        "deps_log": resolved_deps_path,
+        "deps_log_digest": deps_log_digest,
         "entries": entries,
     }
     with open(output_path, "w", encoding="utf-8") as handle:
         json.dump(document, handle, indent=2, sort_keys=True)
         handle.write("\n")
-
 
 def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -2665,6 +2829,10 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
         "--record-depfiles",
         help="Write active dependency (depfile) evidence JSON and exit (requires "
         "--manifest --index --compile-commands)",
+    )
+    parser.add_argument(
+        "--ninja-deps",
+        help="Path to the .ninja_deps dependency log (default: .ninja_deps in the build directory)",
     )
     parser.add_argument(
         "--external-include-root",
@@ -2714,6 +2882,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.index,
                 args.compile_commands,
                 args.record_depfiles,
+                ninja_deps_path=args.ninja_deps,
             )
         except SchemaViolation as exc:
             print(f"{exc.rule_id}: {exc.message}", file=sys.stderr)

@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import struct
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -119,7 +120,7 @@ VALID_MANIFEST = {
         {
             "id": "depfiles",
             "producer": "cch-compiler-depfile",
-            "producer_schema_version": 1,
+            "producer_schema_version": 2,
             "input_identities": ["manifest", "ownership-index", "compile-commands"],
         },
     ],
@@ -600,15 +601,60 @@ def make_compile_commands(entries):
     return pg.parse_compile_commands(entries)
 
 
-def make_depfiles(config_digest, entries):
-    return pg.parse_depfile_evidence(
-        {
-            "producer": "cch-compiler-depfile",
-            "schema_version": 1,
-            "config_digest": config_digest,
-            "entries": entries,
-        }
-    )
+def serialize_ninja_deps(deps_map, mtime=123456789):
+    nodes = []
+    node_to_id = {}
+
+    def get_node_id(path):
+        if path not in node_to_id:
+            node_to_id[path] = len(nodes)
+            nodes.append(path)
+        return node_to_id[path]
+
+    deps_records = []
+    for out_path, deps in deps_map.items():
+        out_id = get_node_id(out_path)
+        dep_ids = [get_node_id(d) for d in deps]
+        deps_records.append((out_id, dep_ids))
+
+    out = bytearray(b"# ninjadeps\n")
+    out.extend(struct.pack("<I", 4))
+
+    for i, path in enumerate(nodes):
+        raw = path.encode("utf-8")
+        pad = (4 - (len(raw) % 4)) % 4
+        payload = raw + b"\0" * pad
+        size = len(payload) + 4
+        checksum = (~i) & 0xFFFFFFFF
+        out.extend(struct.pack("<I", size))
+        out.extend(payload)
+        out.extend(struct.pack("<I", checksum))
+
+    for out_id, dep_ids in deps_records:
+        size = 4 * (3 + len(dep_ids))
+        size_word = size | 0x80000000
+        out.extend(struct.pack("<I", size_word))
+        mtime_low = mtime & 0xFFFFFFFF
+        mtime_high = (mtime >> 32) & 0xFFFFFFFF
+        out.extend(struct.pack("<III", out_id, mtime_low, mtime_high))
+        for did in dep_ids:
+            out.extend(struct.pack("<I", did))
+
+    return bytes(out)
+
+
+def make_depfiles(config_digest, entries, schema_version=2, deps_log=None, deps_log_digest=None):
+    doc = {
+        "producer": "cch-compiler-depfile",
+        "schema_version": schema_version,
+        "config_digest": config_digest,
+        "entries": entries,
+    }
+    if deps_log is not None:
+        doc["deps_log"] = deps_log
+    if deps_log_digest is not None:
+        doc["deps_log_digest"] = deps_log_digest
+    return pg.parse_depfile_evidence(doc)
 
 
 def make_project_tree(root):
@@ -1205,6 +1251,51 @@ class DepfileEvidenceTest(unittest.TestCase):
 
     def test_stale_config_digest_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
+            deps_log = Path(tmp) / ".ninja_deps"
+            deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+            source = Path(tmp) / "model.cpp"
+            index = self._compiled_index(str(source))
+            depfiles = make_depfiles(
+                "a" * 64,
+                [{"source": str(source), "output": "model.o", "digest": "c" * 64}],
+                deps_log=str(deps_log),
+                deps_log_digest=sha256_file(deps_log),
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="b" * 64
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+
+    def test_missing_deps_log_file_is_rejected(self):
+        index = self._compiled_index("/tmp/fake/model.cpp")
+        depfiles = make_depfiles(
+            "a" * 64,
+            [{"source": "/tmp/fake/model.cpp", "output": "model.o", "digest": "c" * 64}],
+            deps_log="/tmp/fake/missing.ninja_deps",
+            deps_log_digest="d" * 64,
+        )
+        diagnostics = pg.check(
+            valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
+        )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+
+    def test_changed_deps_log_digest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deps_log = Path(tmp) / ".ninja_deps"
+            deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+            index = self._compiled_index(str(Path(tmp) / "model.cpp"))
+            depfiles = make_depfiles(
+                "a" * 64,
+                [{"source": str(Path(tmp) / "model.cpp"), "output": "model.o", "digest": "c" * 64}],
+                deps_log=str(deps_log),
+                deps_log_digest="wrong_digest" * 4,
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+    def test_schema_version_1_is_rejected_as_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "model.cpp"
             depfile = Path(tmp) / "model.d"
             depfile.write_text("model.o: model.cpp\n")
@@ -1212,45 +1303,24 @@ class DepfileEvidenceTest(unittest.TestCase):
             depfiles = make_depfiles(
                 "a" * 64,
                 [{"source": str(source), "depfile": str(depfile), "digest": sha256_file(depfile)}],
-            )
-            diagnostics = pg.check(
-                valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="b" * 64
-            )
-        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
-
-    def test_missing_depfile_file_is_rejected(self):
-        index = self._compiled_index("/tmp/fake/model.cpp")
-        depfiles = make_depfiles(
-            "a" * 64,
-            [{"source": "/tmp/fake/model.cpp", "depfile": "/tmp/fake/missing.d", "digest": "c" * 64}],
-        )
-        diagnostics = pg.check(
-            valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
-        )
-        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
-
-    def test_changed_depfile_digest_is_rejected(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            depfile = Path(tmp) / "model.d"
-            depfile.write_text("model.o: model.cpp\n")
-            index = self._compiled_index(str(Path(tmp) / "model.cpp"))
-            depfiles = make_depfiles(
-                "a" * 64,
-                [{"source": str(Path(tmp) / "model.cpp"), "depfile": str(depfile), "digest": "c" * 64}],
+                schema_version=1,
             )
             diagnostics = pg.check(
                 valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
             )
-        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_PRODUCER_SCHEMA])
+
 
     def test_missing_depfile_entry_is_contradictory(self):
         with tempfile.TemporaryDirectory() as tmp:
-            depfile = Path(tmp) / "model.d"
-            depfile.write_text("model.o: model.cpp\n")
-            index = self._compiled_index(str(Path(tmp) / "model.cpp"))
+            deps_log = Path(tmp) / ".ninja_deps"
+            deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+            source = Path(tmp) / "model.cpp"
             depfiles = make_depfiles(
                 "a" * 64,
-                [{"source": str(Path(tmp) / "model.cpp"), "depfile": str(depfile), "digest": sha256_file(depfile)}],
+                [{"source": str(source), "output": "model.o", "digest": "c" * 64}],
+                deps_log=str(deps_log),
+                deps_log_digest=sha256_file(deps_log),
             )
             # A second compiled source has no depfile entry.
             index = make_index(
@@ -1259,7 +1329,7 @@ class DepfileEvidenceTest(unittest.TestCase):
                         "name": "cch_ai",
                         "role": "owner",
                         "owner": "cch_ai",
-                        "sources": [str(Path(tmp) / "model.cpp"), str(Path(tmp) / "other.cpp")],
+                        "sources": [str(source), str(Path(tmp) / "other.cpp")],
                         "dependencies": [],
                     }
                 ]
@@ -1282,12 +1352,14 @@ class DepfileEvidenceTest(unittest.TestCase):
                 pg.PRODUCER_DEPFILES,
             },
         )
+        depfile_evidence = next(e for e in manifest.evidence if e["producer"] == pg.PRODUCER_DEPFILES)
+        self.assertEqual(depfile_evidence["producer_schema_version"], 2)
 
 
 class DepfileRecorderTest(unittest.TestCase):
     """The active dependency evidence producer (`--record-depfiles`)."""
 
-    def _record(self, tmp, commands, manifest_digest="d" * 64):
+    def _record(self, tmp, commands, manifest_digest="d" * 64, ninja_deps=None):
         source = Path(tmp) / "model.cpp"
         index = make_index(
             [
@@ -1314,92 +1386,89 @@ class DepfileRecorderTest(unittest.TestCase):
             str(index_path),
             str(commands_path),
             str(output_path),
+            ninja_deps_path=str(ninja_deps) if ninja_deps else None,
         )
         return json.loads(output_path.read_text())
 
-    def test_records_module_mapper_depfile_for_each_compiled_source(self):
+    def test_records_ninja_deps_for_each_compiled_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "model.cpp"
             source.write_text("int x;\n")
-            depfile = Path(tmp) / "model.cpp.o.ddi.d"
-            depfile.write_text("model.cpp.o.ddi: model.cpp\n")
-            command = (
-                f"g++ -MD -fmodule-mapper=model.cpp.o.modmap "
-                f"-o model.cpp.o -c {source}"
+            header = Path(tmp) / "model.hpp"
+            header.write_text("#pragma once\n")
+            deps_file = Path(tmp) / ".ninja_deps"
+            deps_file.write_bytes(
+                serialize_ninja_deps({"model.cpp.o": [str(source), str(header)]})
             )
-            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            command = f"g++ -MD -o model.cpp.o -c {source}"
+            document = self._record(
+                tmp,
+                [{"file": str(source), "directory": tmp, "command": command}],
+                ninja_deps=deps_file,
+            )
             self.assertEqual(document["producer"], pg.PRODUCER_DEPFILES)
-            self.assertEqual(document["schema_version"], 1)
-            self.assertEqual(
-                document["entries"],
-                [
-                    {
-                        "source": str(source),
-                        "depfile": str(depfile),
-                        "digest": sha256_file(depfile),
-                    }
-                ],
-            )
+            self.assertEqual(document["schema_version"], 2)
+            self.assertEqual(document["deps_log"], str(deps_file))
+            self.assertEqual(document["deps_log_digest"], sha256_file(deps_file))
+            self.assertEqual(len(document["entries"]), 1)
+            entry = document["entries"][0]
+            self.assertEqual(entry["source"], str(source))
+            self.assertEqual(entry["output"], "model.cpp.o")
+            self.assertEqual(entry["dependencies"], [str(source), str(header)])
+            expected_digest = hashlib.sha256(f"{source}\n{header}".encode("utf-8")).hexdigest()
+            self.assertEqual(entry["digest"], expected_digest)
 
-    def test_records_clang_modmap_response_depfile(self):
-        # Clang/CMake passes the module mapper through a response file
-        # (`@<base>.modmap`); the depfile is still `<base>.ddi.d`.
-        with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "model.cpp"
-            source.write_text("int x;\n")
-            depfile = Path(tmp) / "model.cpp.o.ddi.d"
-            depfile.write_text("model.cpp.o.ddi: model.cpp\n")
-            command = (
-                f"clang++ -MD @model.cpp.o.modmap "
-                f"-o model.cpp.o -c {source}"
-            )
-            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
-            self.assertEqual(
-                document["entries"],
-                [
-                    {
-                        "source": str(source),
-                        "depfile": str(depfile),
-                        "digest": sha256_file(depfile),
-                    }
-                ],
-            )
-
-    def test_records_traditional_output_depfile_without_module_mapper(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "model.cpp"
-            source.write_text("int x;\n")
-            depfile = Path(tmp) / "model.o.d"
-            depfile.write_text("model.o: model.cpp\n")
-            command = f"g++ -MD -o model.o -c {source}"
-            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
-            self.assertEqual(
-                document["entries"][0]["depfile"],
-                str(depfile),
-            )
-
-    def test_missing_depfile_is_omitted(self):
-        # A compiled source whose depfile does not exist yet is omitted; the
+    def test_missing_deps_log_entry_is_omitted(self):
+        # A compiled source with no entry in .ninja_deps is omitted; the
         # validator then fails closed with PARITY-6003 for the missing entry.
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "model.cpp"
             source.write_text("int x;\n")
-            command = f"g++ -MD -o model.o -c {source}"
-            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            deps_file = Path(tmp) / ".ninja_deps"
+            deps_file.write_bytes(
+                serialize_ninja_deps({"other.cpp.o": ["other.cpp"]})
+            )
+            command = f"g++ -MD -o model.cpp.o -c {source}"
+            document = self._record(
+                tmp,
+                [{"file": str(source), "directory": tmp, "command": command}],
+                ninja_deps=deps_file,
+            )
             self.assertEqual(document["entries"], [])
+
+    def test_missing_deps_log_file_records_empty_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            source.write_text("int x;\n")
+            command = f"g++ -MD -o model.cpp.o -c {source}"
+            document = self._record(
+                tmp,
+                [{"file": str(source), "directory": tmp, "command": command}],
+                ninja_deps=Path(tmp) / ".ninja_deps_nonexistent",
+            )
+            self.assertEqual(document["entries"], [])
+            self.assertIsNone(document["deps_log"])
 
     def test_config_digest_ties_evidence_to_index_and_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "model.cpp"
             source.write_text("int x;\n")
-            depfile = Path(tmp) / "model.o.d"
-            depfile.write_text("model.o: model.cpp\n")
+            deps_file = Path(tmp) / ".ninja_deps"
+            deps_file.write_bytes(
+                serialize_ninja_deps({"model.o": [str(source)]})
+            )
             command = f"g++ -MD -o model.o -c {source}"
-            document = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
-            # Same inputs -> same digest.
-            second = self._record(tmp, [{"file": str(source), "directory": tmp, "command": command}])
+            document = self._record(
+                tmp,
+                [{"file": str(source), "directory": tmp, "command": command}],
+                ninja_deps=deps_file,
+            )
+            second = self._record(
+                tmp,
+                [{"file": str(source), "directory": tmp, "command": command}],
+                ninja_deps=deps_file,
+            )
             self.assertEqual(document["config_digest"], second["config_digest"])
-            # A different compile-commands input -> a different digest.
             index_path = Path(tmp) / "index.json"
             commands_path = Path(tmp) / "compile_commands.json"
             commands_path.write_text("changed\n")
@@ -1423,10 +1492,32 @@ class DepfileRecorderTest(unittest.TestCase):
                 str(index_path),
                 str(commands_path),
                 str(output_path),
+                ninja_deps_path=str(deps_file),
             )
             second_document = json.loads(output_path.read_text())
             self.assertNotEqual(document["config_digest"], second_document["config_digest"])
 
+    def test_parse_ninja_deps_v3_format(self):
+        # Version 3 uses 32-bit mtime (8 bytes header before dep IDs).
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / ".ninja_deps"
+            raw = bytearray(b"# ninjadeps\n")
+            raw.extend(struct.pack("<I", 3))
+            payload0 = b"out.o\0\0\0"
+            raw.extend(struct.pack("<I", len(payload0) + 4))
+            raw.extend(payload0)
+            raw.extend(struct.pack("<I", (~0) & 0xFFFFFFFF))
+            payload1 = b"in.cpp\0\0"
+            raw.extend(struct.pack("<I", len(payload1) + 4))
+            raw.extend(payload1)
+            raw.extend(struct.pack("<I", (~1) & 0xFFFFFFFF))
+            raw.extend(struct.pack("<I", 12 | 0x80000000))
+            raw.extend(struct.pack("<II", 0, 5000))
+            raw.extend(struct.pack("<I", 1))
+            p.write_bytes(bytes(raw))
+
+            parsed = pg._parse_ninja_deps_binary(str(p))
+            self.assertEqual(parsed, {"out.o": (5000, ["in.cpp"])})
 
 if __name__ == "__main__":
     unittest.main()

@@ -474,6 +474,7 @@ function(cch_parity_add_build_gate manifest_path)
             -DCCH_PARITY_PROJECT_ROOT=${gate_PROJECT_ROOT}
             -DCCH_PARITY_DEPFILES=${gate_BUILD_DIR}/parity-build-gate-depfiles.json
             -DCCH_PARITY_REPORT=${gate_BUILD_DIR}/parity-build-gate.json
+            -DCCH_PARITY_NINJA_DEPS=${gate_BUILD_DIR}/.ninja_deps
             $<$<BOOL:${gate_EXTERNAL_INCLUDE_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${gate_EXTERNAL_INCLUDE_ROOTS}>
             -DCCH_PARITY_STRICT_NO_EXCEPTIONS=${gate_STRICT_NO_EXCEPTIONS}
             -P ${CCH_PARITY_DIR}/run-build-gate.cmake
@@ -517,6 +518,7 @@ function(cch_parity_attach_build_gate_post_build target_name)
             -DCCH_PARITY_PROJECT_ROOT=${CCH_PARITY_BUILD_GATE_PROJECT_ROOT}
             -DCCH_PARITY_DEPFILES=${CMAKE_BINARY_DIR}/parity-build-gate-depfiles.json
             -DCCH_PARITY_REPORT=${CCH_PARITY_BUILD_GATE_REPORT}
+            -DCCH_PARITY_NINJA_DEPS=${CMAKE_BINARY_DIR}/.ninja_deps
             $<$<BOOL:${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>
             -DCCH_PARITY_STRICT_NO_EXCEPTIONS=${CCH_PARITY_BUILD_GATE_STRICT_NO_EXCEPTIONS}
             -P ${CCH_PARITY_BUILD_GATE_SCRIPT}

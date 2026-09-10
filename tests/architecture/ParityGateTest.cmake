@@ -218,3 +218,65 @@ if(NOT build_combined MATCHES "PARITY-6001")
         "Parity Gate build phase did not emit PARITY-6001 for missing depfile evidence:\n"
         "${build_combined}")
 endif()
+
+# Build-phase Gate poison case (issue #551): depfile evidence produced from a
+# build tree whose .ninja_deps is missing an entry for a compiled source must
+# fail closed with PARITY-6003 without emitting PARITY-6002.
+execute_process(
+    COMMAND
+        "${Python3_EXECUTABLE}" -c
+        "import sys; sys.path.insert(0, '${CCH_SOURCE_DIR}/tests/architecture'); from parity_gate_test import serialize_ninja_deps; open('${legal_build_dir}/.ninja_deps', 'wb').write(serialize_ninja_deps({'CMakeFiles/cch_support.dir/src/support/value.cpp.o': ['${CCH_PARITY_FIXTURE_SRC}/support/value.cpp']}))"
+    RESULT_VARIABLE poison_prep_result
+)
+if(NOT poison_prep_result EQUAL 0)
+    message(FATAL_ERROR "failed to write synthetic .ninja_deps for poison fixture")
+endif()
+
+set(poison_depfiles "${legal_build_dir}/parity-poison-depfiles.json")
+execute_process(
+    COMMAND
+        "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
+        --record-depfiles "${poison_depfiles}"
+        --manifest "${CCH_PARITY_MANIFEST}"
+        --index "${legal_build_dir}/parity-ownership-index.json"
+        --compile-commands "${legal_build_dir}/compile_commands.json"
+        --ninja-deps "${legal_build_dir}/.ninja_deps"
+    RESULT_VARIABLE poison_record_result
+    OUTPUT_VARIABLE poison_record_output
+    ERROR_VARIABLE poison_record_error
+)
+if(NOT poison_record_result EQUAL 0)
+    message(FATAL_ERROR
+        "Parity Gate failed to record depfiles for poison fixture:\n"
+        "${poison_record_output}${poison_record_error}")
+endif()
+
+execute_process(
+    COMMAND
+        "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
+        --manifest "${CCH_PARITY_MANIFEST}"
+        --index "${legal_build_dir}/parity-ownership-index.json"
+        --direct-includes "${legal_build_dir}/parity-direct-includes.json"
+        --compile-commands "${legal_build_dir}/compile_commands.json"
+        --depfiles "${poison_depfiles}"
+        --project-root "${CCH_PARITY_FIXTURE_ROOT}"
+        --phase build
+        --format json
+    RESULT_VARIABLE poison_gate_result
+    OUTPUT_VARIABLE poison_gate_output
+    ERROR_VARIABLE poison_gate_error
+)
+if(poison_gate_result EQUAL 0)
+    message(FATAL_ERROR "Parity Gate unexpectedly passed with missing deps log entry")
+endif()
+set(poison_gate_combined "${poison_gate_output}\n${poison_gate_error}")
+if(NOT poison_gate_combined MATCHES "PARITY-6003")
+    message(FATAL_ERROR
+        "Parity Gate build phase did not emit PARITY-6003 for missing deps log entry:\n"
+        "${poison_gate_combined}")
+endif()
+if(poison_gate_combined MATCHES "PARITY-6002")
+    message(FATAL_ERROR
+        "Parity Gate build phase unexpectedly emitted PARITY-6002 for populated .ninja_deps:\n"
+        "${poison_gate_combined}")
+endif()

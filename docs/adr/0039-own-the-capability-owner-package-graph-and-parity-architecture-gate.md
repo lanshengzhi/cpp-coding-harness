@@ -98,3 +98,13 @@ Only conflicting topology, platform, release, and terminology clauses are supers
 - Application behavior authority [#396](https://github.com/lanshengzhi/cpp-coding-harness/issues/396).
 - pi C++ parity map [#2](https://github.com/lanshengzhi/cpp-coding-harness/issues/2).
 - Frozen pi authority commit `83114817c68f5413e4d7ba6d7003ddc511cd31d2`.
+
+## Addendum: Active transitive-conformance depfile evidence sourced from Ninja dependency log (Issue #551)
+
+In CMake 4.4+ with Ninja and GCC 16, CMake's default C++ module scanner decorated compilation commands with `-fmodules-ts -fdeps-format=p1689r5 -fmodule-mapper=...`, which disabled ccache compiler caching across all project translation units while leaving persistent `.ddi.d` depfiles on disk that the build-phase Gate accidentally relied upon. With plain GCC depfile generation (`deps = gcc`), Ninja automatically deletes the on-disk `.d` depfile after loading it into its internal dependency log (`.ninja_deps`).
+
+To restore compiler caching across all presets without sacrificing fail-closed architecture enforcement:
+
+1. `CMAKE_CXX_SCAN_FOR_MODULES` is set to `OFF` globally; no project source uses C++ modules and module scanning flags are rejected by the Gate (`PARITY-5003`).
+2. The active transitive-conformance evidence (`depfiles`, producer `cch-compiler-depfile`) advances to `producer_schema_version: 2`: evidence is sourced directly from `.ninja_deps` rather than persistent on-disk `.d`/`.ddi.d` files.
+3. The fail-closed contract is strictly preserved: a compiled source with no entry in the deps log fails closed with `PARITY-6003` (contradictory depfile evidence); missing or modified `.ninja_deps` files fail closed with `PARITY-6002`.

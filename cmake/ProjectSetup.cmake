@@ -22,6 +22,9 @@ cmake_policy(SET CMP0167 NEW)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Disable CMake C++ module scanning globally (issue #551). No project source uses
+# C++ modules, and the scan adds compiler flags that prevent ccache caching.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
 option(CCH_STRICT_NO_EXCEPTIONS

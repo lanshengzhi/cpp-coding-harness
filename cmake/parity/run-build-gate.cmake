@@ -37,17 +37,22 @@ endif()
 
 find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
 
-# 1. Record the active dependency (depfile) evidence. The producer derives the
-#    compiler depfile from each compile command; a compiled source whose
-#    depfile does not exist is omitted and the validator fails closed on the
-#    missing entry, so no active dependency evidence can disappear silently.
+# 1. Record the active dependency evidence from .ninja_deps. A compiled source
+#    whose compilation has no entry in .ninja_deps is omitted and the validator
+#    fails closed on the missing entry, so no active dependency evidence can
+#    disappear silently.
+set(record_command
+    "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
+    --record-depfiles "${CCH_PARITY_DEPFILES}"
+    --manifest "${CCH_PARITY_MANIFEST}"
+    --index "${CCH_PARITY_INDEX}"
+    --compile-commands "${CCH_PARITY_COMPILE_COMMANDS}"
+)
+if(DEFINED CCH_PARITY_NINJA_DEPS AND NOT "${CCH_PARITY_NINJA_DEPS}" STREQUAL "")
+    list(APPEND record_command --ninja-deps "${CCH_PARITY_NINJA_DEPS}")
+endif()
 execute_process(
-    COMMAND
-        "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
-        --record-depfiles "${CCH_PARITY_DEPFILES}"
-        --manifest "${CCH_PARITY_MANIFEST}"
-        --index "${CCH_PARITY_INDEX}"
-        --compile-commands "${CCH_PARITY_COMPILE_COMMANDS}"
+    COMMAND ${record_command}
     RESULT_VARIABLE record_result
     OUTPUT_VARIABLE record_output
     ERROR_VARIABLE record_error

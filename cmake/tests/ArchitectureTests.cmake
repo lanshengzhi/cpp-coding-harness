@@ -82,6 +82,7 @@ include_guard(GLOBAL)
             -DCCH_PARITY_PROJECT_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -DCCH_PARITY_DEPFILES=${CMAKE_BINARY_DIR}/parity-build-gate-depfiles.json
             -DCCH_PARITY_REPORT=${CMAKE_BINARY_DIR}/parity-build-gate.json
+            -DCCH_PARITY_NINJA_DEPS=${CMAKE_BINARY_DIR}/.ninja_deps
             -DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/run-build-gate.cmake
     )

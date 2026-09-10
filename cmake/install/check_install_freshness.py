@@ -86,9 +86,34 @@ def _check_report(report_path: str, diagnostics: list[str]) -> None:
         diagnostics.append(f"Gate evidence does not record success: {report_path}")
 
 
-def _check_depfiles(depfiles_path: str, diagnostics: list[str]) -> list[str]:
+def _check_prerequisites(
+    source: str,
+    evidence_mtime: int,
+    prerequisites: Sequence[str],
+    build_dir: str,
+    diagnostics: list[str],
+) -> None:
+    for prerequisite in prerequisites:
+        prereq_path = (
+            prerequisite
+            if os.path.isabs(prerequisite)
+            else os.path.join(build_dir, prerequisite)
+        )
+        if not os.path.exists(prereq_path):
+            diagnostics.append(
+                f"stale build products: prerequisite '{prerequisite}' for "
+                f"'{source}' is missing; rebuild before install"
+            )
+        elif _mtime_ns(prereq_path) > evidence_mtime:
+            diagnostics.append(
+                f"stale build products: '{prerequisite}' is newer than the "
+                f"recorded depfile for '{source}'; rebuild before install"
+            )
+
+
+def _check_depfiles(depfiles_path: str, diagnostics: list[str]) -> list[tuple[str, int]]:
     """Validate every recorded depfile against its prerequisites and return
-    the depfile paths for the binary freshness comparison."""
+    the (label, mtime_ns) pairs for the binary freshness comparison."""
     if not os.path.isfile(depfiles_path):
         diagnostics.append(f"missing recorded depfile evidence: {depfiles_path}")
         return []
@@ -100,33 +125,49 @@ def _check_depfiles(depfiles_path: str, diagnostics: list[str]) -> list[str]:
         diagnostics.append(f"invalid recorded depfile evidence: {depfiles_path}: {error}")
         return []
 
-    depfile_paths: list[str] = []
+    build_dir = os.path.dirname(os.path.abspath(depfiles_path))
+    deps_log = evidence.get("deps_log")
+    deps_log_mtime = None
+    if isinstance(deps_log, str) and os.path.isfile(deps_log):
+        deps_log_mtime = _mtime_ns(deps_log)
+
+    depfile_pairs: list[tuple[str, int]] = []
     for entry in entries:
         source = entry.get("source", "<unknown>")
         depfile = entry.get("depfile")
-        if not isinstance(depfile, str) or not os.path.isfile(depfile):
-            diagnostics.append(f"missing depfile evidence for compiled source '{source}'")
-            continue
-        depfile_paths.append(depfile)
-        try:
-            with open(depfile, encoding="utf-8") as handle:
-                prerequisites = parse_makefile_depfile(handle.read())
-        except (OSError, ValueError) as error:
-            diagnostics.append(f"unreadable depfile evidence for '{source}': {error}")
-            continue
-        depfile_mtime = _mtime_ns(depfile)
-        for prerequisite in prerequisites:
-            if not os.path.exists(prerequisite):
-                diagnostics.append(
-                    f"stale build products: prerequisite '{prerequisite}' for "
-                    f"'{source}' is missing; rebuild before install"
-                )
-            elif _mtime_ns(prerequisite) > depfile_mtime:
-                diagnostics.append(
-                    f"stale build products: '{prerequisite}' is newer than the "
-                    f"recorded depfile for '{source}'; rebuild before install"
-                )
-    return depfile_paths
+        if depfile is not None:
+            # Schema 1 fallback
+            if not isinstance(depfile, str) or not os.path.isfile(depfile):
+                diagnostics.append(f"missing depfile evidence for compiled source '{source}'")
+                continue
+            depfile_mtime = _mtime_ns(depfile)
+            depfile_pairs.append((depfile, depfile_mtime))
+            try:
+                with open(depfile, encoding="utf-8") as handle:
+                    prerequisites = parse_makefile_depfile(handle.read())
+            except (OSError, ValueError) as error:
+                diagnostics.append(f"unreadable depfile evidence for '{source}': {error}")
+                continue
+            _check_prerequisites(source, depfile_mtime, prerequisites, build_dir, diagnostics)
+        else:
+            # Schema 2 (.ninja_deps active dependency evidence)
+            output = entry.get("output")
+            dependencies = entry.get("dependencies")
+            if dependencies is None or not isinstance(dependencies, list):
+                diagnostics.append(f"missing depfile evidence for compiled source '{source}'")
+                continue
+
+            if not output:
+                diagnostics.append(f"missing compiled object path for source '{source}'")
+                continue
+            out_path = os.path.join(build_dir, output) if not os.path.isabs(output) else output
+            if not os.path.isfile(out_path):
+                diagnostics.append(f"missing compiled object '{out_path}' for source '{source}'; rebuild before install")
+                continue
+            entry_mtime = _mtime_ns(out_path)
+            depfile_pairs.append((output, entry_mtime))
+            _check_prerequisites(source, entry_mtime, dependencies, build_dir, diagnostics)
+    return depfile_pairs
 
 
 def check_freshness(
@@ -141,16 +182,16 @@ def check_freshness(
     binary = str(binary_path)
     diagnostics: list[str] = []
     _check_report(report, diagnostics)
-    depfile_paths = _check_depfiles(depfiles, diagnostics)
+    depfile_pairs = _check_depfiles(depfiles, diagnostics)
     if not os.path.isfile(binary):
         diagnostics.append(f"missing Runtime binary: {binary}")
     else:
         binary_mtime = _mtime_ns(binary)
-        for depfile in depfile_paths:
-            if _mtime_ns(depfile) > binary_mtime:
+        for label, depfile_mtime in depfile_pairs:
+            if depfile_mtime > binary_mtime:
                 diagnostics.append(
                     f"stale Runtime binary: '{binary}' is older than depfile "
-                    f"'{depfile}'; rebuild before install"
+                    f"'{label}'; rebuild before install"
                 )
     return sorted(diagnostics)
 

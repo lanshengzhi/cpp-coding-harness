@@ -14,6 +14,7 @@
         "CCH_TOOLCHAIN_ROLE": "build",
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "CMAKE_CXX_SCAN_FOR_MODULES": false,
         "VCPKG_HOST_TRIPLET": "x64-linux",
         "VCPKG_MANIFEST_INSTALL": true,
         "VCPKG_MANIFEST_MODE": true,
@@ -77,7 +78,7 @@
     {
       "name": "dev-fast",
       "displayName": "Fast development (Ninja + ccache, Debug)",
-      "description": "Optional local Debug preset: Ninja with ccache required. ADR 0039 defines supported build policy; docs/build-performance-plan.md preserves historical measurements only.",
+      "description": "Optional local Debug preset: Ninja with ccache required, with C++ module scanning disabled globally for full TU cacheability (issue #551). ADR 0039 defines supported build policy; docs/build-performance-plan.md preserves historical measurements only.",
       "inherits": "vcpkg",
       "binaryDir": "${sourceDir}/build/dev-fast",
       "cacheVariables": {
@@ -89,7 +90,7 @@
     {
       "name": "dev-fast-release",
       "displayName": "Fast development release (Ninja + ccache, Release)",
-      "description": "Release form of the fast-development preset: Ninja generator with ccache required and enabled.",
+      "description": "Release form of the fast-development preset: Ninja generator with ccache required and enabled, with C++ module scanning disabled globally for full TU cacheability (issue #551).",
       "inherits": "dev-fast",
       "binaryDir": "${sourceDir}/build/dev-fast-release",
       "cacheVariables": {

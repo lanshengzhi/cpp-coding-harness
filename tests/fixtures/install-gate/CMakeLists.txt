@@ -25,14 +25,12 @@ foreach(required CCH_PARITY_CMAKE_MODULE_PATH CCH_PARITY_MANIFEST CCH_PARITY_FIX
 endforeach()
 
 # Compile commands are generated evidence: the install gate validates them.
-# C++23 matches the production compile pipeline (module dependency scanning,
-# persistent .ddi.d depfiles) so the build-phase Gate sees the same evidence
-# shape as the production build.
+# C++23 with CMAKE_CXX_SCAN_FOR_MODULES OFF matches the production compile pipeline.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 list(PREPEND CMAKE_MODULE_PATH "${CCH_PARITY_CMAKE_MODULE_PATH}")
 include(ParityArchitecture)
 include(RuntimeInstall)
