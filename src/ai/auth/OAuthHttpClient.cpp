@@ -1,5 +1,7 @@
 #include "OAuthHttpClient.hpp"
 
+#include "ai/TransportExecutor.hpp"
+
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/connect.hpp>
@@ -84,7 +86,6 @@ BoostBeastOAuthHttpClient::post(
     namespace beast = boost::beast;
     namespace http = boost::beast::http;
     namespace ssl = boost::asio::ssl;
-    using tcp = boost::asio::ip::tcp;
 
     auto parsed = parse_https_url(url);
     if (!parsed) {
@@ -97,12 +98,11 @@ BoostBeastOAuthHttpClient::post(
     // completion contract takes over.
     try {
 #endif
-    auto executor = co_await asio::this_coro::executor;
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "OAuth HTTP request cancelled"));
-    }
+        auto executor = transport_executor(co_await asio::this_coro::executor);
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "OAuth HTTP request cancelled"));
+        }
 
     auto cancellation_signal = std::make_shared<asio::cancellation_signal>();
     std::stop_callback cancellation{stop_token, [executor, cancellation_signal] {
@@ -123,8 +123,8 @@ BoostBeastOAuthHttpClient::post(
         co_return std::unexpected(network_error("CA loading failure", ec));
     }
 
-    tcp::resolver resolver(executor);
-    beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
+    TransportResolver resolver(executor);
+    TransportTlsStream stream(executor, ctx);
     beast::get_lowest_layer(stream).expires_after(std::chrono::seconds{30});
 
     if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {

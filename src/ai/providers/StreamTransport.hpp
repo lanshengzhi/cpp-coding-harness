@@ -50,8 +50,9 @@ public:
     /// awaitable completes.
     ///
     /// Executor contract: the transport is driven by the calling executor and
-    /// is not internally synchronized; drive it from a single-threaded executor
-    /// and do not run `async_stream` on the same transport from two threads.
+    /// is not internally synchronized; drive it from a single-threaded
+    /// `io_context` executor (`cch::ai::TransportExecutor`, ADR 0054) and do
+    /// not run `async_stream` on the same transport from two threads.
     [[nodiscard]] virtual boost::asio::awaitable<support::Expected<StreamResponse>> async_stream(
         const StreamRequest& request,
         BodyChunkHandler on_body_chunk) = 0;

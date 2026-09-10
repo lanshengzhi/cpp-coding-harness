@@ -17,7 +17,8 @@ namespace cch::ai::api {
 ///
 /// Concurrency contract: the adapter owns the mutable Codex WebSocket session
 /// cache and the SSE-fallback set; it is not internally synchronized. All
-/// `stream` calls on one adapter must be driven by a single-threaded executor
+/// `stream` calls on one adapter must be driven by a single-threaded
+/// `io_context` executor (`cch::ai::TransportExecutor`, ADR 0054)
 /// or otherwise serialized — do not run `stream` concurrently on the same
 /// adapter from two threads.
 class OpenAICodexResponsesAdapter final {

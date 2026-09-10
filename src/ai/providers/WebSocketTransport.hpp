@@ -24,17 +24,24 @@ struct CodexWebSocketCacheConfig {
 
 /// One WebSocket connection request. The connect timeout bounds the TCP/TLS
 /// handshake; the idle timeout bounds each wait for the next text frame and is
-/// re-armed per frame, matching pi's WS idle timeout.
+/// re-armed per frame, matching pi's WS idle timeout. Client transports are
+/// TLS-only (ADR 0054): the URL must be `wss://`.
 struct WebSocketConnectRequest {
     std::string url;
     std::map<std::string, std::string, std::less<>> headers;
     std::chrono::milliseconds connect_timeout{15000};
     std::optional<std::chrono::milliseconds> idle_timeout{std::nullopt};
+    /// Test-only trust injection: an additional CA certificate (PEM) trusted
+    /// for this one connection, so tests can run a local `wss://` mock under
+    /// a generated test CA. Production never sets it; verification mode and
+    /// the default verify paths are unchanged when it is absent.
+    std::optional<std::string> trusted_ca_certificate_pem{std::nullopt};
     std::stop_token stop_token{};
 };
 
 /// One bidirectional WebSocket connection. Implementations are driven by a
-/// single coroutine on a single-threaded executor: sends, receives, and close
+/// single coroutine on a single-threaded `io_context` executor
+/// (`cch::ai::TransportExecutor`, ADR 0054): sends, receives, and close
 /// never overlap and the connection is never driven from two threads. A
 /// connection must outlive every in-flight `async_send`/`async_receive`
 /// awaitable; callers keep the owning `shared_ptr` alive until each completes.
@@ -58,8 +65,9 @@ public:
 /// Injectable WebSocket transport used by the `openai-codex-responses` adapter.
 ///
 /// Executor contract: the transport is driven by the calling executor and is
-/// not internally synchronized; drive it from a single-threaded executor and
-/// do not run `async_connect` on the same transport from two threads.
+/// not internally synchronized; drive it from a single-threaded `io_context`
+/// executor (`cch::ai::TransportExecutor`, ADR 0054) and do not run
+/// `async_connect` on the same transport from two threads.
 class WebSocketTransport {
 public:
     virtual ~WebSocketTransport() = default;

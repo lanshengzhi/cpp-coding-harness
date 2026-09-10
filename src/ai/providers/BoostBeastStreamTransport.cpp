@@ -1,5 +1,7 @@
 #include "BoostBeastStreamTransport.hpp"
 
+#include "ai/TransportExecutor.hpp"
+
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/connect.hpp>
@@ -127,7 +129,6 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
     namespace beast = boost::beast;
     namespace http = boost::beast::http;
     namespace ssl = boost::asio::ssl;
-    using tcp = boost::asio::ip::tcp;
 
     auto parsed = parse_https_url(request.url);
     if (!parsed) {
@@ -146,7 +147,7 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
                 std::string(request_method(request))));
         }
 
-        auto executor = co_await asio::this_coro::executor;
+        const auto executor = transport_executor(co_await asio::this_coro::executor);
         if (request.stop_token.stop_requested()) {
             co_return std::unexpected(cancelled_error());
         }
@@ -162,7 +163,7 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
                 cancellation_signal->slot(),
                 std::move(completion_token));
         };
-        asio::steady_timer response_header_timer(executor, request.timeout);
+        TransportTimer response_header_timer(executor, request.timeout);
         response_header_timer.async_wait(
             [response_header_timed_out, cancellation_signal](
                 boost::system::error_code error) {
@@ -179,8 +180,8 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
             co_return std::unexpected(network_error("CA loading failure", ec));
         }
 
-        tcp::resolver resolver(executor);
-        beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
+        TransportResolver resolver(executor);
+        TransportTlsStream stream(executor, ctx);
         beast::get_lowest_layer(stream).expires_after(request.timeout);
 
         if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {

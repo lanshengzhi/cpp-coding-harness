@@ -1,5 +1,7 @@
 #include "BoostBeastWebSocketTransport.hpp"
 
+#include "ai/TransportExecutor.hpp"
+
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/connect.hpp>
@@ -33,31 +35,24 @@ struct ParsedWebSocketUrl {
     std::string host;
     std::string port{"443"};
     std::string target{"/"};
-    bool tls{true};
 };
 
 [[nodiscard]] support::Expected<ParsedWebSocketUrl> parse_websocket_url(
     const std::string& url) {
     std::string_view rest = url;
-    bool tls = true;
     if (url.starts_with("wss://")) {
         rest.remove_prefix(6);
-    } else if (url.starts_with("ws://")) {
-        tls = false;
-        rest.remove_prefix(5);
     } else {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "unsupported URL scheme",
-            "BoostBeastWebSocketTransport only supports ws and wss URLs"));
+        // Client transports are TLS-only (ADR 0054).
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "unsupported URL scheme",
+                "BoostBeastWebSocketTransport only supports wss URLs"));
     }
 
     auto slash = rest.find('/');
     auto authority = slash == std::string_view::npos ? rest : rest.substr(0, slash);
 
     ParsedWebSocketUrl parsed;
-    parsed.tls = tls;
-    parsed.port = tls ? "443" : "80";
     parsed.target = slash == std::string_view::npos ? "/" : std::string{rest.substr(slash)};
     if (authority.empty()) {
         return std::unexpected(support::make_error(
@@ -165,9 +160,9 @@ public:
             });
         }};
         bool idle_timed_out = false;
-        std::optional<asio::steady_timer> idle_timer;
+        std::optional<TransportTimer> idle_timer;
         if (idle_timeout_ && *idle_timeout_ > std::chrono::milliseconds{0}) {
-            idle_timer.emplace(executor, *idle_timeout_);
+            idle_timer.emplace(transport_executor(executor), *idle_timeout_);
             // The handler captures the coroutine-frame locals `this` and
             // `idle_timed_out` by reference across the read suspension.
             // The frame outlives the handler: the read completion cancels
@@ -282,7 +277,6 @@ BoostBeastWebSocketTransport::async_connect(
     namespace asio = boost::asio;
     namespace beast = boost::beast;
     namespace ssl = boost::asio::ssl;
-    using tcp = boost::asio::ip::tcp;
 
     auto parsed = parse_websocket_url(request.url);
     if (!parsed) {
@@ -292,7 +286,7 @@ BoostBeastWebSocketTransport::async_connect(
         co_return std::unexpected(cancelled_error());
     }
 
-    auto executor = co_await asio::this_coro::executor;
+    const auto executor = transport_executor(co_await asio::this_coro::executor);
     auto signal = std::make_shared<asio::cancellation_signal>();
     std::stop_callback cancellation{request.stop_token, [executor, signal] {
         asio::post(executor, [signal] {
@@ -304,7 +298,7 @@ BoostBeastWebSocketTransport::async_connect(
             signal->slot(), std::move(completion_token));
     };
 
-    asio::steady_timer connect_timer(executor, request.connect_timeout);
+    TransportTimer connect_timer(executor, request.connect_timeout);
     bool connect_timed_out = false;
     connect_timer.async_wait([&connect_timed_out, &signal](
                                  boost::system::error_code error) {
@@ -337,95 +331,62 @@ BoostBeastWebSocketTransport::async_connect(
     // no-exception completion contract takes over.
     try {
 #endif
-    tcp::resolver resolver(executor);
-    if (parsed->tls) {
-        ssl::context ctx(ssl::context::tls_client);
-        boost::system::error_code ec;
-        ctx.set_default_verify_paths(ec);
-        if (ec) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Network,
-                "CA loading failure", ec.message()));
-        }
-        beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
-        if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Network,
-                "TLS SNI setup failed",
-                "OpenSSL rejected the host name"));
-        }
-        stream.set_verify_mode(ssl::verify_peer);
-        stream.set_verify_callback(ssl::host_name_verification(parsed->host));
+        TransportResolver resolver(executor);
+        {
+            ssl::context ctx(ssl::context::tls_client);
+            boost::system::error_code ec;
+            ctx.set_default_verify_paths(ec);
+            if (ec) {
+                co_return std::unexpected(
+                        support::make_error(support::ErrorCode::Network, "CA loading failure", ec.message()));
+            }
+            if (request.trusted_ca_certificate_pem) {
+                // Test-only trust injection (WebSocketConnectRequest contract);
+                // production never sets it.
+                if (ctx.add_certificate_authority(asio::buffer(*request.trusted_ca_certificate_pem), ec); ec) {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Network, "test CA loading failure", ec.message()));
+                }
+            }
+            TransportTlsStream stream(executor, ctx);
+            if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
+                co_return std::unexpected(support::make_error(
+                        support::ErrorCode::Network, "TLS SNI setup failed", "OpenSSL rejected the host name"));
+            }
+            stream.set_verify_mode(ssl::verify_peer);
+            stream.set_verify_callback(ssl::host_name_verification(parsed->host));
 
-        boost::system::error_code setup_ec;
-        auto results = co_await resolver.async_resolve(
-            parsed->host,
-            parsed->port,
-            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
-        if (setup_ec) {
-            co_return std::unexpected(setup_failure(setup_ec));
-        }
-        beast::get_lowest_layer(stream).expires_after(request.connect_timeout);
-        co_await beast::get_lowest_layer(stream).async_connect(
-            results,
-            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
-        if (setup_ec) {
-            co_return std::unexpected(setup_failure(setup_ec));
-        }
-        // The connect timer above covers the remaining TLS and WebSocket
-        // handshake. The TCP stream timeout must not survive into the
-        // established WebSocket, whose receive idle timeout is managed by
-        // BeastWebSocketConnection.
-        beast::get_lowest_layer(stream).expires_never();
-        co_await stream.async_handshake(
-            ssl::stream_base::client,
-            asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
-        if (setup_ec) {
-            co_return std::unexpected(setup_failure(setup_ec));
-        }
+            boost::system::error_code setup_ec;
+            auto results = co_await resolver.async_resolve(
+                    parsed->host, parsed->port, asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+            if (setup_ec) {
+                co_return std::unexpected(setup_failure(setup_ec));
+            }
+            beast::get_lowest_layer(stream).expires_after(request.connect_timeout);
+            co_await beast::get_lowest_layer(stream).async_connect(
+                    results, asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+            if (setup_ec) {
+                co_return std::unexpected(setup_failure(setup_ec));
+            }
+            // The connect timer above covers the remaining TLS and WebSocket
+            // handshake. The TCP stream timeout must not survive into the
+            // established WebSocket, whose receive idle timeout is managed by
+            // BeastWebSocketConnection.
+            beast::get_lowest_layer(stream).expires_never();
+            co_await stream.async_handshake(
+                    ssl::stream_base::client, asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
+            if (setup_ec) {
+                co_return std::unexpected(setup_failure(setup_ec));
+            }
 
-        beast::websocket::stream<beast::ssl_stream<beast::tcp_stream>> socket(
-            std::move(stream));
-        setup_ec = co_await perform_websocket_handshake(
-            socket, *parsed, request.headers, signal);
-        if (setup_ec) {
-            co_return std::unexpected(setup_failure(setup_ec));
+            beast::websocket::stream<TransportTlsStream> socket(std::move(stream));
+            setup_ec = co_await perform_websocket_handshake(socket, *parsed, request.headers, signal);
+            if (setup_ec) {
+                co_return std::unexpected(setup_failure(setup_ec));
+            }
+            connect_timer.cancel();
+            co_return make_connection(std::move(socket), request.stop_token, request.idle_timeout);
         }
-        connect_timer.cancel();
-        co_return make_connection(
-            std::move(socket), request.stop_token, request.idle_timeout);
-    }
-
-    beast::tcp_stream stream(executor);
-    boost::system::error_code setup_ec;
-    auto results = co_await resolver.async_resolve(
-        parsed->host,
-        parsed->port,
-        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
-    if (setup_ec) {
-        co_return std::unexpected(setup_failure(setup_ec));
-    }
-    stream.expires_after(request.connect_timeout);
-    co_await stream.async_connect(
-        results,
-        asio::redirect_error(cancellable(asio::use_awaitable), setup_ec));
-    if (setup_ec) {
-        co_return std::unexpected(setup_failure(setup_ec));
-    }
-    // The connect timer above covers the remaining WebSocket handshake. The
-    // TCP stream timeout must not survive into the established WebSocket,
-    // whose receive idle timeout is managed by BeastWebSocketConnection.
-    stream.expires_never();
-
-    beast::websocket::stream<beast::tcp_stream> socket(std::move(stream));
-    setup_ec = co_await perform_websocket_handshake(
-        socket, *parsed, request.headers, signal);
-    if (setup_ec) {
-        co_return std::unexpected(setup_failure(setup_ec));
-    }
-    connect_timer.cancel();
-    co_return make_connection(
-        std::move(socket), request.stop_token, request.idle_timeout);
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
     } catch (const boost::system::system_error& error) {
         co_return std::unexpected(setup_failure(error.code()));

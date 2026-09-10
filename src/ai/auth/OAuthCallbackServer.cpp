@@ -2,6 +2,7 @@
 
 #include "OauthPage.hpp"
 #include "Pkce.hpp"
+#include "ai/TransportExecutor.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -72,19 +73,15 @@ html_response(int status, std::string body) {
 } // namespace
 
 struct OAuthCallbackServer::Impl {
-    Impl(
-        boost::asio::any_io_executor executor,
-        OAuthCallbackServerOptions options)
+    Impl(TransportExecutor executor, OAuthCallbackServerOptions options)
         // acceptor and wait_channel must reference the member: the parameter
         // has already been moved from by the time they are initialized.
-        : executor(std::move(executor)),
-          options(std::move(options)),
-          acceptor(this->executor),
+        : executor(std::move(executor)), options(std::move(options)), acceptor(this->executor),
           wait_channel(this->executor, 1) {}
 
-    boost::asio::any_io_executor executor;
+    TransportExecutor executor;
     OAuthCallbackServerOptions options;
-    boost::asio::ip::tcp::acceptor acceptor;
+    boost::asio::basic_socket_acceptor<boost::asio::ip::tcp, TransportExecutor> acceptor;
     WaitChannel wait_channel;
     bool closed{false};
     bool degraded{false};
@@ -141,11 +138,11 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
     namespace http = boost::beast::http;
     using tcp = asio::ip::tcp;
 
-    auto executor = co_await asio::this_coro::executor;
+    const auto executor = transport_executor(co_await asio::this_coro::executor);
     auto impl = std::make_shared<Impl>(executor, std::move(options));
 
     boost::system::error_code error;
-    tcp::resolver resolver(executor);
+    TransportResolver resolver(executor);
     const auto results = resolver.resolve(
         impl->options.host,
         std::to_string(impl->options.port),
@@ -174,7 +171,7 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
         executor,
         [impl, expected_state]() -> asio::awaitable<void> {
             while (!impl->closed) {
-                tcp::socket socket(impl->executor);
+                boost::asio::basic_stream_socket<tcp, TransportExecutor> socket(impl->executor);
                 boost::system::error_code accept_error;
                 co_await impl->acceptor.async_accept(
                     socket,
@@ -191,7 +188,7 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                             500,
                             oauth_error_html(
                                 "Internal error while processing OAuth callback."));
-                        beast::tcp_stream stream(std::move(socket));
+                        TransportTcpStream stream(std::move(socket));
                         beast::flat_buffer buffer;
                         http::request<http::string_body> request;
                         boost::system::error_code handler_error;

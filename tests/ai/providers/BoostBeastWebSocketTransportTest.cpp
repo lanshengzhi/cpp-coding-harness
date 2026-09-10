@@ -6,23 +6,55 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core.hpp>
+#include <boost/beast/ssl.hpp>
 #include <boost/beast/websocket.hpp>
 
 #include <chrono>
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 
 using namespace cch;
 
 namespace {
+
+// Committed test credentials for the local `wss://` mock (issue #638):
+// `test-ca.pem` is the trust anchor injected through the test-only
+// WebSocketConnectRequest trust hook; `test-server.pem`/`test-server-key.pem`
+// secure the mock server (SAN: IP 127.0.0.1, DNS localhost). Regeneration
+// commands: tests/ai/providers/tls/README.md.
+constexpr std::string_view kTlsFixtureDir = "/tests/ai/providers/tls/";
+
+[[nodiscard]] std::string tls_fixture_path(std::string_view name) {
+    return std::string{CCH_SOURCE_DIR} + std::string{kTlsFixtureDir} + std::string{name};
+}
+
+[[nodiscard]] std::string read_tls_fixture(std::string_view name) {
+    std::ifstream input(tls_fixture_path(name), std::ios::binary);
+    REQUIRE(input.good());
+    return std::string{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>{}};
+}
+
+[[nodiscard]] boost::asio::ssl::context make_server_context() {
+    namespace ssl = boost::asio::ssl;
+    ssl::context context(ssl::context::tls_server);
+    boost::system::error_code error;
+    context.use_certificate_chain_file(tls_fixture_path("test-server.pem"), error);
+    REQUIRE_FALSE(error);
+    context.use_private_key_file(tls_fixture_path("test-server-key.pem"), ssl::context::pem, error);
+    REQUIRE_FALSE(error);
+    return context;
+}
 
 support::Expected<std::shared_ptr<ai::providers::WebSocket>> run_connect(
     ai::providers::WebSocketConnectRequest request) {
@@ -44,9 +76,13 @@ support::Expected<std::shared_ptr<ai::providers::WebSocket>> run_connect(
     return std::move(*result);
 }
 
-boost::asio::awaitable<void> run_delayed_websocket_server(std::shared_ptr<boost::asio::ip::tcp::acceptor> acceptor) {
+// server_context must outlive the coroutine: the caller keeps it alive until
+// io.run() returns.
+boost::asio::awaitable<void> run_delayed_websocket_server(
+        std::shared_ptr<boost::asio::ip::tcp::acceptor> acceptor, boost::asio::ssl::context& server_context) {
     namespace asio = boost::asio;
     namespace beast = boost::beast;
+    namespace ssl = boost::asio::ssl;
     using tcp = asio::ip::tcp;
 
     auto executor = co_await asio::this_coro::executor;
@@ -57,7 +93,13 @@ boost::asio::awaitable<void> run_delayed_websocket_server(std::shared_ptr<boost:
         co_return;
     }
 
-    beast::websocket::stream<tcp::socket> socket(std::move(peer));
+    beast::ssl_stream<tcp::socket> tls_stream(std::move(peer), server_context);
+    if (co_await tls_stream.async_handshake(ssl::stream_base::server, asio::redirect_error(asio::use_awaitable, error));
+            error) {
+        co_return;
+    }
+
+    beast::websocket::stream<beast::ssl_stream<tcp::socket>> socket(std::move(tls_stream));
     co_await socket.async_accept(asio::redirect_error(asio::use_awaitable, error));
     if (error) {
         co_return;
@@ -84,6 +126,7 @@ support::Expected<std::optional<std::string>> run_delayed_receive(std::uint16_t 
     namespace asio = boost::asio;
 
     asio::io_context io;
+    auto server_context = make_server_context();
     auto acceptor = std::make_shared<asio::ip::tcp::acceptor>(io);
     boost::system::error_code error;
     acceptor->open(asio::ip::tcp::v4(), error);
@@ -100,13 +143,14 @@ support::Expected<std::optional<std::string>> run_delayed_receive(std::uint16_t 
 
     ai::providers::BoostBeastWebSocketTransport transport;
     std::optional<support::Expected<std::optional<std::string>>> result;
-    asio::co_spawn(io, run_delayed_websocket_server(acceptor), asio::detached);
+    asio::co_spawn(io, run_delayed_websocket_server(acceptor, server_context), asio::detached);
     asio::co_spawn(
             io,
             [&transport, listen_port, &result]() -> asio::awaitable<void> {
                 ai::providers::WebSocketConnectRequest request;
-                request.url = "ws://127.0.0.1:" + std::to_string(listen_port) + "/";
-                request.connect_timeout = std::chrono::milliseconds{100};
+                request.url = "wss://127.0.0.1:" + std::to_string(listen_port) + "/";
+                request.trusted_ca_certificate_pem = read_tls_fixture("test-ca.pem");
+                request.connect_timeout = std::chrono::milliseconds{1000};
                 auto connection = co_await transport.async_connect(request);
                 if (!connection) {
                     result = std::unexpected(connection.error());
@@ -130,6 +174,17 @@ support::Expected<std::optional<std::string>> run_delayed_receive(std::uint16_t 
 
 } // namespace
 
+TEST_CASE("WebSocket transport rejects plain ws URLs before network", "[ai][provider][transport][issue638][spec]") {
+    ai::providers::WebSocketConnectRequest request;
+    request.url = "ws://127.0.0.1:1455/backend-api/codex/responses";
+
+    auto connection = run_connect(std::move(request));
+
+    REQUIRE_FALSE(connection);
+    CHECK(connection.error().code == support::ErrorCode::Validation);
+    CHECK(connection.error().detail.find("wss") != std::string::npos);
+}
+
 TEST_CASE("WebSocket transport rejects unsupported URLs before network", "[ai][provider][transport][issue342][spec]") {
     ai::providers::WebSocketConnectRequest request;
     request.url = "https://chatgpt.com/backend-api/codex/responses";
@@ -138,7 +193,7 @@ TEST_CASE("WebSocket transport rejects unsupported URLs before network", "[ai][p
 
     REQUIRE_FALSE(connection);
     CHECK(connection.error().code == support::ErrorCode::Validation);
-    CHECK(connection.error().detail.find("ws") != std::string::npos);
+    CHECK(connection.error().detail.find("wss") != std::string::npos);
 }
 
 TEST_CASE("WebSocket transport rejects missing host before network", "[ai][provider][transport][issue342][spec]") {
@@ -153,7 +208,7 @@ TEST_CASE("WebSocket transport rejects missing host before network", "[ai][provi
 }
 
 TEST_CASE("WebSocket transport does not retain the connect timeout after the handshake",
-        "[ai][provider][transport][issue342][spec]") {
+        "[ai][provider][transport][issue342][issue638][spec]") {
     auto received = run_delayed_receive(0);
 
     REQUIRE(received);
