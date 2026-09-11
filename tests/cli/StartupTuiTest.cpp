@@ -12,16 +12,18 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/Json.hpp"
 
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <filesystem>
+#include <chrono>
+#include <format>
 #include <fstream>
 #include <optional>
 #include <string>
@@ -68,32 +70,79 @@ namespace {
     return options;
 }
 
+/// Format a system clock time point as an ISO-8601 UTC timestamp without
+/// fractional seconds (pi/C++ session header and entry timestamp shape).
+[[nodiscard]] std::string format_iso_timestamp(std::chrono::system_clock::time_point time) {
+    const auto time_point_s = std::chrono::floor<std::chrono::seconds>(time);
+    const auto days = std::chrono::floor<std::chrono::days>(time_point_s);
+    const std::chrono::year_month_day ymd{days};
+    const auto time_of_day = std::chrono::hh_mm_ss{time_point_s - days};
+    return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}Z",
+            static_cast<int>(ymd.year()),
+            static_cast<int>(static_cast<unsigned>(ymd.month())),
+            static_cast<int>(static_cast<unsigned>(ymd.day())),
+            static_cast<int>(time_of_day.hours().count()),
+            static_cast<int>(time_of_day.minutes().count()),
+            static_cast<int>(time_of_day.seconds().count()));
+}
+struct SessionTimestamp {
+    std::string iso;
+    std::int64_t ms{0};
+};
+
+/// Derive the canonical ISO-8601 string and epoch millisecond representations
+/// from a filesystem modification time.
+[[nodiscard]] SessionTimestamp session_timestamp(std::filesystem::file_time_type modified) {
+    const auto sys_time = std::chrono::file_clock::to_sys(modified);
+    return SessionTimestamp{
+            .iso = format_iso_timestamp(sys_time),
+            .ms = std::chrono::duration_cast<std::chrono::milliseconds>(sys_time.time_since_epoch()).count(),
+    };
+}
+
 /// Write a session file under the workspace-keyed default directory of
-/// `sessions_root`; returns the file path.
-[[nodiscard]] std::filesystem::path write_session(
-    const std::filesystem::path& sessions_root,
-    const std::filesystem::path& workspace,
-    std::string id,
-    std::string first_message,
-    std::filesystem::file_time_type modified) {
-    const auto directory =
-        sessions_root /
-        coding_agent::session_paths::encode_workspace_key(workspace);
+/// `sessions_root` with explicit entry timestamps reflecting `modified`;
+/// returns the file path.
+[[nodiscard]] std::filesystem::path write_session(const std::filesystem::path& sessions_root,
+        const std::filesystem::path& workspace,
+        std::string id,
+        std::string first_message,
+        std::filesystem::file_time_type modified) {
+    const auto directory = sessions_root / coding_agent::session_paths::encode_workspace_key(workspace);
     std::filesystem::create_directories(directory);
     const auto path = directory / (id + ".jsonl");
-    auto created = harness::session::SessionStore::create_new(path,
-            {
-                    .session_id = id,
-                    .created_at = "2020-01-01T00:00:00Z",
-                    .workspace = workspace.string(),
-                    .provider = "fake",
-                    .model = "fake-model",
-            });
-    REQUIRE(created);
-    auto user = ai::user_text_message(std::move(first_message));
-    const auto sys_time = std::chrono::file_clock::to_sys(modified);
-    user.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(sys_time.time_since_epoch()).count();
-    REQUIRE(created->append(ai::MessageVariant{user}));
+    const auto timestamp = session_timestamp(modified);
+
+    std::ofstream out(path, std::ios::trunc);
+    REQUIRE(out.is_open());
+    const auto header_json = support::write_json(support::JsonValue::object_t{
+            {"type", "session"},
+            {"version", 3},
+            {"id", id},
+            {"timestamp", timestamp.iso},
+            {"cwd", workspace.string()},
+            {"provider", "fake"},
+            {"model", "fake-model"},
+    });
+    REQUIRE(header_json.has_value());
+    out << *header_json << "\n";
+
+    const auto message_json = support::write_json(support::JsonValue::object_t{
+            {"type", "message"},
+            {"id", "m-" + id},
+            {"parentId", nullptr},
+            {"timestamp", timestamp.iso},
+            {"message",
+                    support::JsonValue::object_t{
+                            {"role", "user"},
+                            {"content", std::move(first_message)},
+                            {"timestamp", static_cast<double>(timestamp.ms)},
+                    }},
+    });
+    REQUIRE(message_json.has_value());
+    out << *message_json << "\n";
+    out.close();
+
     std::error_code ec;
     std::filesystem::last_write_time(path, modified, ec);
     REQUIRE_FALSE(ec);
@@ -172,6 +221,56 @@ TEST_CASE("startup TUI: the --resume picker lists sessions and selects one", "[c
     CHECK((*running.picker_result)->outcome == cli::StartupPickerOutcome::Selected);
     CHECK((*running.picker_result)->session_path == newer);
     CHECK(older != newer);
+}
+
+TEST_CASE("startup TUI: session creation writes explicit entry timestamps matching configured test times",
+        "[cli][startup-tui][issue565]") {
+    tests::TempWorkspace agent_dir;
+    tests::TempWorkspace workspace;
+    const auto sessions_root = agent_dir.path() / "sessions";
+    using namespace std::chrono;
+    const auto now = std::filesystem::file_time_type::clock::now();
+    const auto older_time = now - seconds(120);
+    const auto newer_time = now - seconds(30);
+    const auto expected = session_timestamp(older_time);
+
+    const auto older_path =
+            write_session(sessions_root, workspace.path(), "alpha-session", "Alpha message", older_time);
+    const auto newer_path = write_session(sessions_root, workspace.path(), "beta-session", "Beta message", newer_time);
+    CHECK(older_path != newer_path);
+
+    std::ifstream file(older_path);
+    REQUIRE(file.is_open());
+    std::string header_line;
+    std::string entry_line;
+    REQUIRE(std::getline(file, header_line));
+    REQUIRE(std::getline(file, entry_line));
+
+    auto parsed_entry = support::read_json(entry_line);
+    REQUIRE(parsed_entry.has_value());
+    REQUIRE(parsed_entry->holds<support::JsonValue::object_t>());
+    const auto& entry_obj = parsed_entry->get_object();
+    const auto timestamp_it = entry_obj.find("timestamp");
+    REQUIRE(timestamp_it != entry_obj.end());
+    REQUIRE(timestamp_it->second.holds<std::string>());
+    CHECK(timestamp_it->second.get_string() == expected.iso);
+
+    const auto message_it = entry_obj.find("message");
+    REQUIRE(message_it != entry_obj.end());
+    REQUIRE(message_it->second.holds<support::JsonValue::object_t>());
+    const auto& message_obj = message_it->second.get_object();
+    const auto msg_ts_it = message_obj.find("timestamp");
+    REQUIRE(msg_ts_it != message_obj.end());
+    REQUIRE(msg_ts_it->second.holds<double>());
+    CHECK(static_cast<std::int64_t>(msg_ts_it->second.get<double>()) == expected.ms);
+
+    // Verify session discovery deterministic ordering (newer sorts ahead of older)
+    const auto local = default_directory(sessions_root, workspace.path());
+    const auto sessions = coding_agent::session_discovery::list_sessions_info(local, std::nullopt);
+    REQUIRE(sessions.size() == 2);
+    CHECK(sessions[0].id == "beta-session");
+    CHECK(sessions[1].id == "alpha-session");
+    CHECK(sessions[0].modified > sessions[1].modified);
 }
 
 TEST_CASE(
