@@ -210,6 +210,13 @@ void wait_replacement(Running& running,
             [&] { return actions->replacement_completions.load(std::memory_order_acquire) >= completions; }));
     drain_ready(running.io);
 }
+/// Pump until the screen shows `text`: a replacement install, status update,
+/// or warning can render one loop turn after a plain drain observed a quiet
+/// queue (matching SessionReplacementTest and TuiActionSeamTest).
+void wait_for_screen(Running& running, const std::string& text) {
+    REQUIRE(tests::pump_until(
+            running.io, [&] { return visible_screen(running.terminal).find(text) != std::string::npos; }));
+}
 
 } // namespace
 
@@ -242,6 +249,7 @@ TEST_CASE("session selector lists sessions and resumes the chosen one with the p
     wait_replacement(running, actions, 1);
     REQUIRE(actions->replace_sessions.size() == 1);
     CHECK(actions->replace_sessions[0].target == "explicit-resume");
+    wait_for_screen(running, "Resumed session");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Resumed session") != std::string::npos);
     CHECK(screen.find("hello from other") != std::string::npos);
@@ -399,6 +407,7 @@ TEST_CASE("session selector deletes a session after confirmation",
 
     REQUIRE(running.terminal.inject_input("\r"));
     drain_ready(running.io);
+    wait_for_screen(running, "Session deleted");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Session deleted") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(other));
@@ -443,6 +452,7 @@ TEST_CASE("fork flow pre-fills selectedText, switches sessions, and reports the 
     wait_replacement(running, actions, 1);
     REQUIRE(actions->replace_sessions.size() == 1);
     CHECK(actions->replace_sessions[0].target == "explicit-open-or-create");
+    wait_for_screen(running, "Forked to new session");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Forked to new session") != std::string::npos);
     CHECK(screen.find("user-2") != std::string::npos);
@@ -536,6 +546,7 @@ TEST_CASE("resuming a session whose stored cwd is gone prompts and resumes in th
     wait_replacement(running, actions, 1);
     REQUIRE(actions->replace_sessions.size() == 1);
     CHECK(actions->replace_sessions[0].target == "explicit-resume");
+    wait_for_screen(running, "Resumed session in current cwd");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Resumed session in current cwd") != std::string::npos);
     CHECK(screen.find("hello from the vanished project") != std::string::npos);
@@ -576,6 +587,7 @@ TEST_CASE("declining the missing-cwd prompt reports Resume cancelled",
     drain_ready(running.io);
     REQUIRE(running.terminal.inject_input("\r"));
     drain_ready(running.io);
+    wait_for_screen(running, "Resume cancelled");
     screen = visible_screen(running.terminal);
     CHECK(screen.find("Resume cancelled") != std::string::npos);
     CHECK(actions->replace_sessions.empty());
@@ -599,6 +611,7 @@ TEST_CASE("app.session.new starts a fresh session with the pi chat line",
     wait_replacement(running, actions, 1);
     REQUIRE(actions->replace_sessions.size() == 1);
     CHECK(actions->replace_sessions[0].target == "default-persisted");
+    wait_for_screen(running, "New session started");
     auto screen = visible_screen(running.terminal);
     CHECK(screen.find("New session started") != std::string::npos);
     CHECK(screen.find("old turn") == std::string::npos);
