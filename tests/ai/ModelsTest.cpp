@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"

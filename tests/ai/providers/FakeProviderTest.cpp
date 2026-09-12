@@ -4,7 +4,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "support/AsyncResultBridge.hpp"
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/UsageAssertions.hpp"
 

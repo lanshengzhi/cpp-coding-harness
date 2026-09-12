@@ -1,4 +1,4 @@
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
