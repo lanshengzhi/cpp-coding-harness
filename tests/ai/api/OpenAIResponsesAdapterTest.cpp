@@ -71,7 +71,7 @@ struct RunResult {
     auto models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    ai::providers::ScriptedProviderDefinition definition;
+    tests::ScriptedProviderDefinition definition;
     definition.definition = ai::ProviderDefinition{
             .id = "deepseek",
             .name = "deepseek",
@@ -79,7 +79,7 @@ struct RunResult {
             .auth = ai::providers::make_env_api_key_auth("API key", {}),
     };
     definition.transport.http_transport = transport;
-    if (auto registered = ai::providers::apply_scripted_provider(*models, std::move(definition)); !registered) {
+    if (auto registered = tests::apply_scripted_provider(*models, std::move(definition)); !registered) {
         return nullptr;
     }
     return models;

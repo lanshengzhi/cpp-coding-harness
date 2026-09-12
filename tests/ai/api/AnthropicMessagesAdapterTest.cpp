@@ -85,7 +85,7 @@ struct RunResult {
     auto models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    ai::providers::ScriptedProviderDefinition definition;
+    tests::ScriptedProviderDefinition definition;
     definition.definition = ai::ProviderDefinition{
             .id = "kimi-coding",
             .name = "Kimi For Coding",
@@ -93,7 +93,7 @@ struct RunResult {
             .auth = header_auth(),
     };
     definition.transport.http_transport = transport;
-    if (auto registered = ai::providers::apply_scripted_provider(*models, std::move(definition)); !registered) {
+    if (auto registered = tests::apply_scripted_provider(*models, std::move(definition)); !registered) {
         return nullptr;
     }
     return models;

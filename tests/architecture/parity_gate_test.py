@@ -966,7 +966,7 @@ class ArchitectureContractTest(unittest.TestCase):
                         spelling="quote",
                     )
                 self.assertEqual(
-                    rule_ids(diagnostics), [pg.RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE]
+                    rule_ids(diagnostics), [pg.RULE_SESSION_AI_PRIVATE_INCLUDE]
                 )
                 self.assertIn("agent-no-ai-private-includes", diagnostics[0].message)
                 self.assertEqual(diagnostics[0].target, "cch_agent_core")

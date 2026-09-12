@@ -266,8 +266,8 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 
 | # | Capability | Frozen pi source / shard | C++ surface | Evidence (tests → fixtures) |
 | --- | --- | --- | --- | --- |
-| 1 | Complete passive `Model` (independent `provider`/`id`/`api`, required name/baseUrl/reasoning/input/cost/contextWindow/maxTokens, static headers) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ModelTest` → `models/complete-anthropic-model.json` |
-| 2 | Null-aware `thinkingLevelMap` (missing key = provider default, null = unsupported) | `packages/ai/src/types.ts` | `Model.hpp`, `ModelThinkingLevel.hpp` | `ModelTest`, `SimpleOptionsTest` |
+| 1 | Complete passive `Model` (independent `provider`/`id`/`api`, required name/baseUrl/reasoning/input/cost/contextWindow/maxTokens, static headers) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ProviderComposerTest` `"the frozen complete Model fixture composes to the expected ai::Model"` → `models/complete-anthropic-model.json` |
+| 2 | Null-aware `thinkingLevelMap` (missing key = provider default, null = unsupported) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ModelConfigTest` `"the frozen complete Model fixture preserves the null-aware thinking level map"`, `ModelTest` `"Thinking level wire vocabulary is public on the Model interface"`, `SimpleOptionsTest` |
 | 3 | Typed `AnthropicMessagesCompat` = exactly `{forceAdaptiveThinking, allowEmptySignature}`; no generic compat bag; `OpenAIResponsesCompat` absent | shard `kimi-coding.json`; `types.ts` | `Model.hpp` (`AnthropicMessagesCompat`) | `AnthropicMessagesAdapterTest` `"Kimi catalog carries the frozen Anthropic Messages compat values"` |
 | 4 | Concrete Agent `kDefaultModel` mirroring pi `DEFAULT_MODEL` (`"unknown"` identity, zeroed capabilities) | `packages/agent/src/agent.ts` | `src/agent/AgentDefaults.hpp` | `ModelTest` → `models/default-model.json` |
 | 5 | `SimpleStreamOptions` harness-consumer set (`temperature`, `maxTokens`, cancellation, `apiKey`, `headers`, `env`, `transformHeaders`, `reasoning`, `sessionId`, `cacheRetention`, `timeoutMs`, `maxRetries`, `maxRetryDelayMs`) | `simple-options.ts`, `agent-harness.ts` | `include/cch/ai/RequestOptions.hpp` | `SimpleOptionsTest`, `ModelsTest` `"Models prepares the complete streamSimple request before Provider dispatch"` |
@@ -284,8 +284,8 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 16 | Termination matrices (Responses `completed`/`incomplete`/`failed`, no `[DONE]` for DeepSeek; Anthropic `end_turn`…/missing `message_stop` carry) | adapter sources | `src/ai/api/Termination.*` | `ProviderPolicyTest` → `termination/matrix.json`; per-adapter terminal cases |
 | 17 | Retries: zero by default; configured retries cover network + transient 429/5xx, never terminal quota/billing; exponential base or Retry-After ≤ 60s | `utils/retry.ts` | `src/ai/providers/RetryPolicy.*` | `ProviderPolicyTest`, per-adapter retry cases |
 | 18 | Cancellation → exactly one `aborted` terminal event (`"Request was aborted"`); transport/socket/reader cancellation | `stream-fn` semantics | `Models.cpp`, `StreamEvent.hpp`, transports | `ModelsTest` `"Models cancellation is one aborted terminal value"`, per-adapter cancellation cases |
-| 19 | Terminal-error-event stream semantics: every setup failure → exactly one terminal error event + final `AssistantMessage`; `Expected` error reserved for sink/infrastructure | `StreamFn` contract | `Models.cpp`, `StreamEvent.hpp` | `ModelsTest`, `FakeProviderTest` `"scripted fake Models normalizes static request failures into a terminal value"` |
-| 20 | Six error categories (`model_source`, `model_validation`, `provider`, `stream`, `auth`, `oauth`) through the single `util::Error`/`util::Expected` channel | `models.ts` errors | `cch/util/Error.hpp` | `FakeProviderTest` `"scripted fake Models preserves all six Models error categories"` |
+| 19 | Terminal-error-event stream semantics: every setup failure → exactly one terminal error event + final `AssistantMessage`; `Expected` error reserved for sink/infrastructure | `StreamFn` contract | `Models.cpp`, `StreamEvent.hpp` | `ModelsTest`, `ScriptedProviderTest` `"scripted fake Models normalizes static request failures into a terminal value"` |
+| 20 | Six error categories (`model_source`, `model_validation`, `provider`, `stream`, `auth`, `oauth`) through the single `util::Error`/`util::Expected` channel | `models.ts` errors | `cch/util/Error.hpp` | `ScriptedProviderTest` `"scripted fake Models preserves all six Models error categories"` |
 | 21 | `streamSimple` pipeline: `getSupportedThinkingLevels`/`clampThinkingLevel`, Responses effort mapping, Anthropic adaptive branch (temperature omitted while thinking), `clampMaxTokensToContext` (context − estimate − 4096), `assertRequestAuth` | `simple-options.ts`, adapters | `src/ai/SimpleOptions.cpp`, adapters | `SimpleOptionsTest`, per-adapter thinking cases |
 | 22 | Four-level auth precedence: runtime override → stored credential → environment → models.json configured key; no silent fallback on mismatch/refresh failure | `core/model-runtime.ts`, `auth/resolve.ts` | `Models.cpp`, `RuntimeApiKeyOverlay.*` | `ModelsTest` `"Models applies explicit stored and ambient API key precedence"`, `ModelRuntimeTest` `"ModelRuntime resolves the pi 4-level auth precedence chain"` |
 | 23 | Request-time `getAuth` live resolution: OAuth refresh under store lock (≤5 min validity, double-check), persist before release, `oauth` category on failure with credential preserved; `checkAuth` side-effect-free | `auth/resolve.ts` | `Models.cpp` | `ModelsTest` `"Models refreshes OAuth under the store mutation and checkAuth never refreshes"`, `KimiOAuthLifecycleTest` |
@@ -366,9 +366,9 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
   per provider: `OpenAICodexOAuthTest` (21), `KimiCodingOAuthTest` (16),
   `KimiOAuthLifecycleTest` (4), and persistence under locking in `AuthStorageTest` (7).
 - **Models/stream semantics** — terminal-error-event + final message, one `aborted` terminal, six
-  categories, precedence, and side-effect-free `checkAuth`: `ModelsTest` (27), `FakeProviderTest`
+  categories, precedence, and side-effect-free `checkAuth`: `ModelsTest` (27), `ScriptedProviderTest`
   (7), `SimpleOptionsTest` (2).
-- The six-category evidence lives in `tests/ai/providers/FakeProviderTest.cpp`, not in
+- The six-category evidence lives in `tests/ai/providers/ScriptedProviderTest.cpp`, not in
   `ModelsTest`/`SimpleOptionsTest` (which cover terminal/cancellation but not the category loop).
 
 ### Residual notes

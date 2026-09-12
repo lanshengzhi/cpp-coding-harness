@@ -11,7 +11,7 @@ namespace cch::coding_agent {
 /// Provider Definitions, upgrade trigger: all coding-agent adapter tests use
 /// ModelRuntimeTestOptions instead.
 struct ModelRuntimeTransportTestOptions {
-    ai::providers::ScriptedTransportOptions transports{};
+    tests::ScriptedTransportOptions transports{};
 };
 
 [[nodiscard]] support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(

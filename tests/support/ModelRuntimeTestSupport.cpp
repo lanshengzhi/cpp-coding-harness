@@ -15,8 +15,8 @@
 namespace cch::coding_agent {
 namespace {
 
-[[nodiscard]] ai::providers::ScriptedProviderDefinition to_scripted_provider(ModelRuntimeTestProvider provider) {
-    ai::providers::ScriptedProviderDefinition result;
+[[nodiscard]] tests::ScriptedProviderDefinition to_scripted_provider(ModelRuntimeTestProvider provider) {
+    tests::ScriptedProviderDefinition result;
     result.definition = std::move(provider.definition);
     if (provider.stream) {
         result.stream = [stream = std::move(provider.stream)](
@@ -60,7 +60,7 @@ namespace {
 } // namespace
 
 support::ExpectedVoid apply_model_runtime_test_provider(ai::Models& models, ModelRuntimeTestProvider provider) {
-    return ai::providers::apply_scripted_provider(models, to_scripted_provider(std::move(provider)));
+    return tests::apply_scripted_provider(models, to_scripted_provider(std::move(provider)));
 }
 
 support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
@@ -97,7 +97,7 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
     auto transports = std::move(test_options.transports);
     if (auto configured = (*runtime)->apply_test_models(
                 [transports = std::move(transports)](ai::Models& models) mutable -> support::ExpectedVoid {
-                    return ai::providers::apply_scripted_transport_options(models, std::move(transports));
+                    return tests::apply_scripted_transport_options(models, std::move(transports));
                 });
             !configured) {
         return std::unexpected(configured.error());
@@ -116,8 +116,7 @@ namespace {
     return result;
 }
 
-[[nodiscard]] coding_agent::ModelRuntimeTestProvider to_runtime_test_provider(
-        ai::providers::ScriptedProviderDefinition definition) {
+[[nodiscard]] coding_agent::ModelRuntimeTestProvider to_runtime_test_provider(ScriptedProviderDefinition definition) {
     auto stream = std::move(definition.stream);
     auto provider_definition = std::move(definition.definition);
     coding_agent::ModelRuntimeTestProvider result{
@@ -136,8 +135,7 @@ namespace {
 class FakeScriptedProvider final : public ScriptedProvider {
 public:
     explicit FakeScriptedProvider(std::string provider_id)
-        : ScriptedProvider(provider_id),
-          definition_(ai::providers::make_scripted_fake_provider_definition(provider_id)) {
+        : ScriptedProvider(provider_id), definition_(make_ai_scripted_fake_provider_definition(provider_id)) {
         provider_auth() = std::move(definition_.definition.auth);
     }
 
@@ -151,14 +149,14 @@ public:
     }
 
 private:
-    ai::providers::ScriptedProviderDefinition definition_;
+    ScriptedProviderDefinition definition_;
 };
 
 } // namespace
 
 std::vector<coding_agent::ModelRuntimeTestProvider> make_scripted_fake_provider_definitions() {
     std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
-    for (auto&& definition : ai::providers::make_scripted_fake_provider_definitions()) {
+    for (auto&& definition : make_ai_scripted_fake_provider_definitions()) {
         definitions.push_back(to_runtime_test_provider(std::move(definition)));
     }
     return definitions;

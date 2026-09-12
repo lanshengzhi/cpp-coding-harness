@@ -134,10 +134,8 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // pi's harness boundary (agent-loop.ts `streamAssistantResponse`). The
     // provider conversion layer repeats the drop defensively.
     options.convert_to_llm = [](std::vector<ai::MessageVariant> messages) {
-        std::erase_if(messages, [](const ai::MessageVariant& message) {
-            const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
-            return bash != nullptr && bash->exclude_from_context;
-        });
+        std::erase_if(messages,
+                [](const ai::MessageVariant& message) { return ai::excluded_from_provider_context(message); });
         return support::AsyncResult<std::vector<ai::MessageVariant>>{std::move(messages)};
     };
     // The System Prompt is built at session construction in pi's exact shape

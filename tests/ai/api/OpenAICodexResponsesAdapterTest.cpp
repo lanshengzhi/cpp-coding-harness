@@ -90,19 +90,19 @@ struct CodexHarness {
     harness.models = std::make_shared<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    ai::providers::ScriptedProviderDefinition definition;
+    tests::ScriptedProviderDefinition definition;
     definition.definition = ai::ProviderDefinition{
             .id = "openai-codex",
             .name = "openai-codex",
             .models = {model},
             .auth = ai::providers::make_env_api_key_auth("API key", {}),
     };
-    definition.transport = ai::providers::ScriptedTransportOptions{
+    definition.transport = tests::ScriptedTransportOptions{
             .http_transport = harness.http,
             .ws_transport = harness.ws,
             .codex_cache_config = cache_config,
     };
-    REQUIRE(ai::providers::apply_scripted_provider(*harness.models, std::move(definition)));
+    REQUIRE(tests::apply_scripted_provider(*harness.models, std::move(definition)));
     return harness;
 }
 
