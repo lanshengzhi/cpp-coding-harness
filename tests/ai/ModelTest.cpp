@@ -6,10 +6,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 using namespace cch;
 
@@ -96,4 +99,24 @@ TEST_CASE("Model validation rejects partial identity invalid cost and incompatib
 
     model.api = "anthropic-messages";
     CHECK(ai::validate_model(model));
+}
+
+TEST_CASE("Thinking level wire vocabulary is public on the Model interface", "[ai][model][issue651][spec]") {
+    // The published table holds the seven wire names in the order
+    // `clamp_thinking_level` walks when it widens or narrows a request.
+    const std::array<std::pair<ai::ModelThinkingLevel, std::string_view>, 7> expected{{
+            {ai::ModelThinkingLevel::Off, "off"},
+            {ai::ModelThinkingLevel::Minimal, "minimal"},
+            {ai::ModelThinkingLevel::Low, "low"},
+            {ai::ModelThinkingLevel::Medium, "medium"},
+            {ai::ModelThinkingLevel::High, "high"},
+            {ai::ModelThinkingLevel::XHigh, "xhigh"},
+            {ai::ModelThinkingLevel::Max, "max"},
+    }};
+    CHECK(ai::kModelThinkingLevels == expected);
+    for (const auto& [level, name] : expected) {
+        CHECK(ai::model_thinking_level_name(level) == name);
+        CHECK(ai::parse_model_thinking_level(name) == level);
+    }
+    CHECK_FALSE(ai::parse_model_thinking_level("turbo").has_value());
 }

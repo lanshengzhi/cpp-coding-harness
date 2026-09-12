@@ -1,6 +1,5 @@
 #include "SettingsFlowController.hpp"
 
-#include "ai/ModelThinkingLevel.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/SettingsSelector.hpp"
@@ -71,7 +70,7 @@ void SettingsFlowController::show_settings_selector() {
     const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
     config.available_thinking_levels.reserve(supported.size());
     for (const auto level : supported) {
-        if (const auto name = ai::detail::model_thinking_level_name(level)) {
+        if (const auto name = ai::model_thinking_level_name(level)) {
             config.available_thinking_levels.emplace_back(*name);
         }
     }
