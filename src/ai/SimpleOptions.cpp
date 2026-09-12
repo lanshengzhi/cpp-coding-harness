@@ -121,6 +121,10 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
                         block);
                 }
             } else if constexpr (std::is_same_v<Value, BashExecutionMessage>) {
+                // The estimate accounts for the bash message whether or not pi
+                // excludes it from the context, so it maps the message directly
+                // instead of calling `extended_message_to_user_message`, whose
+                // `nullopt` for an excluded message would shrink the estimate.
                 const auto converted = bash_execution_to_user_message(value);
                 characters = std::get<TextContent>(
                     std::get<std::vector<Content>>(converted.content).front())

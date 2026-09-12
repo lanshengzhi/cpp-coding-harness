@@ -314,20 +314,12 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
     std::vector<ai::MessageVariant> converted;
     converted.reserve(messages.size());
     for (const auto& message : messages) {
-        if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
-            if (!bash->exclude_from_context) {
-                converted.push_back(ai::bash_execution_to_user_message(*bash));
-            }
-        } else if (const auto* custom = std::get_if<ai::CustomMessage>(&message)) {
-            converted.push_back(ai::custom_message_to_user_message(*custom));
-        } else if (const auto* branch = std::get_if<ai::BranchSummaryMessage>(&message)) {
-            converted.push_back(ai::branch_summary_to_user_message(*branch));
-        } else if (const auto* compaction =
-                       std::get_if<ai::CompactionSummaryMessage>(&message)) {
-            converted.push_back(ai::compaction_summary_to_user_message(*compaction));
-        } else if (std::holds_alternative<ai::UserMessage>(message) ||
-                   std::holds_alternative<ai::AssistantMessage>(message) ||
-                   std::holds_alternative<ai::ToolResultMessage>(message)) {
+        if (auto provider_message = ai::extended_message_to_user_message(message)) {
+            converted.push_back(std::move(*provider_message));
+            continue;
+        }
+        if (std::holds_alternative<ai::UserMessage>(message) || std::holds_alternative<ai::AssistantMessage>(message) ||
+                std::holds_alternative<ai::ToolResultMessage>(message)) {
             converted.push_back(message);
         }
     }
