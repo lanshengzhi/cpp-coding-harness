@@ -23,9 +23,19 @@ target_include_directories(pike PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
 )
 
-# Release distribution size optimization (issue #639): strip residual unwind
-# tables from third-party static dependencies.
+# Release distribution size optimization (issue #639): suppress unwind tables
+# and strip residual unwind data from third-party static dependencies. Scoped
+# to the distribution binary: test binaries rely on exception unwinding for
+# Catch2 failure paths, so the EH-suppressing flags must not leak into the
+# global Release options (see cmake/ProjectSetup.cmake).
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(pike PRIVATE
+        -fno-unwind-tables
+        -fno-asynchronous-unwind-tables
+    )
+    target_link_options(pike PRIVATE
+        -Wl,--no-eh-frame-hdr
+    )
     add_custom_command(TARGET pike POST_BUILD
         COMMAND "${CMAKE_STRIP}" --remove-section=.eh_frame "$<TARGET_FILE:pike>"
         COMMENT "Stripping .eh_frame from Release runtime executable"
