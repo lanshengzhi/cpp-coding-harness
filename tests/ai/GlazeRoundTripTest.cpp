@@ -1,155 +1,22 @@
+// The AI-side Glaze cases: the AI context JSON surface (`AiContext` /
+// `ContextDto`, removed with `src/ai/glaze/` by #652) and the shared Glaze
+// reader limits. The pi message JSON cases moved to
+// `tests/harness/session/SessionMessageJsonTest.cpp` when the session module
+// took ownership of that wire shape (ADR 0056).
+
 #include "ai/glaze/AiJson.hpp"
 #include "support/ComplexToolSchemaFixture.hpp"
 #include "support/Json.hpp"
+#include "support/JsonGlaze.hpp"
+
 #include <cch/support/Error.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
 #include <string>
-#include <string_view>
 #include <variant>
 
 using namespace cch;
-
-TEST_CASE("tool-result message round-trips linkage details and error state", "[ai][u2][glaze][compat-pi]") {
-    auto details = support::read_json(R"({"exitCode":2,"stderr":"denied"})");
-    REQUIRE(details);
-
-    ai::ToolResultMessage result;
-    result.tool_call_id = "call-1";
-    result.tool_name = "read_file";
-    result.content.emplace_back(ai::TextContent{
-        .text = "could not read",
-        .text_signature = std::nullopt,
-    });
-    result.content.emplace_back(ai::ImageContent{
-        .data = "ZmFrZQ==",
-        .mime_type = "image/png",
-    });
-    result.details = *details;
-    result.is_error = true;
-    result.timestamp = 1718000000456;
-
-    auto json = ai::glaze::write_message_json(ai::MessageVariant{result});
-    REQUIRE(json);
-    CHECK(json->find(R"("role":"toolResult")") != std::string::npos);
-    CHECK(json->find(R"("toolCallId":"call-1")") != std::string::npos);
-    CHECK(json->find(R"("isError":true)") != std::string::npos);
-
-    auto parsed = ai::glaze::read_message_json(*json);
-    REQUIRE(parsed);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(*parsed));
-    const auto& round_trip = std::get<ai::ToolResultMessage>(*parsed);
-    CHECK(round_trip.tool_call_id == "call-1");
-    CHECK(round_trip.tool_name == "read_file");
-    CHECK(round_trip.is_error);
-    CHECK(round_trip.timestamp == 1718000000456);
-    REQUIRE(round_trip.content.size() == 2);
-    REQUIRE(std::holds_alternative<ai::TextContent>(round_trip.content[0]));
-    CHECK(std::get<ai::TextContent>(round_trip.content[0]).text == "could not read");
-    REQUIRE(std::holds_alternative<ai::ImageContent>(round_trip.content[1]));
-    CHECK(std::get<ai::ImageContent>(round_trip.content[1]).mime_type == "image/png");
-    REQUIRE(round_trip.details);
-    const auto& detail_object = round_trip.details->get<support::JsonValue::object_t>();
-    CHECK(static_cast<int>(detail_object.at("exitCode").get<double>()) == 2);
-    CHECK(detail_object.at("stderr").get_string() == "denied");
-}
-
-TEST_CASE("assistant content round-trips text, thinking, and tool-call variants", "[ai][u2][glaze][compat-pi]") {
-    ai::AssistantMessage msg;
-    msg.content.emplace_back(ai::TextContent{
-        .text = "hello",
-        .text_signature = std::nullopt,
-    });
-    msg.content.emplace_back(ai::ThinkingContent{
-        .thinking = "reasoning",
-        .thinking_signature = std::nullopt,
-        .redacted = false,
-    });
-    msg.content.emplace_back(ai::ToolCallContent{
-        .id = "call-1",
-        .name = "bash",
-        .arguments = std::nullopt,
-        .raw_arguments = R"({"cmd":"ls"})",
-        .thought_signature = std::nullopt,
-        .arguments_valid = true,
-        .argument_error = std::nullopt,
-    });
-    msg.api = "openai-completions";
-    msg.provider = "openai";
-    msg.model = "gpt-test";
-    msg.stop_reason = ai::AssistantStopReason::ToolUse;
-    msg.timestamp = 1718000000123;
-
-    auto json = ai::glaze::write_message_json(ai::MessageVariant{msg});
-    REQUIRE(json);
-    CHECK(json->find(R"("type":"text")") != std::string::npos);
-    CHECK(json->find(R"("type":"thinking")") != std::string::npos);
-    CHECK(json->find(R"("type":"toolCall")") != std::string::npos);
-
-    auto parsed = ai::glaze::read_message_json(*json);
-    REQUIRE(parsed);
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(*parsed));
-    const auto& round_trip = std::get<ai::AssistantMessage>(*parsed);
-    REQUIRE(round_trip.content.size() == 3);
-    REQUIRE(std::holds_alternative<ai::TextContent>(round_trip.content[0]));
-    REQUIRE(std::holds_alternative<ai::ThinkingContent>(round_trip.content[1]));
-    REQUIRE(std::holds_alternative<ai::ToolCallContent>(round_trip.content[2]));
-}
-
-TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2][glaze][compat-pi]") {
-    ai::AssistantMessage msg;
-    msg.content.emplace_back(ai::TextContent{
-        .text = "test",
-        .text_signature = std::nullopt,
-    });
-    msg.api = "openai-completions";
-    msg.provider = "openai";
-    msg.model = "gpt-test";
-    msg.stop_reason = ai::AssistantStopReason::Stop;
-    msg.timestamp = 1718000000123;
-
-    // Add diagnostics
-    ai::DiagnosticErrorInfo err_info;
-    err_info.name = "NetworkError";
-    err_info.message = "connection refused";
-    err_info.code = "ECONNREFUSED";
-    ai::DiagnosticEntry diag;
-    diag.type = "provider_error";
-    diag.timestamp = 1718000000000;
-    diag.error = std::move(err_info);
-    msg.diagnostics = std::vector<ai::DiagnosticEntry>{std::move(diag)};
-
-    // Add usage with cacheWrite1h
-    ai::Usage usage;
-    usage.input = 100;
-    usage.output = 50;
-    usage.cache_read = 10;
-    usage.cache_write = 20;
-    usage.cache_write_1h = 15;
-    usage.reasoning = 12;
-    usage.total_tokens = 150;
-    msg.usage = std::move(usage);
-
-    auto json = ai::glaze::write_message_json(ai::MessageVariant{msg});
-    REQUIRE(json);
-    CHECK(json->find(R"("diagnostics")") != std::string::npos);
-    CHECK(json->find(R"("cacheWrite1h")") != std::string::npos);
-    CHECK(json->find(R"("type":"provider_error")") != std::string::npos);
-
-    auto parsed = ai::glaze::read_message_json(*json);
-    REQUIRE(parsed);
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(*parsed));
-    const auto& round_trip = std::get<ai::AssistantMessage>(*parsed);
-    REQUIRE(round_trip.diagnostics.has_value());
-    REQUIRE(round_trip.diagnostics->size() == 1);
-    CHECK((*round_trip.diagnostics)[0].type == "provider_error");
-    REQUIRE((*round_trip.diagnostics)[0].error.has_value());
-    CHECK((*round_trip.diagnostics)[0].error->name == "NetworkError");
-    CHECK(round_trip.usage.cache_write_1h == 15);
-    CHECK(round_trip.usage.reasoning == 12);
-}
 
 TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24][compat-pi]") {
     auto expected_contract = support::read_json(tests::kComplexToolArgumentContract);
@@ -183,68 +50,6 @@ TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", 
     REQUIRE(expected_json);
     REQUIRE(restored_json);
     CHECK(*restored_json == *expected_json);
-}
-
-TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[ai][u2][glaze][compat-pi]") {
-    ai::glaze::ContentDto dto;
-    dto.type = "toolCall";
-    dto.id = "call-1";
-    dto.name = "read";
-    dto.rawArguments = R"({"path":"test"})";
-
-    // detail::content_from_dto rejects toolCall (only valid in assistant content)
-    auto result = ai::glaze::detail::content_from_dto(dto, "test");
-    REQUIRE(!result);
-    CHECK(result.error().message.find("toolCall") != std::string::npos);
-
-    // detail::assistant_content_from_dto accepts toolCall
-    auto assistant_result = ai::glaze::detail::assistant_content_from_dto(dto, "test");
-    REQUIRE(assistant_result);
-    REQUIRE(std::holds_alternative<ai::ToolCallContent>(*assistant_result));
-}
-
-TEST_CASE("assistant_content_from_dto rejects image content", "[ai][u2][glaze][compat-pi]") {
-    ai::glaze::ContentDto dto;
-    dto.type = "image";
-    dto.data = "ZmFrZQ==";
-    dto.mimeType = "image/png";
-
-    auto result = ai::glaze::detail::assistant_content_from_dto(dto, "test");
-    REQUIRE(!result);
-    CHECK(result.error().message.find("image") != std::string::npos);
-}
-
-TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[ai][u2][glaze][compat-pi]") {
-    auto json = ai::glaze::write_message_json(
-        ai::MessageVariant{ai::user_text_message("valid text")});
-    REQUIRE(json);
-    const auto text_offset = json->find("valid text");
-    REQUIRE(text_offset != std::string::npos);
-    json->replace(
-        text_offset,
-        std::string_view{"valid text"}.size(),
-        std::string{"\xc0\x80", 2});
-
-    const auto parsed = ai::glaze::read_message_json(*json);
-    REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().code == support::ErrorCode::JsonParse);
-}
-
-TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze][compat-pi]") {
-    auto json = ai::glaze::write_message_json(
-        ai::MessageVariant{ai::user_text_message("hello")});
-    REQUIRE(json);
-    const std::string marker = R"("timestamp":)";
-    const auto value_offset = json->find(marker);
-    REQUIRE(value_offset != std::string::npos);
-    const auto number_offset = value_offset + marker.size();
-    const auto number_end = json->find_first_not_of("-0123456789", number_offset);
-    REQUIRE(number_end != std::string::npos);
-    json->replace(number_offset, number_end - number_offset, "9223372036854775808");
-
-    const auto parsed = ai::glaze::read_message_json(*json);
-    REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 
 TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2][glaze][compat-pi]") {
