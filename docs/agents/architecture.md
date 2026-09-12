@@ -25,9 +25,9 @@ Every production source compiles once; the production graph is acyclic. Every un
 One line per package. Headers are the stable pointers; class lists are not enumerated here (they drift with refactors — resolve via `lsp symbols`).
 
 - `cch_agent_core`: Agent loop consumes abstract `Tool` values (`<cch/agent/AgentTool.hpp>`), `ToolRegistry`, and `cch::ai` `MessageVariant` + `ModelStreamFactory`; emits `AgentLifecycleEvent` to weak observers vs strong committer. Harness exposes abstract `AsyncFileSystem` (`harness/FileSystem.hpp`) / `AsyncShell` (`harness/Shell.hpp`); concrete file/shell adapters stay private to `src/agent/harness/`. Built-in tools (`<cch/agent/tools/ToolFactories.hpp>`) depend only on the abstract filesystem/shell. Assembly (binding Harness file/shell to Tools, injecting tools into Agent, wiring Agent events to `SessionStore`) lives outside core in `cch_coding_agent` (`src/coding_agent/runtime/SessionFactory.cpp`, `SessionEventCommitment`).
-- `cch_ai`: owns Model, Provider, authentication, and model-stream (`<cch/ai/...>`); wire adapters and OAuth flows stay private under `src/ai/`.
+- `cch_ai`: owns Model, Provider, authentication, and model-stream (`<cch/ai/...>`); wire adapters and OAuth flows stay private under `src/ai/`. `ai::Models` is the sole Provider composition and Request Authentication owner; its graph is not exposed to downstream Owners.
 - `cch_tui`: owns reusable terminal, input, rendering, and TUI toolkit (`<cch/tui/...>`); the product TUI lives in `cch_coding_agent`.
-- `cch_coding_agent`: repository-private composition of all Owner packages into `pike` (Agent Session, Models Runtime, prompt, Native TUI application, CLI from `src/cli/`); sole assembly point `SessionFactory`.
+- `cch_coding_agent`: repository-private composition of all Owner packages into `pike` (Agent Session, Models Runtime, prompt, Native TUI application, CLI from `src/cli/`); the Models Runtime privately holds `ai::Models` and exposes passive catalog/status values plus an AI-owned `ModelStreamFactory`, while `SessionFactory` remains the sole assembly point.
 - `cch_support`: pi-neutral C++ values and mechanics only (`<cch/support/...>`); owns no Supported Capability, depends on no Capability Owner Package.
 
 ## Passive value contracts

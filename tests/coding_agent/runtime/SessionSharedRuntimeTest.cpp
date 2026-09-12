@@ -147,18 +147,21 @@ TEST_CASE("a Session-created runtime is released on close while a host-shared ru
     Fixture fixture;
     const auto path = fixture.session_file();
 
-    // Default-created (Session-owned) runtime: close releases it.
+    // Default-created (Session-owned) runtime: close releases it. The runtime is
+    // never injected here, so it carries only the built-in catalog and the
+    // persisted resume target exercises stored-identity resolution (and its
+    // fallback). The scripted catalog the pre-#641 `ai::Models` override used
+    // to add to this request is gone: that override produced a Session-owned
+    // wrapper, while a host-injected runtime is never Session-owned and so
+    // cannot stand in for the owned case.
     coding_agent::runtime::AgentSessionCreationRequest owned_request;
     owned_request.workspace = fixture.workspace.path();
-    owned_request.session_target =
-        coding_agent::ExplicitResumeSessionTarget{path};
+    owned_request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
     owned_request.session_facts.no_skills = true;
     owned_request.session_facts.no_prompt_templates = true;
     owned_request.execution_runtime_target = fixture.runtime.make_target();
-    auto created_owned = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(owned_request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
+    auto created_owned =
+            fixture.runtime.run(coding_agent::create_agent_session_async(std::move(owned_request), std::nullopt, {}));
     REQUIRE(created_owned);
     auto& owned_session = fixture.runtime.adopt_session(std::move(created_owned->session));
     REQUIRE(owned_session.model_runtime() != nullptr);

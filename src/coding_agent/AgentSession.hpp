@@ -5,7 +5,6 @@
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
-#include <cch/ai/Models.hpp>
 #include <cch/ai/Usage.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"

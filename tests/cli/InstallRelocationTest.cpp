@@ -211,7 +211,6 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
             .cwd = root.path(),
             .env = {{"HOME", home.string()}, {"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = "",
-            .models = nullptr,
     });
     INFO(smoke.stdout_text + smoke.stderr_text);
     REQUIRE(smoke.exit_code == 0);

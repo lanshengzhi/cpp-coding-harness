@@ -21,8 +21,7 @@ namespace cch::tests {
 /// In-process CLI run options. `args` are the argv tokens after the program
 /// name; `cwd` chdirs for the run (restored after); `env` applies environment
 /// overrides for the run (nullopt value unsets); `stdin_text` feeds the piped
-/// stream; `models` is the transitional direct-Models override used by older
-/// tests; the default path builds scripted Provider Definitions through the
+/// stream; the default path builds scripted Provider Definitions through the
 /// ModelRuntime test seam. `resume_picker` injects
 /// the scripted startup-TUI picker (pi `selectSession` host) so the test
 /// process's terminal is never touched.
@@ -31,7 +30,6 @@ struct CliRunOptions {
     std::optional<std::filesystem::path> cwd;
     std::vector<std::pair<std::string, std::optional<std::string>>> env;
     std::string stdin_text;
-    std::shared_ptr<ai::Models> models;
     bool stdin_is_terminal{false};
     bool stdout_is_terminal{false};
     cli::ResumePickerSink resume_picker{};
@@ -164,8 +162,6 @@ private:
     std::ostringstream output;
     std::ostringstream error;
 
-    std::shared_ptr<ai::Models> models = std::move(options.models);
-
     const cli::FrontendEnvironment environment{
         .stdin_is_terminal = options.stdin_is_terminal,
         .stdout_is_terminal = options.stdout_is_terminal,
@@ -176,7 +172,6 @@ private:
             cli::CliRuntimeOptions{
                     .environment = environment,
                     .environment_explicit = true,
-                    .models = std::move(models),
                     .model_runtime = std::move(model_runtime),
                     .model_runtime_cli_fake = model_runtime_cli_fake,
                     .resume_picker = std::move(options.resume_picker),
@@ -200,8 +195,8 @@ private:
     if (runtime) {
         return run_cli_with_runtime(std::move(options), std::move(*runtime), true);
     }
-    options.models = make_scripted_fake_models();
-    return run_cli_with_runtime(std::move(options), nullptr);
+    auto models = make_scripted_fake_models();
+    return run_cli_with_runtime(std::move(options), runtime_from_models(std::move(models)), true);
 }
 
 } // namespace cch::tests

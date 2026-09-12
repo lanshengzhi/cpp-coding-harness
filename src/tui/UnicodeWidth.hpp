@@ -49,6 +49,7 @@ enum class TerminalTokenKind {
     Sgr,
     Hyperlink,
     Newline,
+    CursorMove,
 };
 
 struct TerminalToken {

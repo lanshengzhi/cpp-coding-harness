@@ -280,8 +280,17 @@ std::optional<ai::ProviderInfo> ModelRuntime::provider(std::string_view provider
     return *found;
 }
 
-std::shared_ptr<ai::Models> ModelRuntime::ai_models() const {
-    return impl_->models;
+ai::ModelStreamFactory ModelRuntime::stream_factory() const {
+    return ai::ModelStreamFactory{[models = impl_->models](ai::Model model,
+                                          ai::AiContext context,
+                                          ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
+        return models->stream(std::move(model), std::move(context), std::move(options));
+    }};
+}
+
+support::ExpectedVoid ModelRuntime::apply_test_models(
+        std::move_only_function<support::ExpectedVoid(ai::Models&)> configure) {
+    return configure(*impl_->models);
 }
 
 std::vector<ai::Model> ModelRuntime::models(
@@ -356,26 +365,6 @@ support::AsyncResult<std::optional<ai::AuthCheck>> ModelRuntime::check_auth(std:
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> {
                 co_return co_await support::detail::await_async_result(
                         impl_->models->check_auth(std::move(provider_id)));
-            });
-}
-
-support::AsyncResult<std::optional<ai::AuthResult>> ModelRuntime::get_auth(
-        std::string provider_id, std::optional<std::string> explicit_api_key) {
-    return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id), explicit_api_key = std::move(explicit_api_key)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
-                co_return co_await support::detail::await_async_result(
-                        impl_->models->get_auth(std::move(provider_id), std::move(explicit_api_key)));
-            });
-}
-
-support::AsyncResult<std::optional<ai::AuthResult>> ModelRuntime::get_auth(
-        ai::Model model, std::optional<std::string> explicit_api_key) {
-    return support::detail::make_async_result(
-            [this, model = std::move(model), explicit_api_key = std::move(explicit_api_key)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthResult>>> {
-                co_return co_await support::detail::await_async_result(
-                        impl_->models->get_auth(std::move(model), std::move(explicit_api_key)));
             });
 }
 
@@ -477,19 +466,17 @@ support::AsyncResult<std::vector<ai::CredentialInfo>> ModelRuntime::list_credent
             });
 }
 
-support::AsyncResult<ai::Credential> ModelRuntime::login(
+support::AsyncResult<void> ModelRuntime::login(
         std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction) {
     return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction)]() mutable
-                    -> boost::asio::awaitable<support::Expected<ai::Credential>> {
-                auto credential = co_await support::detail::await_async_result(
-                        impl_->models->login(provider_id, type, std::move(interaction)));
-                if (credential) {
-                    // Post-login refresh failures are recorded in the composition-errors
-                    // map and never fail the login call (ADR 0032).
-                    static_cast<void>(refresh());
-                }
-                co_return credential;
+                    -> boost::asio::awaitable<support::ExpectedVoid> {
+                CCH_TRY_VOID(co_await support::detail::await_async_result(
+                        impl_->models->login(provider_id, type, std::move(interaction))));
+                // Post-login refresh failures are recorded in the composition-errors
+                // map and never fail the login call (ADR 0032).
+                static_cast<void>(refresh());
+                co_return support::ExpectedVoid{};
             });
 }
 

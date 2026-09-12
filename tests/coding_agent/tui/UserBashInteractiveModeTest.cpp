@@ -360,10 +360,8 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -455,10 +453,8 @@ TEST_CASE("only non-empty focused editor prefixes enter the private User Shell p
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -527,10 +523,8 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -648,10 +642,8 @@ TEST_CASE("User Shell infrastructure failure creates no Bash message and leaves 
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -713,10 +705,8 @@ TEST_CASE("User Shell progress callback failure creates no Bash message and leav
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -788,10 +778,8 @@ TEST_CASE("private User Bash cancellation commits one cancelled terminal outcome
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -864,10 +852,8 @@ TEST_CASE("User Bash output spill failure preserves the bounded truncated result
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -937,10 +923,8 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1053,10 +1037,8 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1171,10 +1153,8 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1281,10 +1261,8 @@ TEST_CASE("repeated User Bash interrupts coalesce and recovery still works", "[c
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1365,10 +1343,8 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1453,10 +1429,8 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1543,10 +1517,8 @@ TEST_CASE("committed User Bash blocks preview the output tail and expand through
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1666,10 +1638,8 @@ TEST_CASE("resumed User Bash messages render in original order with their record
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto resumed = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto resumed = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(resumed);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1745,10 +1715,8 @@ TEST_CASE("live User Bash blocks stream through one status block with a loader a
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1835,10 +1803,8 @@ TEST_CASE("User Bash blocks style model-context inclusion through theme tokens",
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -1904,10 +1870,8 @@ TEST_CASE("the editor enters Bash mode on trimmed ! input and recalls the origin
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2003,10 +1967,8 @@ TEST_CASE("User Bash hints follow effective remapped interruption and expansion 
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2070,10 +2032,8 @@ TEST_CASE("the collapsed User Bash block renders at most 20 visual lines on a na
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2151,10 +2111,8 @@ TEST_CASE("focused User Bash dispatch trims, parses prefixes, and falls through 
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2247,10 +2205,8 @@ TEST_CASE("Skill and Prompt Template expansions beginning with ! stay ordinary A
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -2305,10 +2261,8 @@ TEST_CASE("User Bash input prefixes render in the header hints without a pseudo-
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = std::move(shell)}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 

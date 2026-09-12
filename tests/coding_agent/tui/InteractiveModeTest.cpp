@@ -92,10 +92,8 @@ struct TestRunOptions {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    return coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
+    return coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models)));
 }
 
 [[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
@@ -103,10 +101,8 @@ struct TestRunOptions {
         coding_agent::runtime::AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models) {
     request.execution_runtime_target = runtime.make_target();
-    return coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
+    return coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models)));
 }
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
@@ -558,6 +554,10 @@ public:
         started = true;
         boost::system::error_code error;
         co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        // The gate timer is bound to the run's executor; release it before
+        // that io_context dies. The injected ModelRuntime is host-owned, so
+        // the provider graph outlives the run (ASan, #473/#640).
+        gate_.reset();
 
         auto response = ai::assistant_text_message("released");
         response.provider = "fake";
@@ -607,6 +607,10 @@ public:
         boost::system::error_code error;
         co_await gate_->async_wait(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        // The gate timer is bound to the run's executor; release it before
+        // that io_context dies so the host-owned provider graph can outlive
+        // the run (ASan, #473/#640).
+        gate_.reset();
 
         auto response = ai::assistant_text_message(std::format("turn {}", request_count));
         response.provider = "turn-gated-fake";
@@ -1051,6 +1055,10 @@ public:
         boost::system::error_code error;
         co_await gate_->async_wait(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        // The gate timer is bound to the run's executor; release it before
+        // that io_context dies so the host-owned provider graph can outlive
+        // the run (ASan, #473/#640).
+        gate_.reset();
 
         std::get<ai::TextContent>(partial.content[0]).text =
             "new line 1\nnew line 2\nTAIL COMPLETE";

@@ -1,6 +1,5 @@
 #include "SessionFactory.hpp"
 
-#include <cch/ai/Models.hpp>
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
@@ -218,16 +217,15 @@ struct AssemblyPlan {
     /// default-created from the Agent Config Directory when absent (ADR
     /// 0029/0030).
     std::shared_ptr<ModelRuntime> model_runtime;
-    /// True when the session owns the runtime (default-created, or wrapped by
-    /// the factory from injected `ai::Models` in the private test seam) and
-    /// must release it on close. A host-injected runtime is never disposed by
+    /// True when the session owns the runtime (default-created) and must
+    /// release it on close. A host-injected runtime is never disposed by
     /// the session (ADR 0029: no dispose ceremony; runtimes are reusable
     /// across sessions).
     bool model_runtime_owned{true};
     /// Private test seam: an explicit request Model supplied through the
     /// creation request (focused session tests with deterministic models).
     std::optional<ai::Model> requested_model;
-    /// CLI-path fake-provider seam: the test-suite injected `ai::Models`
+    /// CLI-path fake-provider seam: the test-suite injected ModelRuntime
     /// carries the scripted fake provider, and the request model is fabricated
     /// from it (the request surface the deleted fake-provider CLI flag used to
     /// drive).
@@ -574,7 +572,7 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Fabricate the request Model for the CLI-path fake-provider seam: the
-/// injected `ai::Models` carries the scripted fake provider whose catalog is
+/// injected ModelRuntime carries the scripted fake provider whose catalog is
 /// empty (deterministic test surface), so the request model is a truthful,
 /// credential-free value pointing at it.
 [[nodiscard]] ai::Model make_fake_request_model() {
@@ -2022,20 +2020,6 @@ support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::cre
                         plan->model_runtime = std::move(overrides.model_runtime);
                         plan->model_runtime_owned = false;
                         plan->cli_fake = overrides.cli_fake;
-                    }
-                    co_return co_await finish_creation_async(
-                            std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);
-                }
-                if (overrides.models) {
-                    auto wrapped = std::make_shared<ModelRuntime>(std::move(overrides.models));
-                    auto plan = normalize_cli(std::move(request), snapshot.manager);
-                    if (!plan) {
-                        co_return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
-                    }
-                    if (!plan->model_runtime) {
-                        plan->model_runtime = std::move(wrapped);
-                        plan->model_runtime_owned = true;
-                        plan->cli_fake = true;
                     }
                     co_return co_await finish_creation_async(
                             std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);

@@ -146,10 +146,7 @@ template <typename Predicate> [[nodiscard]] boost::asio::awaitable<void> wait_un
     request.execution_runtime_target = runtime.make_target();
     return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
-                    .cli_fake = false,
-                    .models = tests::models_from_provider(std::move(client)),
-                    .user_shell = std::move(shell)});
+            cch::tests::cli_fake_overrides(cch::tests::models_from_provider(std::move(client)), std::move(shell)));
 }
 
 } // namespace

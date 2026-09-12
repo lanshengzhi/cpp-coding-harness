@@ -143,10 +143,8 @@ TEST_CASE("an admitted event advances live Session state before weak observers a
     auto options = fixture.options(tests::make_scripted_fake_provider());
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
 
     auto* session = &runtime.adopt_session(std::move(created->session));
@@ -179,10 +177,8 @@ TEST_CASE("session event persistence executes off the interaction loop in admiss
     auto options = fixture.options(tests::make_scripted_fake_provider());
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -216,10 +212,8 @@ TEST_CASE("a persistence failure keeps live state and rejects later prompts with
     auto options = fixture.options(tests::make_scripted_fake_provider());
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -258,10 +252,8 @@ TEST_CASE("an aborted prompt settles the commitment channel with a consistent se
     auto options = fixture.options(std::move(provider));
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -303,10 +295,8 @@ TEST_CASE("interaction and timers progress while session persistence is slow",
     auto options = fixture.options(provider);
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -357,20 +347,16 @@ TEST_CASE("a second session on the same Runtime root completes while persistence
     auto slow_options = slow_fixture.options(tests::make_scripted_fake_provider());
     auto slow_models = std::move(slow_options.models);
     coding_agent::runtime::AgentSessionCreationRequest slow_request = std::move(slow_options);
-    auto slow_created = runtime.run(coding_agent::create_agent_session_async(std::move(slow_request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(slow_models), .user_shell = nullptr}));
+    auto slow_created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(slow_request), std::nullopt, cch::tests::cli_fake_overrides(std::move(slow_models))));
     REQUIRE(slow_created.has_value());
     auto& slow_session = runtime.adopt_session(std::move(slow_created->session));
 
     auto fast_options = fast_fixture.options(tests::make_scripted_fake_provider());
     auto fast_models = std::move(fast_options.models);
     coding_agent::runtime::AgentSessionCreationRequest fast_request = std::move(fast_options);
-    auto fast_created = runtime.run(coding_agent::create_agent_session_async(std::move(fast_request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(fast_models), .user_shell = nullptr}));
+    auto fast_created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(fast_request), std::nullopt, cch::tests::cli_fake_overrides(std::move(fast_models))));
     REQUIRE(fast_created.has_value());
     auto& fast_session = runtime.adopt_session(std::move(fast_created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);

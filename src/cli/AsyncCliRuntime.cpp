@@ -174,7 +174,6 @@ void print_session_diagnostics(
 
 [[nodiscard]] int run_native_tui_boot(InitialMessageResult initial,
         const CliConfig& config,
-        std::shared_ptr<ai::Models> models,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake,
         CliStreams streams,
@@ -191,7 +190,7 @@ void print_session_diagnostics(
     // back to per-Session construction so the boot reports the same
     // session-creation error it would have reported otherwise.
     std::shared_ptr<coding_agent::ModelRuntime> shared_runtime = std::move(model_runtime);
-    if (!models && !shared_runtime) {
+    if (!shared_runtime) {
         if (auto created = coding_agent::ModelRuntime::create({}); created) {
             shared_runtime = std::move(*created);
         }
@@ -210,7 +209,6 @@ void print_session_diagnostics(
                        .with_runtime_root(runtime_root)
                        .with_shared_runtime(shared_runtime)
                        .with_model_runtime_cli_fake(model_runtime_cli_fake)
-                       .with_models(models)
                        .with_error_stream(&streams.error)
                        .build();
 
@@ -265,7 +263,6 @@ void print_session_diagnostics(
         Frontend frontend,
         CliStreams streams,
         FrontendEnvironment environment,
-        std::shared_ptr<ai::Models> models,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake,
         ResumePickerSink resume_picker) {
@@ -385,10 +382,9 @@ void print_session_diagnostics(
         return 1;
     };
 
-    // The private test seam injects the deterministic fake catalog; at most
-    // one of the two call sites below executes per run, so moving `models`
-    // here is safe. The non-interactive CLI owns one Runtime root for session
-    // assembly and print-mode work; the interactive path creates its root in
+    // The private test seam injects the deterministic fake catalog. The
+    // non-interactive CLI owns one Runtime root for session assembly and
+    // print-mode work; the interactive path creates its root in
     // `run_native_tui_boot` after this lambda is bypassed.
     std::shared_ptr<boost::asio::io_context> runtime_io;
     std::shared_ptr<harness::RuntimeRoot> runtime_root;
@@ -400,7 +396,6 @@ void print_session_diagnostics(
                 std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime),
                         .cli_fake = model_runtime_cli_fake,
-                        .models = std::move(models),
                         .user_shell = nullptr});
         auto future = boost::asio::co_spawn(
                 *runtime_io, support::detail::await_async_result(std::move(operation)), boost::asio::use_future);
@@ -495,7 +490,6 @@ void print_session_diagnostics(
         // and the base request to the boot.
         return run_native_tui_boot(std::move(*initial),
                 config,
-                models,
                 std::move(model_runtime),
                 model_runtime_cli_fake,
                 streams,
@@ -592,7 +586,6 @@ void print_session_diagnostics(
                 *frontend,
                 streams,
                 environment,
-                std::move(options.models),
                 std::move(options.model_runtime),
                 options.model_runtime_cli_fake,
                 std::move(options.resume_picker));

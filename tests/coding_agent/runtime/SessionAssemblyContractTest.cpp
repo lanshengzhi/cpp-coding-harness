@@ -251,11 +251,15 @@ TEST_CASE("Request Authentication precedence survives assembly unchanged",
     REQUIRE(ambient);
     auto& ambient_session = fix.runtime.adopt_session(std::move(ambient->session));
     {
-        auto auth = tests::run_async_result(ambient_session.model_runtime()->get_auth("gamma"));
-        REQUIRE(auth);
-        REQUIRE(*auth);
-        CHECK((*auth)->auth.api_key == "env-configured-key");
-        CHECK((*auth)->source == "configured API key");
+        auto checked = tests::run_async_result(ambient_session.model_runtime()->check_auth("gamma"));
+        REQUIRE(checked);
+        REQUIRE(*checked);
+        CHECK((*checked)->source == "configured API key");
+        const auto status = ambient_session.model_runtime()->get_provider_auth_status("gamma");
+        REQUIRE(status);
+        CHECK(status->configured);
+        CHECK(status->source == "environment");
+        CHECK(status->label == "GAMMA_KEY");
     }
 
     // Level 2 (stored credential) beats the configured key.
@@ -275,10 +279,21 @@ TEST_CASE("Request Authentication precedence survives assembly unchanged",
     REQUIRE(with_stored);
     auto& stored_session = fix.runtime.adopt_session(std::move(with_stored->session));
     {
-        auto auth = tests::run_async_result(stored_session.model_runtime()->get_auth("gamma"));
-        REQUIRE(auth);
-        REQUIRE(*auth);
-        CHECK((*auth)->auth.api_key == "stored-key");
+        auto checked = tests::run_async_result(stored_session.model_runtime()->check_auth("gamma"));
+        REQUIRE(checked);
+        REQUIRE(*checked);
+        CHECK((*checked)->source == "stored credential");
+        const auto status = stored_session.model_runtime()->get_provider_auth_status("gamma");
+        REQUIRE(status);
+        CHECK(status->configured);
+        CHECK(status->source == "stored");
+        auto listed = tests::run_async_result(stored_session.model_runtime()->list_credentials());
+        REQUIRE(listed);
+        const auto entry = std::find_if(listed->begin(), listed->end(), [](const ai::CredentialInfo& value) {
+            return value.provider_id == "gamma";
+        });
+        REQUIRE(entry != listed->end());
+        CHECK(entry->type == "api_key");
     }
 
     // Level 1 (runtime API key override from --api-key) beats everything and
@@ -292,10 +307,14 @@ TEST_CASE("Request Authentication precedence survives assembly unchanged",
     auto& overridden_session = fix.runtime.adopt_session(std::move(overridden->session));
     CHECK(overridden_session.model_runtime()->has_runtime_api_key("gamma"));
     {
-        auto auth = tests::run_async_result(overridden_session.model_runtime()->get_auth("gamma"));
-        REQUIRE(auth);
-        REQUIRE(*auth);
-        CHECK((*auth)->auth.api_key == "cli-override-key");
+        auto checked = tests::run_async_result(overridden_session.model_runtime()->check_auth("gamma"));
+        REQUIRE(checked);
+        REQUIRE(*checked);
+        const auto status = overridden_session.model_runtime()->get_provider_auth_status("gamma");
+        REQUIRE(status);
+        CHECK(status->configured);
+        CHECK(status->source == "runtime");
+        CHECK(overridden_session.model_runtime()->has_runtime_api_key("gamma"));
     }
 }
 

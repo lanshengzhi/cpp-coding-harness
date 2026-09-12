@@ -140,7 +140,6 @@ AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacemen
                 coding_agent::runtime::AssemblyOverrides{
                         .model_runtime = state->shared_runtime,
                         .cli_fake = state->model_runtime_cli_fake,
-                        .models = state->models,
                         .user_shell = nullptr,
                 },
                 stop_token);
@@ -331,12 +330,6 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_runtime(
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_runtime_cli_fake(
         bool model_runtime_cli_fake) noexcept {
     state_->model_runtime_cli_fake = model_runtime_cli_fake;
-    return *this;
-}
-
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_models(
-    std::shared_ptr<ai::Models> models) noexcept {
-    state_->models = std::move(models);
     return *this;
 }
 

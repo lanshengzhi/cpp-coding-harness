@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cch/ai/Models.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include "coding_agent/AgentSession.hpp"
@@ -26,13 +25,11 @@ namespace cch::coding_agent::runtime {
 
 /// Private test-support assembly seam carried as one value: an injected
 /// ModelRuntime built from scripted Provider Definitions and/or a Session-
-/// owned User Shell (User Bash overlap/cancellation tests). The legacy Models
-/// member remains only for tests that have not yet migrated to the runtime
-/// seam. Production assembly passes neither override.
+/// owned User Shell (User Bash overlap/cancellation tests). Production
+/// assembly passes neither override.
 struct AssemblyOverrides {
     std::shared_ptr<ModelRuntime> model_runtime;
     bool cli_fake{false};
-    std::shared_ptr<ai::Models> models;
     std::unique_ptr<AsyncUserShell> user_shell;
 };
 
@@ -73,7 +70,7 @@ public:
     /// `project_trust_override` is filled from the facts only when the engine
     /// left it unset; the embedded `session_facts` value is replaced
     /// unconditionally. The host-only capabilities (User Shell, Runtime
-    /// target, shared Models runtime) are not part of the merge; the host sets
+    /// target, shared Models Runtime) are not part of the merge; the host sets
     /// them on the request.
     static void apply_cli_facts(
         AgentSessionCreationRequest& request,

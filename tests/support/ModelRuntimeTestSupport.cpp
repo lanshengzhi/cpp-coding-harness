@@ -69,13 +69,21 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
     if (!runtime) {
         return std::unexpected(runtime.error());
     }
-    if (!test_options.providers.empty()) {
-        (*runtime)->ai_models()->clear_providers();
-    }
-    for (auto& provider : test_options.providers) {
-        if (auto applied = apply_model_runtime_test_provider(*(*runtime)->ai_models(), std::move(provider)); !applied) {
-            return std::unexpected(applied.error());
-        }
+    auto providers = std::move(test_options.providers);
+    if (auto configured = (*runtime)->apply_test_models(
+                [providers = std::move(providers)](ai::Models& models) mutable -> support::ExpectedVoid {
+                    if (!providers.empty()) {
+                        models.clear_providers();
+                    }
+                    for (auto& provider : providers) {
+                        if (auto applied = apply_model_runtime_test_provider(models, std::move(provider)); !applied) {
+                            return std::unexpected(applied.error());
+                        }
+                    }
+                    return {};
+                });
+            !configured) {
+        return std::unexpected(configured.error());
     }
     return finish_test_runtime(std::move(runtime));
 }
@@ -86,10 +94,13 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
     if (!runtime) {
         return std::unexpected(runtime.error());
     }
-    if (auto transports = ai::providers::apply_scripted_transport_options(
-                *(*runtime)->ai_models(), std::move(test_options.transports));
-            !transports) {
-        return std::unexpected(transports.error());
+    auto transports = std::move(test_options.transports);
+    if (auto configured = (*runtime)->apply_test_models(
+                [transports = std::move(transports)](ai::Models& models) mutable -> support::ExpectedVoid {
+                    return ai::providers::apply_scripted_transport_options(models, std::move(transports));
+                });
+            !configured) {
+        return std::unexpected(configured.error());
     }
     return finish_test_runtime(std::move(runtime));
 }
