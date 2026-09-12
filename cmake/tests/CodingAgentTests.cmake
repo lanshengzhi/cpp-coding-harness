@@ -14,6 +14,7 @@ include_guard(GLOBAL)
         tests/harness/compaction/CompactionTest.cpp
         tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
+        tests/harness/session/SessionMessageJsonTest.cpp
         tests/harness/session/SessionRoundTripGoldenTest.cpp
         tests/harness/session/SessionStoreTest.cpp
         tests/harness/session/SessionTreeTest.cpp
