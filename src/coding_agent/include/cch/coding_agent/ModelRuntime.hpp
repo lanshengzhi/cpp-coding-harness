@@ -70,8 +70,11 @@ public:
     [[nodiscard]] static support::Expected<std::shared_ptr<ModelRuntime>> create(
         ModelRuntimeOptions options = {});
 
-    /// Test-only wrapper for an already-composed Models value. Production
-    /// callers use create() so Models Runtime owns provider composition.
+    /// Test-only wrapper for an already-composed Models value: the one place a
+    /// Models handle crosses this Owner Interface, and it only crosses inward.
+    /// This constructor never returns a handle, so the no-Models-accessor
+    /// contract (ADR 0055) still holds; production callers use create() so
+    /// Models Runtime owns provider composition.
     explicit ModelRuntime(std::shared_ptr<ai::Models> models);
 
     ModelRuntime(ModelRuntime&&) noexcept;
@@ -101,10 +104,8 @@ public:
     [[nodiscard]] std::vector<ai::ProviderInfo> providers() const;
     /// Installed provider metadata by identity, or no value when absent.
     [[nodiscard]] std::optional<ai::ProviderInfo> provider(std::string_view provider_id) const;
-    /// The AI-owned Models catalog this runtime privately composes and
-    /// delegates to. Hosts receive only passive catalog values and the
-    /// `stream_factory()` seam below; the Models graph never escapes this
-    /// Owner Interface (ADR 0047 / #641).
+    /// Installed models from the privately held catalog, optionally filtered
+    /// by provider. Passive values only; no capability pointer escapes here.
     [[nodiscard]] std::vector<ai::Model> models(
         std::optional<std::string_view> provider_id = std::nullopt) const;
     [[nodiscard]] std::optional<ai::Model> model(std::string_view provider_id, std::string_view model_id) const;
@@ -181,9 +182,13 @@ public:
 private:
     struct Impl;
 
-    /// Test-support-only composition hook. It does not return or store a
-    /// Models handle outside this Runtime; the friend test factories use it to
-    /// submit scripted Provider Definitions and transports during construction.
+    /// Test-support-only composition hook: `configure` is invoked exactly once
+    /// and synchronously, before the caller that requested it resumes, and the
+    /// privately held graph it receives is valid only for the duration of that
+    /// call — the hook neither returns nor stores a Models handle. Reachable
+    /// only by friends of this class (the ModelRuntime test-support factories
+    /// and `runtime::SessionFactory`); no production caller composes the graph
+    /// through it.
     [[nodiscard]] support::ExpectedVoid apply_test_models(
             std::move_only_function<support::ExpectedVoid(ai::Models&)> configure);
 

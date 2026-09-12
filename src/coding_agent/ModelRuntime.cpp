@@ -281,8 +281,7 @@ std::optional<ai::ProviderInfo> ModelRuntime::provider(std::string_view provider
 }
 
 ai::ModelStreamFactory ModelRuntime::stream_factory() const {
-    auto models = impl_->models;
-    return ai::ModelStreamFactory{[models = std::move(models)](ai::Model model,
+    return ai::ModelStreamFactory{[models = impl_->models](ai::Model model,
                                           ai::AiContext context,
                                           ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
         return models->stream(std::move(model), std::move(context), std::move(options));

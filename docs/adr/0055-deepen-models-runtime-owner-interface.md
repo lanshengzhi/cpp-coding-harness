@@ -39,9 +39,15 @@ caller, not through the implementation graph it owns.
   configuration and recomposition policy and submits complete passive `ProviderDefinition` values;
   this decision does not add a Runtime Provider registry, registration hook, or second graph.
 - Scripted Provider Definition and transport injection stays in the existing test support. The
-  friend test factories use a private construction hook to configure the privately held Models
-  graph during test setup; no production caller receives a Models accessor or Provider-registration
-  surface merely for testing.
+  ModelRuntime test-support factories submit scripted definitions and transports to the privately
+  held graph through one private composition hook (`apply_test_models`), which invokes its callback
+  exactly once, synchronously, with a graph reference valid only for that call; like every private
+  member it is also reachable by the `runtime::SessionFactory` friend, which does not call it. Test
+  support that needs a whole scripted catalog keeps using the public test-only
+  `ModelRuntime(std::shared_ptr<ai::Models>)` constructor (through `tests::runtime_from_models`):
+  that constructor takes a Models handle inward only, never returns one, and is the single
+  remaining place where a Models value crosses this Owner Interface. No production caller receives
+  a Models accessor or Provider-registration surface merely for testing.
 - This boundary does not delete trusted AI-owner operations. In-process `ai::Models` continues to
   resolve `get_auth` and return the Credential produced by its `login` operation for its own
   Request Authentication and persistence path. The coding-agent Runtime/Agent/projection seam is
@@ -80,8 +86,10 @@ caller, not through the implementation graph it owns.
   lifetime owner. Runtime sharing and the serialized execution contract from ADR 0040 remain
   unchanged.
 - ModelRuntime tests exercise the same factory used by Agent assembly. Scripted provider and
-  transport setup remains available through test support, while production and non-test-support
-  code have no Models Runtime accessor call path.
+  transport setup remains available through test support (the public test-only constructor with
+  `tests::runtime_from_models`, plus the private composition hook for injection during
+  construction), while production and non-test-support code have no Models Runtime accessor call
+  path.
 - Trusted `ai::Models` authentication tests remain valid and continue to cover refresh, persistence,
   and request precedence at the AI Owner seam. Host-facing auth assertions use status, availability,
   metadata, or observed request behavior rather than Credential values from Runtime.
