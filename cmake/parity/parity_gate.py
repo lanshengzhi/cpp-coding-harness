@@ -1854,8 +1854,8 @@ def _architecture_include_diagnostic(
             continue
         return Diagnostic(
             RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE,
-            f"Product Architecture Contract rule '{rule.rule_id}' forbids headless source "
-            f"'{relative_source}' from including frontend header '{include_path}'",
+            f"Product Architecture Contract rule '{rule.rule_id}' forbids source "
+            f"'{relative_source}' from including header '{include_path}'",
             target=target_name,
             dependency=include_path,
             path=f"{source}:{include_line}",

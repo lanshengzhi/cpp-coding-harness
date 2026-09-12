@@ -49,7 +49,7 @@ The per-configuration direct target dependencies, interface visibility, project-
 _Avoid_: CMakeLists layout, build-order graph
 
 **Product Architecture Contract**:
-The machine-readable boundary set the architecture gate enforces since ADR 0053, succeeding pi parity as the authority: the Headless core must not depend on any frontend, the execution kernel must not depend on concrete system capabilities, and product session records must not live in the AI message model. It evolves by ADR.
+The machine-readable boundary set the architecture gate enforces since ADR 0053, succeeding pi parity as the authority. Its manifest carries two include rules: the Headless core must not depend on any frontend, and product session records must not live in the AI message model — `src/agent/` sources reach the AI Owner only through `<cch/ai/...>` Owner Interface headers. It evolves by ADR.
 _Avoid_: pi parity, ad-hoc dependency review
 
 **Compat Layer** (`compat/pi`):
