@@ -330,7 +330,7 @@ The two user-facing guidance outcomes produced when a request has no usable cred
 _Avoid_: Generic auth failure, silent credential fallback
 
 **Auto-Retry**:
-The session policy that starts another Agent Run with exponential backoff after a retryable terminal error (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
+The session policy that starts another Agent Run with exponential backoff after a retryable terminal error classified from the structured `InferenceFailure` / `InferenceFailureKind` vocabulary (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
 _Avoid_: Infinite retry, silent retry, adapter-level retry
 
 **OAuth Callback Server**:
