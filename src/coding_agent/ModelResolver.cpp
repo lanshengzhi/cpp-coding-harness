@@ -7,6 +7,8 @@
 
 #include <cch/coding_agent/ModelResolver.hpp>
 
+#include <cch/ai/Model.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -28,9 +30,7 @@ namespace {
 
 /// pi `isValidThinkingLevel`: one of the seven wire levels.
 [[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
-    return level == "off" || level == "minimal" || level == "low" ||
-        level == "medium" || level == "high" || level == "xhigh" ||
-        level == "max";
+    return ai::parse_model_thinking_level(level).has_value();
 }
 
 /// pi `isAlias`: a model id with no date suffix (`-YYYYMMDD`); `-latest` ids
