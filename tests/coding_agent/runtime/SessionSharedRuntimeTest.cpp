@@ -145,12 +145,18 @@ TEST_CASE("a host-shared ModelRuntime survives Session close and is reused by th
 TEST_CASE("a Session-created runtime is released on close while a host-shared runtime is retained",
         "[coding_agent][runtime][reuse][issue466][spec]") {
     Fixture fixture;
-    // Default-created (Session-owned) runtime: close releases it. Use an
-    // in-memory target so the default runtime can select its built-in model
-    // without a host-injected test catalog.
+    const auto path = fixture.session_file();
+
+    // Default-created (Session-owned) runtime: close releases it. The runtime is
+    // never injected here, so it carries only the built-in catalog and the
+    // persisted resume target exercises stored-identity resolution (and its
+    // fallback). The scripted catalog the pre-#641 `ai::Models` override used
+    // to add to this request is gone: that override produced a Session-owned
+    // wrapper, while a host-injected runtime is never Session-owned and so
+    // cannot stand in for the owned case.
     coding_agent::runtime::AgentSessionCreationRequest owned_request;
     owned_request.workspace = fixture.workspace.path();
-    owned_request.session_target = coding_agent::InMemorySessionTarget{};
+    owned_request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
     owned_request.session_facts.no_skills = true;
     owned_request.session_facts.no_prompt_templates = true;
     owned_request.execution_runtime_target = fixture.runtime.make_target();

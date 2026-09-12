@@ -92,12 +92,8 @@ struct TestRunOptions {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    return coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr});
+    return coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models)));
 }
 
 [[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
@@ -105,12 +101,8 @@ struct TestRunOptions {
         coding_agent::runtime::AgentSessionCreationRequest request,
         std::shared_ptr<ai::Models> models) {
     request.execution_runtime_target = runtime.make_target();
-    return coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr});
+    return coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models)));
 }
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {

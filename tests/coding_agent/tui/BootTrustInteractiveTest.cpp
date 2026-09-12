@@ -104,12 +104,8 @@ struct BootTrustRun {
             request_overrides.push_back(req.project_trust_override);
             req.provide_user_shell = true;
             req.execution_runtime_target = runtime_target;
-            return coding_agent::create_agent_session_async(std::move(req),
-                    std::nullopt,
-                    coding_agent::runtime::AssemblyOverrides{.model_runtime = cch::tests::runtime_from_models(models),
-                            .cli_fake = true,
-                            .user_shell = nullptr},
-                    stop_token);
+            return coding_agent::create_agent_session_async(
+                    std::move(req), std::nullopt, cch::tests::cli_fake_overrides(models), stop_token);
         };
         auto runtime_io = std::shared_ptr<boost::asio::io_context>(&io, [](boost::asio::io_context*) {});
         auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
@@ -509,12 +505,8 @@ TEST_CASE("boot session creation failure prints pi-style and stops the TUI",
                     std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
         req.provide_user_shell = true;
         req.execution_runtime_target = runtime_target;
-        return coding_agent::create_agent_session_async(std::move(req),
-                std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = cch::tests::runtime_from_models(models),
-                        .cli_fake = true,
-                        .user_shell = nullptr},
-                stop_token);
+        return coding_agent::create_agent_session_async(
+                std::move(req), std::nullopt, cch::tests::cli_fake_overrides(models), stop_token);
     };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_agent_config_directory(fixture.agent_dir)

@@ -96,12 +96,8 @@ struct Fixture {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.execution_runtime_target = runtime_target;
-        return coding_agent::create_agent_session_async(std::move(request),
-                std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = cch::tests::runtime_from_models(models),
-                        .cli_fake = true,
-                        .user_shell = nullptr},
-                stop_token);
+        return coding_agent::create_agent_session_async(
+                std::move(request), std::nullopt, cch::tests::cli_fake_overrides(models), stop_token);
     };
 }
 
@@ -284,12 +280,8 @@ TEST_CASE("a rejected replacement surfaces through the seam and the TUI keeps ru
             return support::AsyncResult<coding_agent::CreateAgentSessionResult>{
                     std::unexpected(support::make_error(support::ErrorCode::Session, "host rejected the replacement"))};
         }
-        return coding_agent::create_agent_session_async(std::move(request),
-                std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = cch::tests::runtime_from_models(models),
-                        .cli_fake = true,
-                        .user_shell = nullptr},
-                stop_token);
+        return coding_agent::create_agent_session_async(
+                std::move(request), std::nullopt, cch::tests::cli_fake_overrides(models), stop_token);
     };
     boot(fixture, running, actions);
 

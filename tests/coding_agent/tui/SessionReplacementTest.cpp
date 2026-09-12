@@ -97,10 +97,7 @@ struct Running {
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = cch::tests::runtime_from_models(tests::models_from_provider(provider)),
-                        .cli_fake = true,
-                        .user_shell = nullptr},
+                cch::tests::cli_fake_overrides(tests::models_from_provider(provider)),
                 stop_token);
     };
 }
@@ -297,10 +294,7 @@ TEST_CASE(
         }
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = cch::tests::runtime_from_models(tests::models_from_provider(provider)),
-                        .cli_fake = true,
-                        .user_shell = nullptr},
+                cch::tests::cli_fake_overrides(tests::models_from_provider(provider)),
                 stop_token);
     };
     boot(fixture, running, actions);
@@ -441,10 +435,8 @@ TEST_CASE("replacement clears a retired Session's pending User Bash block",
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = cch::tests::runtime_from_models(tests::make_scripted_fake_models()),
-                        .cli_fake = true,
-                        .user_shell = std::make_unique<SharedGateShell>(shell_state)},
+                cch::tests::cli_fake_overrides(
+                        tests::make_scripted_fake_models(), std::make_unique<SharedGateShell>(shell_state)),
                 stop_token);
     };
     boot(fixture, running, actions);

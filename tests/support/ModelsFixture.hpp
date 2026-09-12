@@ -174,6 +174,20 @@ private:
     return std::make_shared<coding_agent::ModelRuntime>(std::move(models));
 }
 
+/// Assembly overrides for the CLI-path fake-provider seam: the injected runtime
+/// carries the scripted fake provider, and `cli_fake` makes Session assembly
+/// fabricate the request model from it. The deleted `ai::Models` override
+/// implied both fields; one helper keeps them paired so a call site cannot set
+/// the runtime and silently forget `cli_fake` (#640 review).
+[[nodiscard]] inline coding_agent::runtime::AssemblyOverrides cli_fake_overrides(std::shared_ptr<ai::Models> models,
+        std::unique_ptr<coding_agent::runtime::AsyncUserShell> user_shell = nullptr) {
+    return coding_agent::runtime::AssemblyOverrides{
+            .model_runtime = runtime_from_models(std::move(models)),
+            .cli_fake = true,
+            .user_shell = std::move(user_shell),
+    };
+}
+
 [[nodiscard]] inline support::Expected<std::shared_ptr<coding_agent::ModelRuntime>> runtime_from_provider(
         std::shared_ptr<ScriptedProvider> provider, coding_agent::ModelRuntimeOptions options = {}) {
     const std::string provider_id{provider->id()};

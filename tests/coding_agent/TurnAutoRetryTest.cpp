@@ -266,12 +266,8 @@ struct RetrySessionUnderTest {
     // silently drop it (the one-argument overload cannot recover it).
     auto models = cch::tests::models_from_provider(std::move(client));
 
-    auto created = paths.runtime.run(coding_agent::create_agent_session_async(std::move(options),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr}));
+    auto created = paths.runtime.run(coding_agent::create_agent_session_async(
+            std::move(options), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     paths.runtime_driver.emplace(paths.runtime);
     return RetrySessionUnderTest{

@@ -76,10 +76,7 @@ public:
     request.execution_runtime_target = runtime.make_target();
     return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(tests::models_from_provider(std::move(client))),
-                    .cli_fake = true,
-                    .user_shell = std::move(shell)});
+            cch::tests::cli_fake_overrides(tests::models_from_provider(std::move(client)), std::move(shell)));
 }
 
 template <typename Factory> [[nodiscard]] auto run_on_runtime(tests::RuntimeFixture& runtime, Factory factory) {

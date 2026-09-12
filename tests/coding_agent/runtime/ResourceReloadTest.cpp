@@ -139,9 +139,7 @@ struct ReloadFixture {
         auto models = std::move(options.models);
         coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
         request.execution_runtime_target = runtime.make_target();
-        coding_agent::runtime::AssemblyOverrides overrides;
-        overrides.model_runtime = cch::tests::runtime_from_models(std::move(models));
-        overrides.cli_fake = true;
+        auto overrides = cch::tests::cli_fake_overrides(std::move(models));
         auto created = runtime.run(
                 coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
         REQUIRE(created.has_value());
@@ -175,9 +173,7 @@ struct AsyncReloadFixture {
         request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
         request.workspace = workspace.path();
 
-        coding_agent::runtime::AssemblyOverrides overrides;
-        overrides.model_runtime = cch::tests::runtime_from_models(tests::make_scripted_fake_models());
-        overrides.cli_fake = true;
+        auto overrides = cch::tests::cli_fake_overrides(tests::make_scripted_fake_models());
         auto created = runtime.run(
                 coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
         REQUIRE(created.has_value());
@@ -336,9 +332,7 @@ TEST_CASE("reload returns theme documents for re-registration and reports a fata
         auto models = std::move(options.models);
         coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
         request.execution_runtime_target = fixture.runtime.make_target();
-        coding_agent::runtime::AssemblyOverrides overrides;
-        overrides.model_runtime = cch::tests::runtime_from_models(std::move(models));
-        overrides.cli_fake = true;
+        auto overrides = cch::tests::cli_fake_overrides(std::move(models));
         auto created = fixture.runtime.run(
                 coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
         REQUIRE(created.has_value());
@@ -510,9 +504,7 @@ TEST_CASE("reload surfaces per-kind diagnostics through the result",
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = fixture.runtime.make_target();
-    coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.model_runtime = cch::tests::runtime_from_models(std::move(models));
-    overrides.cli_fake = true;
+    auto overrides = cch::tests::cli_fake_overrides(std::move(models));
     auto created = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
@@ -624,9 +616,7 @@ TEST_CASE("manual compaction exposes is_compacting while is_streaming stays fals
     request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     request.workspace = workspace.path();
     request.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
-    coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.model_runtime = cch::tests::runtime_from_models(cch::tests::models_from_provider(client));
-    overrides.cli_fake = true;
+    auto overrides = cch::tests::cli_fake_overrides(cch::tests::models_from_provider(client));
     auto created = runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());

@@ -177,12 +177,8 @@ struct SessionUnderTest {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
@@ -308,12 +304,8 @@ TEST_CASE("manual compaction aborts an in-flight run before compacting", "[codin
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
@@ -399,12 +391,8 @@ TEST_CASE("manual compaction rejects sessions too small to compact and in-memory
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     REQUIRE(run_awaitable(runtime, created->session->prompt("small prompt")).has_value());
     auto rejected = run_awaitable(runtime, created->session->compact());
@@ -425,12 +413,8 @@ TEST_CASE("manual compaction rejects sessions too small to compact and in-memory
     auto memory_models = std::move(memory_options.models);
     coding_agent::runtime::AgentSessionCreationRequest memory_request = std::move(memory_options);
     memory_request.execution_runtime_target = runtime.make_target();
-    auto memory_created = runtime.run(coding_agent::create_agent_session_async(std::move(memory_request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(memory_models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr}));
+    auto memory_created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(memory_request), std::nullopt, cch::tests::cli_fake_overrides(std::move(memory_models))));
     REQUIRE(memory_created.has_value());
     auto memory_rejected = run_awaitable(runtime, memory_created->session->compact());
     REQUIRE_FALSE(memory_rejected.has_value());
@@ -570,12 +554,8 @@ struct TriggerSessionUnderTest {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
-    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
-                    .cli_fake = true,
-                    .user_shell = nullptr}));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
     return TriggerSessionUnderTest{
         std::move(created->session),
