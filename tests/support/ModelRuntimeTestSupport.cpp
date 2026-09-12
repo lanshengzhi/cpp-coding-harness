@@ -1,7 +1,7 @@
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/ModelRuntimeTransportTestSupport.hpp"
 
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ModelsFixture.hpp"
 

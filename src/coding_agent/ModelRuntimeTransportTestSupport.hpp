@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/coding_agent/ModelRuntime.hpp>
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 
 namespace cch::coding_agent {
 
