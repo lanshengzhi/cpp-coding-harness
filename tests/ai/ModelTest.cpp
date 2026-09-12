@@ -1,101 +1,66 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Model.hpp>
-#include "ai/glaze/ModelJson.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/PiFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <filesystem>
-#include <fstream>
 #include <limits>
-#include <optional>
-#include <sstream>
+#include <memory>
 #include <string>
+#include <string_view>
 
 using namespace cch;
 
 namespace {
 
-std::string read_fixture(std::string_view name) {
-    const auto path = std::filesystem::path(CCH_SOURCE_DIR) / "fixtures" / "pi-ai" / "models" / name;
-    std::ifstream input(path);
-    REQUIRE(input.is_open());
-    std::ostringstream contents;
-    contents << input.rdbuf();
-    auto text = contents.str();
-    if (text.ends_with('\n')) {
-        text.pop_back();
-    }
-    return text;
+[[nodiscard]] const support::JsonValue& require_member(
+        const support::JsonValue::object_t& object, std::string_view key) {
+    const auto found = object.find(std::string{key});
+    REQUIRE(found != object.end());
+    return found->second;
 }
 
 } // namespace
 
-TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issue336][compat-pi]") {
-    auto model = tests::make_model("kimi-for-coding", "kimi-coding", "anthropic-messages");
-    model.name = "Kimi for Coding";
-    model.base_url = "https://api.kimi.com/coding";
-    model.reasoning = true;
-    model.thinking_level_map = ai::ThinkingLevelMap{
-        {ai::ModelThinkingLevel::Minimal, std::string{"low"}},
-        {ai::ModelThinkingLevel::Low, std::nullopt},
-        {ai::ModelThinkingLevel::High, std::string{"high"}},
-    };
-    model.input = {ai::ModelInput::Text, ai::ModelInput::Image};
-    model.cost = ai::ModelCost{
-        .input = 1.0,
-        .output = 4.0,
-        .cache_read = 0.1,
-        .cache_write = 1.25,
-        .tiers = std::vector<ai::ModelCostTier>{ai::ModelCostTier{
-            .input = 2.0,
-            .output = 8.0,
-            .cache_read = 0.2,
-            .cache_write = 2.5,
-            .input_tokens_above = 200000,
-        }},
-    };
-    model.context_window = 262144;
-    model.max_tokens = 32768;
-    model.headers = ai::ModelHeaders{{"X-Static", "catalog"}};
-    model.compat = ai::AnthropicMessagesCompat{
-        .force_adaptive_thinking = true,
-        .allow_empty_signature = false,
-    };
-
-    REQUIRE(ai::validate_model(model));
-    auto serialized = ai::glaze::write_model_json(model);
-    REQUIRE(serialized);
-    CHECK(*serialized == read_fixture("complete-anthropic-model.json"));
-}
-
 TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][issue336][compat-pi]") {
+    // The vendored pi DEFAULT_MODEL golden stays the authority for the Agent's
+    // initial `ai::Model`, compared member by member: the placeholder has no
+    // `models.json` parse path (an empty baseUrl and zeroed capabilities fail
+    // the coding-agent schema) and production never writes model JSON.
     auto runtime = std::make_shared<tests::FakeModelStream>();
     agent::Agent instance(runtime->factory(), agent::ToolRegistry{});
+    const auto& model = instance.state().model;
 
-    auto serialized = ai::glaze::write_model_json(instance.state().model);
-    REQUIRE(serialized);
-    CHECK(*serialized == read_fixture("default-model.json"));
-}
+    const auto golden = tests::read_pi_fixture("models/default-model.json");
+    REQUIRE(golden);
+    const auto* object = golden->get_if<support::JsonValue::object_t>();
+    REQUIRE(object != nullptr);
 
-TEST_CASE("thinking level map distinguishes no map missing key and explicit null", "[ai][model][issue336][compat-pi]") {
-    auto parsed = ai::glaze::read_model_json(read_fixture("complete-anthropic-model.json"));
-    REQUIRE(parsed);
-    REQUIRE(parsed->thinking_level_map.has_value());
-
-    const auto& levels = *parsed->thinking_level_map;
-    CHECK(levels.find(ai::ModelThinkingLevel::Off) == levels.end());
-    const auto low = levels.find(ai::ModelThinkingLevel::Low);
-    REQUIRE(low != levels.end());
-    CHECK_FALSE(low->second.has_value());
-    const auto high = levels.find(ai::ModelThinkingLevel::High);
-    REQUIRE(high != levels.end());
-    CHECK(high->second == std::optional<std::string>{"high"});
-
-    auto no_map = ai::glaze::read_model_json(read_fixture("default-model.json"));
-    REQUIRE(no_map);
-    CHECK_FALSE(no_map->thinking_level_map.has_value());
+    CHECK(model.id == require_member(*object, "id").get_string());
+    CHECK(model.name == require_member(*object, "name").get_string());
+    CHECK(model.api == require_member(*object, "api").get_string());
+    CHECK(model.provider == require_member(*object, "provider").get_string());
+    CHECK(model.base_url == require_member(*object, "baseUrl").get_string());
+    CHECK(model.reasoning == require_member(*object, "reasoning").get_boolean());
+    CHECK(require_member(*object, "input").get_array().empty());
+    CHECK(model.input.empty());
+    const auto& golden_cost = require_member(*object, "cost").get_object();
+    CHECK(model.cost.input == golden_cost.at("input").get_number());
+    CHECK(model.cost.output == golden_cost.at("output").get_number());
+    CHECK(model.cost.cache_read == golden_cost.at("cacheRead").get_number());
+    CHECK(model.cost.cache_write == golden_cost.at("cacheWrite").get_number());
+    CHECK_FALSE(model.cost.tiers.has_value());
+    CHECK(model.context_window == require_member(*object, "contextWindow").get_number());
+    CHECK(model.max_tokens == require_member(*object, "maxTokens").get_number());
+    // Omitted optional members mean no thinking map, headers, or API compat.
+    CHECK_FALSE(object->contains("thinkingLevelMap"));
+    CHECK_FALSE(model.thinking_level_map.has_value());
+    CHECK_FALSE(object->contains("headers"));
+    CHECK_FALSE(model.headers.has_value());
+    CHECK_FALSE(object->contains("compat"));
+    CHECK_FALSE(model.compat.has_value());
 }
 
 TEST_CASE("Model validation rejects partial identity invalid cost and incompatible compat",
