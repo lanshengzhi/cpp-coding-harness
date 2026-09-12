@@ -4,7 +4,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "support/AsyncResultBridge.hpp"
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/UsageAssertions.hpp"
 
@@ -40,42 +40,37 @@ struct RunResult {
     std::vector<ai::AssistantStreamEvent> events;
 };
 
-RunResult run_fake(
-    FakeRequest request,
-    std::optional<std::size_t> fail_at_event = std::nullopt) {
+RunResult run_fake(FakeRequest request, std::optional<std::size_t> fail_at_event = std::nullopt) {
     boost::asio::io_context io;
-    auto models = ai::providers::make_scripted_fake_models();
+    auto models = tests::make_ai_scripted_fake_models();
     REQUIRE(models != nullptr);
     std::optional<support::Expected<ai::AssistantMessage>> result;
     std::vector<ai::AssistantStreamEvent> events;
 
     boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            auto stream = models->stream(
-                std::move(request.model),
-                std::move(request.context),
-                std::move(request.options));
-            result = co_await support::detail::await_async_result(
-                    std::move(stream).run([&](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-                        events.push_back(event);
-                        if (fail_at_event && events.size() - 1 == *fail_at_event) {
-                            return std::unexpected(support::make_error(
-                                support::ErrorCode::Unknown,
-                                "fake sink rejected event",
-                                std::to_string(*fail_at_event)));
-                        }
-                        return {};
-                    }));
-            co_return;
-        },
-        boost::asio::detached);
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                auto stream = models->stream(
+                        std::move(request.model), std::move(request.context), std::move(request.options));
+                result = co_await support::detail::await_async_result(
+                        std::move(stream).run([&](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
+                            events.push_back(event);
+                            if (fail_at_event && events.size() - 1 == *fail_at_event) {
+                                return std::unexpected(support::make_error(support::ErrorCode::Unknown,
+                                        "fake sink rejected event",
+                                        std::to_string(*fail_at_event)));
+                            }
+                            return {};
+                        }));
+                co_return;
+            },
+            boost::asio::detached);
 
     io.run();
     REQUIRE(result.has_value());
     return RunResult{
-        .result = std::move(*result),
-        .events = std::move(events),
+            .result = std::move(*result),
+            .events = std::move(events),
     };
 }
 
@@ -94,9 +89,7 @@ const Event& require_event(const std::vector<ai::AssistantStreamEvent>& events, 
     return *event;
 }
 
-void check_same_metadata(
-    const ai::AssistantMessage& actual,
-    const ai::AssistantMessage& expected) {
+void check_same_metadata(const ai::AssistantMessage& actual, const ai::AssistantMessage& expected) {
     CHECK(actual.api == expected.api);
     CHECK(actual.provider == expected.provider);
     CHECK(actual.model == expected.model);
@@ -116,46 +109,38 @@ const ai::TextContent& require_text(const ai::AssistantMessage& message, std::si
     return *text;
 }
 
-const ai::ToolCallContent& require_tool_call(
-    const ai::AssistantMessage& message,
-    std::size_t index) {
+const ai::ToolCallContent& require_tool_call(const ai::AssistantMessage& message, std::size_t index) {
     REQUIRE(index < message.content.size());
     const auto* call = std::get_if<ai::ToolCallContent>(&message.content[index]);
     REQUIRE(call != nullptr);
     return *call;
 }
 
-void check_nonempty_text_block_lifecycle(
-    const std::vector<ai::AssistantStreamEvent>& events,
-    std::size_t first_event_index,
-    const ai::AssistantMessage& final_message,
-    std::size_t content_index,
-    const std::string& expected_text) {
-    const auto& text_start =
-        require_event<ai::TextStartEvent>(events, first_event_index);
+void check_nonempty_text_block_lifecycle(const std::vector<ai::AssistantStreamEvent>& events,
+        std::size_t first_event_index,
+        const ai::AssistantMessage& final_message,
+        std::size_t content_index,
+        const std::string& expected_text) {
+    const auto& text_start = require_event<ai::TextStartEvent>(events, first_event_index);
     CHECK(text_start.content_index == content_index);
     check_same_metadata(text_start.partial, final_message);
     REQUIRE(text_start.partial.content.size() == content_index + 1);
     CHECK(require_text(text_start.partial, content_index).text.empty());
 
-    const auto& text_delta =
-        require_event<ai::TextDeltaEvent>(events, first_event_index + 1);
+    const auto& text_delta = require_event<ai::TextDeltaEvent>(events, first_event_index + 1);
     CHECK(text_delta.content_index == content_index);
     CHECK(text_delta.delta == expected_text);
     check_same_metadata(text_delta.partial, final_message);
     CHECK(require_text(text_delta.partial, content_index).text == expected_text);
 
-    const auto& text_end =
-        require_event<ai::TextEndEvent>(events, first_event_index + 2);
+    const auto& text_end = require_event<ai::TextEndEvent>(events, first_event_index + 2);
     CHECK(text_end.content_index == content_index);
     CHECK(text_end.content == expected_text);
     check_same_metadata(text_end.partial, final_message);
     CHECK(require_text(text_end.partial, content_index).text == expected_text);
 }
 
-void check_text_lifecycle(
-    const RunResult& run,
-    const std::string& expected_text) {
+void check_text_lifecycle(const RunResult& run, const std::string& expected_text) {
     REQUIRE(run.result.has_value());
     const auto& final_message = *run.result;
     REQUIRE(final_message.content.size() == 1);
@@ -166,12 +151,7 @@ void check_text_lifecycle(
     check_same_metadata(assistant_start.partial, final_message);
     CHECK(assistant_start.partial.content.empty());
 
-    check_nonempty_text_block_lifecycle(
-        run.events,
-        1,
-        final_message,
-        0,
-        expected_text);
+    check_nonempty_text_block_lifecycle(run.events, 1, final_message, 0, expected_text);
 
     const auto& done = require_event<ai::AssistantDoneEvent>(run.events, 4);
     CHECK(done.reason == final_message.stop_reason);
@@ -180,14 +160,13 @@ void check_text_lifecycle(
     CHECK(require_text(done.message, 0).text == expected_text);
 }
 
-void check_tool_lifecycle(
-    const RunResult& run,
-    const std::string& expected_text,
-    const std::string& expected_id,
-    const std::string& expected_name,
-    const std::string& expected_raw_arguments,
-    const std::string& expected_argument_name,
-    const std::string& expected_argument_value) {
+void check_tool_lifecycle(const RunResult& run,
+        const std::string& expected_text,
+        const std::string& expected_id,
+        const std::string& expected_name,
+        const std::string& expected_raw_arguments,
+        const std::string& expected_argument_name,
+        const std::string& expected_argument_value) {
     REQUIRE(run.result.has_value());
     const auto& final_message = *run.result;
     CHECK(final_message.stop_reason == ai::AssistantStopReason::ToolUse);
@@ -208,12 +187,7 @@ void check_tool_lifecycle(
     check_same_metadata(assistant_start.partial, final_message);
     CHECK(assistant_start.partial.content.empty());
 
-    check_nonempty_text_block_lifecycle(
-        run.events,
-        1,
-        final_message,
-        0,
-        expected_text);
+    check_nonempty_text_block_lifecycle(run.events, 1, final_message, 0, expected_text);
 
     const auto& call_start = require_event<ai::ToolCallStartEvent>(run.events, 4);
     CHECK(call_start.content_index == 1);
@@ -291,8 +265,7 @@ TEST_CASE("scripted fake emits complete text lifecycles for every text-only resp
     auto prompt_run = run_fake(request_with(ai::user_text_message("hello")));
     check_text_lifecycle(prompt_run, "fake: hello");
 
-    auto tool_result_run = run_fake(request_with(
-        ai::tool_result_message("fake-read-1", "read", "file contents")));
+    auto tool_result_run = run_fake(request_with(ai::tool_result_message("fake-read-1", "read", "file contents")));
     check_text_lifecycle(tool_result_run, "fake observed: file contents");
 }
 
@@ -313,23 +286,11 @@ TEST_CASE("scripted fake emits complete ordered read and bash tool lifecycles",
         "[ai][provider][fake][issue23][issue30][spec]") {
     auto read_run = run_fake(request_with(ai::user_text_message("read README.md")));
     check_tool_lifecycle(
-        read_run,
-        "reading README.md",
-        "fake-read-1",
-        "read",
-        R"({"path":"README.md"})",
-        "path",
-        "README.md");
+            read_run, "reading README.md", "fake-read-1", "read", R"({"path":"README.md"})", "path", "README.md");
 
     auto bash_run = run_fake(request_with(ai::user_text_message("bash echo hi")));
     check_tool_lifecycle(
-        bash_run,
-        "running bash",
-        "fake-bash-1",
-        "bash",
-        R"({"command":"echo hi"})",
-        "command",
-        "echo hi");
+            bash_run, "running bash", "fake-bash-1", "bash", R"({"command":"echo hi"})", "command", "echo hi");
 }
 
 TEST_CASE("scripted fake Models normalizes static request failures into a terminal value",
@@ -368,17 +329,16 @@ TEST_CASE("scripted fake Models preserves all six Models error categories", "[ai
         support::ErrorCode code;
     };
     constexpr std::array<FailureCase, 6> kFailureCases{{
-        {.name = "model_source", .code = support::ErrorCode::ModelSource},
-        {.name = "model_validation", .code = support::ErrorCode::ModelValidation},
-        {.name = "provider", .code = support::ErrorCode::Provider},
-        {.name = "stream", .code = support::ErrorCode::Stream},
-        {.name = "auth", .code = support::ErrorCode::Auth},
-        {.name = "oauth", .code = support::ErrorCode::OAuth},
+            {.name = "model_source", .code = support::ErrorCode::ModelSource},
+            {.name = "model_validation", .code = support::ErrorCode::ModelValidation},
+            {.name = "provider", .code = support::ErrorCode::Provider},
+            {.name = "stream", .code = support::ErrorCode::Stream},
+            {.name = "auth", .code = support::ErrorCode::Auth},
+            {.name = "oauth", .code = support::ErrorCode::OAuth},
     }};
 
     for (const auto& failure : kFailureCases) {
-        auto run = run_fake(request_with(ai::user_text_message(
-            "fail " + std::string{failure.name})));
+        auto run = run_fake(request_with(ai::user_text_message("fail " + std::string{failure.name})));
 
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -394,9 +354,7 @@ TEST_CASE("scripted fake Models preserves all six Models error categories", "[ai
 TEST_CASE("scripted fake stops at and propagates every sink failure", "[ai][provider][fake][issue23][spec]") {
     constexpr std::size_t kExpectedEventCount = 8;
     for (std::size_t fail_at = 0; fail_at < kExpectedEventCount; ++fail_at) {
-        auto run = run_fake(
-            request_with(ai::user_text_message("read README.md")),
-            fail_at);
+        auto run = run_fake(request_with(ai::user_text_message("read README.md")), fail_at);
 
         REQUIRE_FALSE(run.result.has_value());
         CHECK(run.result.error().code == support::ErrorCode::Unknown);

@@ -49,7 +49,7 @@ The per-configuration direct target dependencies, interface visibility, project-
 _Avoid_: CMakeLists layout, build-order graph
 
 **Product Architecture Contract**:
-The machine-readable boundary set the architecture gate enforces since ADR 0053, succeeding pi parity as the authority: the Headless core must not depend on any frontend, the execution kernel must not depend on concrete system capabilities, and product session records must not live in the AI message model. It evolves by ADR.
+The machine-readable boundary set the architecture gate enforces since ADR 0053, succeeding pi parity as the authority. Its manifest carries two include rules: the Headless core must not depend on any frontend, and product session records must not live in the AI message model — `src/agent/` sources reach the AI Owner only through `<cch/ai/...>` Owner Interface headers. It evolves by ADR.
 _Avoid_: pi parity, ad-hoc dependency review
 
 **Compat Layer** (`compat/pi`):
@@ -330,7 +330,7 @@ The two user-facing guidance outcomes produced when a request has no usable cred
 _Avoid_: Generic auth failure, silent credential fallback
 
 **Auto-Retry**:
-The session policy that starts another Agent Run with exponential backoff after a retryable terminal error (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
+The session policy that starts another Agent Run with exponential backoff after a retryable terminal error classified from the structured `InferenceFailure` / `InferenceFailureKind` vocabulary (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
 _Avoid_: Infinite retry, silent retry, adapter-level retry
 
 **OAuth Callback Server**:

@@ -1,8 +1,7 @@
 #include <cch/ai/Models.hpp>
-#include "ai/glaze/ModelJson.hpp"
 #include "coding_agent/ModelConfig.hpp"
 #include "coding_agent/ProviderComposer.hpp"
-#include "support/JsonCompare.hpp"
+#include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
@@ -40,6 +39,103 @@ namespace {
         if (definition.id == provider_id) {
             return std::move(definition);
         }
+    }
+    return std::nullopt;
+}
+
+/// Compose fixture `models.json` model entries through the production config
+/// path: a config-only provider carrying the entries is loaded by `ModelConfig`
+/// and turned into `ai::Model` values by `compose_provider`.
+[[nodiscard]] std::vector<ai::Model> compose_fixture_models(
+        const tests::TempWorkspace& workspace, std::string_view provider_id, const std::vector<std::string>& entries) {
+    std::string models;
+    for (const auto& entry : entries) {
+        if (!models.empty()) {
+            models += ',';
+        }
+        models += entry;
+    }
+    const auto config = load_models_json(workspace,
+            R"({"providers":{")" + std::string{provider_id} + R"(":{"apiKey":"dummy-fixture-key","models":[)" + models +
+                    "]}}}");
+    REQUIRE_FALSE(config.error().has_value());
+    std::optional<std::string> error;
+    auto change = coding_agent::compose_provider(provider_id, std::nullopt, config, composer_options(), error);
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(change.definition.has_value());
+    return change.definition->models;
+}
+
+[[nodiscard]] std::optional<std::string> string_field_mismatch(
+        std::string_view field, const std::string& expected, const std::string& actual) {
+    if (expected == actual) {
+        return std::nullopt;
+    }
+    return std::string{field} + ": expected \"" + expected + "\", composed \"" + actual + "\"";
+}
+
+/// First field difference between a built-in catalog `ai::Model` and the
+/// `ai::Model` composed from the same frozen shard entry, or nullopt when they
+/// match. `compat` is not compared: the C++ `models.json` schema has no compat
+/// surface (`ModelConfig.hpp`), so a shard entry's compat member never reaches
+/// the config path; `AnthropicMessagesAdapterTest` pins the Kimi catalog compat
+/// values instead.
+[[nodiscard]] std::optional<std::string> model_field_mismatch(const ai::Model& expected, const ai::Model& actual) {
+    if (auto mismatch = string_field_mismatch("id", expected.id, actual.id)) {
+        return mismatch;
+    }
+    if (auto mismatch = string_field_mismatch("name", expected.name, actual.name)) {
+        return mismatch;
+    }
+    if (auto mismatch = string_field_mismatch("api", expected.api, actual.api)) {
+        return mismatch;
+    }
+    if (auto mismatch = string_field_mismatch("provider", expected.provider, actual.provider)) {
+        return mismatch;
+    }
+    if (auto mismatch = string_field_mismatch("baseUrl", expected.base_url, actual.base_url)) {
+        return mismatch;
+    }
+    if (expected.reasoning != actual.reasoning) {
+        return "reasoning differs";
+    }
+    if (expected.thinking_level_map != actual.thinking_level_map) {
+        return "thinkingLevelMap differs";
+    }
+    if (expected.input != actual.input) {
+        return "input differs";
+    }
+    if (expected.cost.input != actual.cost.input || expected.cost.output != actual.cost.output ||
+            expected.cost.cache_read != actual.cost.cache_read ||
+            expected.cost.cache_write != actual.cost.cache_write) {
+        return "cost rates differ";
+    }
+    if (expected.cost.tiers.has_value() != actual.cost.tiers.has_value()) {
+        return "cost tiers presence differs";
+    }
+    if (expected.cost.tiers.has_value()) {
+        if (expected.cost.tiers->size() != actual.cost.tiers->size()) {
+            return "cost tier count differs";
+        }
+        for (std::size_t index = 0; index < expected.cost.tiers->size(); ++index) {
+            const auto& expected_tier = (*expected.cost.tiers)[index];
+            const auto& actual_tier = (*actual.cost.tiers)[index];
+            if (expected_tier.input != actual_tier.input || expected_tier.output != actual_tier.output ||
+                    expected_tier.cache_read != actual_tier.cache_read ||
+                    expected_tier.cache_write != actual_tier.cache_write ||
+                    expected_tier.input_tokens_above != actual_tier.input_tokens_above) {
+                return "cost tier " + std::to_string(index) + " differs";
+            }
+        }
+    }
+    if (expected.context_window != actual.context_window) {
+        return "contextWindow differs";
+    }
+    if (expected.max_tokens != actual.max_tokens) {
+        return "maxTokens differs";
+    }
+    if (expected.headers != actual.headers) {
+        return "headers differs";
     }
     return std::nullopt;
 }
@@ -87,10 +183,12 @@ TEST_CASE("builtin catalogs match the frozen baseline shard values",
         "[coding_agent][provider-composer][issue370][spec]") {
     // The committed shard goldens (fixtures/pi-ai/models/*-shard.json) are
     // verbatim copies of the frozen-baseline pi shards (byte-hashes pinned in
-    // the pi-ai fixture README). Every built-in catalog model must serialize
-    // to exactly its baseline shard entry, except the deferred Codex catalog
-    // compat flags (supportsOpenAIGrammarTools / supportsToolSearch), which
-    // are absent from the C++ surface and are stripped from the golden entry.
+    // the pi-ai fixture README). Every built-in catalog model must equal the
+    // `ai::Model` the production models.json path composes from its baseline
+    // shard entry. The shard compat members are excluded (see
+    // `model_field_mismatch`); the deferred Codex catalog compat flags
+    // (supportsOpenAIGrammarTools / supportsToolSearch) remain absent from the
+    // C++ surface by design.
     const auto check_shard = [](const std::vector<ai::Model>& models,
                                 std::string_view shard_fixture,
                                 std::string_view api) {
@@ -103,23 +201,29 @@ TEST_CASE("builtin catalogs match the frozen baseline shard values",
         const auto* golden = found->second.get_if<support::JsonValue::object_t>();
         REQUIRE(golden);
 
+        REQUIRE_FALSE(models.empty());
         REQUIRE(models.size() == golden->size());
+        std::vector<std::string> entries;
+        entries.reserve(golden->size());
+        for (const auto& golden_entry : *golden) {
+            const auto entry_json = support::write_json(golden_entry.second);
+            REQUIRE(entry_json);
+            entries.push_back(*entry_json);
+        }
+        tests::TempWorkspace workspace;
+        const auto composed = compose_fixture_models(workspace, models.front().provider, entries);
+        REQUIRE(composed.size() == models.size());
+
         for (const auto& model : models) {
-            const auto golden_entry = golden->find(model.id);
-            REQUIRE(golden_entry != golden->end());
-            auto expected = golden_entry->second;
-            if (!model.compat) {
-                expected.get_object().erase("compat");
-            }
-            auto serialized = ai::glaze::write_model_json(model);
-            REQUIRE(serialized);
-            const auto actual = support::read_json(*serialized);
-            REQUIRE(actual);
-            if (auto mismatch = tests::json_mismatch(expected, *actual); mismatch) {
+            const auto match = std::find_if(composed.begin(), composed.end(), [&model](const ai::Model& value) {
+                return value.id == model.id;
+            });
+            REQUIRE(match != composed.end());
+            if (auto mismatch = model_field_mismatch(model, *match); mismatch) {
                 // The vendored fallback test header has no INFO macro; print
                 // the diff to stderr so it appears in the failure output.
-                std::cerr << "CATALOG SHARD MISMATCH (" << shard_fixture << ")"
-                          << ":\n" << *mismatch << "\n";
+                std::cerr << "CATALOG SHARD MISMATCH (" << shard_fixture << "): " << model.id << "\n"
+                          << *mismatch << "\n";
                 CHECK(false);
             }
         }
@@ -129,6 +233,53 @@ TEST_CASE("builtin catalogs match the frozen baseline shard values",
     REQUIRE(builtins.size() == 2);
     check_shard(builtins[0].models, "models/openai-codex-shard.json", "openai-codex-responses");
     check_shard(builtins[1].models, "models/kimi-coding-shard.json", "anthropic-messages");
+}
+
+TEST_CASE("the frozen complete Model fixture composes to the expected ai::Model",
+        "[coding_agent][provider-composer][issue336][compat-pi]") {
+    // complete-anthropic-model.json exercises every supported Model field. The
+    // vendored entry is read through the production config path, so the golden
+    // pins what `models.json` composition must produce rather than a test-only
+    // write surface. The entry's `provider` member has no config meaning (the
+    // provider key supplies it) and its `compat` member has no C++ models.json
+    // surface, so the expected value carries no compat.
+    const auto fixture = tests::read_pi_fixture_text("models/complete-anthropic-model.json");
+    REQUIRE(fixture);
+    tests::TempWorkspace workspace;
+    const auto composed = compose_fixture_models(workspace, "kimi-coding", {*fixture});
+    REQUIRE(composed.size() == 1);
+
+    auto expected = tests::make_model("kimi-for-coding", "kimi-coding", "anthropic-messages");
+    expected.name = "Kimi for Coding";
+    expected.base_url = "https://api.kimi.com/coding";
+    expected.reasoning = true;
+    expected.thinking_level_map = ai::ThinkingLevelMap{
+            {ai::ModelThinkingLevel::Minimal, std::string{"low"}},
+            {ai::ModelThinkingLevel::Low, std::nullopt},
+            {ai::ModelThinkingLevel::High, std::string{"high"}},
+    };
+    expected.input = {ai::ModelInput::Text, ai::ModelInput::Image};
+    expected.cost = ai::ModelCost{
+            .input = 1.0,
+            .output = 4.0,
+            .cache_read = 0.1,
+            .cache_write = 1.25,
+            .tiers = std::vector<ai::ModelCostTier>{ai::ModelCostTier{
+                    .input = 2.0,
+                    .output = 8.0,
+                    .cache_read = 0.2,
+                    .cache_write = 2.5,
+                    .input_tokens_above = 200000,
+            }},
+    };
+    expected.context_window = 262144;
+    expected.max_tokens = 32768;
+    expected.headers = ai::ModelHeaders{{"X-Static", "catalog"}};
+
+    if (auto mismatch = model_field_mismatch(expected, composed.front()); mismatch) {
+        std::cerr << "COMPLETE MODEL FIXTURE MISMATCH\n" << *mismatch << "\n";
+        CHECK(false);
+    }
 }
 
 TEST_CASE("built-in without models.json config is submitted unchanged",
