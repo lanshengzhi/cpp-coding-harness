@@ -106,6 +106,10 @@ public:
         boost::system::error_code error;
         co_await gate_->async_wait(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        // The gate timer is bound to the run's executor; release it before
+        // that io_context dies so the host-owned provider graph can outlive
+        // the run (ASan, #473/#640).
+        gate_.reset();
 
         auto response = ai::assistant_text_message("released");
         response.provider = "snapshot-fake";
