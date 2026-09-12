@@ -377,12 +377,10 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
     REQUIRE(runtime);
 
     ai::AuthInteraction interaction;
-    auto credential =
-            run_async_result((*runtime)->login("login-provider", ai::AuthType::ApiKey, std::move(interaction)));
-    REQUIRE(credential);
-    REQUIRE(std::holds_alternative<ai::ApiKeyCredential>(*credential));
-    CHECK(std::get<ai::ApiKeyCredential>(*credential).key == "dummy-login-key");
-    // The credential was persisted.
+    auto result = run_async_result((*runtime)->login("login-provider", ai::AuthType::ApiKey, std::move(interaction)));
+    REQUIRE(result);
+    // The credential was persisted inside the injected CredentialStore; the
+    // Runtime login outcome itself carries only success or failure.
     const auto stored = run_async_result(store->read("login-provider"));
     REQUIRE(stored);
     REQUIRE(stored->has_value());
@@ -549,87 +547,137 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain",
     })");
 
     auto storage = std::make_shared<coding_agent::AuthStorage>(home.path() / ".pike" / "agent" / "auth.json");
-    auto runtime = coding_agent::ModelRuntime::create(
-        coding_agent::ModelRuntimeOptions{.credentials = storage});
+    auto transport = std::make_shared<ScriptedTransport>();
+    constexpr std::string_view completed_response =
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n";
+    for (int i = 0; i < 4; ++i) {
+        transport->attempts.push_back(TransportAttempt{
+                .chunks = {std::string{completed_response}},
+        });
+    }
+    auto runtime =
+            coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{.credentials = storage},
+                    coding_agent::ModelRuntimeTransportTestOptions{
+                            .transports =
+                                    ai::providers::ScriptedTransportOptions{
+                                            .http_transport = transport,
+                                    },
+                    });
     REQUIRE(runtime);
+    const auto deepseek = (*runtime)->model("deepseek", "deepseek-v4-flash");
+    REQUIRE(deepseek);
 
-    const auto get_auth_for = [&](std::string provider_id) {
-        auto auth = run_async_result((*runtime)->get_auth(std::move(provider_id)));
-        REQUIRE(auth);
-        return std::move(*auth);
+    const auto stream_deepseek = [&]() {
+        ai::SimpleStreamOptions options;
+        options.max_tokens = 16;
+        return run_async_result((*runtime)
+                        ->stream_factory()(*deepseek, {}, std::move(options))
+                        .run([](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; }));
     };
     const auto store_key = [&](std::string provider_id, std::string key) {
-        auto stored = run_async_result(storage->modify(
-            std::move(provider_id),
-            [key = std::move(key)](std::optional<ai::Credential>)
-                -> cch::support::AsyncResult<std::optional<ai::Credential>> {
-                return cch::support::AsyncResult<std::optional<ai::Credential>>(
-                    std::expected<std::optional<ai::Credential>, cch::support::Error>{
-                        std::optional<ai::Credential>{
-                            ai::ApiKeyCredential{.key = key}}});
-            }));
+        auto stored = run_async_result(storage->modify(std::move(provider_id),
+                [key = std::move(key)](
+                        std::optional<ai::Credential>) -> cch::support::AsyncResult<std::optional<ai::Credential>> {
+                    return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                                    std::optional<ai::Credential>{ai::ApiKeyCredential{.key = key}}});
+                }));
         REQUIRE(stored);
     };
 
     // Level 4 (models.json configured key): an env-template apiKey is
-    // unconfigured until its environment variable is present.
+    // unconfigured until its environment variable is present. The status is
+    // non-secret; the stream request below observes the resolved header at the
+    // AI-owned transport test seam.
     secret.unset();
     auto unconfigured = run_async_result((*runtime)->check_auth("deepseek"));
     REQUIRE(unconfigured);
     CHECK_FALSE(*unconfigured);
 
     secret.set("env-configured-key");
-    auto configured = get_auth_for("deepseek");
+    auto configured = run_async_result((*runtime)->check_auth("deepseek"));
     REQUIRE(configured);
-    CHECK(configured->auth.api_key == "env-configured-key");
-    CHECK(configured->source == "configured API key");
+    REQUIRE(*configured);
+    CHECK((*configured)->source == "configured API key");
+    auto configured_status = (*runtime)->get_provider_auth_status("deepseek");
+    REQUIRE(configured_status);
+    CHECK(configured_status->configured);
+    CHECK(configured_status->source == "environment");
+    CHECK(configured_status->label == "DEEPSEEK_SECRET");
+    auto configured_stream = stream_deepseek();
+    REQUIRE(configured_stream);
+    REQUIRE(transport->requests.size() == 1);
+    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer env-configured-key");
 
     // Level 3 (environment): the built-in kimi provider resolves its ambient
     // KIMI_API_KEY chain when nothing is stored.
     kimi.set("kimi-env-key");
-    auto kimi_env = get_auth_for("kimi-coding");
+    auto kimi_env = run_async_result((*runtime)->check_auth("kimi-coding"));
     REQUIRE(kimi_env);
-    CHECK(kimi_env->auth.api_key == "kimi-env-key");
+    REQUIRE(*kimi_env);
+    CHECK((*kimi_env)->source == "KIMI_API_KEY");
+    REQUIRE(run_async_result((*runtime)->get_available()));
+    auto kimi_status = (*runtime)->get_provider_auth_status("kimi-coding");
+    REQUIRE(kimi_status);
+    CHECK(kimi_status->configured);
+    CHECK(kimi_status->source == "environment");
+    CHECK(kimi_status->label == "KIMI_API_KEY");
 
     // Level 2 (stored auth.json credential) beats env and configured keys.
     store_key("deepseek", "stored-key");
     store_key("kimi-coding", "stored-kimi-key");
-    auto deepseek_stored = get_auth_for("deepseek");
+    REQUIRE(run_async_result((*runtime)->get_available()));
+    auto deepseek_stored = run_async_result((*runtime)->check_auth("deepseek"));
     REQUIRE(deepseek_stored);
-    CHECK(deepseek_stored->auth.api_key == "stored-key");
-    auto kimi_stored = get_auth_for("kimi-coding");
+    REQUIRE(*deepseek_stored);
+    CHECK((*deepseek_stored)->source == "stored credential");
+    auto kimi_stored = run_async_result((*runtime)->check_auth("kimi-coding"));
     REQUIRE(kimi_stored);
-    CHECK(kimi_stored->auth.api_key == "stored-kimi-key");
+    REQUIRE(*kimi_stored);
+    CHECK((*kimi_stored)->source == "stored credential");
+    auto stored_status = (*runtime)->get_provider_auth_status("deepseek");
+    REQUIRE(stored_status);
+    CHECK(stored_status->configured);
+    CHECK(stored_status->source == "stored");
+    auto stored_stream = stream_deepseek();
+    REQUIRE(stored_stream);
+    REQUIRE(transport->requests.size() == 2);
+    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer stored-key");
 
     // Level 1 (runtime API key override, in-memory) beats the stored credential
     // and never persists.
     REQUIRE((*runtime)->set_runtime_api_key("deepseek", "runtime-key"));
     CHECK((*runtime)->has_runtime_api_key("deepseek"));
     CHECK((*runtime)->has_configured_auth("deepseek"));
-    auto deepseek_runtime = get_auth_for("deepseek");
-    REQUIRE(deepseek_runtime);
-    CHECK(deepseek_runtime->auth.api_key == "runtime-key");
-    auto status = (*runtime)->get_provider_auth_status("deepseek");
-    REQUIRE(status);
-    CHECK(status->configured);
-    CHECK(status->source == "runtime");
+    auto runtime_status = (*runtime)->get_provider_auth_status("deepseek");
+    REQUIRE(runtime_status);
+    CHECK(runtime_status->configured);
+    CHECK(runtime_status->source == "runtime");
+    auto runtime_stream = stream_deepseek();
+    REQUIRE(runtime_stream);
+    REQUIRE(transport->requests.size() == 3);
+    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer runtime-key");
 
     // list_credentials stays metadata-only but reports the runtime override.
     auto listed = run_async_result((*runtime)->list_credentials());
     REQUIRE(listed);
-    const auto deepseek_entry = std::find_if(
-        listed->begin(), listed->end(), [](const ai::CredentialInfo& entry) {
-            return entry.provider_id == "deepseek";
-        });
+    const auto deepseek_entry = std::find_if(listed->begin(), listed->end(), [](const ai::CredentialInfo& entry) {
+        return entry.provider_id == "deepseek";
+    });
     REQUIRE(deepseek_entry != listed->end());
     CHECK(deepseek_entry->type == "api_key");
     CHECK(deepseek_entry->provider_id == "deepseek");
 
     REQUIRE((*runtime)->remove_runtime_api_key("deepseek"));
     CHECK_FALSE((*runtime)->has_runtime_api_key("deepseek"));
-    auto deepseek_restored = get_auth_for("deepseek");
-    REQUIRE(deepseek_restored);
-    CHECK(deepseek_restored->auth.api_key == "stored-key");
+    auto restored_status = (*runtime)->get_provider_auth_status("deepseek");
+    REQUIRE(restored_status);
+    CHECK(restored_status->configured);
+    CHECK(restored_status->source == "stored");
+    auto restored_stream = stream_deepseek();
+    REQUIRE(restored_stream);
+    REQUIRE(transport->requests.size() == 4);
+    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer stored-key");
 }
 
 TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a process-lifetime cache",

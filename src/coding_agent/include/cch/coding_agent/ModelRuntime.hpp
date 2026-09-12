@@ -124,12 +124,6 @@ public:
 
     /// Side-effect-free; OAuth credentials are never refreshed.
     [[nodiscard]] support::AsyncResult<std::optional<ai::AuthCheck>> check_auth(std::string provider_id);
-    /// Live authentication resolution (delegates to `ai::Models`).
-    [[nodiscard]] support::AsyncResult<std::optional<ai::AuthResult>> get_auth(
-            std::string provider_id, std::optional<std::string> explicit_api_key = std::nullopt);
-    [[nodiscard]] support::AsyncResult<std::optional<ai::AuthResult>> get_auth(
-            ai::Model model, std::optional<std::string> explicit_api_key = std::nullopt);
-
     /// True when the provider currently resolves as configured (snapshot).
     [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const;
     /// True when the provider authenticates through an OAuth credential.
@@ -156,8 +150,10 @@ public:
     // ── Login / logout ─────────────────────────────────────────────────────
 
     /// `Models::login` + `refresh()`. A post-login refresh failure is recorded
-    /// in the composition-errors map and never fails the login call.
-    [[nodiscard]] support::AsyncResult<ai::Credential> login(
+    /// in the composition-errors map and never fails the login call. The
+    /// returned outcome carries only success or failure; the Credential remains
+    /// inside the Models/CredentialStore path.
+    [[nodiscard]] support::AsyncResult<void> login(
             std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction);
 
     /// `Models::logout` + `recomposeProvider` + `refresh()` (order preserved).

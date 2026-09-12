@@ -42,13 +42,15 @@ caller, not through the implementation graph it owns.
   friend test factories use a private construction hook to configure the privately held Models
   graph during test setup; no production caller receives a Models accessor or Provider-registration
   surface merely for testing.
-- This boundary does not delete trusted AI-owner operations. In-process `ai::Models` may continue
-  to resolve `get_auth` and return the Credential produced by its `login` operation for its own
+- This boundary does not delete trusted AI-owner operations. In-process `ai::Models` continues to
+  resolve `get_auth` and return the Credential produced by its `login` operation for its own
   Request Authentication and persistence path. The coding-agent Runtime/Agent/projection seam is
-  not an authentication-resolution seam; the follow-up [#642](https://github.com/lanshengzhi/cpp-coding-harness/issues/642)
-  removes the Runtime's public request-time `get_auth` forwarding and Credential-bearing login
-  result. `support::Error` remains a string-only error value, so there is no credential payload to
-  remove from that public error type.
+  not an authentication-resolution seam: `ModelRuntime` publishes no request-time `get_auth`, and
+  its `login` returns `AsyncResult<void>` after Models persists the Credential and a successful
+  login refreshes composition. Login failures carry only the existing string-based `support::Error`;
+  `logout`, `check_auth`, provider status, credential metadata, and runtime API-key controls remain
+  available as non-secret host surfaces. `support::Error` is `{code, message, detail, context}` and
+  has no Credential payload or credential-carrying synchronization error to remove.
 - Remote Models/projection services are not introduced here. ADR 0051's projection work starts
   from this already-narrow in-process boundary rather than from a leaked Models handle.
 
@@ -94,7 +96,7 @@ caller, not through the implementation graph it owns.
 
 - Issue [#641](https://github.com/lanshengzhi/cpp-coding-harness/issues/641) and parent spec
   [#640](https://github.com/lanshengzhi/cpp-coding-harness/issues/640).
-- Follow-up Runtime secret-surface ticket [#642](https://github.com/lanshengzhi/cpp-coding-harness/issues/642).
+- Runtime secret-surface narrowing in [#642](https://github.com/lanshengzhi/cpp-coding-harness/issues/642).
 - [ADR 0029](0029-align-models-provider-and-authentication-ownership-with-pi.md), [ADR
   0032](0032-own-oauth-lifecycle-and-frontend-interaction-division-with-pi.md), [ADR
   0040](0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md), [ADR
