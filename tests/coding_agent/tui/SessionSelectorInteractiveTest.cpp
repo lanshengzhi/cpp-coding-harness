@@ -174,8 +174,7 @@ struct Running {
         request.execution_runtime_target = runtime_root->make_target();
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = nullptr, .models = nullptr, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .user_shell = nullptr},
                 stop_token);
     };
 

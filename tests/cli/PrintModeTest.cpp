@@ -179,7 +179,9 @@ CreatedSession make_session(tests::RuntimeFixture& runtime, const tests::TempWor
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     return CreatedSession{std::move(*created)};
 }
@@ -195,7 +197,9 @@ CreatedSession make_session(tests::RuntimeFixture& runtime,
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     return CreatedSession{std::move(*created)};
 }

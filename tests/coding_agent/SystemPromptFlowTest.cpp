@@ -79,7 +79,9 @@ public:
     return runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
 }
 
 } // namespace
@@ -186,7 +188,9 @@ TEST_CASE("system prompt default branch renders project context files in pi's or
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
@@ -241,7 +245,9 @@ TEST_CASE("system prompt custom branch renders the custom prompt, joined appends
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
@@ -293,7 +299,9 @@ TEST_CASE("system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md thr
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));
@@ -330,7 +338,9 @@ TEST_CASE("system prompt drops project context files under --no-context-files",
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto prompted = run_awaitable(runtime, created->session->prompt("hello"));

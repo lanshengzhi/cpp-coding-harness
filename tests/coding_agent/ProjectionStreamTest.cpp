@@ -151,7 +151,9 @@ private:
     return runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
 }
 
 /// A custom tool that streams cumulative partial results through the update
@@ -540,7 +542,9 @@ TEST_CASE("Projection patches converge with the Core snapshot for a streaming to
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 
@@ -629,7 +633,9 @@ TEST_CASE("Projection observers converge on tool and run state after a stalled m
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = *created->session;
 

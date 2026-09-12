@@ -269,7 +269,9 @@ struct RetrySessionUnderTest {
     auto created = paths.runtime.run(coding_agent::create_agent_session_async(std::move(options),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     paths.runtime_driver.emplace(paths.runtime);
     return RetrySessionUnderTest{

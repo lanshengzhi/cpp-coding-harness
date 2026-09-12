@@ -95,7 +95,9 @@ struct TestRunOptions {
     return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr});
 }
 
 [[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
@@ -106,7 +108,9 @@ struct TestRunOptions {
     return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr});
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr});
 }
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {

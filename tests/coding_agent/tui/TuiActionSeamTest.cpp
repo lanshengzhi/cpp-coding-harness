@@ -98,8 +98,9 @@ struct Fixture {
         request.execution_runtime_target = runtime_target;
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = cch::tests::runtime_from_models(models),
+                        .cli_fake = true,
+                        .user_shell = nullptr},
                 stop_token);
     };
 }
@@ -285,8 +286,9 @@ TEST_CASE("a rejected replacement surfaces through the seam and the TUI keeps ru
         }
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{
-                        .model_runtime = nullptr, .models = models, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{.model_runtime = cch::tests::runtime_from_models(models),
+                        .cli_fake = true,
+                        .user_shell = nullptr},
                 stop_token);
     };
     boot(fixture, running, actions);

@@ -10,6 +10,7 @@
 #include <cch/support/Error.hpp>
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -100,10 +101,10 @@ public:
     [[nodiscard]] std::vector<ai::ProviderInfo> providers() const;
     /// Installed provider metadata by identity, or no value when absent.
     [[nodiscard]] std::optional<ai::ProviderInfo> provider(std::string_view provider_id) const;
-    /// The AI-owned Models catalog this runtime composes and delegates to.
-    /// The Agent's model-streaming seam is built from this catalog's
-    /// `ModelStream` surface (ADR 0040 / #453), not from the runtime itself.
-    [[nodiscard]] std::shared_ptr<ai::Models> ai_models() const;
+    /// The AI-owned Models catalog this runtime privately composes and
+    /// delegates to. Hosts receive only passive catalog values and the
+    /// `stream_factory()` seam below; the Models graph never escapes this
+    /// Owner Interface (ADR 0047 / #641).
     [[nodiscard]] std::vector<ai::Model> models(
         std::optional<std::string_view> provider_id = std::nullopt) const;
     [[nodiscard]] std::optional<ai::Model> model(std::string_view provider_id, std::string_view model_id) const;
@@ -113,7 +114,7 @@ public:
     /// Live availability: models whose provider has configured auth. Without a
     /// provider id this runs an availability refresh against the live runtime
     /// and refreshes the snapshot. Cached snapshots never replace live
-    /// `get_auth`/`check_auth` semantics.
+    /// `check_auth` or stream-time Request Authentication semantics.
     [[nodiscard]] support::AsyncResult<std::vector<ai::Model>> get_available(
             std::optional<std::string> provider_id = std::nullopt);
     /// Last availability snapshot (synchronous). Never replaces live semantics.
@@ -165,10 +166,12 @@ public:
 
     // ── Streaming ─────────────────────────────────────────────────────────
 
-    // Model streaming is produced through `models()->stream(...)`, the
-    // AI-owned `ModelStream` seam (ADR 0040 / #453). The runtime keeps model
-    // resolution, authentication, and Provider composition; it no longer
-    // exposes a streaming surface of its own.
+    /// Produce one AI-owned move-only `ModelStream` per turn. The factory
+    /// captures the privately held Models lifetime; provider lookup,
+    /// Request Authentication, and stream dispatch remain inside `ai::Models`
+    /// (ADR 0040 / #641). No Models handle or request-time auth value crosses
+    /// this seam.
+    [[nodiscard]] ai::ModelStreamFactory stream_factory() const;
 
     /// Env var names referenced by configured models.json `apiKey` templates
     /// (pi `getConfigValueEnvVarNames`). Used for execution environment secret
@@ -181,6 +184,12 @@ public:
 
 private:
     struct Impl;
+
+    /// Test-support-only composition hook. It does not return or store a
+    /// Models handle outside this Runtime; the friend test factories use it to
+    /// submit scripted Provider Definitions and transports during construction.
+    [[nodiscard]] support::ExpectedVoid apply_test_models(
+            std::move_only_function<support::ExpectedVoid(ai::Models&)> configure);
 
     [[nodiscard]] static support::Expected<std::shared_ptr<ModelRuntime>> create_impl(ModelRuntimeOptions options);
     explicit ModelRuntime(std::unique_ptr<Impl> impl);

@@ -145,20 +145,17 @@ TEST_CASE("a host-shared ModelRuntime survives Session close and is reused by th
 TEST_CASE("a Session-created runtime is released on close while a host-shared runtime is retained",
         "[coding_agent][runtime][reuse][issue466][spec]") {
     Fixture fixture;
-    const auto path = fixture.session_file();
-
-    // Default-created (Session-owned) runtime: close releases it.
+    // Default-created (Session-owned) runtime: close releases it. Use an
+    // in-memory target so the default runtime can select its built-in model
+    // without a host-injected test catalog.
     coding_agent::runtime::AgentSessionCreationRequest owned_request;
     owned_request.workspace = fixture.workspace.path();
-    owned_request.session_target =
-        coding_agent::ExplicitResumeSessionTarget{path};
+    owned_request.session_target = coding_agent::InMemorySessionTarget{};
     owned_request.session_facts.no_skills = true;
     owned_request.session_facts.no_prompt_templates = true;
     owned_request.execution_runtime_target = fixture.runtime.make_target();
-    auto created_owned = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(owned_request),
-            std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
+    auto created_owned =
+            fixture.runtime.run(coding_agent::create_agent_session_async(std::move(owned_request), std::nullopt, {}));
     REQUIRE(created_owned);
     auto& owned_session = fixture.runtime.adopt_session(std::move(created_owned->session));
     REQUIRE(owned_session.model_runtime() != nullptr);

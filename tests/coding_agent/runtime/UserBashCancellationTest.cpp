@@ -76,9 +76,9 @@ public:
     request.execution_runtime_target = runtime.make_target();
     return coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
-            coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
-                    .cli_fake = false,
-                    .models = cch::tests::models_from_provider(std::move(client)),
+            coding_agent::runtime::AssemblyOverrides{
+                    .model_runtime = cch::tests::runtime_from_models(tests::models_from_provider(std::move(client))),
+                    .cli_fake = true,
                     .user_shell = std::move(shell)});
 }
 

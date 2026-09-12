@@ -171,7 +171,8 @@ public:
         models = tests::models_from_provider(std::make_shared<QuietProvider>());
     }
     coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.models = std::move(models);
+    overrides.model_runtime = cch::tests::runtime_from_models(std::move(models));
+    overrides.cli_fake = true;
     auto created = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
@@ -480,7 +481,8 @@ TEST_CASE("navigate_tree after branching appends to the new active path",
     request.request_model = tests::scripted_request_model("fake", "fake-model");
     request.execution_runtime_target = fixture.runtime.make_target();
     coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.models = std::move(models);
+    overrides.model_runtime = cch::tests::runtime_from_models(std::move(models));
+    overrides.cli_fake = true;
     auto created = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
@@ -547,7 +549,8 @@ TEST_CASE("an in-memory fork seed mirrors into the new session's live tree",
     request.request_model = tests::scripted_request_model("fake", "fake-model");
     request.execution_runtime_target = fixture.runtime.make_target();
     coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.models = tests::models_from_provider(scripted);
+    overrides.model_runtime = cch::tests::runtime_from_models(tests::models_from_provider(scripted));
+    overrides.cli_fake = true;
     auto created = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
@@ -575,7 +578,8 @@ TEST_CASE("an in-memory fork seed mirrors into the new session's live tree",
     fork_request.in_memory_branch_seed = std::move(*prepared->in_memory_seed);
     fork_request.execution_runtime_target = fixture.runtime.make_target();
     coding_agent::runtime::AssemblyOverrides fork_overrides;
-    fork_overrides.models = tests::models_from_provider(scripted);
+    fork_overrides.model_runtime = cch::tests::runtime_from_models(tests::models_from_provider(scripted));
+    fork_overrides.cli_fake = true;
     auto forked = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(fork_request), std::nullopt, std::move(fork_overrides)));
     REQUIRE(forked.has_value());
@@ -627,7 +631,9 @@ TEST_CASE("a branch seed's thinking level wins over the settings default in the 
     request.in_memory_branch_seed = std::move(seed);
     request.execution_runtime_target = fixture.runtime.make_target();
     coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.models = tests::models_from_provider(std::make_shared<QuietProvider>());
+    overrides.model_runtime =
+            cch::tests::runtime_from_models(tests::models_from_provider(std::make_shared<QuietProvider>()));
+    overrides.cli_fake = true;
     auto created = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());
@@ -675,7 +681,8 @@ TEST_CASE("persisted navigation then prompt appends to the navigated leaf",
     request.execution_runtime_target = fixture.runtime.make_target();
     request.request_model = tests::scripted_request_model("fake", "fake-model");
     coding_agent::runtime::AssemblyOverrides overrides;
-    overrides.models = std::move(models);
+    overrides.model_runtime = cch::tests::runtime_from_models(std::move(models));
+    overrides.cli_fake = true;
     auto created = fixture.runtime.run(
             coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
     REQUIRE(created.has_value());

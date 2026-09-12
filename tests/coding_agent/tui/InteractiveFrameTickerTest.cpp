@@ -80,8 +80,8 @@ public:
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr,
-                    .models = std::move(models),
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
                     .user_shell = nullptr,
             }));
     if (!created) return std::unexpected(created.error());

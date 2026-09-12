@@ -140,6 +140,14 @@ ai::ProviderDefinition login_provider_definition() {
     };
 }
 
+[[nodiscard]] std::vector<coding_agent::ModelRuntimeTestProvider> login_test_providers() {
+    std::vector<coding_agent::ModelRuntimeTestProvider> providers;
+    providers.emplace_back(coding_agent::ModelRuntimeTestProvider{
+            .definition = login_provider_definition(),
+    });
+    return providers;
+}
+
 [[nodiscard]] ai::AiContext request_context() {
     ai::AiContext context;
     context.system_prompt = "system";
@@ -316,15 +324,12 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     options.timeout_ms = 4321;
 
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_async_result(
-        (*runtime)->ai_models()->stream(
-            *model,
-            request_context(),
-            std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
+    auto result = run_async_result((*runtime)
+                    ->stream_factory()(*model, request_context(), std::move(options))
+                    .run([&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
+                        events.push_back(event);
+                        return {};
+                    }));
 
     REQUIRE(result);
     CHECK(result->stop_reason == ai::AssistantStopReason::ToolUse);
@@ -362,14 +367,14 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
     home.write(".pike/agent/models.json", "{not valid json");
 
     auto store = std::make_shared<MemoryCredentialStore>();
-    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-        .credentials = store,
-    });
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .credentials = store,
+            },
+            coding_agent::ModelRuntimeTestOptions{
+                    .providers = login_test_providers(),
+            });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->ai_models()->apply_provider(ai::ProviderChange{
-            .provider_id = "login-provider",
-            .definition = login_provider_definition(),
-    }));
 
     ai::AuthInteraction interaction;
     auto credential =
@@ -396,14 +401,14 @@ TEST_CASE(
 
     auto store = std::make_shared<MemoryCredentialStore>();
     store->records["login-provider"] = ai::ApiKeyCredential{.key = "dummy-login-key"};
-    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-        .credentials = store,
-    });
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .credentials = store,
+            },
+            coding_agent::ModelRuntimeTestOptions{
+                    .providers = login_test_providers(),
+            });
     REQUIRE(runtime);
-    REQUIRE((*runtime)->ai_models()->apply_provider(ai::ProviderChange{
-            .provider_id = "login-provider",
-            .definition = login_provider_definition(),
-    }));
 
     REQUIRE(run_async_result((*runtime)->logout("login-provider")));
     const auto stored = run_async_result(store->read("login-provider"));
@@ -516,9 +521,9 @@ TEST_CASE(
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
     auto result = run_async_result(
-        (*runtime)->ai_models()->stream(
-            *model, {}, std::move(options)).run(
-        [](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; }));
+            (*runtime)->stream_factory()(*model, {}, std::move(options)).run([](const ai::AssistantStreamEvent&) {
+                return support::ExpectedVoid{};
+            }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-env-key");
@@ -662,9 +667,9 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
     auto result = run_async_result(
-        (*runtime)->ai_models()->stream(
-            *model, {}, std::move(options)).run(
-        [](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; }));
+            (*runtime)->stream_factory()(*model, {}, std::move(options)).run([](const ai::AssistantStreamEvent&) {
+                return support::ExpectedVoid{};
+            }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");

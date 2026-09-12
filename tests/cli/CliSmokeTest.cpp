@@ -220,11 +220,10 @@ cch::tests::CliRunResult run_in_workspace(
     const cch::tests::TempWorkspace& workspace,
     std::vector<std::string> args) {
     return cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = std::move(args),
-        .cwd = workspace.path(),
-        .env = {},
-        .stdin_text = {},
-        .models = {},
+            .args = std::move(args),
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
     });
 }
 
@@ -543,11 +542,10 @@ TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue6
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "piped.jsonl";
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string()},
-        .cwd = workspace.path(),
-        .env = {},
-        .stdin_text = "one\ntwo",
-        .models = {},
+            .args = {"--session", session.string()},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = "one\ntwo",
     });
 
     REQUIRE(result.exit_code == 0);
@@ -724,11 +722,10 @@ TEST_CASE("CLI --session open uses session workspace when the launch directory d
     REQUIRE(first.exit_code == 0);
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "read note.txt"},
-        .cwd = other.path(),
-        .env = {},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "read note.txt"},
+            .cwd = other.path(),
+            .env = {},
+            .stdin_text = {},
     });
 
     REQUIRE(resumed.exit_code == 0);
@@ -757,11 +754,10 @@ TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][sel
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "empty-print.jsonl";
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string()},
-        .cwd = workspace.path(),
-        .env = {},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string()},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
     });
 
     // pi: no prompt-required guard; the session is still created, nothing is
@@ -869,11 +865,10 @@ TEST_CASE("CLI skips project skills by default when project trust is unknown", "
     auto session = workspace.path() / "untrusted-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -899,7 +894,6 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
             .cwd = workspace.path(),
             .env = {{"HOME", workspace.path().string()}, {"PIKE_CODING_AGENT_DIR", std::nullopt}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -922,11 +916,10 @@ TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust][
     auto session = workspace.path() / "trusted-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -948,11 +941,10 @@ TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trus
     auto session = workspace.path() / "no-approve-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--no-approve", "--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--no-approve", "--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -972,11 +964,10 @@ TEST_CASE("CLI -na short carries pi's no-approve semantics", "[cli][project-trus
     auto session = workspace.path() / "short-no-approve-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"-na", "--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"-na", "--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -994,11 +985,10 @@ TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][proje
     auto session = workspace.path() / "trusted-prompts.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "--session", session.string(), "/greet Ada"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "--session", session.string(), "/greet Ada"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1019,11 +1009,10 @@ TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][pro
     auto session = workspace.path() / "disabled-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "--no-skills", "--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "--no-skills", "--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1043,11 +1032,10 @@ TEST_CASE("CLI -ns short disables project skills even when approved", "[cli][pro
     auto session = workspace.path() / "short-disabled-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "-ns", "--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "-ns", "--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1067,11 +1055,10 @@ TEST_CASE("CLI no-skills keeps project prompt templates", "[cli][project-resourc
     // pi semantics: --no-skills drops skill discovery only; prompt templates
     // still load from the trust-gated project directory.
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "--no-skills", "--session", session.string(), "/greet Ada"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "--no-skills", "--session", session.string(), "/greet Ada"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1090,11 +1077,10 @@ TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[c
     auto session = workspace.path() / "explicit-template.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--prompt-template", "custom.md", "/custom Ada"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "--prompt-template", "custom.md", "/custom Ada"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1115,12 +1101,15 @@ TEST_CASE("CLI no-prompt-templates keeps explicit prompt template files", "[cli]
     // pi semantics: --no-prompt-templates drops user and project discovery
     // but keeps explicit --prompt-template paths.
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--prompt-template", "custom.md",
-                 "--no-prompt-templates", "/custom Ada"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session",
+                    session.string(),
+                    "--prompt-template",
+                    "custom.md",
+                    "--no-prompt-templates",
+                    "/custom Ada"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1138,12 +1127,10 @@ TEST_CASE("CLI -np short keeps explicit prompt template files", "[cli][project-r
     auto session = workspace.path() / "short-explicit-template-kept.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--prompt-template", "custom.md",
-                 "-np", "/custom Ada"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "--prompt-template", "custom.md", "-np", "/custom Ada"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1167,11 +1154,10 @@ TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr"
     auto session = workspace.path() / "malformed-resources.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "--session", session.string(), "hello"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "--session", session.string(), "hello"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1193,7 +1179,6 @@ TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][setti
             .cwd = workspace.path(),
             .env = {{"HOME", home.path().string()}, {"PIKE_CODING_AGENT_DIR", std::nullopt}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1210,11 +1195,10 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation",
     auto session = workspace.path() / "explicit-fail.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--prompt-template", "missing.md", "hello"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "--prompt-template", "missing.md", "hello"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code != 0);
@@ -1232,11 +1216,10 @@ TEST_CASE("CLI rejects an explicit prompt template with an unsupported file type
     auto session = workspace.path() / "explicit-type-fail.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--prompt-template", "not-a-template.txt", "hello"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "--prompt-template", "not-a-template.txt", "hello"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code != 0);
@@ -1254,12 +1237,16 @@ TEST_CASE("CLI rejects each explicit prompt template input that has no loadable 
     auto session = workspace.path() / "explicit-empty-dir-fail.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(),
-                 "--prompt-template", "valid.md", "--prompt-template", "empty-prompts", "hello"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session",
+                    session.string(),
+                    "--prompt-template",
+                    "valid.md",
+                    "--prompt-template",
+                    "empty-prompts",
+                    "hello"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code != 0);
@@ -1275,20 +1262,18 @@ TEST_CASE("CLI --session open with explicit model override reports diagnostic an
     auto session = workspace.path() / "resume-override.jsonl";
 
     auto first = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "first"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "first"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
     REQUIRE(first.exit_code == 0);
 
     auto second = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--model", "override-model", "second"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "--model", "override-model", "second"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(second.exit_code == 0);
@@ -1302,20 +1287,18 @@ TEST_CASE("CLI --session open without override retains stored provider and model
     auto session = workspace.path() / "resume-retain.jsonl";
 
     auto first = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "first"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "first"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
     REQUIRE(first.exit_code == 0);
 
     auto second = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "second"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "second"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(second.exit_code == 0);
@@ -1365,12 +1348,10 @@ TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli]
     auto session = workspace.path() / "api-key-session.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "--model", "fake-model",
-                 "--api-key", "sk-runtime-hello", "hello"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "--model", "fake-model", "--api-key", "sk-runtime-hello", "hello"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1427,7 +1408,6 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1453,7 +1433,6 @@ TEST_CASE(
             .cwd = real.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(direct.exit_code == 0);
     auto aliased = cch::tests::run_cli(cch::tests::CliRunOptions{
@@ -1461,7 +1440,6 @@ TEST_CASE(
             .cwd = alias,
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(aliased.exit_code == 0);
 
@@ -1499,7 +1477,6 @@ TEST_CASE("CLI piped print propagates the same default persisted target", "[cli]
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = "hello",
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1519,7 +1496,6 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(created.exit_code == 0);
     CHECK(std::filesystem::exists(explicit_session));
@@ -1530,7 +1506,6 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
@@ -1552,7 +1527,6 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(seed.exit_code == 0);
     const auto legacy_before = read_file(legacy_file);
@@ -1562,7 +1536,6 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(result.exit_code == 0);
     CHECK(read_file(legacy_file) == legacy_before);
@@ -1575,7 +1548,6 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
@@ -1634,7 +1606,6 @@ TEST_CASE("CLI failed assembly publishes no default session file", "[cli][defaul
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code != 0);
@@ -1666,7 +1637,6 @@ TEST_CASE("CLI --no-session runs a text prompt without publishing session state"
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1685,7 +1655,6 @@ TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", 
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1704,7 +1673,6 @@ TEST_CASE("CLI print mode sends /session to the model under default session stor
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1725,7 +1693,6 @@ TEST_CASE("CLI --no-session short-circuits silently over explicit create and res
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(created.exit_code == 0);
     CHECK(created.stdout_text == "fake: hello\n");
@@ -1737,7 +1704,6 @@ TEST_CASE("CLI --no-session short-circuits silently over explicit create and res
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text == "fake: hello\n");
@@ -1760,7 +1726,6 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", blocker.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     // In-memory operation is explicit, so unusable default storage is never
@@ -1781,7 +1746,6 @@ TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-sess
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1802,7 +1766,6 @@ TEST_CASE(
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code != 0);
@@ -1823,7 +1786,6 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1856,7 +1818,6 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}, {"PIKE_CODING_AGENT_SESSION_DIR", env_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(flagged.exit_code == 0);
     CHECK(jsonl_files_under(flag_dir).size() == 1);
@@ -1868,7 +1829,6 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}, {"PIKE_CODING_AGENT_SESSION_DIR", env_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(from_env.exit_code == 0);
     CHECK(jsonl_files_under(env_dir).size() == 1);
@@ -1879,7 +1839,6 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(from_settings.exit_code == 0);
     CHECK(jsonl_files_under(settings_dir).size() == 1);
@@ -1899,7 +1858,6 @@ TEST_CASE("CLI ignores the legacy pi session directory environment variable", "[
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()},
                     {"PI_CODING_AGENT_SESSION_DIR", legacy_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1918,7 +1876,6 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(result.exit_code == 0);
     require_single_session_in_directory(canonical_workspace / "my-sessions", canonical_workspace);
@@ -1931,7 +1888,6 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(again.exit_code == 0);
     CHECK(jsonl_files_under(canonical_workspace / "my-sessions").size() == 2);
@@ -1949,7 +1905,6 @@ TEST_CASE("CLI session directory override expands a leading home marker", "[cli]
             .cwd = workspace.path(),
             .env = {{"HOME", home_root.path().string()}, {"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1971,7 +1926,6 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(created.exit_code == 0);
     CHECK(std::filesystem::exists(explicit_session));
@@ -1983,7 +1937,6 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()},
                     {"PIKE_CODING_AGENT_SESSION_DIR", override_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
@@ -2003,7 +1956,6 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -2029,7 +1981,6 @@ TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default roo
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -2052,7 +2003,6 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -2076,7 +2026,6 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
             .cwd = workspace.path(),
             .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code != 0);
@@ -2104,11 +2053,10 @@ TEST_CASE("CLI non-interactive resume of a session with a vanished cwd prints pi
     CHECK_FALSE(ec);
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "second"},
-        .cwd = other.path(),
-        .env = {},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "second"},
+            .cwd = other.path(),
+            .env = {},
+            .stdin_text = {},
     });
 
     REQUIRE(resumed.exit_code == 1);
@@ -2135,11 +2083,10 @@ TEST_CASE("CLI --session open of a session with a vanished cwd fails identically
     // pi `SessionManager.open` on the existing file resumes (header cwd from
     // the file), so the missing-cwd boot check applies to --session too.
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--session", session.string(), "second"},
-        .cwd = other.path(),
-        .env = {},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--session", session.string(), "second"},
+            .cwd = other.path(),
+            .env = {},
+            .stdin_text = {},
     });
 
     REQUIRE(resumed.exit_code == 1);
@@ -2160,12 +2107,15 @@ TEST_CASE("CLI --skill explicit paths load and survive --no-skills", "[cli][skil
     auto session = workspace.path() / "explicit-skill.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--no-skills", "--skill", "explicit-skill.md",
-                 "--session", session.string(), "/skill:explicit-skill"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--no-skills",
+                    "--skill",
+                    "explicit-skill.md",
+                    "--session",
+                    session.string(),
+                    "/skill:explicit-skill"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -2187,11 +2137,10 @@ TEST_CASE("CLI --no-skills drops discovered skills but keeps the prompt", "[cli]
     auto session = workspace.path() / "no-skills.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--approve", "--no-skills", "--session", session.string(), "/skill:demo"},
-        .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
-        .stdin_text = {},
-        .models = {},
+            .args = {"--approve", "--no-skills", "--session", session.string(), "/skill:demo"},
+            .cwd = workspace.path(),
+            .env = {{"HOME", home.path().string()}},
+            .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -2217,7 +2166,6 @@ TEST_CASE("CLI loads user skills from ~/.pike/agent/skills with root-level .md i
             .cwd = workspace.path(),
             .env = {{"HOME", home.path().string()}, {"PIKE_CODING_AGENT_DIR", std::nullopt}},
             .stdin_text = {},
-            .models = {},
     });
 
     REQUIRE(result.exit_code == 0);

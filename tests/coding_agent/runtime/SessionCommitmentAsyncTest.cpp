@@ -146,7 +146,9 @@ TEST_CASE("an admitted event advances live Session state before weak observers a
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto* session = &runtime.adopt_session(std::move(created->session));
@@ -182,7 +184,9 @@ TEST_CASE("session event persistence executes off the interaction loop in admiss
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -219,7 +223,9 @@ TEST_CASE("a persistence failure keeps live state and rejects later prompts with
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -261,7 +267,9 @@ TEST_CASE("an aborted prompt settles the commitment channel with a consistent se
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -306,7 +314,9 @@ TEST_CASE("interaction and timers progress while session persistence is slow",
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
     auto& session = runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -360,7 +370,9 @@ TEST_CASE("a second session on the same Runtime root completes while persistence
     auto slow_created = runtime.run(coding_agent::create_agent_session_async(std::move(slow_request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(slow_models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(slow_models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(slow_created.has_value());
     auto& slow_session = runtime.adopt_session(std::move(slow_created->session));
 
@@ -370,7 +382,9 @@ TEST_CASE("a second session on the same Runtime root completes while persistence
     auto fast_created = runtime.run(coding_agent::create_agent_session_async(std::move(fast_request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(fast_models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(fast_models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(fast_created.has_value());
     auto& fast_session = runtime.adopt_session(std::move(fast_created->session));
     tests::RuntimeLoopDriver runtime_driver(runtime);

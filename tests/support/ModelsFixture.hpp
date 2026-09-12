@@ -166,6 +166,14 @@ private:
     };
 }
 
+[[nodiscard]] inline std::shared_ptr<coding_agent::ModelRuntime> runtime_from_models(
+        std::shared_ptr<ai::Models> models) {
+    if (!models) {
+        return nullptr;
+    }
+    return std::make_shared<coding_agent::ModelRuntime>(std::move(models));
+}
+
 [[nodiscard]] inline support::Expected<std::shared_ptr<coding_agent::ModelRuntime>> runtime_from_provider(
         std::shared_ptr<ScriptedProvider> provider, coding_agent::ModelRuntimeOptions options = {}) {
     const std::string provider_id{provider->id()};

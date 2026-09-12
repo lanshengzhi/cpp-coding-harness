@@ -5,7 +5,6 @@
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
-#include <cch/ai/Models.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -139,7 +138,6 @@ private:
         ProjectResourceFileSystems project_resource_filesystems{};
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime{nullptr};
         bool model_runtime_cli_fake{false};
-        std::shared_ptr<ai::Models> models{nullptr};
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
         bool is_resume_target{false};
         std::atomic<bool> creation_failure_reported{false};
@@ -188,8 +186,6 @@ public:
     InteractiveSessionRunBuilder& with_shared_runtime(
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
     InteractiveSessionRunBuilder& with_model_runtime_cli_fake(bool model_runtime_cli_fake) noexcept;
-    InteractiveSessionRunBuilder& with_models(
-        std::shared_ptr<ai::Models> models) noexcept;
     InteractiveSessionRunBuilder& with_error_stream(
         std::ostream* error_stream) noexcept;
     InteractiveSessionRunBuilder& with_is_resume_target(

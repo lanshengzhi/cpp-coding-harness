@@ -194,7 +194,9 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             cch::coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -281,7 +283,9 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             cch::coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -373,7 +377,9 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             cch::coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -475,7 +481,9 @@ TEST_CASE("Process Terminal preserves keypresses while streaming output and rest
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             cch::coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -565,7 +573,9 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             cch::coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -668,7 +678,9 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     auto created = runtime.run(cch::coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             cch::coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created);
     cch::tests::RuntimeLoopDriver runtime_driver(runtime);
 

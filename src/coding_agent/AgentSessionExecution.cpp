@@ -89,16 +89,16 @@ ai::UserMessage detail::make_admitted_user_message(std::string text,
 }
 
 ai::ModelStreamFactory AgentSession::Impl::make_stream_factory() {
-    auto models = services_.model_runtime->ai_models();
     auto runtime = services_.model_runtime;
-    return ai::ModelStreamFactory{[models, runtime](ai::Model model,
+    auto factory = runtime->stream_factory();
+    return ai::ModelStreamFactory{[factory = std::move(factory), runtime](ai::Model model,
                                           ai::AiContext context,
-                                          ai::SimpleStreamOptions options) -> ai::ModelStream {
+                                          ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
         // The provider identity must survive the move into the Models
         // call; the forwarding sink may fire after the model argument is
         // already moved-from.
         const std::string provider{model.provider};
-        auto inner = models->stream(std::move(model), std::move(context), std::move(options));
+        auto inner = factory(std::move(model), std::move(context), std::move(options));
         return runtime::apply_auth_guidance(std::move(inner),
                 provider,
                 runtime::OAuthProviderPredicate{

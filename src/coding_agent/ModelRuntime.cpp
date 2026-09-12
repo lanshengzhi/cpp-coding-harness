@@ -280,8 +280,18 @@ std::optional<ai::ProviderInfo> ModelRuntime::provider(std::string_view provider
     return *found;
 }
 
-std::shared_ptr<ai::Models> ModelRuntime::ai_models() const {
-    return impl_->models;
+ai::ModelStreamFactory ModelRuntime::stream_factory() const {
+    auto models = impl_->models;
+    return ai::ModelStreamFactory{[models = std::move(models)](ai::Model model,
+                                          ai::AiContext context,
+                                          ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
+        return models->stream(std::move(model), std::move(context), std::move(options));
+    }};
+}
+
+support::ExpectedVoid ModelRuntime::apply_test_models(
+        std::move_only_function<support::ExpectedVoid(ai::Models&)> configure) {
+    return configure(*impl_->models);
 }
 
 std::vector<ai::Model> ModelRuntime::models(

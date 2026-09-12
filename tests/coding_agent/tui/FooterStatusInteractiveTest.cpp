@@ -728,7 +728,6 @@ TEST_CASE("Native TUI editor border color transitions for bash mode and thinking
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,
                     .cli_fake = false,
-                    .models = nullptr,
                     .user_shell = std::make_unique<tests::FakeUserShell>()}));
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);

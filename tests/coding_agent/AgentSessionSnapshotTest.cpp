@@ -76,7 +76,9 @@ struct TestPaths {
     return runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = tests::make_scripted_fake_models(), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(tests::make_scripted_fake_models()),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
 }
 
 class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
@@ -159,7 +161,9 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto snapshot = created->session->snapshot();
@@ -198,7 +202,9 @@ TEST_CASE(
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     const auto snapshot = created->session->snapshot();
@@ -226,7 +232,9 @@ TEST_CASE("SDK active snapshot copies running and streaming state on the prompt 
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     boost::asio::io_context io;
@@ -275,7 +283,9 @@ TEST_CASE("SDK snapshot retains live messages and diagnostics after subscriber f
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     auto failing = created->session->subscribe(
@@ -311,7 +321,9 @@ TEST_CASE("SDK snapshot retains Live Session State after persistence failure",
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = nullptr, .models = std::move(models), .user_shell = nullptr}));
+                    .model_runtime = cch::tests::runtime_from_models(std::move(models)),
+                    .cli_fake = true,
+                    .user_shell = nullptr}));
     REQUIRE(created.has_value());
 
     harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
