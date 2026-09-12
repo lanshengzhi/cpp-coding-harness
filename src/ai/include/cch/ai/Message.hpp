@@ -208,4 +208,29 @@ inline constexpr std::string_view kBranchSummarySuffix = "</summary>";
     return UserMessage{.content = msg.content, .timestamp = msg.timestamp};
 }
 
+/// pi `convertToLlm` for one extended runtime message: bash execution, custom,
+/// branch summary, and compaction summary become the provider-ready user
+/// message they map to. Returns `nullopt` for bash execution with
+/// `exclude_from_context` (pi drops it from the context) and for every
+/// non-extended alternative.
+[[nodiscard]] inline std::optional<UserMessage> extended_message_to_user_message(
+        const MessageVariant& message) noexcept {
+    if (const auto* bash = std::get_if<BashExecutionMessage>(&message)) {
+        if (bash->exclude_from_context) {
+            return std::nullopt;
+        }
+        return bash_execution_to_user_message(*bash);
+    }
+    if (const auto* custom = std::get_if<CustomMessage>(&message)) {
+        return custom_message_to_user_message(*custom);
+    }
+    if (const auto* branch = std::get_if<BranchSummaryMessage>(&message)) {
+        return branch_summary_to_user_message(*branch);
+    }
+    if (const auto* compaction = std::get_if<CompactionSummaryMessage>(&message)) {
+        return compaction_summary_to_user_message(*compaction);
+    }
+    return std::nullopt;
+}
+
 } // namespace cch::ai

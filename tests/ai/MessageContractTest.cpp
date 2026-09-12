@@ -614,6 +614,71 @@ TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extend
     CHECK(msg.timestamp == 1718000000006);
 }
 
+TEST_CASE("extended_message_to_user_message maps every extended runtime message",
+        "[ai][extended][convert][issue650][compat-pi]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "echo hello";
+    bash.output = "hello\n";
+    bash.timestamp = 1718000000010;
+    const auto from_bash = ai::extended_message_to_user_message(ai::MessageVariant{bash});
+    REQUIRE(from_bash.has_value());
+    CHECK(from_bash->timestamp == 1718000000010);
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(from_bash->content)[0])
+                    .text.find("Ran `echo hello`") != std::string::npos);
+
+    ai::CustomMessage custom;
+    custom.custom_type = "ext";
+    custom.content.emplace_back(ai::TextContent{
+            .text = "custom text",
+            .text_signature = std::nullopt,
+    });
+    custom.timestamp = 1718000000011;
+    const auto from_custom = ai::extended_message_to_user_message(ai::MessageVariant{custom});
+    REQUIRE(from_custom.has_value());
+    CHECK(from_custom->timestamp == 1718000000011);
+    REQUIRE(std::get<std::vector<ai::Content>>(from_custom->content).size() == 1);
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(from_custom->content)[0]).text == "custom text");
+
+    ai::BranchSummaryMessage branch;
+    branch.summary = "Branch work completed";
+    branch.timestamp = 1718000000012;
+    const auto from_branch = ai::extended_message_to_user_message(ai::MessageVariant{branch});
+    REQUIRE(from_branch.has_value());
+    CHECK(from_branch->timestamp == 1718000000012);
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(from_branch->content)[0])
+                    .text.find(std::string{ai::kBranchSummaryPrefix} + "Branch work completed" +
+                               std::string{ai::kBranchSummarySuffix}) != std::string::npos);
+
+    ai::CompactionSummaryMessage compaction;
+    compaction.summary = "Previous messages compacted";
+    compaction.tokens_before = 8000;
+    compaction.timestamp = 1718000000013;
+    const auto from_compaction = ai::extended_message_to_user_message(ai::MessageVariant{compaction});
+    REQUIRE(from_compaction.has_value());
+    CHECK(from_compaction->timestamp == 1718000000013);
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(from_compaction->content)[0])
+                    .text.find(std::string{ai::kCompactionSummaryPrefix} + "Previous messages compacted" +
+                               std::string{ai::kCompactionSummarySuffix}) != std::string::npos);
+}
+
+TEST_CASE("extended_message_to_user_message returns nullopt for excluded bash output and non-extended messages",
+        "[ai][extended][convert][issue650][compat-pi]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "node script.js";
+    bash.output = "hidden";
+    bash.exclude_from_context = true;
+    CHECK_FALSE(ai::extended_message_to_user_message(ai::MessageVariant{bash}).has_value());
+
+    CHECK_FALSE(ai::extended_message_to_user_message(ai::MessageVariant{ai::user_text_message("plain")}).has_value());
+    CHECK_FALSE(
+            ai::extended_message_to_user_message(ai::MessageVariant{ai::assistant_text_message("reply")}).has_value());
+    CHECK_FALSE(
+            ai::extended_message_to_user_message(ai::MessageVariant{ai::tool_result_message("call-1", "read", "text")})
+                    .has_value());
+    CHECK_FALSE(ai::extended_message_to_user_message(ai::MessageVariant{ai::SystemMessage{.content = "system"}})
+                    .has_value());
+}
+
 TEST_CASE("default-constructed AI contracts are empty passive values", "[ai][contract][issue372][compat-pi]") {
     ai::Tool tool;
     CHECK(tool.name.empty());
