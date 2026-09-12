@@ -6,7 +6,7 @@
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "ai/utils/RetryClassifier.hpp"
+#include <cch/ai/InferenceFailure.hpp>
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"

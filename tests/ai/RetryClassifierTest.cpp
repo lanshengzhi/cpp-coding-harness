@@ -1,4 +1,4 @@
-#include "ai/utils/RetryClassifier.hpp"
+#include <cch/ai/InferenceFailure.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
