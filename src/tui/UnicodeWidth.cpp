@@ -103,6 +103,18 @@ namespace {
         if (cursor >= text.size()) {
             return std::unexpected(invalid_terminal_text("Incomplete CSI sequence"));
         }
+        if (text[cursor] == 'A' || text[cursor] == 'B') {
+            const auto parameters = text.substr(position + 2, cursor - position - 2);
+            for (char c : parameters) {
+                if (c < '0' || c > '9') {
+                    return std::unexpected(invalid_terminal_text("Malformed cursor movement parameters"));
+                }
+            }
+            return AnsiCode{
+                    .code = std::string(text.substr(position, cursor + 1 - position)),
+                    .length = cursor + 1 - position,
+            };
+        }
         if (text[cursor] != 'm') {
             return std::unexpected(invalid_terminal_text("Only SGR CSI sequences are supported"));
         }
@@ -291,12 +303,16 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
         if (byte == 0x1B) {
             auto ansi = parse_supported_ansi(text, position);
             if (!ansi) return std::unexpected(ansi.error());
+            TerminalTokenKind token_kind = TerminalTokenKind::Sgr;
+            if (ansi->code.ends_with('A') || ansi->code.ends_with('B')) {
+                token_kind = TerminalTokenKind::CursorMove;
+            } else if (!ansi->code.starts_with("\x1b[")) {
+                token_kind = TerminalTokenKind::Hyperlink;
+            }
             tokens.push_back(TerminalToken{
-                .kind = ansi->code.starts_with("\x1b[")
-                            ? TerminalTokenKind::Sgr
-                            : TerminalTokenKind::Hyperlink,
-                .text = std::move(ansi->code),
-                .width = 0,
+                    .kind = token_kind,
+                    .text = std::move(ansi->code),
+                    .width = 0,
             });
             position += ansi->length;
             continue;

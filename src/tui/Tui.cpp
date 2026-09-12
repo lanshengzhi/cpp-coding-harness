@@ -201,6 +201,7 @@ support::ExpectedVoid Tui::stop() {
     if (!started_) return {};
 
     started_ = false;
+    const auto stop_cursor = resolve_cursor_location();
     if (auto* focusable = dynamic_cast<Focusable*>(focused_)) {
         focusable->set_focused(false);
     }
@@ -209,23 +210,49 @@ support::ExpectedVoid Tui::stop() {
 
     const auto image_result = remove_active_images();
     (void)terminal_.reset_scroll_margins();
+    const auto dock_height = previous_dock_lines_.size();
+    const auto dimensions = terminal_.dimensions();
+    const auto dock_capacity =
+            dimensions.rows > previous_viewport_height_ ? dimensions.rows - previous_viewport_height_ : std::size_t{0};
+    const auto visible_dock_height = std::min(dock_height, dock_capacity);
+    const auto dock_skip = dock_height - visible_dock_height;
     previous_dock_lines_.clear();
-    // pi TuiMainScreen::beforeTerminalStop: move the cursor below the composed
-    // buffer's last line and end the line, so the shell prompt resumes under
-    // the transcript instead of overwriting its last line. Under the anchored
-    // absolute flow (ADR 0041) the relative movement is one absolute
-    // set_cursor one row past the buffer; rows past the visible bottom flow
-    // and scroll through the terminal mapping.
+    // pi TuiMainScreen::beforeTerminalStop: complete the current line, move
+    // down through the remaining bottom dock rows, and end the line so the
+    // shell prompt resumes below the composed frame. Relative movement avoids
+    // depending on the anchored buffer-row mapping after viewport scrolling.
     support::ExpectedVoid exit_result;
     if (!previous_lines_.empty()) {
         if (auto written = terminal_.write(" "); !written) {
             exit_result = std::unexpected(written.error());
-        } else if (auto positioned = terminal_.set_cursor(
-                       CursorPosition{.column = 0, .row = previous_lines_.size()});
-                   !positioned) {
-            exit_result = std::unexpected(positioned.error());
-        } else if (auto newline = terminal_.write("\r\n"); !newline) {
-            exit_result = std::unexpected(newline.error());
+        } else if (dock_height == 0) {
+            if (auto positioned = terminal_.set_cursor(CursorPosition{.column = 0, .row = previous_lines_.size()});
+                    !positioned) {
+                exit_result = std::unexpected(positioned.error());
+            } else if (auto newline = terminal_.write("\r\n"); !newline) {
+                exit_result = std::unexpected(newline.error());
+            }
+        } else {
+            std::size_t current_row = dimensions.rows - 1;
+            if (visible_dock_height > 0 && stop_cursor) {
+                std::size_t dock_row = stop_cursor->row;
+                if (dock_row >= previous_viewport_height_ && dock_row < dimensions.rows) {
+                    dock_row -= previous_viewport_height_;
+                }
+                if (dock_row < dock_height) {
+                    const auto visible_row = dock_row > dock_skip ? dock_row - dock_skip : 0;
+                    current_row =
+                            dimensions.rows - visible_dock_height + std::min(visible_row, visible_dock_height - 1);
+                } else {
+                    current_row = std::min(stop_cursor->row, dimensions.rows - 1);
+                }
+            }
+            auto rows_down = current_row < dimensions.rows - 1 ? dimensions.rows - 1 - current_row : std::size_t{0};
+            if (stop_cursor && stop_cursor->column >= dimensions.columns && rows_down > 0) --rows_down;
+            if (rows_down > 0) {
+                exit_result = terminal_.write(std::format("\x1b[{}B", rows_down));
+            }
+            if (exit_result) exit_result = terminal_.write("\r\n");
         }
     }
     const auto cursor_result = terminal_.set_cursor_visible(true);

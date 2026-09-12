@@ -1026,3 +1026,67 @@ TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a f
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 2});
     CHECK(terminal.modes().cursor_visible);
 }
+TEST_CASE("Tui stop places the shell prompt below the bottom dock", "[tui][terminal][issue476][spec]") {
+    class DockedExitComponent final : public cch::tui::Component {
+    public:
+        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+            return cch::tui::RenderResult{
+                    .lines = {"one", "two"},
+                    .viewport_height = 3,
+                    .dock_lines = {"editor", "footer"},
+            };
+        }
+
+        void invalidate() override {}
+    };
+
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<DockedExitComponent>()));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(tui.stop());
+
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
+    CHECK(terminal.screen()[1].starts_with("editor"));
+    CHECK(terminal.screen()[2].starts_with("footer"));
+}
+
+TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][terminal][issue476][spec]") {
+    class FocusableDockedExitComponent final : public cch::tui::Component, public cch::tui::Focusable {
+    public:
+        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+            return cch::tui::RenderResult{
+                    .lines = {"one", "two"},
+                    .viewport_height = 3,
+                    .dock_lines = {"editor", "footer"},
+            };
+        }
+
+        void invalidate() override {}
+
+        void set_focused(bool focused) override { focused_ = focused; }
+        [[nodiscard]] bool focused() const override { return focused_; }
+
+        [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
+            return cch::tui::CursorPosition{.column = 6, .row = 0};
+        }
+
+    private:
+        bool focused_{false};
+    };
+
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableDockedExitComponent>();
+    auto* component_ptr = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.set_focus(component_ptr));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(tui.stop());
+
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
+    CHECK(terminal.screen()[2].starts_with("editor"));
+    CHECK(terminal.screen()[3].starts_with("footer"));
+}

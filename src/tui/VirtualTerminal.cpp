@@ -5,6 +5,7 @@
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
+#include <charconv>
 #include <exception>
 #include <format>
 #include <memory>
@@ -229,6 +230,19 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
                 } else {
                     ++impl.cursor.row;
                 }
+            }
+            continue;
+        }
+        if (token.kind == detail::TerminalTokenKind::CursorMove) {
+            std::size_t count = 1;
+            const auto sub = std::string_view(token.text).substr(2, token.text.size() - 3);
+            if (!sub.empty()) {
+                (void)std::from_chars(sub.data(), sub.data() + sub.size(), count);
+            }
+            if (token.text.ends_with('B')) {
+                impl.cursor.row = std::min(impl.cursor.row + count, impl.dimensions.rows - 1);
+            } else if (token.text.ends_with('A')) {
+                impl.cursor.row = impl.cursor.row > count ? impl.cursor.row - count : 0;
             }
             continue;
         }
@@ -460,6 +474,11 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
                 first_line_width = line_width;
                 first_line = false;
             }
+            line_width = 0;
+            available = impl_->dimensions.columns;
+            continue;
+        }
+        if (token.kind == detail::TerminalTokenKind::CursorMove) {
             line_width = 0;
             available = impl_->dimensions.columns;
             continue;
