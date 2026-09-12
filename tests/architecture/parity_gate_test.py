@@ -48,6 +48,12 @@ VALID_MANIFEST = {
                     "src/cli/",
                 ],
             },
+            {
+                "id": "agent-no-ai-private-includes",
+                "source_prefixes": ["src/agent/"],
+                "excluded_source_prefixes": [],
+                "forbidden_include_prefixes": ["ai/", "src/ai/"],
+            },
         ],
         "exceptions": [],
     },
@@ -202,6 +208,14 @@ class ManifestSchemaTest(unittest.TestCase):
             set(manifest.owners),
             {"cch_ai", "cch_agent_core", "cch_tui", "cch_coding_agent", "cch_support"},
         )
+
+    def test_checked_in_manifest_rejects_ai_private_includes_from_agent_sources(self):
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["agent-no-ai-private-includes"]
+        self.assertEqual(clause.source_prefixes, ("src/agent/",))
+        self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
 
     def test_provider_capability_is_outside_ai_interface_root(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -939,6 +953,24 @@ class ArchitectureContractTest(unittest.TestCase):
         )
         self.assertEqual(diagnostics[0].target, "cch_coding_agent")
         self.assertEqual(diagnostics[0].dependency, "cch/tui/Render.hpp")
+
+    def test_agent_source_cannot_include_ai_private_header(self):
+        for include_path in ("ai/glaze/AiJson.hpp", "src/ai/glaze/AiJson.hpp"):
+            with self.subTest(include_path=include_path):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_agent_core",
+                        "agent/harness/session/EntrySerializer.cpp",
+                        include_path,
+                        spelling="quote",
+                    )
+                self.assertEqual(
+                    rule_ids(diagnostics), [pg.RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE]
+                )
+                self.assertIn("agent-no-ai-private-includes", diagnostics[0].message)
+                self.assertEqual(diagnostics[0].target, "cch_agent_core")
+                self.assertEqual(diagnostics[0].dependency, include_path)
 
     def test_dated_exception_allows_one_known_migration_source(self):
         data = deep_copy(VALID_MANIFEST)
