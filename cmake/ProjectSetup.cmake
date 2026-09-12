@@ -67,11 +67,14 @@ endif()
 
 # Distribution binary size optimization (issues #636, #639).
 # All Release targets compile with size optimization (-Os), section splitting
-# (-ffunction-sections, -fdata-sections), hidden symbol visibility
-# (-fvisibility=hidden, -fvisibility-inlines-hidden), and unwind-table
-# suppression (-fno-unwind-tables, -fno-asynchronous-unwind-tables). The link stage utilizes
+# (-ffunction-sections, -fdata-sections), and hidden symbol visibility
+# (-fvisibility=hidden, -fvisibility-inlines-hidden). The link stage utilizes
 # GNU gold (-fuse-ld=gold) with dead-code collection (-Wl,--gc-sections),
 # identical code folding (-Wl,--icf=all), and link-time stripping (-Wl,-s).
+# Unwind-table suppression stays scoped to the pike distribution binary (see
+# cmake/targets/Runtime.cmake): removing .eh_frame_hdr from test binaries
+# breaks C++ exception unwinding, so a failing Catch2 REQUIRE terminates by
+# SIGABRT instead of unwinding to a clean failure exit (#639 regression).
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     if(CMAKE_CXX_FLAGS_RELEASE MATCHES "-O3")
         string(REGEX REPLACE "-O3" "-Os" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
@@ -81,17 +84,14 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         -fdata-sections
         -fvisibility=hidden
         -fvisibility-inlines-hidden
-        -fno-unwind-tables
-        -fno-asynchronous-unwind-tables
     )
     add_link_options(
         -fuse-ld=gold
         -Wl,--gc-sections
         -Wl,--icf=all
         -Wl,-s
-        -Wl,--no-eh-frame-hdr
     )
     message(STATUS
         "Release size optimization (-Os, sections, hidden visibility, "
-        "no unwind tables, gold, gc-sections, icf, strip) enabled")
+        "gold, gc-sections, icf, strip) enabled")
 endif()
