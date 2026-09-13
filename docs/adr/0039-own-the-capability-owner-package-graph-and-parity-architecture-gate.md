@@ -117,7 +117,7 @@ To make the freshness unit match the unit the evidence describes:
 
 1. The evidence advances to `producer_schema_version: 2`: each entry carries the source path and its include directives, and no longer carries a per-source byte digest.
 2. At the build phase the Gate re-reads every declared source, re-derives its include directives with the same lexer the producer uses, and rejects with `PARITY-4011` when they differ from the recorded scan.
-3. The fail-closed contract is preserved and strengthened: the Gate now compares the tree's include directives against the recorded ones instead of trusting a digest, so an include that is added, removed, reordered, or respelled still fails until the evidence is rescanned. Unreadable, undeclared, and missing sources keep their existing rules (`PARITY-4008`, `PARITY-4009`, `PARITY-4010`).
+3. The fail-closed contract is preserved and strengthened: the Gate now compares the tree's include directives against the recorded ones instead of trusting a digest, so an include that is added, removed, reordered, or respelled still fails until the evidence is rescanned. An undeclared source keeps `PARITY-4010`, a source the evidence omits keeps `PARITY-4009`, and an unreadable source surfaces `PARITY-3003` through the read helper the producer shares.
 4. A source-body or comment edit no longer invalidates include evidence.
 
-`PARITY-3002` rejects `schema_version: 1` evidence as stale, so an existing build tree rescans once and then stops rescanning on body edits.
+The parser rejects `schema_version: 1` evidence as stale (`PARITY-3002`) before it reads any entry, so an existing build tree rescans once and then stops rescanning on body edits.

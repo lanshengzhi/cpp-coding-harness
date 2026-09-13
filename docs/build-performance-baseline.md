@@ -138,10 +138,9 @@ Beast/Asio transport implementations, interactive-mode sources, serialization, a
 
 The Ninja no-op build took 0.04 seconds. CMake/Ninja dependency-graph scanning is not a meaningful bottleneck.
 
-
 ## Benchmark contract
 
-Add an agent-runnable script, proposed as `scripts/benchmark-build.sh`, that records:
+`scripts/benchmark-build.sh` is the agent-runnable benchmark; it records:
 
 - configure time;
 - clean cold build time;
@@ -163,7 +162,7 @@ Do not add a hard absolute-time CI gate yet. Accumulate results first; later con
 
 ## Fast-development preset contract
 
-Add a checked-in `dev-fast` family that:
+The checked-in `dev-fast` family:
 
 - explicitly uses Ninja;
 - requires ccache and fails clearly when it is unavailable;
@@ -172,10 +171,9 @@ Add a checked-in `dev-fast` family that:
 - permits explicit command-line parallelism override on high-memory hosts;
 - provides Debug first and a corresponding Release form if naming remains clear.
 
-**Go:** warm-cache rebuilds satisfy the target and cold builds do not regress materially.
+**Go:** warm rebuilds are materially faster and cold builds do not regress materially.
 
 **No-Go:** cache use is silent or nondeterministic, or the preset changes the compatibility baseline.
-
 
 ## Decision boundaries
 

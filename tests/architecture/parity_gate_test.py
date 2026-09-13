@@ -594,17 +594,17 @@ def include_doc(path, spelling="angle", line=1, macro=False):
     return {"path": path, "spelling": spelling, "line": line, "macro": macro}
 
 
-def include_source_text(path, spelling="angle", macro=False):
-    """Render the `#include` directive that a fixture's evidence records.
+def include_source_text(include):
+    """Render the `#include` directive for an `include_doc` entry.
 
-    The directive sits on line 1 so the recorded line number matches, and the
-    build-phase Gate re-derives this list from the file (schema 2).
+    Reading the directive from the same shape the evidence carries keeps the two
+    in step: the build-phase Gate re-derives this list from the file (schema 2).
     """
-    if macro:
-        return f"#include {path}\n"
-    if spelling == "quote":
-        return f'#include "{path}"\n'
-    return f"#include <{path}>\n"
+    if include["macro"]:
+        return f"#include {include['path']}\n"
+    if include["spelling"] == "quote":
+        return f'#include "{include["path"]}"\n'
+    return f"#include <{include['path']}>\n"
 
 
 def make_index(targets):
@@ -700,7 +700,8 @@ def run_include_case(
     source = project_root / "src" / source_name
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text(
-        include_source_text(include_path, spelling=spelling, macro=macro) + "// fixture source\n"
+        include_source_text(include_doc(include_path, spelling=spelling, macro=macro))
+        + "// fixture source\n"
     )
     role = "support" if from_owner == "cch_support" else "owner"
     index = make_index(
@@ -819,7 +820,7 @@ class IncludeResolutionTest(unittest.TestCase):
                 self.skipTest("symlinks are not supported on this filesystem")
             source = project_root / "src/model.cpp"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text(include_source_text("cch/ai/Model.hpp") + "// fixture\n")
+            source.write_text(include_source_text(include_doc("cch/ai/Model.hpp")) + "// fixture\n")
             index = make_index(
                 [
                     {
@@ -852,7 +853,7 @@ class IncludeResolutionTest(unittest.TestCase):
             duplicate.write_text("#pragma once\n")
             source = project_root / "src/model.cpp"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text(include_source_text("cch/ai/Model.hpp") + "// fixture\n")
+            source.write_text(include_source_text(include_doc("cch/ai/Model.hpp")) + "// fixture\n")
             index = make_index(
                 [
                     {
@@ -970,6 +971,54 @@ class IncludeResolutionTest(unittest.TestCase):
                 valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
             )
         self.assertEqual(rule_ids(diagnostics), [])
+
+    def test_comment_above_include_keeps_include_evidence_fresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            # The include sits on line 2 here and on line 1 in the recorded scan.
+            source.write_text("// note\n" + include_source_text(include_doc("cch/ai/Model.hpp")))
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [{"path": str(source), "includes": [include_doc("cch/ai/Model.hpp")]}]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [])
+
+    def test_include_identity_ignores_line_numbers_but_not_order_or_spelling(self):
+        model = pg.IncludeDirective("cch/ai/Model.hpp", "angle", 1, False)
+        shifted = pg.IncludeDirective("cch/ai/Model.hpp", "angle", 9, False)
+        auth = pg.IncludeDirective("cch/ai/Auth.hpp", "angle", 2, False)
+        self.assertEqual(pg._include_identity([model]), pg._include_identity([shifted]))
+        self.assertNotEqual(
+            pg._include_identity([model]),
+            pg._include_identity([pg.IncludeDirective("cch/ai/Model.hpp", "quote", 1, False)]),
+        )
+        self.assertNotEqual(pg._include_identity([model, auth]), pg._include_identity([auth, model]))
+
+    def test_schema_one_evidence_is_rejected_as_stale(self):
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_direct_includes(
+                {
+                    "producer": "cch-parity-lexer",
+                    "schema_version": 1,
+                    "sources": [{"path": "src/model.cpp", "digest": "a" * 64, "includes": []}],
+                }
+            )
+        self.assertEqual(raised.exception.rule_id, pg.RULE_STALE_PRODUCER_SCHEMA)
 
 
 class ArchitectureContractTest(unittest.TestCase):
@@ -1419,6 +1468,12 @@ class DepfileEvidenceTest(unittest.TestCase):
         )
         depfile_evidence = next(e for e in manifest.evidence if e["producer"] == pg.PRODUCER_DEPFILES)
         self.assertEqual(depfile_evidence["producer_schema_version"], 2)
+        direct_includes_evidence = next(
+            e for e in manifest.evidence if e["producer"] == pg.PRODUCER_DIRECT_INCLUDES
+        )
+        self.assertEqual(
+            direct_includes_evidence["producer_schema_version"], pg.DIRECT_INCLUDES_SCHEMA_VERSION
+        )
 
 
 class DepfileRecorderTest(unittest.TestCase):

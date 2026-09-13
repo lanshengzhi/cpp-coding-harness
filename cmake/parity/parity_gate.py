@@ -1176,6 +1176,18 @@ def lex_includes(text: str, source: str) -> tuple[IncludeDirective, ...]:
     return tuple(result)
 
 
+def _include_identity(
+    includes: Sequence[IncludeDirective],
+) -> tuple[tuple[str, str, bool], ...]:
+    """The include set with line numbers removed.
+
+    Freshness compares which includes a source carries, not where they sit, so a
+    comment inserted above or between them keeps the recorded scan valid, while an
+    added, removed, reordered, or respelled include still fails closed.
+    """
+    return tuple((directive.path, directive.spelling, directive.macro) for directive in includes)
+
+
 def parse_direct_includes(data: Any) -> DirectIncludes:
     _require_object(data, "direct-includes", RULE_MALFORMED_EVIDENCE)
     _check_unknown_keys(
@@ -1196,6 +1208,18 @@ def parse_direct_includes(data: Any) -> DirectIncludes:
         "direct-includes",
         RULE_MALFORMED_EVIDENCE,
     )
+    if schema_version < DIRECT_INCLUDES_SCHEMA_VERSION:
+        _fail(
+            RULE_STALE_PRODUCER_SCHEMA,
+            f"stale evidence: direct-includes schema_version {schema_version} is older than "
+            f"{DIRECT_INCLUDES_SCHEMA_VERSION}; rescan the direct-include evidence",
+        )
+    if schema_version > DIRECT_INCLUDES_SCHEMA_VERSION:
+        _fail(
+            RULE_UNKNOWN_INDEX_VERSION,
+            f"unknown schema_version {schema_version} for direct-includes; this validator "
+            f"writes {DIRECT_INCLUDES_SCHEMA_VERSION}",
+        )
     sources_raw = _require_member(data, "sources", "direct-includes", RULE_MALFORMED_EVIDENCE)
     if not isinstance(sources_raw, list):
         _fail(RULE_MALFORMED_EVIDENCE, "field 'sources' at direct-includes must be a list")
@@ -1979,7 +2003,9 @@ def _check_includes(
 
         if os.path.exists(scanned.path):
             text = _read_bytes(scanned.path).decode("utf-8", errors="replace")
-            if lex_includes(text, scanned.path) != scanned.includes:
+            if _include_identity(lex_includes(text, scanned.path)) != _include_identity(
+                scanned.includes
+            ):
                 diagnostics.append(
                     Diagnostic(
                         RULE_STALE_INCLUDE_EVIDENCE,
