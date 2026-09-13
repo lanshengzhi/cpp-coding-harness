@@ -63,6 +63,11 @@ PRODUCER_DIRECT_INCLUDES = "cch-parity-lexer"
 PRODUCER_COMPILE_COMMANDS = "cmake-file-api"
 PRODUCER_DEPFILES = "cch-compiler-depfile"
 
+# Direct-include evidence schema. 2 records each source's include directives and
+# re-verifies them at the build phase; 1 recorded a whole-file digest, which went
+# stale on any comment or body edit.
+DIRECT_INCLUDES_SCHEMA_VERSION = 2
+
 # Compiled translation-unit extensions: only these sources require a compile
 # command and a depfile entry.
 COMPILED_SOURCE_EXTS = (".c", ".cc", ".cpp", ".cxx", ".c++", ".C", ".m", ".mm")
@@ -241,7 +246,6 @@ class IncludeDirective:
 @dataclass(frozen=True)
 class ScannedSource:
     path: str
-    digest: str
     includes: tuple[IncludeDirective, ...]
 
 
@@ -1172,6 +1176,18 @@ def lex_includes(text: str, source: str) -> tuple[IncludeDirective, ...]:
     return tuple(result)
 
 
+def _include_identity(
+    includes: Sequence[IncludeDirective],
+) -> tuple[tuple[str, str, bool], ...]:
+    """The include set with line numbers removed.
+
+    Freshness compares which includes a source carries, not where they sit, so a
+    comment inserted above or between them keeps the recorded scan valid, while an
+    added, removed, reordered, or respelled include still fails closed.
+    """
+    return tuple((directive.path, directive.spelling, directive.macro) for directive in includes)
+
+
 def parse_direct_includes(data: Any) -> DirectIncludes:
     _require_object(data, "direct-includes", RULE_MALFORMED_EVIDENCE)
     _check_unknown_keys(
@@ -1192,6 +1208,18 @@ def parse_direct_includes(data: Any) -> DirectIncludes:
         "direct-includes",
         RULE_MALFORMED_EVIDENCE,
     )
+    if schema_version < DIRECT_INCLUDES_SCHEMA_VERSION:
+        _fail(
+            RULE_STALE_PRODUCER_SCHEMA,
+            f"stale evidence: direct-includes schema_version {schema_version} is older than "
+            f"{DIRECT_INCLUDES_SCHEMA_VERSION}; rescan the direct-include evidence",
+        )
+    if schema_version > DIRECT_INCLUDES_SCHEMA_VERSION:
+        _fail(
+            RULE_UNKNOWN_INDEX_VERSION,
+            f"unknown schema_version {schema_version} for direct-includes; this validator "
+            f"writes {DIRECT_INCLUDES_SCHEMA_VERSION}",
+        )
     sources_raw = _require_member(data, "sources", "direct-includes", RULE_MALFORMED_EVIDENCE)
     if not isinstance(sources_raw, list):
         _fail(RULE_MALFORMED_EVIDENCE, "field 'sources' at direct-includes must be a list")
@@ -1201,17 +1229,11 @@ def parse_direct_includes(data: Any) -> DirectIncludes:
         context = f"direct-includes.sources[{position}]"
         _require_object(entry, context, RULE_MALFORMED_EVIDENCE)
         _check_unknown_keys(
-            entry, frozenset({"path", "digest", "includes"}), context, RULE_MALFORMED_EVIDENCE
+            entry, frozenset({"path", "includes"}), context, RULE_MALFORMED_EVIDENCE
         )
         path = _require_string(
             _require_member(entry, "path", context, RULE_MALFORMED_EVIDENCE),
             "path",
-            context,
-            RULE_MALFORMED_EVIDENCE,
-        )
-        digest = _require_string(
-            _require_member(entry, "digest", context, RULE_MALFORMED_EVIDENCE),
-            "digest",
             context,
             RULE_MALFORMED_EVIDENCE,
         )
@@ -1252,7 +1274,7 @@ def parse_direct_includes(data: Any) -> DirectIncludes:
         if path in seen:
             _fail(RULE_MALFORMED_EVIDENCE, f"scanned source '{path}' is declared more than once")
         seen.add(path)
-        sources.append(ScannedSource(path, digest, tuple(includes)))
+        sources.append(ScannedSource(path, tuple(includes)))
     return DirectIncludes(producer, schema_version, tuple(sources))
 
 
@@ -1979,14 +2001,16 @@ def _check_includes(
             )
             continue
 
-        if os.path.exists(scanned.path) and scanned.digest:
-            current = hashlib.sha256(_read_bytes(scanned.path)).hexdigest()
-            if current != scanned.digest:
+        if os.path.exists(scanned.path):
+            text = _read_bytes(scanned.path).decode("utf-8", errors="replace")
+            if _include_identity(lex_includes(text, scanned.path)) != _include_identity(
+                scanned.includes
+            ):
                 diagnostics.append(
                     Diagnostic(
                         RULE_STALE_INCLUDE_EVIDENCE,
-                        f"source '{scanned.path}' changed after the include scan; rescan the "
-                        f"direct-include evidence",
+                        f"source '{scanned.path}' include directives no longer match the "
+                        f"recorded scan; rescan the direct-include evidence",
                         path=scanned.path,
                     )
                 )
@@ -2540,13 +2564,11 @@ def _emit_scan(sources: Sequence[str], output_path: str) -> None:
     payload: list[dict[str, Any]] = []
     for source in sorted(set(sources)):
         raw = _read_bytes(source)
-        digest = hashlib.sha256(raw).hexdigest()
         text = raw.decode("utf-8", errors="replace")
         includes = lex_includes(text, source)
         payload.append(
             {
                 "path": source,
-                "digest": digest,
                 "includes": [
                     {"path": inc.path, "spelling": inc.spelling, "line": inc.line, "macro": inc.macro}
                     for inc in includes
@@ -2555,7 +2577,7 @@ def _emit_scan(sources: Sequence[str], output_path: str) -> None:
         )
     document = {
         "producer": PRODUCER_DIRECT_INCLUDES,
-        "schema_version": 1,
+        "schema_version": DIRECT_INCLUDES_SCHEMA_VERSION,
         "sources": payload,
     }
     with open(output_path, "w", encoding="utf-8") as handle:

@@ -1,5 +1,5 @@
 // T6 (#432): `support::JsonValue` I/O is implemented without Glaze in
-// `src/support/Json.cpp` (build-performance-plan Stage 5) so non-serialization
+// `src/support/Json.cpp` (docs/build-performance-baseline.md) so non-serialization
 // translation units no longer parse Glaze. These tests pin the behavior that
 // must stay byte- and semantics-compatible with the Glaze-backed path it
 // replaced: compact byte-identical serialization (Glaze number thresholds,

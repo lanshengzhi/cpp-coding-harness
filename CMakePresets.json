@@ -78,7 +78,7 @@
     {
       "name": "dev-fast",
       "displayName": "Fast development (Ninja + ccache, Debug)",
-      "description": "Optional local Debug preset: Ninja with ccache required, with C++ module scanning disabled globally for full TU cacheability (issue #551). ADR 0039 defines supported build policy; docs/build-performance-plan.md preserves historical measurements only.",
+      "description": "Optional local Debug preset: Ninja with ccache required, with C++ module scanning disabled globally for full TU cacheability (issue #551). ADR 0039 defines supported build policy; docs/build-performance-baseline.md preserves the historical measurement record.",
       "inherits": "vcpkg",
       "binaryDir": "${sourceDir}/build/dev-fast",
       "cacheVariables": {

@@ -108,3 +108,16 @@ To restore compiler caching across all presets without sacrificing fail-closed a
 1. `CMAKE_CXX_SCAN_FOR_MODULES` is set to `OFF` globally; no project source uses C++ modules and module scanning flags are rejected by the Gate (`PARITY-5003`).
 2. The active transitive-conformance evidence (`depfiles`, producer `cch-compiler-depfile`) advances to `producer_schema_version: 2`: evidence is sourced directly from `.ninja_deps` rather than persistent on-disk `.d`/`.ddi.d` files.
 3. The fail-closed contract is strictly preserved: a compiled source with no entry in the deps log fails closed with `PARITY-6003` (contradictory depfile evidence); missing or modified `.ninja_deps` files fail closed with `PARITY-6002`.
+
+## Addendum: Direct-include evidence freshness is measured over includes, not file bytes (Issue #656)
+
+The `direct-includes` evidence (producer `cch-parity-lexer`) records a source's include directives, but its freshness was recorded as a SHA-256 of the whole file: the build-phase Gate recomputed that digest and rejected with `PARITY-4011` on any mismatch. The evidence unit and the freshness unit therefore disagreed, and the failure mode was a false positive rather than a miss. A comment or function-body edit invalidated evidence that was still exactly correct and demanded a reconfigure before the Gate would pass again, so the Gate reported a policy violation for changes that carry no include meaning.
+
+To make the freshness unit match the unit the evidence describes:
+
+1. The evidence advances to `producer_schema_version: 2`: each entry carries the source path and its include directives, and no longer carries a per-source byte digest.
+2. At the build phase the Gate re-reads every declared source, re-derives its include directives with the same lexer the producer uses, and rejects with `PARITY-4011` when they differ from the recorded scan.
+3. The fail-closed contract is preserved and strengthened: the Gate now compares the tree's include directives against the recorded ones instead of trusting a digest, so an include that is added, removed, reordered, or respelled still fails until the evidence is rescanned. An undeclared source keeps `PARITY-4010`, a source the evidence omits keeps `PARITY-4009`, and an unreadable source surfaces `PARITY-3003` through the read helper the producer shares.
+4. A source-body or comment edit no longer invalidates include evidence.
+
+The parser rejects `schema_version: 1` evidence as stale (`PARITY-3002`) before it reads any entry, so an existing build tree rescans once and then stops rescanning on body edits.

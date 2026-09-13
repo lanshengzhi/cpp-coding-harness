@@ -14,8 +14,9 @@ namespace {
 
 /// Hand-rolled JSON parser producing the passive `support::JsonValue`. This is
 /// the non-serialization replacement for the Glaze-backed `read_json<JsonValue>`
-/// (build-performance-plan Stage 5): it must stay byte-compatible with the
-/// values the Glaze path produced for every input the suite exercises.
+/// (the Glaze localization recorded in docs/build-performance-baseline.md): it
+/// must stay byte-compatible with the values the Glaze path produced for every
+/// input the suite exercises.
 ///
 /// Matched Glaze behaviors: strict JSON grammar (leading zeros, bare `.`/`e`
 /// and dangling commas are rejected; numbers overflow/underflow the double

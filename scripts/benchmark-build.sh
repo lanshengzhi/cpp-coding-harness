@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Build-performance benchmark — Stage 1 measurement contract (#428).
+# Build-performance benchmark — measurement contract recorded in
+# docs/build-performance-baseline.md (#428).
 #
-# Runs every Stage 1 scenario against an isolated Ninja + ccache build tree and
+# Runs every benchmark scenario against an isolated Ninja + ccache build tree and
 # records, in one invocation:
 #   * fresh configure time (vcpkg manifest, dependencies served from the local
 #     binary cache, no network);
@@ -16,12 +17,12 @@
 #   * compiler, generator, build type, job count, cache state, CPU, memory, and
 #     background-load caveats.
 #
-# Source of truth: docs/build-performance-plan.md, Stage 1. The script only
+# Source of truth: the benchmark contract in docs/build-performance-baseline.md. The script only
 # measures; it adds no absolute-time CI gate, requires no network once the
 # vcpkg binary cache is warm, rejects a second concurrent run against the same
 # build directory, and never touches the repository's normal build outputs.
 # Results accumulate as timestamped JSON files under the benchmark root's
-# results/ directory so later stages can trend them.
+# results/ directory so later runs can trend them.
 #
 # Exit codes: 0 success; 1 environment or build failure; 2 usage; 3 a concurrent
 # run already owns the benchmark build directory.
@@ -33,7 +34,7 @@ usage() {
 	cat <<'EOF'
 Usage: scripts/benchmark-build.sh [options]
 
-Stage 1 build-performance benchmark (see docs/build-performance-plan.md).
+Build-performance benchmark (see docs/build-performance-baseline.md).
 Runs every measurement scenario against an isolated Ninja + ccache build tree,
 writes a timestamped JSON result under <root>/results, and prints a human
 summary. Never touches the repository's normal build outputs.
@@ -50,7 +51,7 @@ Options:
                        (default: src/coding_agent/SettingsManager.cpp).
   --test-source FILE   Test source for the typical test-source incremental
                        scenario (default: tests/coding_agent/ModelConfigTest.cpp).
-                       The owning package shard (Stage 4) is built, not the
+                       The owning package shard is built, not the
                        aggregate.
   --hotspot-source FILE
                        Leading-hotspot translation unit
@@ -69,8 +70,8 @@ EOF
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Map a test source path to its owning package shard executable (Stage 4,
-# #433). Unknown paths fall back to the aggregate target so the benchmark
+# Map a test source path to its owning package shard executable (#433).
+# Unknown paths fall back to the aggregate target so the benchmark
 # still builds a named target.
 test_shard_for() {
 	local file=$1
@@ -366,7 +367,7 @@ else
 	export VCPKG_BINARY_SOURCES="clear;files,$cache_dir,read"
 fi
 
-echo "== build benchmark (Stage 1) =="
+echo "== build benchmark =="
 echo "root:       $root"
 echo "build type: $build_type, jobs: $jobs, samples: $samples"
 echo "compiler:   ${compiler:-CMake default}, generator: Ninja, ccache: $ccache_dir"
@@ -445,7 +446,7 @@ read -r -a prod_samples <<< "$(sample_scenario "$prod_source" pike "$samples")"
 echo "      prod incremental: ${prod_samples[*]}s"
 
 # --- 6. Typical test-source incremental build -------------------------------
-# Stage 4: a focused test edit builds and links only its owning package shard.
+# A focused test edit builds and links only its owning package shard.
 test_target="$(test_shard_for "$test_source")"
 echo "[7/8] test-source incremental ($test_source -> $test_target, $samples samples)"
 read -r -a test_samples <<< "$(sample_scenario "$test_source" "$test_target" "$samples")"
@@ -509,7 +510,7 @@ export BM_RESULTS_FILE="$results_file"
 
 cat > "$run_dir/summarize.py" <<'PY'
 #!/usr/bin/env python3
-"""Stage 1 build-benchmark summarizer.
+"""Build-benchmark summarizer.
 
 Reads the per-run state (Ninja cold-build log, ccache stats, BM_* environment
 variables) and writes the accumulated JSON result plus a human summary.
