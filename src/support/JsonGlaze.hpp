@@ -1,7 +1,7 @@
 #pragma once
 
-// Private Glaze serialization layer (build-performance-plan Stage 5). The
-// shared `support/Json.hpp` provides `JsonValue` I/O without Glaze; everything
+// Private Glaze serialization layer (see docs/build-performance-baseline.md).
+// The shared `support/Json.hpp` provides `JsonValue` I/O without Glaze; everything
 // that needs Glaze — the `glz::generic` conversions and the generic
 // `read_json<T>` / `write_json(const T&)` templates for Glaze DTOs — lives
 // here. Translation units that serialize DTOs include this header; translation

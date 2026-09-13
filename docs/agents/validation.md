@@ -23,7 +23,7 @@ ctest --preset vcpkg -LE architecture -L coding_agent          # owning module l
 cmake --build --preset vcpkg && ctest --preset vcpkg -LE architecture   # suite minus the architecture label
 ```
 
-Parallel builds share one host budget. On the measured host in [build-performance-plan.md](../build-performance-plan.md), four concurrent jobs left 1.24 GiB available with swap effectively full, and six jobs were not safe. Treat four as the ceiling: two lanes at `-j2`, or four at `-j1`.
+Parallel builds share one host budget. On the measured host in [build-performance-baseline.md](../build-performance-baseline.md), four concurrent jobs left 1.24 GiB available with swap effectively full, and six jobs were not safe. Treat four as the ceiling: two lanes at `-j2`, or four at `-j1`.
 
 The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), and a regex that matches other cases passes silently. Measured on this repository: `-R 'message conversion'` selects no case, `-R 'thinking level'` selects 13 of the wrong ones, and `-R 'session'` selects 207. Verify the match set before trusting it — `ctest --preset vcpkg -N -R '<regex>'` prints the case names and the count — and prefer a label (`-L <label>`) or the owning shard. Report the selected count with the result.
 

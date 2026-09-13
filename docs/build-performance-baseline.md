@@ -1,6 +1,6 @@
-# Build Performance Plan
+# Build Performance Baseline
 
-Status: Historical measurement record. The proposed policy and staged recommendation are superseded by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) and accepted [ADR 0039](adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md)/[ADR 0040](adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md). This document preserves benchmark evidence; it does not authorize implementation or define a supported build path. Historical target names such as `cpp_harness` and `cpp_harness_tests` are intentionally retained in the measurements; the current product target is `pike` per ADR 0045.
+Status: Historical measurement record. The proposal's policy and staged plan are superseded by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) and accepted [ADR 0039](adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md)/[ADR 0040](adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md). What remains is the measurement evidence, the supersession mapping, and the two tooling contracts those decisions produced. This document does not authorize implementation and does not define a supported build path. Historical target names such as `cpp_harness` and `cpp_harness_tests` are retained in the measurements; the current product target is `pike` per ADR 0045.
 
 ## Current architecture-policy supersession
 
@@ -14,7 +14,7 @@ The measurements below remain historical evidence. Conflicting policy and recomm
 | Remove Catch2 and retain the local Catch-compatible imitation. | Use formal Catch2 v3 from the pinned dependency graph and delete the imitation without a compatibility header. |
 | Split and schedule tests through package shards and `scripts/run-tests.sh`. | Discover fast tests as individual CTest cases; use CTest names and labels as the normal selection and scheduling authority, with measured grouping only for scenarios that justify it. |
 | Reconsider optional Unity Build. | Unity Build and Unix Makefiles are unsupported. |
-| Treat the numeric targets and stages below as the recommended implementation tranche. | Structural bounds, unique compilation, legal fan-out, and dependency classification block immediately. Numeric gates require controlled repeated measurements with baseline, variance, selection rule, and update procedure. All stages and the old recommendation below are superseded. |
+| Treat the numeric targets and the stage sequence as the recommended implementation tranche. | Structural bounds, unique compilation, legal fan-out, and dependency classification block immediately. Numeric gates require controlled repeated measurements with baseline, variance, selection rule, and update procedure. The targets, the stage sequence, and the old recommendation are superseded; the two contracts that survived are below. |
 
 ## Historical objective
 
@@ -138,36 +138,8 @@ Beast/Asio transport implementations, interactive-mode sources, serialization, a
 
 The Ninja no-op build took 0.04 seconds. CMake/Ninja dependency-graph scanning is not a meaningful bottleneck.
 
-## Historical target outcomes (not current gates)
 
-These one-host numeric goals belong to the superseded proposal. They are not blocking thresholds; current numeric policy requires the controlled repeated evidence defined by ADR 0039.
-
-### Historical Debug goals
-
-- cold clean build: at most 420 seconds;
-- warm-ccache clean rebuild: at most 60 seconds;
-- typical production-source build to `cpp_harness`: at most 10 seconds;
-- typical test-source build to its package test executable: at most 10 seconds;
-- slowest GCC Debug translation unit: at most 35 seconds;
-- shared-header rebuild fan-out or aggregate time: at least 40% lower;
-- no-op build: remain below one second.
-
-### Historical Release goals
-
-- cold clean build: at most 720 seconds;
-- warm-ccache clean rebuild: at most 30 seconds;
-- slowest Release translation unit: at most 70 seconds;
-- typical Release incremental build: at most 30 seconds.
-
-Absolute cold-build targets should be compared on a similarly loaded host. Each implementation ticket should also report relative change against a same-session control run.
-
-## Superseded proposed stages
-
-The stages below are retained to explain the measurement record. They are not a current sequence or authorization; where they conflict with the supersession table above, ADR 0039/0040 and #439 control.
-
-The proposal gave each stage an independent Go/No-Go measurement and avoided batching stages before measurement so a regression or win could be attributed.
-
-### Stage 1: establish the benchmark contract
+## Benchmark contract
 
 Add an agent-runnable script, proposed as `scripts/benchmark-build.sh`, that records:
 
@@ -189,7 +161,7 @@ The benchmark must use its own build and cache directories, reject concurrent us
 
 Do not add a hard absolute-time CI gate yet. Accumulate results first; later consider a wide trend check.
 
-### Stage 2: add an explicit fast-development preset
+## Fast-development preset contract
 
 Add a checked-in `dev-fast` family that:
 
@@ -204,122 +176,6 @@ Add a checked-in `dev-fast` family that:
 
 **No-Go:** cache use is silent or nondeterministic, or the preset changes the compatibility baseline.
 
-### Stage 3: remove known build waste
-
-**Superseded test-framework clause:** Catch2 removal is rejected. The current destination uses formal Catch2 v3 and deletes the local imitation. Source ownership must follow the four authoritative Owner libraries and central CMake declarations rather than the legacy target graph.
-
-The historical proposal was:
-
-1. Remove the then-unused Catch2 dependency from `vcpkg.json` and retain the repository's lightweight Catch-compatible header.
-2. Give the five duplicated production sources one authoritative CMake owner, then link that owner into the executable and relevant tests.
-
-The ownership change must preserve the dependency directions in `CODING_STANDARDS.md` section 12 and the architecture tests.
-
-**Go:** compile commands contain one entry per shared production source per configuration, behavior and tests remain unchanged, and bootstrap still resolves all required dependencies.
-
-**No-Go:** the change creates a reverse dependency or turns private CLI implementation into a public contract.
-
-### Stage 4: split tests by package boundary
-
-**Superseded scheduling clause:** package shards, the `cpp_harness_tests` aggregate, and `scripts/run-tests.sh` do not define the destination. Formal Catch2 v3 case discovery and CTest names/labels are the normal scheduling surface; scenarios are grouped only when measured startup or shared setup justifies it.
-
-The historical proposal would have replaced the single test executable with package-aligned executables, initially considering:
-
-- util;
-- TUI;
-- AI;
-- agent;
-- harness and tools;
-- coding-agent core/runtime;
-- coding-agent interactive TUI;
-- CLI and architecture.
-
-Exact grouping should follow dependency and fixture ownership rather than equal file counts. Keep Debug developer builds compiling all tests by default, but allow building and running one package's tests.
-
-Provide:
-
-- `ctest` registration for every shard;
-- `scripts/run-tests.sh` as the uniform tag/filter entry point;
-- a `cpp_harness_tests` CMake aggregate target that builds all shards;
-- updated README and agent validation commands.
-
-The proposal intentionally does not preserve `cpp_harness_tests` as one executable. Do not compile all test objects twice merely to retain that path.
-
-**Go:** focused test edits build and link only the relevant shard, complete `ctest` behavior remains equivalent, and the package test loop meets its target.
-
-**No-Go:** fixture initialization semantics, global test isolation, tag filtering, or architecture coverage differs from the current suite.
-
-### Stage 5: localize Glaze
-
-**Terminology and ownership supersession:** Glaze DTOs and serialization machinery remain Owner-private, but `cch_util`, `src/util/Json.hpp`, and public `util::JsonValue` are not destination contracts. Cross-Owner unstructured JSON uses passive `cch::support::JsonValue` through repository-internal Owner Interfaces.
-
-The historical proposal would have removed Glaze-dependent machinery from `src/util/Json.hpp`, moved conversions and serialization helpers into private implementation areas, and removed dead helpers after verifying that they had no callers.
-
-**Go:** approximately 50 non-serialization translation units no longer parse Glaze, architecture tests pass, and shared-header rebuild cost decreases.
-
-**No-Go:** Glaze appears in a public header, serialization machinery moves outward, or the value contract changes.
-
-### Stage 6: introduce narrow private PCH experiments
-
-Only after the prior stages are measured, experiment on remaining expensive targets such as `cch_ai` and selected runtime, interactive, or test shards.
-
-Rules:
-
-- PCH contents are stable third-party headers, not project headers;
-- each PCH is private to a target or a demonstrably compatible small target family;
-- the normal compatibility build remains able to compile with PCH disabled;
-- CI or required validation includes a no-PCH build so missing direct includes cannot be hidden.
-
-**Go:** the target's cold compile time improves materially, total memory remains safe at four jobs, and no-PCH validation remains green.
-
-**No-Go:** PCH creation dominates focused builds, increases rebuild fan-out, obscures include correctness, or fails to deliver at least a meaningful double-digit improvement.
-
-### Stage 7: evaluate Clang separately
-
-**Superseded compiler clause:** Clang 22.x is a blocking Linux conformance verifier, not an optional developer-only experiment or release-artifact compiler. GCC 16.x remains the sole build/release compiler.
-
-**Go:** the full edit-build-test loop improves materially without compatibility loss.
-
-**No-Go:** the isolated hotspot gain does not translate to the whole project or splits cache usage without enough benefit.
-
-### Stage 8: optimize private hotspots only if targets remain unmet
-
-If the leading Beast/Asio translation units still exceed the target, use compiler tracing and include analysis to identify template-instantiation and code-generation cost. Prefer:
-
-- narrower private headers;
-- moving template-heavy details behind private non-template functions or Pimpl boundaries;
-- explicit instantiation where ownership is clear;
-- reducing unnecessary protocol/header inclusion.
-
-Preserve the public Transport capability seam and observable provider behavior. Do not replace the network library as a build-time shortcut.
-
-**Go:** hotspot and incremental targets are met with unchanged provider tests.
-
-**No-Go:** the proposed split leaks provider DTOs, transport details, or new capability methods across public seams.
-
-### Stage 9: reconsider Unity Build only if necessary
-
-**Superseded:** Unity Build is unsupported by ADR 0039 and is not a conditional optimization path.
-
-## Superseded recommended decision
-
-Do not approve or implement the old staged tranche from this document. #439 and ADR 0039/0040 replace its package, test, platform, compiler, Unity, and Runtime assumptions; approved work follows `/to-spec` → `/to-tickets` → `/implement` from those authorities.
-
-The measured Release rebuild improvement from 967.2 seconds cold to 4.2 seconds warm remains evidence for Ninja/ccache on that host. The former package-sharding recommendation is superseded by Catch2 v3 case discovery and CTest scheduling. The measured-host warning against increasing parallelism remains evidence, not a universal policy.
-
-## Historical validation and rollout
-
-The proposal required the following for each then-accepted stage:
-
-1. record control measurements with compiler, configuration, cache state, and system load;
-2. implement only that stage;
-3. run the smallest focused build/test that can fail;
-4. rerun the same performance scenarios;
-5. run the full test suite and architecture tests when CMake boundaries or public/private dependency directions change;
-6. record the observed delta and residual risks;
-7. revert or redesign the stage when its Go criteria fail.
-
-Documentation-only changes to this proposal require heading, link, tracker-reference, and agent-facing-English checks; they do not require a C++ build.
 
 ## Decision boundaries
 

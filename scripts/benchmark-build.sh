@@ -16,7 +16,7 @@
 #   * compiler, generator, build type, job count, cache state, CPU, memory, and
 #     background-load caveats.
 #
-# Source of truth: docs/build-performance-plan.md, Stage 1. The script only
+# Source of truth: the benchmark contract in docs/build-performance-baseline.md. The script only
 # measures; it adds no absolute-time CI gate, requires no network once the
 # vcpkg binary cache is warm, rejects a second concurrent run against the same
 # build directory, and never touches the repository's normal build outputs.
@@ -33,7 +33,7 @@ usage() {
 	cat <<'EOF'
 Usage: scripts/benchmark-build.sh [options]
 
-Stage 1 build-performance benchmark (see docs/build-performance-plan.md).
+Build-performance benchmark (see docs/build-performance-baseline.md).
 Runs every measurement scenario against an isolated Ninja + ccache build tree,
 writes a timestamped JSON result under <root>/results, and prints a human
 summary. Never touches the repository's normal build outputs.

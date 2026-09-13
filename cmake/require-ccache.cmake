@@ -1,14 +1,16 @@
 # Configure-time guard for the dev-fast presets.
 #
 # The dev-fast preset family is the checked-in Ninja + ccache fast-development
-# path (docs/build-performance-plan.md, Stage 2). ccache is mandatory there:
-# it is what makes warm rebuilds fast, and a missing launcher would otherwise
-# fail only at build time with a generic "command not found". This script is
-# wired into the dev-fast configure presets through CMAKE_PROJECT_INCLUDE so
-# configure fails immediately, with a clear message, when ccache is absent.
+# path (docs/build-performance-baseline.md, fast-development preset contract).
+# ccache is mandatory there: it is what makes warm rebuilds fast, and a missing
+# launcher would otherwise fail only at build time with a generic "command not
+# found". This script is wired into the dev-fast configure presets through
+# CMAKE_PROJECT_INCLUDE so configure fails immediately, with a clear message,
+# when ccache is absent.
 #
 # It also prints an explicit status line so cache use is never silent — a
-# silent or nondeterministic cache is a Stage 2 No-Go signal.
+# silent or nondeterministic cache is a No-Go signal for the fast-development
+# preset.
 
 find_program(CCACHE_PROGRAM NAMES ccache)
 
