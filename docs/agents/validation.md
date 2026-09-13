@@ -10,7 +10,9 @@ The validation tiers are defined in `CONTEXT.md`: Focused Validation, Full Valid
 
 During implementation, run the smallest focused test that can fail: build the owning shard incrementally on the default Debug preset, then select with native CTest arguments (CTest names and labels are the sole selection authority, ADR 0039):
 
-Configure presets require `VCPKG_ROOT` pointing at a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline; after Fresh Validation it is `.deps/vcpkg` in the repository root. If `build/` is not configured (no `cmake --build --preset vcpkg` target tree), configure once with `cmake --preset vcpkg` first. Any edit to a compiled source can make the build-phase Parity Gate reject with PARITY-4011 (include evidence older than the source): this is staleness, not an architecture violation — reconfigure once (`VCPKG_ROOT=<root> cmake --preset <preset>`) to rescan the direct-include evidence, then build.
+Configure presets require `VCPKG_ROOT` pointing at a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline; after Fresh Validation it is `.deps/vcpkg` in the repository root, and a linked worktree has no `.deps/` of its own, so point `VCPKG_ROOT` at the primary checkout and expect a cold build there. If `build/` is not configured (no `cmake --build --preset vcpkg` target tree), configure once with `cmake --preset vcpkg` first.
+
+**Stale include evidence (`PARITY-4011`).** Any edit to a compiled source can make the build-phase Parity Gate reject with include evidence older than the source. This is staleness, not an architecture violation: reconfigure once (`VCPKG_ROOT=<root> cmake --preset <preset>`) to rescan the direct-include evidence, then build. The reconfigure is a workaround for the gate not refreshing its own evidence; a gate that rescans on demand would delete this paragraph.
 
 The build-phase Parity Architecture Gate sources active transitive-conformance depfile evidence directly from `.ninja_deps` (schema version 2; issue #551, ADR 0039 addendum). CMake C++ module scanning is disabled globally (`CMAKE_CXX_SCAN_FOR_MODULES OFF`), ensuring that `compile_commands.json` carries no `-fmodules-ts` / `-fmodule-mapper` flags and every translation unit remains cacheable under ccache across all presets.
 
@@ -21,7 +23,9 @@ ctest --preset vcpkg -LE architecture -L coding_agent          # owning module l
 cmake --build --preset vcpkg && ctest --preset vcpkg -LE architecture   # suite minus the architecture label
 ```
 
-The `vcpkg` test preset already treats an empty selection as an error (`noTests: error`), so a mistyped name or label never passes silently.
+Parallel builds share one host budget. On the measured host in [build-performance-plan.md](../build-performance-plan.md), four concurrent jobs left 1.24 GiB available with swap effectively full, and six jobs were not safe. Treat four as the ceiling: two lanes at `-j2`, or four at `-j1`.
+
+The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), and a regex that matches other cases passes silently. Measured on this repository: `-R 'message conversion'` selects no case, `-R 'thinking level'` selects 13 of the wrong ones, and `-R 'session'` selects 207. Verify the match set before trusting it — `ctest --preset vcpkg -N -R '<regex>'` prints the case names and the count — and prefer a label (`-L <label>`) or the owning shard. Report the selected count with the result.
 
 Full Validation is mandatory once before delivery, as required by `/implement`: an incremental build followed by the complete unfiltered offline CTest suite on the default Debug preset, including every architecture gate test:
 
@@ -33,6 +37,8 @@ ctest --preset vcpkg
 ### Formatting gate
 
 Added or modified lines must conform to `.clang-format`. `scripts/format-check.sh [base-ref]` checks them through `git clang-format` (no argument: working tree vs HEAD; a ref such as `origin/main`: the branch's merge-base). CI runs the same check as a blocking formatting job. To fix findings, run `git clang-format` with the same arguments and re-stage. Untouched lines stay outside the gate (`CODING_STANDARDS.md` §14).
+
+Report the CI form — `scripts/format-check.sh <merge-base>` — before delivery. The no-argument form sees only uncommitted changes, so it reports clean on work that is already committed. A rename gates the file as if new: every line it carries becomes a modified line, including lines this branch never touched. Reformat a moved file in the same commit as the move.
 
 Fresh Validation is the environment-level tier: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`. Reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. Do not run it for ordinary code edits. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039), not the per-change default.
 
