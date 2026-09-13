@@ -72,10 +72,13 @@ this divergence cannot affect request payloads, only cost accounting.
   of the frozen-baseline provider shards (`packages/ai/src/providers/data/openai-codex.json` /
   `kimi-coding.json` at the baseline), with the byte-hashes pinned in [Pinned baseline and shard
   artifact](#pinned-baseline-and-shard-artifact) above. They close residual note 1: `ProviderComposerTest`
-  `"builtin catalogs match the frozen baseline shard values"` serializes every built-in catalog
-  model and compares it to its shard entry (the deferred Codex `compat` flags
-  `supportsOpenAIGrammarTools`/`supportsToolSearch`, absent from the C++ surface, are stripped from
-  the golden entry).
+  `"builtin catalogs match the frozen baseline shard values"` parses the shard entries through
+  `load_models_json` + `compose_provider` and compares the resulting `ai::Model` fields with each
+  built-in catalog model. This check does not exercise Model JSON serialization and excludes
+  `compat` for both shards (#649). Kimi catalog compat values are checked separately by
+  `AnthropicMessagesAdapterTest` `"Kimi catalog carries the frozen Anthropic Messages compat values"`,
+  not against the shard's `compat` members; the deferred Codex flags
+  `supportsOpenAIGrammarTools`/`supportsToolSearch` remain absent from the C++ surface.
 
 ### Conversion, usage, termination (`conversion/`, `usage/`, `termination/`)
 
@@ -267,7 +270,7 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | # | Capability | Frozen pi source / shard | C++ surface | Evidence (tests → fixtures) |
 | --- | --- | --- | --- | --- |
 | 1 | Complete passive `Model` (independent `provider`/`id`/`api`, required name/baseUrl/reasoning/input/cost/contextWindow/maxTokens, static headers) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ProviderComposerTest` `"the frozen complete Model fixture composes to the expected ai::Model"` → `models/complete-anthropic-model.json` |
-| 2 | Null-aware `thinkingLevelMap` (missing key = provider default, null = unsupported) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ModelConfigTest` `"the frozen complete Model fixture preserves the null-aware thinking level map"`, `ModelTest` `"Thinking level wire vocabulary is public on the Model interface"`, `SimpleOptionsTest` |
+| 2 | Null-aware `thinkingLevelMap` (missing key = provider default, null = unsupported) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ModelConfigTest` `"the frozen complete Model fixture preserves the null-aware thinking level map"`, `SimpleOptionsTest` |
 | 3 | Typed `AnthropicMessagesCompat` = exactly `{forceAdaptiveThinking, allowEmptySignature}`; no generic compat bag; `OpenAIResponsesCompat` absent | shard `kimi-coding.json`; `types.ts` | `Model.hpp` (`AnthropicMessagesCompat`) | `AnthropicMessagesAdapterTest` `"Kimi catalog carries the frozen Anthropic Messages compat values"` |
 | 4 | Concrete Agent `kDefaultModel` mirroring pi `DEFAULT_MODEL` (`"unknown"` identity, zeroed capabilities) | `packages/agent/src/agent.ts` | `src/agent/AgentDefaults.hpp` | `ModelTest` → `models/default-model.json` |
 | 5 | `SimpleStreamOptions` harness-consumer set (`temperature`, `maxTokens`, cancellation, `apiKey`, `headers`, `env`, `transformHeaders`, `reasoning`, `sessionId`, `cacheRetention`, `timeoutMs`, `maxRetries`, `maxRetryDelayMs`) | `simple-options.ts`, `agent-harness.ts` | `include/cch/ai/RequestOptions.hpp` | `SimpleOptionsTest`, `ModelsTest` `"Models prepares the complete streamSimple request before Provider dispatch"` |
