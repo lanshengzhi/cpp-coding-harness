@@ -12,7 +12,7 @@ During implementation, run the smallest focused test that can fail: build the ow
 
 Configure presets require `VCPKG_ROOT` pointing at a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline; after Fresh Validation it is `.deps/vcpkg` in the repository root, and a linked worktree has no `.deps/` of its own, so point `VCPKG_ROOT` at the primary checkout and expect a cold build there. If `build/` is not configured (no `cmake --build --preset vcpkg` target tree), configure once with `cmake --preset vcpkg` first.
 
-**Stale include evidence (`PARITY-4011`).** Any edit to a compiled source can make the build-phase Parity Gate reject with include evidence older than the source. This is staleness, not an architecture violation: reconfigure once (`VCPKG_ROOT=<root> cmake --preset <preset>`) to rescan the direct-include evidence, then build. The reconfigure is a workaround for the gate not refreshing its own evidence; a gate that rescans on demand would delete this paragraph.
+**Include evidence (`PARITY-4011`).** The build phase re-derives each declared source's include directives and compares them with the recorded scan, so a changed include set needs a reconfigure (`VCPKG_ROOT=<root> cmake --preset <preset>`) before the Gate passes. A comment or body edit does not.
 
 The build-phase Parity Architecture Gate sources active transitive-conformance depfile evidence directly from `.ninja_deps` (schema version 2; issue #551, ADR 0039 addendum). CMake C++ module scanning is disabled globally (`CMAKE_CXX_SCAN_FOR_MODULES OFF`), ensuring that `compile_commands.json` carries no `-fmodules-ts` / `-fmodule-mapper` flags and every translation unit remains cacheable under ccache across all presets.
 

@@ -114,7 +114,7 @@ VALID_MANIFEST = {
         {
             "id": "direct-includes",
             "producer": "cch-parity-lexer",
-            "producer_schema_version": 1,
+            "producer_schema_version": 2,
             "input_identities": ["manifest", "ownership-index"],
         },
         {
@@ -594,6 +594,19 @@ def include_doc(path, spelling="angle", line=1, macro=False):
     return {"path": path, "spelling": spelling, "line": line, "macro": macro}
 
 
+def include_source_text(path, spelling="angle", macro=False):
+    """Render the `#include` directive that a fixture's evidence records.
+
+    The directive sits on line 1 so the recorded line number matches, and the
+    build-phase Gate re-derives this list from the file (schema 2).
+    """
+    if macro:
+        return f"#include {path}\n"
+    if spelling == "quote":
+        return f'#include "{path}"\n'
+    return f"#include <{path}>\n"
+
+
 def make_index(targets):
     return pg.parse_index(
         {
@@ -607,7 +620,7 @@ def make_index(targets):
 
 def make_direct_includes(sources):
     return pg.parse_direct_includes(
-        {"producer": "cch-parity-lexer", "schema_version": 1, "sources": sources}
+        {"producer": "cch-parity-lexer", "schema_version": 2, "sources": sources}
     )
 
 
@@ -686,7 +699,9 @@ def run_include_case(
     project_root = make_project_tree(root)
     source = project_root / "src" / source_name
     source.parent.mkdir(parents=True, exist_ok=True)
-    source.write_text("// fixture source\n")
+    source.write_text(
+        include_source_text(include_path, spelling=spelling, macro=macro) + "// fixture source\n"
+    )
     role = "support" if from_owner == "cch_support" else "owner"
     index = make_index(
         [
@@ -703,7 +718,6 @@ def run_include_case(
         [
             {
                 "path": str(source),
-                "digest": sha256_file(source),
                 "includes": [include_doc(include_path, spelling=spelling, macro=macro)],
             }
         ]
@@ -805,7 +819,7 @@ class IncludeResolutionTest(unittest.TestCase):
                 self.skipTest("symlinks are not supported on this filesystem")
             source = project_root / "src/model.cpp"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text("// fixture\n")
+            source.write_text(include_source_text("cch/ai/Model.hpp") + "// fixture\n")
             index = make_index(
                 [
                     {
@@ -821,7 +835,6 @@ class IncludeResolutionTest(unittest.TestCase):
                 [
                     {
                         "path": str(source),
-                        "digest": sha256_file(source),
                         "includes": [include_doc("cch/ai/Model.hpp")],
                     }
                 ]
@@ -839,7 +852,7 @@ class IncludeResolutionTest(unittest.TestCase):
             duplicate.write_text("#pragma once\n")
             source = project_root / "src/model.cpp"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text("// fixture\n")
+            source.write_text(include_source_text("cch/ai/Model.hpp") + "// fixture\n")
             index = make_index(
                 [
                     {
@@ -855,7 +868,6 @@ class IncludeResolutionTest(unittest.TestCase):
                 [
                     {
                         "path": str(source),
-                        "digest": sha256_file(source),
                         "includes": [include_doc("cch/ai/Model.hpp")],
                     }
                 ]
@@ -900,7 +912,7 @@ class IncludeResolutionTest(unittest.TestCase):
             ghost.write_text("// not declared by any target\n")
             index = make_index([])
             direct = make_direct_includes(
-                [{"path": str(ghost), "digest": sha256_file(ghost), "includes": []}]
+                [{"path": str(ghost), "includes": []}]
             )
             diagnostics = pg.check(
                 valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
@@ -912,7 +924,32 @@ class IncludeResolutionTest(unittest.TestCase):
             project_root = make_project_tree(tmp)
             source = project_root / "src/model.cpp"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text("// fixture\n")
+            # The source includes a header; the recorded scan lists none, so the
+            # evidence no longer describes the tree's include directives.
+            source.write_text("#include <cch/ai/Model.hpp>\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            direct = make_direct_includes([{"path": str(source), "includes": []}])
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_INCLUDE_EVIDENCE])
+
+    def test_body_edit_keeps_include_evidence_fresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("#include <cch/ai/Model.hpp>\n\nint answer() { return 1; }\n")
             index = make_index(
                 [
                     {
@@ -925,18 +962,14 @@ class IncludeResolutionTest(unittest.TestCase):
                 ]
             )
             direct = make_direct_includes(
-                [
-                    {
-                        "path": str(source),
-                        "digest": "e" * 64,  # does not match the on-disk bytes
-                        "includes": [],
-                    }
-                ]
+                [{"path": str(source), "includes": [include_doc("cch/ai/Model.hpp")]}]
             )
+            # A body edit leaves the include directives the evidence describes intact.
+            source.write_text("#include <cch/ai/Model.hpp>\n\nint answer() { return 2; }\n")
             diagnostics = pg.check(
                 valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
             )
-        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_INCLUDE_EVIDENCE])
+        self.assertEqual(rule_ids(diagnostics), [])
 
 
 class ArchitectureContractTest(unittest.TestCase):
@@ -1214,7 +1247,7 @@ class CompileContextTest(unittest.TestCase):
                 ]
             )
             direct = make_direct_includes(
-                [{"path": str(source), "digest": sha256_file(source), "includes": []}]
+                [{"path": str(source), "includes": []}]
             )
             diagnostics = pg.check(
                 valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
