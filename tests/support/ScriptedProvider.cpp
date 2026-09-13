@@ -1,4 +1,4 @@
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
@@ -22,7 +22,11 @@
 #include <variant>
 #include <vector>
 
-namespace cch::ai::providers {
+namespace cch::tests {
+
+// The scripted provider is installed through cch_ai's private provider seam; this
+// file names that seam explicitly instead of living inside it.
+namespace providers = cch::ai::providers;
 namespace {
 
 void set_fake_metadata(ai::AssistantMessage& assistant, const ai::Model& model) {
@@ -51,7 +55,7 @@ struct FakeToolCallSpec {
     auto partial = final_message;
     partial.content.clear();
 
-    if (auto emitted = emit(sink, ai::AssistantStartEvent{.partial = partial}); !emitted) {
+    if (auto emitted = providers::emit(sink, ai::AssistantStartEvent{.partial = partial}); !emitted) {
         return std::unexpected(emitted.error());
     }
 
@@ -62,7 +66,7 @@ struct FakeToolCallSpec {
                     .text = "",
                     .text_signature = std::nullopt,
             });
-            if (auto emitted = emit(sink,
+            if (auto emitted = providers::emit(sink,
                         ai::TextStartEvent{
                                 .content_index = content_index,
                                 .partial = partial,
@@ -72,7 +76,7 @@ struct FakeToolCallSpec {
             }
             if (!text->text.empty()) {
                 std::get<ai::TextContent>(partial.content[content_index]).text = text->text;
-                if (auto emitted = emit(sink,
+                if (auto emitted = providers::emit(sink,
                             ai::TextDeltaEvent{
                                     .content_index = content_index,
                                     .delta = text->text,
@@ -83,7 +87,7 @@ struct FakeToolCallSpec {
                 }
             }
             partial.content[content_index] = *text;
-            if (auto emitted = emit(sink,
+            if (auto emitted = providers::emit(sink,
                         ai::TextEndEvent{
                                 .content_index = content_index,
                                 .content = text->text,
@@ -105,7 +109,7 @@ struct FakeToolCallSpec {
                 .arguments_valid = true,
                 .argument_error = std::nullopt,
         });
-        if (auto emitted = emit(sink,
+        if (auto emitted = providers::emit(sink,
                     ai::ToolCallStartEvent{
                             .content_index = content_index,
                             .partial = partial,
@@ -116,7 +120,7 @@ struct FakeToolCallSpec {
         if (!tool_call.raw_arguments.empty()) {
             auto& streaming_call = std::get<ai::ToolCallContent>(partial.content[content_index]);
             streaming_call.raw_arguments += tool_call.raw_arguments;
-            if (auto emitted = emit(sink,
+            if (auto emitted = providers::emit(sink,
                         ai::ToolCallDeltaEvent{
                                 .content_index = content_index,
                                 .delta = tool_call.raw_arguments,
@@ -127,7 +131,7 @@ struct FakeToolCallSpec {
             }
         }
         partial.content[content_index] = tool_call;
-        if (auto emitted = emit(sink,
+        if (auto emitted = providers::emit(sink,
                     ai::ToolCallEndEvent{
                             .content_index = content_index,
                             .tool_call = tool_call,
@@ -138,7 +142,7 @@ struct FakeToolCallSpec {
         }
     }
 
-    return emit(sink,
+    return providers::emit(sink,
             ai::AssistantDoneEvent{
                     .reason = final_message.stop_reason,
                     .message = final_message,
@@ -284,13 +288,13 @@ private:
 
     auto http_transport = std::move(definition.transport.http_transport);
     if (!http_transport) {
-        http_transport = std::make_shared<BoostBeastStreamTransport>();
+        http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
     }
     auto ws_transport = std::move(definition.transport.ws_transport);
     if (!ws_transport) {
-        ws_transport = std::make_shared<BoostBeastWebSocketTransport>();
+        ws_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
     }
-    return make_composed_provider(std::move(definition.definition.id),
+    return providers::make_composed_provider(std::move(definition.definition.id),
             std::move(definition.definition.name),
             std::move(definition.definition.models),
             std::move(definition.definition.auth),
@@ -308,7 +312,7 @@ support::ExpectedVoid apply_scripted_provider(ai::Models& models, ScriptedProvid
     const std::string provider_id = definition.definition.id;
     if (definition.stream || definition.transport.http_transport || definition.transport.ws_transport ||
             has_custom_cache_config(definition.transport)) {
-        return ProviderTestAccess::install(models, make_scripted_provider(std::move(definition)));
+        return providers::ProviderTestAccess::install(models, make_scripted_provider(std::move(definition)));
     }
     return models.apply_provider(ai::ProviderChange{
             .provider_id = provider_id,
@@ -324,24 +328,24 @@ support::ExpectedVoid apply_scripted_transport_options(ai::Models& models, Scrip
 
     auto http_transport = std::move(options.http_transport);
     if (!http_transport) {
-        http_transport = std::make_shared<BoostBeastStreamTransport>();
+        http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
     }
     auto ws_transport = std::move(options.ws_transport);
     if (!ws_transport) {
-        ws_transport = std::make_shared<BoostBeastWebSocketTransport>();
+        ws_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
     }
 
-    return ProviderTestAccess::replace_transports(
+    return providers::ProviderTestAccess::replace_transports(
             models, std::move(http_transport), std::move(ws_transport), options.codex_cache_config);
 }
 
-ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string provider_id) {
+ScriptedProviderDefinition make_ai_scripted_fake_provider_definition(std::string provider_id) {
     ScriptedProviderDefinition definition;
     definition.definition.id = provider_id;
     definition.definition.name = "Fake";
     definition.definition.auth = fake_auth();
     definition.stream = [](ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
-        return detail::make_model_stream(
+        return ai::detail::make_model_stream(
                 [model = std::move(model), context = std::move(context), options = std::move(options)](
                         ai::AssistantEventSink sink)
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
@@ -355,15 +359,16 @@ ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string pr
                         assistant.stop_reason = ai::AssistantStopReason::Aborted;
                         assistant.error_message = "Request was aborted";
                         auto failure = support::make_error(support::ErrorCode::Cancelled, *assistant.error_message);
-                        if (auto emitted = emit(sink,
+                        if (auto emitted = providers::emit(sink,
                                     ai::AssistantErrorEvent{
                                             .reason = assistant.stop_reason,
                                             .error = assistant,
                                             .failure = std::move(failure),
-                                            .inference_failure = ai::InferenceFailure{
-                                                    .kind = ai::InferenceFailureKind::Cancelled,
-                                                    .output_started = false,
-                                            },
+                                            .inference_failure =
+                                                    ai::InferenceFailure{
+                                                            .kind = ai::InferenceFailureKind::Cancelled,
+                                                            .output_started = false,
+                                                    },
                                     });
                                 !emitted) {
                             co_return std::unexpected(emitted.error());
@@ -393,15 +398,17 @@ ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string pr
                         assistant.error_message =
                                 "scripted fake " + std::string{support::to_string(*failure_code)} + " failure";
                         auto failure = support::make_error(*failure_code, *assistant.error_message);
-                        if (auto emitted = emit(sink,
+                        if (auto emitted = providers::emit(sink,
                                     ai::AssistantErrorEvent{
                                             .reason = assistant.stop_reason,
                                             .error = assistant,
                                             .failure = std::move(failure),
-                                            .inference_failure = ai::InferenceFailure{
-                                                    .kind = providers::inference_failure_kind_from_transport(*failure_code),
-                                                    .output_started = false,
-                                            },
+                                            .inference_failure =
+                                                    ai::InferenceFailure{
+                                                            .kind = providers::inference_failure_kind_from_transport(
+                                                                    *failure_code),
+                                                            .output_started = false,
+                                                    },
                                     });
                                 !emitted) {
                             co_return std::unexpected(emitted.error());
@@ -443,17 +450,17 @@ ScriptedProviderDefinition make_scripted_fake_provider_definition(std::string pr
     return definition;
 }
 
-std::vector<ScriptedProviderDefinition> make_scripted_fake_provider_definitions() {
+std::vector<ScriptedProviderDefinition> make_ai_scripted_fake_provider_definitions() {
     std::vector<ScriptedProviderDefinition> definitions;
-    definitions.push_back(make_scripted_fake_provider_definition());
-    definitions.push_back(make_scripted_fake_provider_definition("sdk-host"));
+    definitions.push_back(make_ai_scripted_fake_provider_definition());
+    definitions.push_back(make_ai_scripted_fake_provider_definition("sdk-host"));
     return definitions;
 }
 
-std::shared_ptr<ai::Models> make_scripted_fake_models() {
+std::shared_ptr<ai::Models> make_ai_scripted_fake_models() {
     auto models = std::make_shared<ai::Models>(
             std::make_shared<EmptyCredentialStore>(), std::make_shared<EmptyAuthContext>());
-    for (auto&& definition : make_scripted_fake_provider_definitions()) {
+    for (auto&& definition : make_ai_scripted_fake_provider_definitions()) {
         if (auto added = apply_scripted_provider(*models, std::move(definition)); !added) {
             return nullptr;
         }
@@ -461,4 +468,4 @@ std::shared_ptr<ai::Models> make_scripted_fake_models() {
     return models;
 }
 
-} // namespace cch::ai::providers
+} // namespace cch::tests

@@ -12,7 +12,6 @@
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
-#include "ai/ModelThinkingLevel.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
@@ -835,13 +834,13 @@ support::Expected<std::optional<std::string>> AgentSession::Impl::cycle_thinking
     // yields -1, so the next index is 0 (the first supported level).
     std::ptrdiff_t current_index = -1;
     for (std::size_t index = 0; index < levels.size(); ++index) {
-        if (ai::detail::model_thinking_level_name(levels[index]) == current) {
+        if (ai::model_thinking_level_name(levels[index]) == current) {
             current_index = static_cast<std::ptrdiff_t>(index);
             break;
         }
     }
     const auto next_index = (current_index + 1) % static_cast<std::ptrdiff_t>(levels.size());
-    const auto next_name = ai::detail::model_thinking_level_name(levels[next_index]);
+    const auto next_name = ai::model_thinking_level_name(levels[next_index]);
     if (!next_name) {
         return std::optional<std::string>{};
     }

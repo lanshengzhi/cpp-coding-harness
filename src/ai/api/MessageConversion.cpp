@@ -309,16 +309,8 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
                     *blocks, kUserImagePlaceholder, supports_images(model));
             }
             result.emplace_back(std::move(transformed));
-        } else if (const auto* bash = std::get_if<BashExecutionMessage>(&message)) {
-            if (!bash->exclude_from_context) {
-                result.emplace_back(bash_execution_to_user_message(*bash));
-            }
-        } else if (const auto* custom = std::get_if<CustomMessage>(&message)) {
-            result.emplace_back(custom_message_to_user_message(*custom));
-        } else if (const auto* branch = std::get_if<BranchSummaryMessage>(&message)) {
-            result.emplace_back(branch_summary_to_user_message(*branch));
-        } else if (const auto* compaction = std::get_if<CompactionSummaryMessage>(&message)) {
-            result.emplace_back(compaction_summary_to_user_message(*compaction));
+        } else if (auto converted = extended_message_to_user_message(message)) {
+            result.emplace_back(std::move(*converted));
         }
     }
     flush_orphans();

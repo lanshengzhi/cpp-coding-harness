@@ -21,6 +21,17 @@
           "cli/",
           "src/cli/"
         ]
+      },
+      {
+        "id": "agent-no-ai-private-includes",
+        "source_prefixes": [
+          "src/agent/"
+        ],
+        "excluded_source_prefixes": [],
+        "forbidden_include_prefixes": [
+          "ai/",
+          "src/ai/"
+        ]
       }
     ],
     "exceptions": []

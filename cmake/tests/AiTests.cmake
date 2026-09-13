@@ -13,7 +13,7 @@ include_guard(GLOBAL)
         tests/ai/ModelTest.cpp
         tests/ai/ModelsTest.cpp
         tests/ai/ProviderPolicyTest.cpp
-        tests/ai/RetryClassifierTest.cpp
+        tests/ai/InferenceFailureTest.cpp
         tests/ai/SimpleOptionsTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
@@ -25,7 +25,7 @@ include_guard(GLOBAL)
         tests/ai/auth/OpenAICodexOAuthTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
-        tests/ai/providers/FakeProviderTest.cpp
+        tests/ai/providers/ScriptedProviderTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/ai/providers/StreamExecutionEngineTest.cpp
 )

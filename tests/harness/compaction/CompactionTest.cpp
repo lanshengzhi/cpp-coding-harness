@@ -20,7 +20,7 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/support/Error.hpp>
-#include "ai/glaze/AiJson.hpp"
+#include "agent/harness/session/SessionMessageJson.hpp"
 #include "agent/harness/compaction/Compaction.hpp"
 #include <cch/ai/Models.hpp>
 #include "support/AsyncResultBridge.hpp"
@@ -231,7 +231,7 @@ template <typename T> [[nodiscard]] T run_awaitable(boost::asio::awaitable<T> aw
     }
     support::JsonValue messages{support::JsonValue::array_t{}};
     for (const auto& message : call.context.messages) {
-        auto serialized = support::write_json(ai::glaze::to_message_dto(message));
+        auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
         REQUIRE(serialized);
         auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);
@@ -935,7 +935,7 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(context.messages[0]));
     support::JsonValue rebuild{support::JsonValue::array_t{}};
     for (const auto& message : context.messages) {
-        auto serialized = support::write_json(ai::glaze::to_message_dto(message));
+        auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
         REQUIRE(serialized);
         auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);

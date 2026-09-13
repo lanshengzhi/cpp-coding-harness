@@ -3,7 +3,7 @@
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
-#include "ai/utils/RetryClassifier.hpp"
+#include <cch/ai/InferenceFailure.hpp>
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/redirect_error.hpp>

@@ -2,8 +2,6 @@
 
 #include <cch/support/Error.hpp>
 
-#include "ai/ModelThinkingLevel.hpp"
-
 #include <cmath>
 #include <format>
 #include <string_view>
@@ -91,7 +89,7 @@ support::ExpectedVoid validate_model(const Model& model) {
     }
     if (model.thinking_level_map) {
         for (const auto& [level, _] : *model.thinking_level_map) {
-            if (!detail::model_thinking_level_name(level)) {
+            if (!model_thinking_level_name(level)) {
                 return std::unexpected(support::make_error(
                     support::ErrorCode::Validation,
                     "invalid model thinking level"));

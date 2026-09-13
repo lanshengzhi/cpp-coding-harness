@@ -303,7 +303,7 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
             coding_agent::ModelRuntimeTransportTestOptions{
                     .transports =
-                            ai::providers::ScriptedTransportOptions{
+                            tests::ScriptedTransportOptions{
                                     .http_transport = transport,
                             },
             });
@@ -508,7 +508,7 @@ TEST_CASE(
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
             coding_agent::ModelRuntimeTransportTestOptions{
                     .transports =
-                            ai::providers::ScriptedTransportOptions{
+                            tests::ScriptedTransportOptions{
                                     .http_transport = transport,
                             },
             });
@@ -559,7 +559,7 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain",
             coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{.credentials = storage},
                     coding_agent::ModelRuntimeTransportTestOptions{
                             .transports =
-                                    ai::providers::ScriptedTransportOptions{
+                                    tests::ScriptedTransportOptions{
                                             .http_transport = transport,
                                     },
                     });
@@ -704,7 +704,7 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
             coding_agent::ModelRuntimeTransportTestOptions{
                     .transports =
-                            ai::providers::ScriptedTransportOptions{
+                            tests::ScriptedTransportOptions{
                                     .http_transport = transport,
                             },
             });

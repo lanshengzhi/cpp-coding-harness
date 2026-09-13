@@ -2,10 +2,13 @@
 
 #include <cch/support/Error.hpp>
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace cch::ai {
@@ -69,6 +72,40 @@ struct Model {
 [[nodiscard]] ModelThinkingLevel clamp_thinking_level(
     const Model& model,
     ModelThinkingLevel requested);
+
+/// The seven Thinking Level wire names paired with their levels, in the order
+/// `clamp_thinking_level` walks when it widens or narrows a request.
+inline constexpr std::array<std::pair<ModelThinkingLevel, std::string_view>, 7> kModelThinkingLevels{{
+        {ModelThinkingLevel::Off, "off"},
+        {ModelThinkingLevel::Minimal, "minimal"},
+        {ModelThinkingLevel::Low, "low"},
+        {ModelThinkingLevel::Medium, "medium"},
+        {ModelThinkingLevel::High, "high"},
+        {ModelThinkingLevel::XHigh, "xhigh"},
+        {ModelThinkingLevel::Max, "max"},
+}};
+
+/// The wire name of `level`, or `std::nullopt` for a level outside the
+/// seven-level vocabulary.
+[[nodiscard]] inline std::optional<std::string_view> model_thinking_level_name(ModelThinkingLevel level) {
+    for (const auto& [known_level, name] : kModelThinkingLevels) {
+        if (known_level == level) {
+            return name;
+        }
+    }
+    return std::nullopt;
+}
+
+/// The level named by `name`, or `std::nullopt` when `name` is not one of the
+/// seven wire names; validation owns rejection of invalid names.
+[[nodiscard]] inline std::optional<ModelThinkingLevel> parse_model_thinking_level(std::string_view name) {
+    for (const auto& [level, known_name] : kModelThinkingLevels) {
+        if (known_name == name) {
+            return level;
+        }
+    }
+    return std::nullopt;
+}
 
 /// Clamp a wire-name thinking level ("off".."max") to the model's supported
 /// set and return the clamped wire name (pi-ai `clampThinkingLevel` applied to

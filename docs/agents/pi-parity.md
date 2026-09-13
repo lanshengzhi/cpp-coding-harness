@@ -23,10 +23,14 @@ The first contract rules establish these boundaries:
 
 - Headless Session and Runtime sources cannot include frontend headers from the
   TUI, terminal, or CLI surfaces.
-- Cross-Owner dependencies must follow the declared Owner graph and use
-  authoritative Owner targets.
-- Owner Interface headers remain canonical and private implementation roots do
-  not leak across Owners.
+- Session-module sources under `src/agent/` cannot include `cch_ai` private
+  headers; that module reaches the AI Owner only through the canonical
+  `<cch/ai/...>` Owner Interface spelling (rule `agent-no-ai-private-includes`,
+  diagnostic `PARITY-8003`).
+- Owner Interface headers keep their canonical `<cch/...>` spelling, and
+  cross-Owner include edges must follow the declared Owner graph through
+  authoritative Owner targets; the gate enforces those checks rather than a
+  blanket ban on private includes.
 - Strict builds keep their no-exception and evidence requirements.
 
 The contract is intentionally machine-readable and fail-closed. A rule change

@@ -1,5 +1,6 @@
 #include "SlashCommandRouter.hpp"
 
+#include <cch/ai/Model.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
 
@@ -138,9 +139,6 @@ constexpr std::array<SlashCommandAlias, 24> kCommandAliases{{
     {.spelling = "trust", .command = SlashCommandId::Trust},
 }};
 
-constexpr std::array<std::string_view, 7> kThinkingLevels{
-    "off", "minimal", "low", "medium", "high", "xhigh", "max"};
-
 [[nodiscard]] bool is_ascii_space(char value) noexcept {
     return std::isspace(static_cast<unsigned char>(value)) != 0;
 }
@@ -195,8 +193,7 @@ struct SlashCommandParts {
 }
 
 [[nodiscard]] bool is_valid_thinking_level(std::string_view level) noexcept {
-    return std::find(kThinkingLevels.begin(), kThinkingLevels.end(), level) !=
-        kThinkingLevels.end();
+    return ai::parse_model_thinking_level(level).has_value();
 }
 
 [[nodiscard]] SlashCommandRouteError unknown_command_error(

@@ -208,4 +208,39 @@ inline constexpr std::string_view kBranchSummarySuffix = "</summary>";
     return UserMessage{.content = msg.content, .timestamp = msg.timestamp};
 }
 
+/// pi `excludeFromContext` rule for bash-execution output: a message marked
+/// `exclude_from_context` never enters the provider context. False for every
+/// other alternative, which all convert.
+[[nodiscard]] inline bool excluded_from_provider_context(const MessageVariant& message) noexcept {
+    if (const auto* bash = std::get_if<BashExecutionMessage>(&message)) {
+        return bash->exclude_from_context;
+    }
+    return false;
+}
+
+/// pi `convertToLlm` for one extended runtime message: bash execution, custom,
+/// branch summary, and compaction summary become the provider-ready user
+/// message they map to. Returns `nullopt` when
+/// `excluded_from_provider_context` holds and for every non-extended
+/// alternative.
+[[nodiscard]] inline std::optional<UserMessage> extended_message_to_user_message(
+        const MessageVariant& message) noexcept {
+    if (excluded_from_provider_context(message)) {
+        return std::nullopt;
+    }
+    if (const auto* bash = std::get_if<BashExecutionMessage>(&message)) {
+        return bash_execution_to_user_message(*bash);
+    }
+    if (const auto* custom = std::get_if<CustomMessage>(&message)) {
+        return custom_message_to_user_message(*custom);
+    }
+    if (const auto* branch = std::get_if<BranchSummaryMessage>(&message)) {
+        return branch_summary_to_user_message(*branch);
+    }
+    if (const auto* compaction = std::get_if<CompactionSummaryMessage>(&message)) {
+        return compaction_summary_to_user_message(*compaction);
+    }
+    return std::nullopt;
+}
+
 } // namespace cch::ai

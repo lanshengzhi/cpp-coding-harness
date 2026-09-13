@@ -14,8 +14,8 @@
 #include <cch/support/JsonValue.hpp>
 
 #include "support/AsyncResultBridge.hpp"
-#include "ai/glaze/AiJson.hpp"
 #include "agent/harness/session/EntrySerializer.hpp"
+#include "agent/harness/session/SessionMessageJson.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -126,7 +126,7 @@ namespace {
 }
 
 [[nodiscard]] support::JsonValue cpp_message_json(const ai::MessageVariant& message) {
-    auto serialized = support::write_json(ai::glaze::to_message_dto(message));
+    auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
     REQUIRE(serialized);
     auto parsed = support::read_json(*serialized);
     REQUIRE(parsed);

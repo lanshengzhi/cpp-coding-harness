@@ -16,7 +16,7 @@
 #include "coding_agent/SessionDiscovery.hpp"
 
 #include "ai/ModelStreamBridge.hpp"
-#include "ai/glaze/AiJson.hpp"
+#include "agent/harness/session/SessionMessageJson.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -236,11 +236,11 @@ canonical_message(const support::JsonValue &message) {
 
 [[nodiscard]] support::JsonValue
 canonical_message(const ai::MessageVariant &message) {
-  auto serialized = support::write_json(ai::glaze::to_message_dto(message));
-  REQUIRE(serialized);
-  auto parsed = support::read_json(*serialized);
-  REQUIRE(parsed);
-  return canonical_message(*parsed);
+    auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
+    REQUIRE(serialized);
+    auto parsed = support::read_json(*serialized);
+    REQUIRE(parsed);
+    return canonical_message(*parsed);
 }
 
 [[nodiscard]] support::JsonValue

@@ -1,5 +1,6 @@
 #include <cch/ai/Model.hpp>
 #include "coding_agent/ModelConfig.hpp"
+#include "support/PiFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -155,6 +156,44 @@ TEST_CASE("ModelConfig parses thinking level maps preserving null-unsupported se
     REQUIRE(high != map->end());
     REQUIRE(high->second.has_value());
     CHECK(*high->second == "max");
+}
+
+TEST_CASE("the frozen complete Model fixture preserves the null-aware thinking level map",
+        "[coding_agent][model-config][issue336][compat-pi]") {
+    // complete-anthropic-model.json exercises pi's three map states: an absent
+    // level key (provider default), a present null (explicitly unsupported),
+    // and a mapped wire name.
+    tests::TempWorkspace workspace;
+    const auto fixture = tests::read_pi_fixture_text("models/complete-anthropic-model.json");
+    REQUIRE(fixture);
+    const auto config = load_models_json(
+            workspace, R"({"providers":{"kimi-coding":{"apiKey":"dummy-fixture-key","models":[)" + *fixture + "]}}}");
+    CHECK_FALSE(config.error().has_value());
+    const auto provider = config.provider("kimi-coding");
+    REQUIRE(provider.has_value());
+    REQUIRE(provider->models.has_value());
+    const auto& map = provider->models->front().thinking_level_map;
+    REQUIRE(map.has_value());
+    CHECK(map->find(ai::ModelThinkingLevel::Off) == map->end());
+    const auto low = map->find(ai::ModelThinkingLevel::Low);
+    REQUIRE(low != map->end());
+    CHECK_FALSE(low->second.has_value());
+    const auto high = map->find(ai::ModelThinkingLevel::High);
+    REQUIRE(high != map->end());
+    CHECK(high->second == std::optional<std::string>{"high"});
+
+    // A model entry without the member has no map at all, rather than an empty
+    // map. (default-model.json is pi's placeholder and has no models.json
+    // profile: its empty baseUrl fails the C++ schema.)
+    const auto plain = load_models_json(workspace, R"({"providers":{"deepseek":{
+      "baseUrl":"https://api.deepseek.example/v1",
+      "api":"openai-responses",
+      "models":[{"id":"deepseek-v4-flash"}]}}})");
+    CHECK_FALSE(plain.error().has_value());
+    const auto plain_provider = plain.provider("deepseek");
+    REQUIRE(plain_provider.has_value());
+    REQUIRE(plain_provider->models.has_value());
+    CHECK_FALSE(plain_provider->models->front().thinking_level_map.has_value());
 }
 
 TEST_CASE("ModelConfig unknown provider fields are ignored (no compat surface)",

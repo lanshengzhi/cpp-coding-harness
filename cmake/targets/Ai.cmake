@@ -9,6 +9,7 @@ cch_parity_declare_target(
     SOURCES
         src/ai/BuiltinProviders.cpp
         src/ai/ContentUtil.cpp
+        src/ai/InferenceFailure.cpp
         src/ai/Model.cpp
         src/ai/Models.cpp
         src/ai/ModelStream.cpp
@@ -36,7 +37,6 @@ cch_parity_declare_target(
         src/ai/providers/RetryPolicy.cpp
         src/ai/providers/SseParser.cpp
         src/ai/providers/StreamExecutionEngine.cpp
-        src/ai/utils/RetryClassifier.cpp
     DEPENDS
         cch_support
         Boost::headers@boost

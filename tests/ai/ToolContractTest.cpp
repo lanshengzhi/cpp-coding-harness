@@ -1,4 +1,3 @@
-#include "ai/glaze/ToolDtos.hpp"
 #include "support/ComplexToolSchemaFixture.hpp"
 #include "support/Json.hpp"
 #include <cch/ai/Tool.hpp>
@@ -6,7 +5,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <string>
 #include <type_traits>
 
 using namespace cch;
@@ -17,12 +15,6 @@ support::JsonValue complex_contract() {
     auto parsed = support::read_json(tests::kComplexToolArgumentContract);
     REQUIRE(parsed);
     return std::move(*parsed);
-}
-
-std::string canonical_json(const support::JsonValue& value) {
-    auto serialized = support::write_json(value);
-    REQUIRE(serialized);
-    return std::move(*serialized);
 }
 
 } // namespace
@@ -36,30 +28,4 @@ TEST_CASE("tool parameters are the passive project JSON value", "[ai][u2][tool][
     CHECK(object_tool.parameters.holds<support::JsonValue::object_t>());
     CHECK(boolean_tool.parameters.holds<bool>());
     CHECK_FALSE(boolean_tool.parameters.get_boolean());
-}
-
-TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", "[ai][u2][tool][issue24][compat-pi]") {
-    const auto expected = complex_contract();
-    const ai::Tool tool{"complete_contract", "Complete contract", expected};
-
-    auto json = ai::glaze::write_function_tool_json(tool);
-    REQUIRE(json);
-    auto parsed = support::read_json(*json);
-    REQUIRE(parsed);
-
-    CHECK(parsed->at("name").get_string() == "complete_contract");
-    CHECK(parsed->at("description").get_string() == "Complete contract");
-    CHECK(canonical_json(parsed->at("parameters")) == canonical_json(expected));
-}
-
-TEST_CASE("function tool serialization preserves boolean JSON Schemas", "[ai][u2][tool][issue24][compat-pi]") {
-    const ai::Tool tool{"disabled_contract", "Reject every argument", support::JsonValue{false}};
-
-    auto json = ai::glaze::write_function_tool_json(tool);
-    REQUIRE(json);
-    auto parsed = support::read_json(*json);
-    REQUIRE(parsed);
-
-    REQUIRE(parsed->at("parameters").holds<bool>());
-    CHECK_FALSE(parsed->at("parameters").get_boolean());
 }

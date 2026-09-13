@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
-#include "ai/providers/FakeProvider.hpp"
+#include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -352,7 +352,7 @@ std::shared_ptr<ai::Models> make_models(
 template <typename ProviderType>
 [[nodiscard]] support::ExpectedVoid install_provider(
         const std::shared_ptr<ai::Models>& models, std::shared_ptr<ProviderType> provider) {
-    ai::providers::ScriptedProviderDefinition definition;
+    tests::ScriptedProviderDefinition definition;
     definition.definition = ai::ProviderDefinition{
             .id = std::string{provider->id()},
             .name = std::string{provider->name()},
@@ -363,7 +363,7 @@ template <typename ProviderType>
                                 ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
         return provider->stream(std::move(model), std::move(context), std::move(options));
     };
-    return ai::providers::apply_scripted_provider(*models, std::move(definition));
+    return tests::apply_scripted_provider(*models, std::move(definition));
 }
 
 ai::ProviderAuth oauth_login_auth(

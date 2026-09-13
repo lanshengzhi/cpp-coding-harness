@@ -1,6 +1,6 @@
 #include "EntrySerializer.hpp"
 
-#include "ai/glaze/AiJson.hpp"
+#include "agent/harness/session/SessionMessageJson.hpp"
 #include "support/Json.hpp"
 #include "support/Redactor.hpp"
 
@@ -58,7 +58,7 @@ struct MessageEntryDto {
     NullableString parentId;
     std::optional<std::string> timestamp;
     std::string type{"message"};
-    ai::glaze::MessageDto message;
+    MessageDto message;
     // Legacy read tolerance: pre-pi C++ files carried `entryId`/`leafId`.
     std::optional<std::string> entryId;
     std::optional<std::string> leafId;
@@ -102,8 +102,7 @@ struct CustomDto {
     std::optional<glz::raw_json> data;
 };
 
-using CustomMessageContentDto =
-    std::variant<std::string, std::vector<ai::glaze::ContentDto>>;
+using CustomMessageContentDto = std::variant<std::string, std::vector<ContentDto>>;
 
 struct CustomMessageDto {
     std::string id;
@@ -133,9 +132,9 @@ struct CompactionDto {
     std::string summary;
     std::optional<std::string> firstKeptEntryId;
     std::size_t tokensBefore{0};
-    std::optional<std::vector<ai::glaze::MessageDto>> retainedTail;
+    std::optional<std::vector<MessageDto>> retainedTail;
     std::optional<glz::raw_json> details;
-    std::optional<ai::glaze::UsageDto> usage;
+    std::optional<UsageDto> usage;
     std::optional<bool> fromHook;
 };
 
@@ -147,7 +146,7 @@ struct BranchSummaryDto {
     std::string fromId;
     std::string summary;
     std::optional<glz::raw_json> details;
-    std::optional<ai::glaze::UsageDto> usage;
+    std::optional<UsageDto> usage;
     std::optional<bool> fromHook;
 };
 
@@ -454,7 +453,7 @@ struct EntryBaseResult {
     dto.id = std::move(entry_id);
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = format_iso_timestamp_ms(timestamp);
-    dto.message = ai::glaze::to_message_dto(message);
+    dto.message = detail::to_message_dto(message);
     return dto;
 }
 
@@ -545,11 +544,11 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
         return CustomMessageEntryContent{*text};
     }
 
-    const auto& content_dtos = std::get<std::vector<ai::glaze::ContentDto>>(content);
+    const auto& content_dtos = std::get<std::vector<detail::ContentDto>>(content);
     std::vector<CustomMessageEntryContentBlock> converted;
     converted.reserve(content_dtos.size());
     for (const auto& dto : content_dtos) {
-        auto block = ai::glaze::detail::content_from_dto(dto, context);
+        auto block = detail::content_from_dto(dto, context);
         if (!block) {
             return std::unexpected(block.error());
         }
@@ -558,10 +557,9 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
         } else if (auto* image = std::get_if<ai::ImageContent>(&*block)) {
             converted.emplace_back(std::move(*image));
         } else {
-            return std::unexpected(ai::glaze::detail::json_contract_error(
-                "unsupported custom_message content block",
-                "custom_message content accepts only text and image blocks",
-                context));
+            return std::unexpected(detail::json_contract_error("unsupported custom_message content block",
+                    "custom_message content accepts only text and image blocks",
+                    context));
         }
     }
     return CustomMessageEntryContent{std::move(converted)};
@@ -574,12 +572,10 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     }
 
     const auto& blocks = std::get<std::vector<CustomMessageEntryContentBlock>>(content);
-    std::vector<ai::glaze::ContentDto> dtos;
+    std::vector<detail::ContentDto> dtos;
     dtos.reserve(blocks.size());
     for (const auto& block : blocks) {
-        dtos.push_back(std::visit(
-            [](const auto& concrete) { return ai::glaze::detail::to_dto(concrete); },
-            block));
+        dtos.push_back(std::visit([](const auto& concrete) { return detail::to_dto(concrete); }, block));
     }
     return detail::CustomMessageContentDto{std::move(dtos)};
 }
@@ -801,7 +797,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         if (!dto) {
             return std::unexpected(dto.error());
         }
-        auto message = ai::glaze::message_from_dto(dto->message, line);
+        auto message = detail::message_from_dto(dto->message, line);
         if (!message) {
             return std::unexpected(message.error());
         }
@@ -907,7 +903,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
             std::vector<ai::MessageVariant> tail;
             tail.reserve(dto->retainedTail->size());
             for (const auto& message_dto : *dto->retainedTail) {
-                auto message = ai::glaze::message_from_dto(message_dto, line);
+                auto message = detail::message_from_dto(message_dto, line);
                 if (!message) {
                     return std::unexpected(message.error());
                 }
@@ -917,7 +913,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         }
         std::optional<ai::Usage> usage;
         if (dto->usage.has_value()) {
-            auto parsed_usage = ai::glaze::detail::usage_from_dto(*dto->usage, line);
+            auto parsed_usage = detail::usage_from_dto(*dto->usage, line);
             if (!parsed_usage) {
                 return std::unexpected(parsed_usage.error());
             }
@@ -942,7 +938,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         }
         std::optional<ai::Usage> usage;
         if (dto->usage.has_value()) {
-            auto parsed_usage = ai::glaze::detail::usage_from_dto(*dto->usage, line);
+            auto parsed_usage = detail::usage_from_dto(*dto->usage, line);
             if (!parsed_usage) {
                 return std::unexpected(parsed_usage.error());
             }
@@ -1177,10 +1173,10 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     dto.firstKeptEntryId = value.first_kept_entry_id;
     dto.tokensBefore = value.tokens_before;
     if (value.retained_tail) {
-        std::vector<ai::glaze::MessageDto> tail;
+        std::vector<detail::MessageDto> tail;
         tail.reserve(value.retained_tail->size());
         for (const auto& message : *value.retained_tail) {
-            tail.push_back(ai::glaze::to_message_dto(message));
+            tail.push_back(detail::to_message_dto(message));
         }
         dto.retainedTail = std::move(tail);
     }
@@ -1192,7 +1188,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
         dto.details = glz::raw_json{std::move(*details_json)};
     }
     if (value.usage) {
-        dto.usage = ai::glaze::detail::to_dto(*value.usage);
+        dto.usage = detail::to_dto(*value.usage);
     }
     dto.fromHook = value.from_hook;
     return finish_entry(
@@ -1225,7 +1221,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
         dto.details = glz::raw_json{std::move(*details_json)};
     }
     if (usage) {
-        dto.usage = ai::glaze::detail::to_dto(*usage);
+        dto.usage = detail::to_dto(*usage);
     }
     dto.fromHook = from_hook;
     return finish_entry(
@@ -1312,7 +1308,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
-        dto.message = ai::glaze::to_message_dto(*entry.message);
+        dto.message = detail::to_message_dto(*entry.message);
         return serialize_tree_entry(dto);
     }
     case SessionEntryKind::ModelChange: {
@@ -1397,10 +1393,10 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         dto.firstKeptEntryId = value.first_kept_entry_id;
         dto.tokensBefore = value.tokens_before;
         if (value.retained_tail.has_value()) {
-            std::vector<ai::glaze::MessageDto> tail;
+            std::vector<detail::MessageDto> tail;
             tail.reserve(value.retained_tail->size());
             for (const auto& message : *value.retained_tail) {
-                tail.push_back(ai::glaze::to_message_dto(message));
+                tail.push_back(detail::to_message_dto(message));
             }
             dto.retainedTail = std::move(tail);
         }
@@ -1412,7 +1408,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
             dto.details = glz::raw_json{std::move(*details_json)};
         }
         if (value.usage) {
-            dto.usage = ai::glaze::detail::to_dto(*value.usage);
+            dto.usage = detail::to_dto(*value.usage);
         }
         dto.fromHook = value.from_hook;
         return serialize_tree_entry(dto);
@@ -1433,7 +1429,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
             dto.details = glz::raw_json{std::move(*details_json)};
         }
         if (value.usage) {
-            dto.usage = ai::glaze::detail::to_dto(*value.usage);
+            dto.usage = detail::to_dto(*value.usage);
         }
         dto.fromHook = value.from_hook;
         return serialize_tree_entry(dto);

@@ -1,6 +1,5 @@
 #include "SimpleOptions.hpp"
 
-#include "ai/ModelThinkingLevel.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -121,6 +120,10 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
                         block);
                 }
             } else if constexpr (std::is_same_v<Value, BashExecutionMessage>) {
+                // The estimate accounts for the bash message whether or not pi
+                // excludes it from the context, so it maps the message directly
+                // instead of calling `extended_message_to_user_message`, whose
+                // `nullopt` for an excluded message would shrink the estimate.
                 const auto converted = bash_execution_to_user_message(value);
                 characters = std::get<TextContent>(
                     std::get<std::vector<Content>>(converted.content).front())
@@ -204,9 +207,9 @@ ModelThinkingLevel clamp_thinking_level(
 std::string clamp_thinking_level_string(
     const Model& model,
     std::string_view requested) {
-    if (const auto parsed = detail::parse_model_thinking_level(requested)) {
+    if (const auto parsed = parse_model_thinking_level(requested)) {
         const auto clamped = clamp_thinking_level(model, *parsed);
-        if (const auto name = detail::model_thinking_level_name(clamped)) {
+        if (const auto name = model_thinking_level_name(clamped)) {
             return std::string{*name};
         }
     }
