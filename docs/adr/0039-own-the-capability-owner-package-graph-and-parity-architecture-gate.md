@@ -121,3 +121,9 @@ To make the freshness unit match the unit the evidence describes:
 4. A source-body or comment edit no longer invalidates include evidence.
 
 The parser rejects `schema_version: 1` evidence as stale (`PARITY-3002`) before it reads any entry, so an existing build tree rescans once and then stops rescanning on body edits.
+
+## Addendum: the `cch_coding_agent` row's legal Owner dependencies are keyed on the depending target's role (Issue #658)
+
+The legal-graph table above states each Owner's direct Owner dependencies as one list. For `cch_coding_agent` that list is now a function of the depending target's role: `legal_owner_dependencies` stays authoritative for every target, and the optional manifest field `implementation_owner_dependencies` is appended only when the depending target's role is not `owner`. `cch_tui` moved into that field, so the headless `owner` library cannot reach the frontend while its `implementation` frontend targets keep the edge and their `<cch/tui/...>` includes.
+
+Both Parity Gate seams apply the split — the cross-Owner target edge (`PARITY-2001`) and the direct include edge (`PARITY-4007`). The Owner Interface standalone-compile check (`tests/architecture/owner_interface_standalone.py`) stays on `legal_owner_dependencies` deliberately: an interface header that reached for a frontend would put the frontend on the headless core's own contract surface, so the narrower set is the right authority there. Because the include check now judges the declaring target's role, a file declared by two targets is rejected as a contradictory declaration rather than resolved by declaration order. [ADR 0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md)'s addendum records the contract clause this enforces.

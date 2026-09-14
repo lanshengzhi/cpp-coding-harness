@@ -167,6 +167,24 @@ class Owner:
     root: str
     interface_root: str
     legal_owner_dependencies: tuple[str, ...]
+    implementation_owner_dependencies: tuple[str, ...] = ()
+
+    def legal_dependencies_for(self, target_role: str) -> frozenset[str]:
+        """The Owner names a depending target of `target_role` may depend on.
+
+        `legal_owner_dependencies` is the authoritative set for every target.
+        `implementation_owner_dependencies` is appended for *every* role other
+        than `owner` - the frontend `implementation` targets today, any future
+        `implementation` or `composition` target tomorrow - so a presentation
+        target may link a package the headless owner library must not, while
+        the owner library is held to the authoritative set alone. The field
+        name is narrower than that predicate and kept for the frontend case
+        it was introduced for (ADR 0053, issue #658).
+        """
+        legal = set(self.legal_owner_dependencies)
+        if target_role != "owner":
+            legal.update(self.implementation_owner_dependencies)
+        return frozenset(legal)
 
 
 @dataclass(frozen=True)
@@ -241,6 +259,15 @@ class IncludeDirective:
     spelling: str  # "angle" | "quote" | "macro"
     line: int
     macro: bool
+
+
+@dataclass(frozen=True)
+class IncludeSite:
+    """One scanned `#include` directive: the including file and its target header."""
+
+    including_file: str
+    include_path: str
+    line: int
 
 
 @dataclass(frozen=True)
@@ -754,7 +781,15 @@ def parse_manifest(data: Any) -> Manifest:
         _require_object(entry, owner_context, RULE_INVALID_MANIFEST_VALUE)
         _check_unknown_keys(
             entry,
-            frozenset({"role", "root", "interface_root", "legal_owner_dependencies"}),
+            frozenset(
+                {
+                    "role",
+                    "root",
+                    "interface_root",
+                    "legal_owner_dependencies",
+                    "implementation_owner_dependencies",
+                }
+            ),
             owner_context,
             RULE_UNKNOWN_MANIFEST_FIELD,
         )
@@ -815,6 +850,20 @@ def parse_manifest(data: Any) -> Manifest:
             )
         legal = tuple(legal_raw)
 
+        # Optional appended set: a depending target whose role is not `owner`
+        # may also use these Owner dependencies. Absent means no append, so an
+        # entry that does not need the split is unchanged.
+        implementation_raw = entry.get("implementation_owner_dependencies", [])
+        if not isinstance(implementation_raw, list) or any(
+            not isinstance(item, str) for item in implementation_raw
+        ):
+            _fail(
+                RULE_INVALID_MANIFEST_VALUE,
+                f"field 'implementation_owner_dependencies' at {owner_context} must be a list "
+                "of strings",
+            )
+        implementation = tuple(implementation_raw)
+
         if root in seen_roots:
             _fail(
                 RULE_INVALID_MANIFEST_VALUE,
@@ -830,40 +879,53 @@ def parse_manifest(data: Any) -> Manifest:
             )
         seen_interface_roots[interface_root] = name
 
-        owners[name] = Owner(name, role, root, interface_root, legal)
+        owners[name] = Owner(name, role, root, interface_root, legal, implementation)
 
-    # Contradictory legal_owner_dependencies are validated after every owner is
-    # present, so forward references are only errors when they name a package
-    # that does not exist at all.
+    # Contradictory Owner dependency declarations are validated after every
+    # owner is present, so forward references are only errors when they name a
+    # package that does not exist at all. The authoritative and appended sets
+    # share one namespace: a dependency declared in both is a contradiction,
+    # because the appended set only widens the authoritative one.
     for owner in owners.values():
-        seen: set[str] = set()
-        for dependency in owner.legal_owner_dependencies:
-            if dependency not in owners:
-                _fail(
-                    RULE_INVALID_MANIFEST_VALUE,
-                    f"contradictory declaration: owner '{owner.name}' lists legal owner dependency "
-                    f"'{dependency}' which is not a declared owner",
-                )
-            if dependency == owner.name:
-                _fail(
-                    RULE_INVALID_MANIFEST_VALUE,
-                    f"contradictory declaration: owner '{owner.name}' lists itself as a legal "
-                    f"owner dependency",
-                )
-            if dependency in seen:
-                _fail(
-                    RULE_INVALID_MANIFEST_VALUE,
-                    f"contradictory declaration: owner '{owner.name}' lists legal owner dependency "
-                    f"'{dependency}' more than once",
-                )
-            seen.add(dependency)
-            if owners[dependency].role != "owner":
-                _fail(
-                    RULE_INVALID_MANIFEST_VALUE,
-                    f"contradictory declaration: owner '{owner.name}' lists '{dependency}' as a "
-                    f"legal owner dependency, but '{dependency}' is a '{owners[dependency].role}' "
-                    f"package; support is pi-neutral and never a legal cross-Owner edge",
-                )
+        declared_in: dict[str, str] = {}
+        for field, dependencies in (
+            ("legal_owner_dependencies", owner.legal_owner_dependencies),
+            ("implementation_owner_dependencies", owner.implementation_owner_dependencies),
+        ):
+            for dependency in dependencies:
+                if dependency not in owners:
+                    _fail(
+                        RULE_INVALID_MANIFEST_VALUE,
+                        f"contradictory declaration: owner '{owner.name}' lists {field} "
+                        f"'{dependency}' which is not a declared owner",
+                    )
+                if dependency == owner.name:
+                    _fail(
+                        RULE_INVALID_MANIFEST_VALUE,
+                        f"contradictory declaration: owner '{owner.name}' lists itself in "
+                        f"'{field}'",
+                    )
+                if dependency in declared_in:
+                    previous_field = declared_in[dependency]
+                    repeated_in = (
+                        f"in '{previous_field}' and '{field}'"
+                        if previous_field != field
+                        else f"twice in '{field}'"
+                    )
+                    _fail(
+                        RULE_INVALID_MANIFEST_VALUE,
+                        f"contradictory declaration: owner '{owner.name}' lists Owner dependency "
+                        f"'{dependency}' more than once, {repeated_in}",
+                    )
+                declared_in[dependency] = field
+                if owners[dependency].role != "owner":
+                    _fail(
+                        RULE_INVALID_MANIFEST_VALUE,
+                        f"contradictory declaration: owner '{owner.name}' lists '{dependency}' "
+                        f"in '{field}', but '{dependency}' is a "
+                        f"'{owners[dependency].role}' package; support is pi-neutral and never "
+                        f"a legal cross-Owner edge",
+                    )
 
     roles_raw = _require_member(data, "roles", "manifest", RULE_MISSING_MANIFEST_FIELD)
     if not isinstance(roles_raw, list) or any(
@@ -1122,6 +1184,28 @@ def parse_index(data: Any) -> Index:
                 pch_input,
             )
         )
+
+    # A declared file belongs to exactly one target. The include check judges a
+    # cross-Owner edge against the declaring target's role, so letting two
+    # targets claim the same file would leave that policy to declaration order
+    # (issue #658).
+    declared_by: dict[str, str] = {}
+    for target in targets:
+        for declared_path in (
+            *target.sources,
+            *target.forced_includes,
+            *((target.pch_input,) if target.pch_input else ()),
+        ):
+            normalized = _norm_path(declared_path)
+            previous = declared_by.get(normalized)
+            if previous is not None and previous != target.name:
+                _fail(
+                    RULE_INVALID_INDEX_VALUE,
+                    f"contradictory declaration: file '{normalized}' is declared by targets "
+                    f"'{previous}' and '{target.name}'; a declared file belongs to exactly one "
+                    f"target",
+                )
+            declared_by[normalized] = target.name
 
     return Index(producer, schema_version, manifest_digest, tuple(targets))
 
@@ -1610,11 +1694,19 @@ def _resolve_include(
 def _include_edge_diagnostic(
     from_owner: str,
     to_owner: str,
+    from_target_role: str,
     manifest: Manifest,
-    source: str,
-    include_path: str,
-    line: int,
+    site: IncludeSite,
 ) -> Optional[Diagnostic]:
+    """Judge one cross-Owner include edge against the depending target's role.
+
+    Two seams can reject a frontend include from an `owner` target: the Product
+    Architecture Contract rule (source-content prefixes, with its dated
+    exceptions) and this Owner dependency allowlist (keyed on the depending
+    target's role). The allowlist is the authority for edges and deliberately
+    ignores contract exceptions; the contract rule adds the source-level
+    prohibition. Neither replaces the other (issue #658).
+    """
     if from_owner == to_owner:
         return None
     from_entry = manifest.owners.get(from_owner)
@@ -1626,22 +1718,24 @@ def _include_edge_diagnostic(
     if from_entry.role == "support":
         return Diagnostic(
             RULE_ILLEGAL_DIRECT_INCLUDE,
-            f"support source '{source}' (owner '{from_owner}') includes owner header "
-            f"'{include_path}' (owner '{to_owner}'); support owns no Supported Capability",
+            f"support source '{site.including_file}' (owner '{from_owner}') includes owner "
+            f"header '{site.include_path}' (owner '{to_owner}'); support owns no Supported "
+            f"Capability",
             target=from_owner,
             dependency=to_owner,
-            path=f"{source}:{line}",
+            path=f"{site.including_file}:{site.line}",
         )
-    if to_owner not in from_entry.legal_owner_dependencies:
+    legal = from_entry.legal_dependencies_for(from_target_role)
+    if to_owner not in legal:
         return Diagnostic(
             RULE_ILLEGAL_DIRECT_INCLUDE,
-            f"illegal direct include: '{source}' (owner '{from_owner}') includes "
-            f"'{include_path}' (owner '{to_owner}'); '{to_owner}' is not in "
-            f"'{from_owner}'s legal owner dependencies "
-            f"{sorted(from_entry.legal_owner_dependencies)}",
+            f"illegal direct include: '{site.including_file}' (owner '{from_owner}') includes "
+            f"'{site.include_path}' (owner '{to_owner}'); '{to_owner}' is not in "
+            f"'{from_owner}'s legal owner dependencies for a '{from_target_role}' target "
+            f"{sorted(legal)}",
             target=from_owner,
             dependency=to_owner,
-            path=f"{source}:{line}",
+            path=f"{site.including_file}:{site.line}",
         )
     return None
 
@@ -1855,14 +1949,12 @@ def _architecture_exception_matches(
 
 def _architecture_include_diagnostic(
     manifest: Manifest,
-    source: str,
-    include_path: str,
-    include_line: int,
+    site: IncludeSite,
     target_name: str,
     project_root: Optional[str],
 ) -> Optional[Diagnostic]:
-    relative_source = _relative_project_path(source, project_root)
-    normalized_include = include_path.replace("\\", "/")
+    relative_source = _relative_project_path(site.including_file, project_root)
+    normalized_include = site.include_path.replace("\\", "/")
     for rule in manifest.architecture_contract.rules:
         if not any(
             _path_matches_prefix(relative_source, prefix)
@@ -1888,10 +1980,10 @@ def _architecture_include_diagnostic(
                 rule.rule_id, RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE
             ),
             f"Product Architecture Contract rule '{rule.rule_id}' forbids source "
-            f"'{relative_source}' from including header '{include_path}'",
+            f"'{relative_source}' from including header '{site.include_path}'",
             target=target_name,
-            dependency=include_path,
-            path=f"{source}:{include_line}",
+            dependency=site.include_path,
+            path=f"{site.including_file}:{site.line}",
         )
     return None
 
@@ -1923,25 +2015,32 @@ def _check_includes(
     if direct_includes is None:
         return
 
-    source_owner: dict[str, str] = {}
-    source_target: dict[str, str] = {}
-    forced_owner: dict[str, str] = {}
-    pch_owner: dict[str, str] = {}
+    # One entry per scanned file, holding the whole declaring target so Owner,
+    # target, and role can never come from different declarations (issue
+    # #658). The legal Owner dependency set is keyed on the depending target's
+    # role, so an include edge is judged against the role that carries it.
+    # parse_index rejects two targets claiming one file, so each entry has one
+    # unambiguous declaring target.
+    declaring_target_by_path: dict[str, Target] = {}
+    forced_include_paths: set[str] = set()
+    pch_input_paths: set[str] = set()
     compiled_sources: set[str] = set()
     for target in index.targets:
         if target.role == "external":
             continue
-        owner = target.owner or ""
         for source in target.sources:
             normalized_source = _norm_path(source)
-            source_owner[normalized_source] = owner
-            source_target[normalized_source] = target.name
+            declaring_target_by_path[normalized_source] = target
             if _is_compiled_source(source):
-                compiled_sources.add(_norm_path(source))
+                compiled_sources.add(normalized_source)
         for forced in target.forced_includes:
-            forced_owner[_norm_path(forced)] = owner
+            normalized_forced = _norm_path(forced)
+            declaring_target_by_path[normalized_forced] = target
+            forced_include_paths.add(normalized_forced)
         if target.pch_input:
-            pch_owner[_norm_path(target.pch_input)] = owner
+            normalized_pch = _norm_path(target.pch_input)
+            declaring_target_by_path[normalized_pch] = target
+            pch_input_paths.add(normalized_pch)
 
     scanned_by_path = {_norm_path(s.path): s for s in direct_includes.sources}
 
@@ -1954,7 +2053,7 @@ def _check_includes(
                     path=source,
                 )
             )
-    for forced in sorted(forced_owner):
+    for forced in sorted(forced_include_paths):
         if forced not in scanned_by_path:
             diagnostics.append(
                 Diagnostic(
@@ -1963,7 +2062,7 @@ def _check_includes(
                     path=forced,
                 )
             )
-    for pch in sorted(pch_owner):
+    for pch in sorted(pch_input_paths):
         if pch not in scanned_by_path:
             diagnostics.append(
                 Diagnostic(
@@ -1982,15 +2081,11 @@ def _check_includes(
 
     for scanned in direct_includes.sources:
         spath = _norm_path(scanned.path)
-        if spath in source_owner:
-            from_owner = source_owner[spath]
-            from_target = source_target[spath]
-        elif spath in forced_owner:
-            from_owner = forced_owner[spath]
-            from_target = from_owner
-        elif spath in pch_owner:
-            from_owner = pch_owner[spath]
-            from_target = from_owner
+        declaring_target = declaring_target_by_path.get(spath)
+        if declaring_target is not None:
+            from_owner = declaring_target.owner or ""
+            from_target = declaring_target.name
+            from_target_role = declaring_target.role
         else:
             diagnostics.append(
                 Diagnostic(
@@ -2029,19 +2124,15 @@ def _check_includes(
                     )
                 )
             else:
+                site = IncludeSite(scanned.path, include.path, include.line)
                 architecture_diag = _architecture_include_diagnostic(
-                    manifest,
-                    scanned.path,
-                    include.path,
-                    include.line,
-                    from_target,
-                    project_root,
+                    manifest, site, from_target, project_root
                 )
                 if architecture_diag is not None:
                     diagnostics.append(architecture_diag)
                 if to_owner is not None:
                     edge = _include_edge_diagnostic(
-                        from_owner, to_owner, manifest, scanned.path, include.path, include.line
+                        from_owner, to_owner, from_target_role, manifest, site
                     )
                     if edge is not None:
                         diagnostics.append(edge)
@@ -2432,7 +2523,7 @@ def check(
                 )
                 continue
 
-            legal = set(from_entry.legal_owner_dependencies)
+            legal = from_entry.legal_dependencies_for(target.role)
             if to_target.role != "owner":
                 diagnostics.append(
                     Diagnostic(
@@ -2450,10 +2541,10 @@ def check(
                 diagnostics.append(
                     Diagnostic(
                         RULE_ILLEGAL_CROSS_OWNER_EDGE,
-                        f"illegal cross-Owner edge: target '{target.name}' (owner '{from_owner}') "
-                        f"depends on target '{dependency_name}' (owner '{to_owner}'); "
-                        f"'{to_owner}' is not in '{from_owner}'s legal owner dependencies "
-                        f"{sorted(from_entry.legal_owner_dependencies)}",
+                        f"illegal cross-Owner edge: target '{target.name}' (owner '{from_owner}', "
+                        f"role '{target.role}') depends on target '{dependency_name}' (owner "
+                        f"'{to_owner}'); '{to_owner}' is not in '{from_owner}'s legal owner "
+                        f"dependencies for a '{target.role}' target {sorted(legal)}",
                         target=target.name,
                         dependency=dependency_name,
                     )

@@ -45,6 +45,21 @@ include_guard(GLOBAL)
     set_tests_properties(cch_parity_gate_unit PROPERTIES
         LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;spec")
 
+    # Include resolution and Owner role ownership at their join point (#658).
+    # One <cch/tui/...> header resolves to `cch_tui` everywhere; only the
+    # declaring target's role decides whether the edge is legal, including
+    # when the directive arrives through a forced include or PCH input. The
+    # assertions live with the other Parity Gate unit cases, so they are
+    # selected by class name into their own focused case.
+    add_test(
+        NAME cch_includes_are_resolved_and_checked_with_role_ownership
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/parity_gate_test.py
+            IncludeRoleOwnershipTest
+    )
+    set_tests_properties(cch_includes_are_resolved_and_checked_with_role_ownership PROPERTIES
+        LABELS "architecture;parity-gate;issue658;spec")
+
     add_test(
         NAME cch_warning_gate_unit
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/WarningGateTest.py

@@ -13,6 +13,7 @@ CTest case `cch_parity_gate_unit` registered in `cmake/tests/ArchitectureTests.c
 from __future__ import annotations
 
 import contextlib
+import enum
 import hashlib
 import io
 import json
@@ -22,6 +23,7 @@ import sys
 import tempfile
 import unittest
 import struct
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -90,7 +92,8 @@ VALID_MANIFEST = {
             "role": "owner",
             "root": "src/coding_agent",
             "interface_root": "include/cch/coding_agent",
-            "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_tui"],
+            "legal_owner_dependencies": ["cch_agent_core", "cch_ai"],
+            "implementation_owner_dependencies": ["cch_tui"],
         },
         "cch_support": {
             "role": "support",
@@ -176,6 +179,16 @@ VALID_INDEX = {
             "dependencies": [
                 {"name": "cch_agent_core", "family": None},
                 {"name": "cch_ai", "family": None},
+                {"name": "cch_support", "family": None},
+            ],
+        },
+        {
+            "name": "frontend_tui",
+            "role": "implementation",
+            "owner": "cch_coding_agent",
+            "sources": ["src/coding_agent/tui/render.cpp"],
+            "dependencies": [
+                {"name": "cch_coding_agent", "family": None},
                 {"name": "cch_tui", "family": None},
                 {"name": "cch_support", "family": None},
             ],
@@ -208,6 +221,11 @@ class ManifestSchemaTest(unittest.TestCase):
             set(manifest.owners),
             {"cch_ai", "cch_agent_core", "cch_tui", "cch_coding_agent", "cch_support"},
         )
+        # The headless Owner keeps its own dependencies authoritative and adds
+        # the frontend-only one for non-`owner` targets (issue #658).
+        coding_agent = manifest.owners["cch_coding_agent"]
+        self.assertEqual(coding_agent.legal_owner_dependencies, ("cch_agent_core", "cch_ai"))
+        self.assertEqual(coding_agent.implementation_owner_dependencies, ("cch_tui",))
 
     def test_checked_in_manifest_rejects_ai_private_includes_from_agent_sources(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -236,6 +254,13 @@ class ManifestSchemaTest(unittest.TestCase):
         self.assertEqual(manifest.schema_version, 3)
         self.assertEqual(manifest.architecture_contract.name, "Product Architecture Contract")
         self.assertEqual(manifest.owners["cch_agent_core"].legal_owner_dependencies, ("cch_ai",))
+
+    def test_implementation_owner_dependencies_are_parsed_and_default_empty(self):
+        manifest = valid_manifest()
+        self.assertEqual(
+            manifest.owners["cch_coding_agent"].implementation_owner_dependencies, ("cch_tui",)
+        )
+        self.assertEqual(manifest.owners["cch_ai"].implementation_owner_dependencies, ())
 
     def test_missing_architecture_contract_fails_closed(self):
         data = deep_copy(VALID_MANIFEST)
@@ -310,6 +335,34 @@ class ManifestSchemaTest(unittest.TestCase):
             pg.parse_manifest(data)
         self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_MANIFEST_VALUE)
 
+    def test_support_in_implementation_owner_dependencies_is_contradictory(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["owners"]["cch_ai"]["implementation_owner_dependencies"] = ["cch_support"]
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_manifest(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_MANIFEST_VALUE)
+
+    def test_dependency_in_both_owner_dependency_sets_is_contradictory(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["owners"]["cch_coding_agent"]["legal_owner_dependencies"].append("cch_tui")
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_manifest(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_MANIFEST_VALUE)
+
+    def test_unknown_implementation_owner_dependency_is_contradictory(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["owners"]["cch_coding_agent"]["implementation_owner_dependencies"] = ["cch_ghost"]
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_manifest(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_MANIFEST_VALUE)
+
+    def test_implementation_owner_dependencies_must_be_a_list_of_strings(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["owners"]["cch_coding_agent"]["implementation_owner_dependencies"] = "cch_tui"
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_manifest(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_MANIFEST_VALUE)
+
     def test_duplicate_root_is_contradictory(self):
         data = deep_copy(VALID_MANIFEST)
         data["owners"]["cch_tui"]["root"] = "src/ai"
@@ -335,7 +388,7 @@ class ManifestSchemaTest(unittest.TestCase):
 class IndexSchemaTest(unittest.TestCase):
     def test_valid_index_parses(self):
         index = valid_index()
-        self.assertEqual(len(index.targets), 5)
+        self.assertEqual(len(index.targets), 6)
 
     def test_malformed_json_fails_closed(self):
         with self.assertRaises(pg.SchemaViolation) as raised:
@@ -362,6 +415,56 @@ class IndexSchemaTest(unittest.TestCase):
         with self.assertRaises(pg.SchemaViolation) as raised:
             pg.parse_index(data)
         self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_INDEX_VALUE)
+
+    def test_file_declared_by_two_targets_fails_closed(self):
+        # The include check judges an edge against the declaring target's role,
+        # so two targets claiming one file would leave that policy to
+        # declaration order (issue #658).
+        data = {
+            "producer": "cch-parity-constructor",
+            "schema_version": 1,
+            "manifest_digest": "d" * 64,
+            "targets": [
+                {
+                    "name": "cch_coding_agent",
+                    "role": "owner",
+                    "owner": "cch_coding_agent",
+                    "sources": ["src/shared.cpp"],
+                    "dependencies": [],
+                },
+                {
+                    "name": "frontend_tui",
+                    "role": "implementation",
+                    "owner": "cch_coding_agent",
+                    "sources": [],
+                    "dependencies": [],
+                    "forced_includes": ["src/shared.cpp"],
+                },
+            ],
+        }
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_index(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_INDEX_VALUE)
+
+    def test_one_target_may_declare_a_file_as_source_and_forced_include(self):
+        data = {
+            "producer": "cch-parity-constructor",
+            "schema_version": 1,
+            "manifest_digest": "d" * 64,
+            "targets": [
+                {
+                    "name": "cch_coding_agent",
+                    "role": "owner",
+                    "owner": "cch_coding_agent",
+                    "sources": ["src/shared.cpp"],
+                    "dependencies": [],
+                    "forced_includes": ["src/shared.cpp"],
+                    "pch_input": "src/shared.cpp",
+                },
+            ],
+        }
+        index = pg.parse_index(data)
+        self.assertEqual(len(index.targets), 1)
 
     def test_dependency_visibility_defaults_to_private(self):
         index = valid_index()
@@ -405,6 +508,41 @@ class GatePolicyTest(unittest.TestCase):
         index = pg.parse_index(data)
         diagnostics = pg.check(manifest, index, VALID_INDEX["manifest_digest"])
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_SUPPORT_DEPENDS_ON_OWNER])
+
+    def test_implementation_owner_dependency_is_legal_only_for_non_owner_targets(self):
+        # `cch_tui` sits in cch_coding_agent's appended set, keyed on the
+        # depending target's role being anything other than `owner` (issue
+        # #658).
+        manifest = valid_manifest()
+        for role, expected in (
+            ("implementation", []),
+            ("composition", []),
+            ("owner", [pg.RULE_ILLEGAL_CROSS_OWNER_EDGE]),
+        ):
+            with self.subTest(role=role):
+                data = {
+                    "producer": "cch-parity-constructor",
+                    "schema_version": 1,
+                    "manifest_digest": "d" * 64,
+                    "targets": [
+                        {
+                            "name": "cch_tui",
+                            "role": "owner",
+                            "owner": "cch_tui",
+                            "sources": [],
+                            "dependencies": [],
+                        },
+                        {
+                            "name": "cch_coding_agent_frontend",
+                            "role": role,
+                            "owner": "cch_coding_agent",
+                            "sources": [],
+                            "dependencies": [{"name": "cch_tui", "family": None}],
+                        },
+                    ],
+                }
+                diagnostics = pg.check(manifest, pg.parse_index(data), "d" * 64)
+                self.assertEqual(rule_ids(diagnostics), expected)
 
     def test_cross_owner_edge_to_non_authoritative_target_is_rejected(self):
         manifest = valid_manifest()
@@ -693,22 +831,67 @@ def make_project_tree(root):
     return root
 
 
-def run_include_case(
-    root, from_owner, source_name, include_path, spelling="angle", macro=False, manifest=None
-):
-    project_root = make_project_tree(root)
+@dataclass(frozen=True)
+class DeclaredTarget:
+    """The target a fixture source is declared by: its role and target name.
+
+    `run_include_case` derives both from the Owner name for the ordinary cases;
+    a role-sensitive case states them explicitly (issue #658).
+    """
+
+    role: str
+    name: str
+
+    @staticmethod
+    def default_for(owner):
+        return DeclaredTarget("support" if owner == "cch_support" else "owner", owner)
+
+
+class DeclaredKind(enum.Enum):
+    """A scanned file a target declares beside its sources (issue #658)."""
+
+    FORCED_INCLUDE = "forced include"
+    PCH_INPUT = "pch input"
+
+    def declare(self, target, path):
+        """Record `path` on `target` the way this kind declares it."""
+        if self is DeclaredKind.FORCED_INCLUDE:
+            target["forced_includes"] = [path]
+        else:
+            target["pch_input"] = path
+
+
+def write_fixture_source(project_root, source_name, text=""):
+    """Write a fixture source under `<project_root>/src/` and return its path."""
     source = project_root / "src" / source_name
     source.parent.mkdir(parents=True, exist_ok=True)
-    source.write_text(
-        include_source_text(include_doc(include_path, spelling=spelling, macro=macro))
-        + "// fixture source\n"
+    source.write_text(text + "// fixture source\n")
+    return source
+
+
+def run_include_case(
+    root,
+    from_owner,
+    source_name,
+    include_path,
+    spelling="angle",
+    macro=False,
+    manifest=None,
+    declared=None,
+):
+    project_root = make_project_tree(root)
+    source = write_fixture_source(
+        project_root,
+        source_name,
+        include_source_text(include_doc(include_path, spelling=spelling, macro=macro)),
     )
-    role = "support" if from_owner == "cch_support" else "owner"
+    if declared is None:
+        declared = DeclaredTarget.default_for(from_owner)
     index = make_index(
         [
             {
-                "name": from_owner,
-                "role": role,
+                "name": declared.name,
+                "role": declared.role,
                 "owner": from_owner,
                 "sources": [str(source)],
                 "dependencies": [],
@@ -1023,6 +1206,10 @@ class IncludeResolutionTest(unittest.TestCase):
 
 class ArchitectureContractTest(unittest.TestCase):
     def test_headless_source_cannot_include_frontend_header(self):
+        # The headless owner library is an `owner` target, so the frontend
+        # header is rejected twice over: by the Product Architecture Contract
+        # rule and by the Owner dependency allowlist for an `owner` target
+        # (issue #658).
         with tempfile.TemporaryDirectory() as tmp:
             diagnostics = run_include_case(
                 tmp,
@@ -1031,10 +1218,12 @@ class ArchitectureContractTest(unittest.TestCase):
                 "cch/tui/Render.hpp",
             )
         self.assertEqual(
-            rule_ids(diagnostics), [pg.RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE]
+            rule_ids(diagnostics),
+            [pg.RULE_ILLEGAL_DIRECT_INCLUDE, pg.RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE],
         )
         self.assertEqual(diagnostics[0].target, "cch_coding_agent")
-        self.assertEqual(diagnostics[0].dependency, "cch/tui/Render.hpp")
+        self.assertEqual(diagnostics[0].dependency, "cch_tui")
+        self.assertEqual(diagnostics[1].dependency, "cch/tui/Render.hpp")
 
     def test_agent_source_cannot_include_ai_private_header(self):
         for include_path in ("ai/glaze/AiJson.hpp", "src/ai/glaze/AiJson.hpp"):
@@ -1069,14 +1258,178 @@ class ArchitectureContractTest(unittest.TestCase):
         ]
         manifest = pg.parse_manifest(data)
         with tempfile.TemporaryDirectory() as tmp:
+            # An `implementation` target may legally include the frontend
+            # header, so the dated exception is the only thing standing
+            # between this source and rejection: the exception, not the Owner
+            # dependency allowlist, is what this case proves.
             diagnostics = run_include_case(
                 tmp,
                 "cch_coding_agent",
                 "coding_agent/compose.cpp",
                 "cch/tui/Render.hpp",
                 manifest=manifest,
+                declared=DeclaredTarget("implementation", "frontend_tui"),
             )
         self.assertEqual(diagnostics, [])
+
+
+class IncludeRoleOwnershipTest(unittest.TestCase):
+    """Include resolution and Owner role ownership at their join point (#658).
+
+    The same `<cch/tui/...>` header resolves to `cch_tui` in every case; only
+    the declaring target's role decides whether the resulting edge is legal.
+    The rule covers every scanned file a target declares, not just its
+    sources: a forced include or PCH input carries the declaring target's role
+    too.
+    """
+
+    def _run_declared_file_case(self, tmp, target_name, role, declared_kind):
+        """Declare a frontend directive inside a forced include or PCH input."""
+        project_root = make_project_tree(tmp)
+        source = write_fixture_source(project_root, "coding_agent/compose.cpp")
+        # The declared file lives under the contract rule's excluded prefix, so
+        # the Owner allowlist is the only seam that can reject the include.
+        declared_file = write_fixture_source(
+            project_root,
+            "coding_agent/tui/force.hpp",
+            include_source_text(include_doc("cch/tui/Render.hpp")),
+        )
+        target = {
+            "name": target_name,
+            "role": role,
+            "owner": "cch_coding_agent",
+            "sources": [str(source)],
+            "dependencies": [],
+        }
+        declared_kind.declare(target, str(declared_file))
+        direct = make_direct_includes(
+            [
+                {"path": str(source), "includes": []},
+                {"path": str(declared_file), "includes": [include_doc("cch/tui/Render.hpp")]},
+            ]
+        )
+        return pg.check(
+            valid_manifest(),
+            make_index([target]),
+            "d" * 64,
+            direct_includes=direct,
+            project_root=str(project_root),
+        )
+
+    def test_the_frontend_include_resolves_to_the_tui_owner(self):
+        # The role rule is about the resolved Owner, not the include spelling:
+        # one header resolves to `cch_tui` whatever target declares the source.
+        manifest = valid_manifest()
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            headers_by_owner = {
+                name: pg._walk_interface_headers(str(project_root), owner.interface_root)
+                for name, owner in manifest.owners.items()
+            }
+            to_owner, diag = pg._resolve_include(
+                pg.IncludeDirective("cch/tui/Render.hpp", "angle", 1, False),
+                manifest,
+                str(project_root),
+                headers_by_owner,
+                pg._basename_map(headers_by_owner),
+            )
+        self.assertIsNone(diag)
+        self.assertEqual(to_owner, "cch_tui")
+
+    def test_frontend_targets_can_include_tui_header(self):
+        cases = (
+            ("frontend_tui", "coding_agent/tui/render.cpp"),
+            ("frontend_cli", "cli/StartupTui.cpp"),
+        )
+        for target_name, source_name in cases:
+            with self.subTest(target_name=target_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_coding_agent",
+                        source_name,
+                        "cch/tui/Render.hpp",
+                        declared=DeclaredTarget("implementation", target_name),
+                    )
+                self.assertEqual(diagnostics, [])
+
+    def test_composition_target_uses_the_appended_set_too(self):
+        # The appended set is keyed on `role != "owner"`, not on the
+        # `implementation` name: the composition entry point uses it as well.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "main.cpp",
+                "cch/tui/Render.hpp",
+                declared=DeclaredTarget("composition", "pike"),
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_owner_library_source_cannot_include_tui_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "main.cpp",
+                "cch/tui/Render.hpp",
+                declared=DeclaredTarget("owner", "cch_coding_agent"),
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+        self.assertEqual(diagnostics[0].target, "cch_coding_agent")
+        self.assertEqual(diagnostics[0].dependency, "cch_tui")
+
+    def test_declared_include_context_carries_the_declaring_targets_role(self):
+        cases = (
+            (DeclaredKind.FORCED_INCLUDE, "frontend_tui", "implementation", []),
+            (
+                DeclaredKind.FORCED_INCLUDE,
+                "cch_coding_agent",
+                "owner",
+                [pg.RULE_ILLEGAL_DIRECT_INCLUDE],
+            ),
+            (DeclaredKind.PCH_INPUT, "frontend_cli", "implementation", []),
+            (
+                DeclaredKind.PCH_INPUT,
+                "cch_coding_agent",
+                "owner",
+                [pg.RULE_ILLEGAL_DIRECT_INCLUDE],
+            ),
+        )
+        for declared_kind, target_name, role, expected in cases:
+            with self.subTest(declared_kind=declared_kind.value, role=role):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = self._run_declared_file_case(
+                        tmp, target_name, role, declared_kind
+                    )
+                self.assertEqual(rule_ids(diagnostics), expected)
+
+    def test_dated_exception_cannot_license_an_owner_role_frontend_include(self):
+        data = deep_copy(VALID_MANIFEST)
+        data["architecture_contract"]["exceptions"] = [
+            {
+                "id": "known-migration",
+                "rule_id": "headless-no-frontend-dependencies",
+                "source": "src/coding_agent/compose.cpp",
+                "owner": "architecture-maintainers",
+                "removal_ticket": "#623",
+                "expires": "2099-12-31",
+                "reason": "test migration exception",
+            }
+        ]
+        manifest = pg.parse_manifest(data)
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/compose.cpp",
+                "cch/tui/Render.hpp",
+                manifest=manifest,
+                declared=DeclaredTarget("owner", "cch_coding_agent"),
+            )
+        # The exception lifts the source-level contract rule (PARITY-8001)
+        # only; the Owner allowlist rejects the edge (PARITY-4007) regardless.
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
 
 
 class CompileContextTest(unittest.TestCase):

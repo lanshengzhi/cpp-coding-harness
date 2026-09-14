@@ -5,6 +5,11 @@ cmake_minimum_required(VERSION 4.4)
 # target edges and only canonical project-header includes, then runs the
 # fail-closed Gate at configure time. This fixture must configure successfully.
 #
+# The headless `cch_coding_agent` owner library and its `frontend_tui` /
+# `frontend_cli` implementation targets mirror the production split: only the
+# implementation targets may depend on `cch_tui` and include its headers
+# (manifest `implementation_owner_dependencies`, issue #658).
+#
 # Injected by the test harness:
 #   CCH_PARITY_CMAKE_MODULE_PATH  directory containing ParityArchitecture.cmake
 #   CCH_PARITY_MANIFEST           path to the strict versioned manifest
@@ -68,6 +73,22 @@ cch_parity_declare_target(
     OWNER cch_coding_agent
     SOURCES ${CCH_PARITY_FIXTURE_SRC}/coding_agent/compose.cpp
     DEPENDS cch_agent_core cch_ai cch_support
+)
+
+cch_parity_declare_target(
+    TARGET frontend_tui
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES ${CCH_PARITY_FIXTURE_SRC}/coding_agent/tui/render.cpp
+    DEPENDS cch_coding_agent cch_tui cch_support
+)
+
+cch_parity_declare_target(
+    TARGET frontend_cli
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES ${CCH_PARITY_FIXTURE_SRC}/cli/startup.cpp
+    DEPENDS cch_coding_agent frontend_tui cch_tui cch_support
 )
 
 cch_parity_run_gate("${CCH_PARITY_MANIFEST}" PROJECT_ROOT "${CCH_PARITY_FIXTURE_ROOT}")

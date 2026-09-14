@@ -80,12 +80,15 @@ cch_parity_declare_target(
 )
 target_include_directories(cch_agent_core PUBLIC ${CCH_PARITY_FIXTURE_SRC}/agent/include)
 
+# The headless owner library does not link the TUI toolkit; a frontend
+# implementation target is what would (manifest
+# `implementation_owner_dependencies`, issue #658).
 cch_parity_declare_target(
     TARGET cch_coding_agent
     ROLE owner
     OWNER cch_coding_agent
     SOURCES ${CCH_PARITY_FIXTURE_SRC}/coding_agent/compose.cpp
-    DEPENDS cch_agent_core cch_ai cch_tui cch_support
+    DEPENDS cch_agent_core cch_ai cch_support
 )
 target_include_directories(cch_coding_agent PUBLIC ${CCH_PARITY_FIXTURE_SRC}/coding_agent/include)
 
