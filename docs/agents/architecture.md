@@ -13,7 +13,7 @@ The repository has four authoritative Capability Owner Packages and one pi-neutr
 | `cch_ai` | owner | `src/ai/` | `<cch/ai/...>` | Model, Provider, authentication, model-stream (ADR 0029, ADR 0040) | none |
 | `cch_agent_core` | owner | `src/agent/` | `<cch/agent/...>` | Agent loop, agent harness, and Tool behavior (ADR 0005, ADR 0039) | `cch_ai` |
 | `cch_tui` | owner | `src/tui/` | `<cch/tui/...>` | Reusable terminal, input, rendering, TUI toolkit (ADR 0025) | none |
-| `cch_coding_agent` | owner (private) | `src/coding_agent/` + `src/cli/` | `<cch/coding_agent/...>` | Agent Session, Models Runtime, Native TUI application, CLI, Runtime composition (ADR 0036, ADR 0040) | `cch_agent_core`, `cch_ai`, `cch_tui` |
+| `cch_coding_agent` | owner (private) | `src/coding_agent/` + `src/cli/` | `<cch/coding_agent/...>` | Agent Session, Models Runtime, Native TUI application, CLI, Runtime composition (ADR 0036, ADR 0040) | `cch_agent_core`, `cch_ai`; `cch_tui` only for its non-`owner` targets (manifest `implementation_owner_dependencies`) |
 | `cch_support` | support | `src/support/` | `<cch/support/...>` | Pi-neutral C++ values and mechanics (`AsyncResult`, `Expected`, `JsonValue`, ADR 0046) | none |
 
 The `pike` executable compiles only `src/main.cpp` (role `composition`, owner `cch_coding_agent`) over the `cch_coding_agent` library.

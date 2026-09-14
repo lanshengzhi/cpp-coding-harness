@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 4.4)
 
 # Illegal Parity Architecture Gate fixture. Identical to the legal fixture
-# except for one illegal cross-Owner edge: `cch_agent_core` depends on
-# `cch_tui`, which is not in `cch_agent_core`'s legal owner dependencies. The
-# Gate must reject this deterministically at configure time with rule ID
+# except for one illegal cross-Owner edge: the headless `cch_coding_agent`
+# owner library depends on `cch_tui`, which the manifest declares only in
+# `implementation_owner_dependencies` and therefore makes legal for the
+# `frontend_tui` implementation target, never for an `owner` target. The Gate
+# must reject this deterministically at configure time with rule ID
 # PARITY-2001.
 
 project(parity_gate_fixture_illegal LANGUAGES CXX)
@@ -52,7 +54,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_agent_core
     SOURCES ${CCH_PARITY_FIXTURE_SRC}/agent_core/agent.cpp
-    DEPENDS cch_ai cch_tui cch_support
+    DEPENDS cch_ai cch_support
 )
 
 cch_parity_declare_target(
@@ -61,6 +63,22 @@ cch_parity_declare_target(
     OWNER cch_coding_agent
     SOURCES ${CCH_PARITY_FIXTURE_SRC}/coding_agent/compose.cpp
     DEPENDS cch_agent_core cch_ai cch_tui cch_support
+)
+
+cch_parity_declare_target(
+    TARGET frontend_tui
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES ${CCH_PARITY_FIXTURE_SRC}/coding_agent/tui/render.cpp
+    DEPENDS cch_coding_agent cch_tui cch_support
+)
+
+cch_parity_declare_target(
+    TARGET frontend_cli
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES ${CCH_PARITY_FIXTURE_SRC}/cli/startup.cpp
+    DEPENDS cch_coding_agent frontend_tui cch_tui cch_support
 )
 
 cch_parity_run_gate("${CCH_PARITY_MANIFEST}" PROJECT_ROOT "${CCH_PARITY_FIXTURE_ROOT}")

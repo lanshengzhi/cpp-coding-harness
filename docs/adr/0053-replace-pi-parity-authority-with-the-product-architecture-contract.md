@@ -45,3 +45,14 @@ Not everything pi-shaped is a compromise. We keep: the serialized Runtime (ADR 0
 - The de-pi program's first tickets: re-gate the manifest and split `frontend_tui`/`frontend_cli` out of `cch_coding_agent`; complete the projection Read Model; audit the test suite into `spec` / `compat-pi` / `diverge` labels; structured inference-failure classification; own config namespace with one-time pi import.
 - Every migration chain must end by deleting its old entry — dual state sources and dual execution paths are forbidden as steady states, and manifest exceptions must carry an owner and a removal ticket.
 - Glossary terms recorded in CONTEXT.md: Product Architecture Contract, Compat Layer; Parity Baseline and the Parity map terms are marked historical.
+
+## Addendum: the Owner dependency allowlist is keyed on the depending target's role (Issue #658)
+
+The contract's first clause — the Headless core must not depend on any frontend — was machine-enforced only at the source level: a `forbidden_include_prefixes` rule stopped `src/coding_agent/*.cpp` from including `<cch/tui/...>`, while `cch_coding_agent`'s `legal_owner_dependencies` still named `cch_tui`. A `DEPENDS cch_tui` on the headless owner library therefore passed, and the re-gate ticket's title ("ban core->tui edges") promised more than the gate delivered.
+
+The allowlist is now keyed on the depending target's role. `legal_owner_dependencies` stays the authoritative set for every target; the manifest may add an optional `implementation_owner_dependencies` list, appended for every role other than `owner`. Both Parity Gate seams apply the split — the cross-Owner target edge (`PARITY-2001`) and the direct include edge (`PARITY-4007`). The Owner Interface standalone-compile check stays on `legal_owner_dependencies` deliberately: an interface header that reached for a frontend would put the frontend on the headless core's own contract surface. The real `implementation` frontend targets keep their legal `cch_tui` edges and `<cch/tui/...>` includes; the `owner` library keeps neither.
+
+Two consequences this addendum records deliberately:
+
+1. An `owner` target can no longer be excused into a frontend include by a dated architecture exception. The exception lifts the source-level contract rule (`PARITY-8001`); the Owner allowlist rejects the edge (`PARITY-4007`) independently, because an exception cannot license an edge the Owner graph forbids.
+2. `implementation_owner_dependencies` understates its predicate: it applies to every non-`owner` role, not only `implementation`. The name is kept for the frontend case it was introduced for.

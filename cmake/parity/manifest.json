@@ -69,7 +69,8 @@
       "role": "owner",
       "root": "src/coding_agent",
       "interface_root": "src/coding_agent/include/cch/coding_agent",
-      "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_tui"]
+      "legal_owner_dependencies": ["cch_agent_core", "cch_ai"],
+      "implementation_owner_dependencies": ["cch_tui"]
     },
     "cch_support": {
       "role": "support",
