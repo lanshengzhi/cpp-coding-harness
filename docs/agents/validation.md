@@ -2,6 +2,13 @@
 
 Read this for implementation, review, test selection, Git delivery, or issue close-out.
 
+## Acceptance discipline
+
+A change is accepted for the property, not for the check that stands in for it. #657's row adjudications found the same defect six times: the check was a cheap stand-in for the property it was named for, and the delivery satisfied the stand-in while the property was violated. Issue acceptance criteria, Parity Architecture Gate rules, golden tests, and test doubles are all in scope. The evidence is not restated here: the rows that reached a decision record are in the `ADR 0056` addendum (#664), and the rest are in #657's row notes.
+
+1. **A text or existence check is not acceptance of a property.** A predicate that matches an include spelling, searches for a string, asserts that a file or symbol exists, or compares a projection of a value can be satisfied by a respelling, a moved file, or a field added on one side while the property it is named for is violated; the clause-4 `agent-no-ai-private-includes` rule and the two session goldens are the measured cases. Run such a check when it is cheap and catches the ordinary case, but report its pass as a check, never as acceptance of the property.
+2. **Acceptance includes a case the property separates and the check does not.** For each acceptance criterion, name one case the check passes while the property is violated, and make it part of the delivery: a test where automation reaches it, manual evidence where it does not. One question finds it — *if this stand-in were broken, which case would it let through?* — and that case then gets built. A criterion with no such case is not yet accepted.
+
 ## Implementation
 
 Before editing, read the related code and tests plus the relevant build declarations. Follow `CODING_STANDARDS.md`.
@@ -102,5 +109,5 @@ Use fake Providers and deterministic local resources by default. Use live API ke
 
 Use this completion path after implementation; triage and `wontfix` outcomes follow the `/triage` workflow instead. Close-out is ordered:
 
-1. Confirm and tick every acceptance criterion in the issue body (`- [x]`).
+1. Confirm and tick every acceptance criterion in the issue body (`- [x]`); a tick means the property holds, not that a check for it passed (§Acceptance discipline).
 2. Close the issue: `gh issue close <n> --comment "..."` (see `docs/agents/issue-tracker.md`).
