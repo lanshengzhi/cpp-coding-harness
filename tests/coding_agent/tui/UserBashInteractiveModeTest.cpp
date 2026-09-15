@@ -333,7 +333,7 @@ struct GatedCloseToolHandle {
 } // namespace
 
 TEST_CASE("focused User Bash commits included and excluded results through the private composition",
-        "[coding_agent][tui][issue85][spec]") {
+        "[coding_agent][tui][issue85][issue668][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
@@ -420,7 +420,13 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     REQUIRE(client_pointer->requests.size() == 1);
     const auto& provider_messages = client_pointer->requests[0].context.messages;
     CHECK(has_bash_command(provider_messages, "echo included"));
-    CHECK_FALSE(has_bash_command(provider_messages, "echo excluded"));
+    // The Session applies no exclusion rule at its own boundary (#668). This
+    // scripted Provider substitutes the adapter, so it observes the context
+    // before the provider conversion: the excluded message is still present
+    // here, and the conversion is the rule's one application point. The
+    // provider-visible drop is asserted on the adapter payload in
+    // `tests/ai/MessageConversionTest.cpp`.
+    CHECK(has_bash_command(provider_messages, "echo excluded"));
     // The fixed #331 tool set (read/write/edit/bash) is always registered.
     const auto& tools = client_pointer->requests[0].context.tools;
     REQUIRE(tools.size() == 4);

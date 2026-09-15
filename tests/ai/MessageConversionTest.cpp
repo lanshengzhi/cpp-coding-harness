@@ -460,3 +460,67 @@ TEST_CASE("Synthesized user messages still arrive as block arrays", "[ai][conver
     CHECK(block.at("type").get_string() == "input_text");
     CHECK(block.at("text").get_string().find("Ran `echo hello`") != std::string::npos);
 }
+
+TEST_CASE("Excluded bash output never reaches a provider adapter payload", "[ai][conversion][issue668][compat-pi]") {
+    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::BashExecutionMessage included;
+    included.command = "echo included";
+    included.output = "included output\n";
+    included.exit_code = 0;
+    included.timestamp = 1;
+    ai::BashExecutionMessage excluded;
+    excluded.command = "echo excluded";
+    excluded.output = "excluded output\n";
+    excluded.exit_code = 7;
+    excluded.exclude_from_context = true;
+    excluded.timestamp = 2;
+    ai::AiContext context;
+    context.messages.push_back(std::move(included));
+    context.messages.push_back(ai::user_text_message("later prompt", 3));
+    context.messages.push_back(std::move(excluded));
+    ai::ProviderStreamOptions options;
+
+    // `extended_message_to_user_message` is the exclusion rule's one
+    // application point (#650, #668); every adapter reaches it through its
+    // provider-boundary conversion, so a recorded request that still carries
+    // the message cannot leak it into the wire payload.
+    for (const auto adapter : {ai::api::AdapterKind::OpenAIResponses,
+                 ai::api::AdapterKind::OpenAICodexResponses,
+                 ai::api::AdapterKind::AnthropicMessages}) {
+        const auto payload = ai::api::build_adapter_payload(adapter, model, context, options);
+        REQUIRE(payload);
+        const auto serialized = support::write_json(*payload);
+        REQUIRE(serialized);
+        CHECK(serialized->find("excluded output") == std::string::npos);
+        CHECK(serialized->find("included output") != std::string::npos);
+    }
+}
+
+TEST_CASE("An all-excluded context converts to an empty provider payload without a local error",
+        "[ai][conversion][issue668][compat-pi]") {
+    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::BashExecutionMessage excluded;
+    excluded.command = "echo excluded";
+    excluded.output = "excluded output\n";
+    excluded.exclude_from_context = true;
+    excluded.timestamp = 1;
+    ai::AiContext context;
+    context.messages.push_back(std::move(excluded));
+    ai::ProviderStreamOptions options;
+
+    // #668 decision: the Session installs no `convertToLlm` hook, so an
+    // all-excluded context reaches the provider as a request with zero
+    // messages instead of failing at a Session-level guard, exactly as in pi
+    // where `convertToLlm`'s result flows into `streamSimple`. The Agent's
+    // generic `convertToLlm returned no messages` guard stays the contract
+    // for hosts that do install a hook (`tests/agent/AgentBehaviorTest.cpp`).
+    const auto responses =
+            ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAIResponses, model, context, options);
+    REQUIRE(responses);
+    CHECK(responses->at("input").get<support::JsonValue::array_t>().empty());
+
+    const auto anthropic =
+            ai::api::build_adapter_payload(ai::api::AdapterKind::AnthropicMessages, model, context, options);
+    REQUIRE(anthropic);
+    CHECK(anthropic->at("messages").get<support::JsonValue::array_t>().empty());
+}
