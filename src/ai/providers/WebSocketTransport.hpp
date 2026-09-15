@@ -26,6 +26,12 @@ struct CodexWebSocketCacheConfig {
 /// handshake; the idle timeout bounds each wait for the next text frame and is
 /// re-armed per frame, matching pi's WS idle timeout. Client transports are
 /// TLS-only (ADR 0054): the URL must be `wss://`.
+///
+/// debt: TLS-only leaves no plaintext transport path, so no real transport can
+/// be pointed at a plaintext local endpoint. A local `wss://` mock is already
+/// reachable through `trusted_ca_certificate_pem` below, so only the plaintext
+/// case is missing. Upgrade when a plaintext local or proxy target is actually
+/// needed, and expose it explicitly rather than by relaxing the scheme check.
 struct WebSocketConnectRequest {
     std::string url;
     std::map<std::string, std::string, std::less<>> headers;
