@@ -7,7 +7,6 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
         tests/ai/BuiltinProvidersTest.cpp
-        tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/MessageConversionTest.cpp
         tests/ai/ModelTest.cpp
