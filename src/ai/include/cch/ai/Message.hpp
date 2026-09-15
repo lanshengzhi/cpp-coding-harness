@@ -109,6 +109,16 @@ using MessageVariant = std::variant<
     BranchSummaryMessage,
     CompactionSummaryMessage>;
 
+/// Conversions, vocabulary tables, and predicates that give this Owner
+/// Interface's types their meaning. They stay inline so a consumer can read a
+/// type and its interpretation in one place.
+///
+/// debt: implementations live in this header, so every consumer recompiles
+/// them and the cost is unmeasured; the alternative, a separate mechanism
+/// header, pulls a predicate or a vocabulary table away from the type it gives
+/// meaning to. Upgrade when a consumer's recompilation cost is measured as a
+/// pain, or when one of these functions starts depending on a type that is not
+/// part of this contract.
 [[nodiscard]] inline UserMessage user_text_message(std::string text, TimestampMs timestamp = 0) {
     UserMessage message;
     message.content = std::vector<Content>{text_content(std::move(text))};

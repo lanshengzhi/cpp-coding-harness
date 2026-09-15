@@ -54,8 +54,9 @@ similar machinery ... in serialization or implementation layers rather than Owne
   resolved when the move lands; models.json parsing itself stays with its current coding-agent
   owner.
 - **The Product Architecture Contract gains the clause it currently only asserts.** ADR 0053's
-  "product session records must not live in the AI message model" becomes a machine-checked include
-  rule once this move lands, so the removed reach-through cannot return.
+  "product session records must not live in the AI message model" gains an include-level rule once
+  this move lands. That rule asserts the `src/agent/` side only; it does not by itself prevent
+  `src/ai/` from re-growing a session-record shape (see the addendum on #657 rows 1 and 2).
 - **The other reach-throughs #540 covers are remedied independently and recorded there.**
   `ai/utils/RetryClassifier.hpp`, `ai/ModelThinkingLevel.hpp`, and `ai/providers/FakeProvider.hpp`
   each widen or relocate an existing Owner surface rather than choosing a serialization owner, so
@@ -91,8 +92,10 @@ similar machinery ... in serialization or implementation layers rather than Owne
 - ADR 0046's characterization of this reuse as "domain-coupled" is superseded for Seam 2. Its Seam
   1 outcome — Provider assembly owned inside `cch_ai` — is unaffected, as are ADR 0047's `Models`
   deepening and ADR 0055's Models Runtime narrowing.
-- The Parity Architecture Gate gains a clause-4 rule, so `cch_ai` and the session module cannot
-  re-cross this seam without failing validation.
+- The Parity Architecture Gate gains a clause-4 rule (`agent-no-ai-private-includes`, `PARITY-8003`)
+  that keeps session-module sources under `src/agent/` out of `cch_ai` private headers. It is an
+  include-level rule on one side of the seam, so it does not cover `cch_ai` re-growing a
+  session-record shape (see the addendum on #657 rows 1 and 2).
 
 ## References
 
@@ -105,3 +108,36 @@ similar machinery ... in serialization or implementation layers rather than Owne
   0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md), [ADR
   0054](0054-make-client-transports-tls-only-with-concrete-executor-beast-streams.md).
 - `docs/agents/architecture.md` §Local generic machinery.
+
+## Addendum: the clause-4 guard is include-level and one-sided (Issue #657, rows 1 and 2)
+
+Two claims above asserted more than the gate does. Both were narrowed in place; this addendum records
+why, and keeps the two adjudications behind them traceable.
+
+**The clause-4 rule does not enforce "no session record in the AI message model".** The rule is
+`agent-no-ai-private-includes` (`cmake/parity/manifest.json:25-35`): `source_prefixes: ["src/agent/"]`
+against `forbidden_include_prefixes: ["ai/", "src/ai/"]`, enforced by `_architecture_include_diagnostic`
+(`cmake/parity/parity_gate.py:1950-1986`, diagnostic `PARITY-8003`). Its predicate compares the
+including file's path prefix and the raw `#include` spelling, and nothing else — no declared target,
+Owner, role, or file content. So it asserts nothing at all about `src/ai/`, and the file #652 removed
+can come back as a self-contained DTO header whose include set no forbidden prefix contains.
+
+A reversed rule (`source_prefixes: ["src/ai/"]`) does match such a header, but the predicate has no
+selectivity: it also matches any sibling header carrying the same raw spellings, legitimate ones
+included, so that configuration is not usable. A new rule kind (an Owner-scoped content scan) was
+rejected — it needs four schema changes and conflicts with #652's recorded scope of reusing the
+existing forbidden-include-prefix shape. **Adjudicated: accept the gap and leave the rule as it is.**
+
+**The guard for the accepted duplication is narrower than "the guard".** The two golden tests named
+above do pin the pi v3 bytes, but their comparison projects away the fields where the two DTO sets can
+drift: the `SessionSuiteGoldenTest.cpp` projection keeps role, content, api, provider, model,
+stopReason, errorMessage, toolCallId, toolName, isError, summary, and customType, and drops
+`timestamp`, `usage`, `diagnostics`, `responseId`, `responseModel`, `rawStopReason`, `details`, and
+`display`. The pi v3 golden covers two message states byte-exactly, out of twenty fixture lines.
+
+Measured drift over the module's history is low: of seven shape changes, six landed on both DTO sets,
+and all seven field additions changed both in one commit. But a field added to one set alone triggers
+no failure at all — the compiler catches renames and deletions, and no field-count or schema check
+exists. **Adjudicated: keep the deliberate duplication**, since the evidence supports the value it was
+accepted for, and handle the guard's blind spots as separate defects rather than by reopening the
+duplication decision.

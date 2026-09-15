@@ -124,6 +124,12 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
                 // excludes it from the context, so it maps the message directly
                 // instead of calling `extended_message_to_user_message`, whose
                 // `nullopt` for an excluded message would shrink the estimate.
+                // debt: this estimate's rule set deliberately differs from the
+                // provider boundary's, so an excluded bash message is counted
+                // anyway and compaction fires earlier than the request needs.
+                // Upgrade when the exclusion rule becomes exactly predictable
+                // from the message alone, or when over-eager compaction is
+                // actually observed in a session.
                 const auto converted = bash_execution_to_user_message(value);
                 characters = std::get<TextContent>(
                     std::get<std::vector<Content>>(converted.content).front())
