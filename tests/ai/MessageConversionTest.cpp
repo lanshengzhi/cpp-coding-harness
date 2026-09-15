@@ -5,7 +5,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 using namespace cch;
 
@@ -83,6 +88,60 @@ ai::AiContext responses_context() {
         },
     });
     return context;
+}
+
+void collect_string_leaves(const support::JsonValue& value, std::vector<std::string>& out) {
+    if (value.holds<support::JsonValue::array_t>()) {
+        for (const auto& item : value.get<support::JsonValue::array_t>()) {
+            collect_string_leaves(item, out);
+        }
+    } else if (value.holds<support::JsonValue::object_t>()) {
+        for (const auto& entry : value.get<support::JsonValue::object_t>()) {
+            collect_string_leaves(entry.second, out);
+        }
+    } else if (value.holds<std::string>()) {
+        out.push_back(value.get<std::string>());
+    }
+}
+
+/// Every string leaf of a payload's message list (`input` for the Responses
+/// adapters, `messages` for Anthropic). Structural absence assertions read the
+/// values a leaked message would have to appear as, rather than a byte spelling
+/// the serializer happened to produce (issue #675's reload form).
+[[nodiscard]] std::vector<std::string> payload_string_leaves(const support::JsonValue& payload) {
+    const auto& object = payload.get<support::JsonValue::object_t>();
+    const auto found = object.find(object.contains("input") ? "input" : "messages");
+    if (found == object.end()) {
+        return {};
+    }
+    std::vector<std::string> texts;
+    collect_string_leaves(found->second, texts);
+    return texts;
+}
+
+[[nodiscard]] bool any_leaf_contains(const std::vector<std::string>& texts, std::string_view needle) {
+    return std::ranges::any_of(
+            texts, [needle](const std::string& text) { return text.find(needle) != std::string::npos; });
+}
+
+/// The three frozen adapters every exclusion assertion drives, so the rule has
+/// one consumer list.
+constexpr std::array kConsumerAdapters{
+        ai::api::AdapterKind::OpenAIResponses,
+        ai::api::AdapterKind::OpenAICodexResponses,
+        ai::api::AdapterKind::AnthropicMessages,
+};
+
+/// One User Bash message in the shape the assertions drive through the
+/// adapters; `exclude_from_context` is the `!!` policy flag the rule reads.
+[[nodiscard]] ai::BashExecutionMessage user_bash(
+        std::string command, std::string output, bool exclude_from_context, ai::TimestampMs timestamp) {
+    ai::BashExecutionMessage message;
+    message.command = std::move(command);
+    message.output = std::move(output);
+    message.exclude_from_context = exclude_from_context;
+    message.timestamp = timestamp;
+    return message;
 }
 
 } // namespace
@@ -459,4 +518,99 @@ TEST_CASE("Synthesized user messages still arrive as block arrays", "[ai][conver
     const auto& block = blocks.front().get<support::JsonValue::object_t>();
     CHECK(block.at("type").get_string() == "input_text");
     CHECK(block.at("text").get_string().find("Ran `echo hello`") != std::string::npos);
+}
+
+TEST_CASE("Excluded bash output never reaches a provider adapter payload", "[ai][conversion][issue668][compat-pi]") {
+    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::AiContext context;
+    context.messages.push_back(user_bash("echo included", "included output\n", false, 1));
+    context.messages.push_back(ai::user_text_message("later prompt", 2));
+    context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 3));
+    ai::ProviderStreamOptions options;
+
+    // `extended_message_to_user_message` drops excluded messages on the
+    // conversion path — the rule's one application path (#650, #668); the
+    // loop additionally keeps them invisible to tool-call pairing. Every
+    // adapter reaches it through its
+    // provider-boundary conversion, so a recorded request that still carries
+    // the message cannot leak it into the wire payload.
+    for (const auto adapter : kConsumerAdapters) {
+        const auto payload = ai::api::build_adapter_payload(adapter, model, context, options);
+        REQUIRE(payload);
+        const auto texts = payload_string_leaves(*payload);
+        CHECK_FALSE(any_leaf_contains(texts, "excluded output"));
+        // The included message proves the walk reaches bash-rendered text at
+        // all, so the absence above cannot mean "no message was inspected".
+        CHECK(any_leaf_contains(texts, "included output"));
+
+        const auto serialized = support::write_json(*payload);
+        REQUIRE(serialized);
+        CHECK(serialized->find("excluded output") == std::string::npos);
+        CHECK(serialized->find("included output") != std::string::npos);
+    }
+}
+
+TEST_CASE("An all-excluded context converts to an empty provider payload without a local error",
+        "[ai][conversion][issue668][compat-pi]") {
+    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::AiContext context;
+    context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 1));
+    ai::ProviderStreamOptions options;
+
+    // The converter's half of the #668 decision: an all-excluded context yields
+    // zero provider messages instead of a local error, as in pi, where
+    // `convertToLlm`'s result flows into `streamSimple`. The Session-level half
+    // has no machine backstop: the harness cannot build an all-excluded request
+    // (every turn's context carries the message that started it), so no test
+    // reaches it and review is the only check. The Agent's generic
+    // `convertToLlm returned no messages` guard stays the hook contract
+    // (`tests/agent/AgentBehaviorTest.cpp` covers the guard itself).
+    const auto responses =
+            ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAIResponses, model, context, options);
+    REQUIRE(responses);
+    CHECK(responses->at("input").get<support::JsonValue::array_t>().empty());
+
+    const auto anthropic =
+            ai::api::build_adapter_payload(ai::api::AdapterKind::AnthropicMessages, model, context, options);
+    REQUIRE(anthropic);
+    CHECK(anthropic->at("messages").get<support::JsonValue::array_t>().empty());
+}
+
+TEST_CASE("An excluded message between a tool call and its result does not orphan the call",
+        "[ai][conversion][issue668][compat-pi]") {
+    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::AssistantMessage assistant;
+    assistant.api = "openai-responses";
+    assistant.provider = "deepseek";
+    assistant.model = "text-only";
+    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+    assistant.timestamp = 1;
+    assistant.content.push_back(ai::tool_call_content("call-1", "bash", R"({"command":"echo x"})"));
+    ai::AiContext context;
+    context.messages.push_back(std::move(assistant));
+    context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 2));
+    context.messages.push_back(ai::tool_result_message("call-1", "bash", "real tool output", false, 3));
+    ai::ProviderStreamOptions options;
+
+    // The excluded message stays invisible to the tool-call pairing state
+    // machine: it closes no pending batch and synthesizes no orphan result
+    // (#668). A conversion that let it reach the fallthrough would append its
+    // own "No result provided" result for `call-1` beside the real one, while
+    // pi drops the message before the pairing transform ever sees it.
+    for (const auto adapter : kConsumerAdapters) {
+        const auto payload = ai::api::build_adapter_payload(adapter, model, context, options);
+        REQUIRE(payload);
+        const auto texts = payload_string_leaves(*payload);
+        CHECK_FALSE(any_leaf_contains(texts, "No result provided"));
+        CHECK_FALSE(any_leaf_contains(texts, "excluded output"));
+        // The real result proves the pair still converts, so the absences above
+        // cannot mean "the tool call was dropped entirely".
+        CHECK(any_leaf_contains(texts, "real tool output"));
+
+        const auto serialized = support::write_json(*payload);
+        REQUIRE(serialized);
+        CHECK(serialized->find("No result provided") == std::string::npos);
+        CHECK(serialized->find("excluded output") == std::string::npos);
+        CHECK(serialized->find("real tool output") != std::string::npos);
+    }
 }
