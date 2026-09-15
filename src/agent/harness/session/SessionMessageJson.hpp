@@ -116,33 +116,8 @@ struct MessageDto {
     std::int64_t timestamp{};
 };
 
-// pi assistant `stopReason` wire vocabulary.
-
-[[nodiscard]] inline std::string stop_reason_to_json(ai::AssistantStopReason reason) {
-    return ai::stop_reason_to_string(reason);
-}
-
-[[nodiscard]] inline std::optional<ai::AssistantStopReason> stop_reason_from_json(std::string_view reason) {
-    if (reason == "pending") {
-        return ai::AssistantStopReason::Pending;
-    }
-    if (reason == "stop") {
-        return ai::AssistantStopReason::Stop;
-    }
-    if (reason == "length") {
-        return ai::AssistantStopReason::Length;
-    }
-    if (reason == "toolUse") {
-        return ai::AssistantStopReason::ToolUse;
-    }
-    if (reason == "error") {
-        return ai::AssistantStopReason::Error;
-    }
-    if (reason == "aborted") {
-        return ai::AssistantStopReason::Aborted;
-    }
-    return std::nullopt;
-}
+// pi assistant `stopReason` wire vocabulary: `cch::ai` owns the table and the
+// session module reads it, so the writer and the parser cannot drift (#665).
 
 inline constexpr std::int64_t kMinimumRealUnixEpochMilliseconds = 1'000'000'000'000;
 
@@ -184,6 +159,29 @@ template <typename T>
             std::string{"required field '"} + std::string(field_name) + "' for " + std::string(discriminator) +
                     " must not be empty",
             context));
+}
+
+/// The assistant identity and timestamp invariants. One check serves both
+/// directions: the parser rejects a record that violates them, and the
+/// serializer refuses to emit one, so a written record is always readable
+/// back (#665). `context` is the parsed JSON source on the read side and
+/// empty when a value is being serialized.
+[[nodiscard]] inline support::ExpectedVoid require_assistant_message_identity(
+        const MessageDto& dto, std::string_view context) {
+    for (const auto& identity : {std::pair{&dto.api, std::string_view{"api"}},
+                 std::pair{&dto.provider, std::string_view{"provider"}},
+                 std::pair{&dto.model, std::string_view{"model"}}}) {
+        if (auto required = require_non_empty_string(*identity.first, "assistant message", identity.second, context);
+                !required) {
+            return required;
+        }
+    }
+    if (dto.timestamp < kMinimumRealUnixEpochMilliseconds) {
+        return std::unexpected(json_contract_error("invalid assistant timestamp",
+                "required field 'timestamp' for assistant message must be a real Unix epoch millisecond value",
+                context));
+    }
+    return {};
 }
 
 [[nodiscard]] inline support::Expected<std::vector<ai::Content>> required_content_from_dto(
@@ -608,8 +606,8 @@ template <typename T>
     };
 }
 
-[[nodiscard]] inline MessageDto to_message_dto(const ai::AssistantMessage& message) {
-    return MessageDto{
+[[nodiscard]] inline support::Expected<MessageDto> to_message_dto(const ai::AssistantMessage& message) {
+    MessageDto dto{
             .role = "assistant",
             .content = to_assistant_content_dtos(message.content),
             .api = message.api,
@@ -618,7 +616,7 @@ template <typename T>
             .responseModel = message.response_model,
             .responseId = message.response_id,
             .usage = to_dto(message.usage),
-            .stopReason = stop_reason_to_json(message.stop_reason),
+            .stopReason = ai::stop_reason_to_string(message.stop_reason),
             .rawStopReason = message.raw_stop_reason,
             .errorMessage = message.error_message,
             .diagnostics = message.diagnostics
@@ -627,6 +625,10 @@ template <typename T>
                                    : std::nullopt,
             .timestamp = message.timestamp,
     };
+    if (auto identity = require_assistant_message_identity(dto, std::string_view{}); !identity) {
+        return std::unexpected(identity.error());
+    }
+    return dto;
 }
 
 [[nodiscard]] inline MessageDto to_message_dto(const ai::ToolResultMessage& message) {
@@ -687,8 +689,11 @@ template <typename T>
     };
 }
 
-[[nodiscard]] inline MessageDto to_message_dto(const ai::MessageVariant& message) {
-    return std::visit([](const auto& concrete) { return to_message_dto(concrete); }, message);
+/// Every role but assistant maps without a failing invariant, so the variant
+/// overload is fallible only because the assistant arm is (#665).
+[[nodiscard]] inline support::Expected<MessageDto> to_message_dto(const ai::MessageVariant& message) {
+    return std::visit(
+            [](const auto& concrete) -> support::Expected<MessageDto> { return to_message_dto(concrete); }, message);
 }
 
 [[nodiscard]] inline support::Expected<ai::MessageVariant> message_from_dto(
@@ -722,19 +727,8 @@ template <typename T>
     }
 
     if (dto.role == "assistant") {
-        for (const auto& identity : {std::pair{&dto.api, std::string_view{"api"}},
-                     std::pair{&dto.provider, std::string_view{"provider"}},
-                     std::pair{&dto.model, std::string_view{"model"}}}) {
-            if (auto required =
-                            require_non_empty_string(*identity.first, "assistant message", identity.second, context);
-                    !required) {
-                return std::unexpected(required.error());
-            }
-        }
-        if (dto.timestamp < kMinimumRealUnixEpochMilliseconds) {
-            return std::unexpected(detail::json_contract_error("invalid assistant timestamp",
-                    "required field 'timestamp' for assistant message must be a real Unix epoch millisecond value",
-                    context));
+        if (auto identity = require_assistant_message_identity(dto, context); !identity) {
+            return std::unexpected(identity.error());
         }
         auto content = required_assistant_content_from_dto(dto.content, dto.role, context);
         if (!content) {
@@ -750,7 +744,7 @@ template <typename T>
         if (auto required = require_field(dto.stopReason, "assistant message", "stopReason", context); !required) {
             return std::unexpected(required.error());
         }
-        const auto stop_reason = stop_reason_from_json(*dto.stopReason);
+        const auto stop_reason = ai::stop_reason_from_string(*dto.stopReason);
         if (!stop_reason) {
             return std::unexpected(detail::json_contract_error("unsupported assistant stop reason",
                     "unsupported stopReason '" + *dto.stopReason + "' for assistant message",

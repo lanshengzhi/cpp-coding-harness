@@ -14,6 +14,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -24,7 +26,11 @@ using namespace cch;
 namespace {
 
 [[nodiscard]] support::Expected<std::string> write_message_json(const ai::MessageVariant& message) {
-    return support::write_json(harness::session::detail::to_message_dto(message));
+    auto dto = harness::session::detail::to_message_dto(message);
+    if (!dto) {
+        return std::unexpected(dto.error());
+    }
+    return support::write_json(*dto);
 }
 
 [[nodiscard]] support::Expected<ai::MessageVariant> read_message_json(std::string_view json) {
@@ -33,6 +39,34 @@ namespace {
         return std::unexpected(dto.error());
     }
     return harness::session::detail::message_from_dto(*dto, json);
+}
+
+/// A complete assistant record whose three identity fields and timestamp are
+/// supplied by the caller, so a case can empty exactly one of them.
+[[nodiscard]] std::string assistant_identity_json(
+        std::string_view api, std::string_view provider, std::string_view model, std::int64_t timestamp) {
+    return std::format(
+            R"({{"role":"assistant","content":[{{"type":"text","text":"answer"}}],"api":"{}","provider":"{}","model":"{}","usage":{{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}},"stopReason":"stop","timestamp":{}}})",
+            api,
+            provider,
+            model,
+            timestamp);
+}
+
+/// The assistant value behind `assistant_identity_json`, with real identity,
+/// a real timestamp, and one text block.
+[[nodiscard]] ai::AssistantMessage assistant_with_identity() {
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{
+            .text = "answer",
+            .text_signature = std::nullopt,
+    });
+    assistant.api = "openai-completions";
+    assistant.provider = "openai";
+    assistant.model = "gpt-test";
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    assistant.timestamp = 1718000000000;
+    return assistant;
 }
 
 } // namespace
@@ -486,6 +520,75 @@ TEST_CASE("assistant JSON requires a supported stop reason", "[harness][session]
     REQUIRE_FALSE(unsupported);
     CHECK(unsupported.error().code == support::ErrorCode::JsonParse);
     CHECK(unsupported.error().detail.find("future_reason") != std::string::npos);
+}
+
+// The assistant identity and timestamp invariants are one contract, not a
+// read-side check: a record the serializer emits must be one the parser
+// accepts, so both boundaries reject the same input (#665).
+TEST_CASE("assistant message write and read reject an empty response identity",
+        "[harness][session][u2][glaze][issue665][compat-pi]") {
+    const auto check_rejected_by_both =
+            [](const ai::AssistantMessage& message, const std::string& json, std::string_view field) {
+                const auto written = write_message_json(ai::MessageVariant{message});
+                REQUIRE_FALSE(written);
+                CHECK(written.error().code == support::ErrorCode::JsonParse);
+                CHECK(written.error().detail.find(field) != std::string::npos);
+
+                const auto read = read_message_json(json);
+                REQUIRE_FALSE(read);
+                CHECK(read.error().code == support::ErrorCode::JsonParse);
+                CHECK(read.error().detail.find(field) != std::string::npos);
+            };
+
+    auto empty_api = assistant_with_identity();
+    empty_api.api.clear();
+    check_rejected_by_both(empty_api, assistant_identity_json("", "openai", "gpt-test", 1718000000000), "api");
+
+    auto empty_provider = assistant_with_identity();
+    empty_provider.provider.clear();
+    check_rejected_by_both(
+            empty_provider, assistant_identity_json("openai-completions", "", "gpt-test", 1718000000000), "provider");
+
+    auto empty_model = assistant_with_identity();
+    empty_model.model.clear();
+    check_rejected_by_both(
+            empty_model, assistant_identity_json("openai-completions", "openai", "", 1718000000000), "model");
+}
+
+TEST_CASE("assistant message write and read reject a non-real timestamp",
+        "[harness][session][u2][glaze][issue665][compat-pi]") {
+    auto assistant = assistant_with_identity();
+    assistant.timestamp = 0;
+
+    const auto written = write_message_json(ai::MessageVariant{assistant});
+    REQUIRE_FALSE(written);
+    CHECK(written.error().code == support::ErrorCode::JsonParse);
+    CHECK(written.error().detail.find("timestamp") != std::string::npos);
+
+    const auto read = read_message_json(assistant_identity_json("openai-completions", "openai", "gpt-test", 0));
+    REQUIRE_FALSE(read);
+    CHECK(read.error().code == support::ErrorCode::JsonParse);
+    CHECK(read.error().detail.find("timestamp") != std::string::npos);
+}
+
+TEST_CASE("assistant stop reason vocabulary round-trips through the session wire",
+        "[harness][session][u2][glaze][issue665][compat-pi]") {
+    for (const auto reason : {ai::AssistantStopReason::Pending,
+                 ai::AssistantStopReason::Stop,
+                 ai::AssistantStopReason::ToolUse,
+                 ai::AssistantStopReason::Length,
+                 ai::AssistantStopReason::Error,
+                 ai::AssistantStopReason::Aborted}) {
+        auto assistant = assistant_with_identity();
+        assistant.stop_reason = reason;
+
+        const auto json = write_message_json(ai::MessageVariant{assistant});
+        REQUIRE(json);
+        const auto parsed = read_message_json(*json);
+        REQUIRE(parsed);
+        REQUIRE(std::holds_alternative<ai::AssistantMessage>(*parsed));
+        CHECK(std::get<ai::AssistantMessage>(*parsed).stop_reason == reason);
+    }
 }
 
 TEST_CASE("unknown content discriminator returns a typed JSON error", "[harness][session][u2][glaze][compat-pi]") {

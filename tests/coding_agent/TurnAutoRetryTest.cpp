@@ -134,7 +134,15 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return ai::assistant_text_message("default fake response");
+            auto fallback = ai::assistant_text_message("default fake response");
+            // Session files require the response identity and a real epoch
+            // timestamp on assistant messages; stamp the same deterministic
+            // value the queued responses receive below.
+            fallback.provider = "sdk-host";
+            fallback.api = "fake";
+            fallback.model = model.id;
+            fallback.timestamp = 1718000000123;
+            co_return fallback;
         }
         auto response = std::move(responses.front());
         responses.pop_front();

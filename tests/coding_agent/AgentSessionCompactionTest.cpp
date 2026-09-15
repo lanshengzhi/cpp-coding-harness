@@ -75,6 +75,19 @@ struct TestPaths {
     return summary;
 }
 
+/// A scripted default response carrying the identity and real epoch timestamp
+/// every real adapter stamps. Session files require them, so a fallback that
+/// omits them describes a record the harness cannot read back (#665).
+[[nodiscard]] ai::AssistantMessage scripted_fallback(
+        std::string text, const ai::Model& model, ai::TimestampMs timestamp) {
+    auto message = ai::assistant_text_message(std::move(text));
+    message.provider = "sdk-host";
+    message.api = "fake";
+    message.model = model.id;
+    message.timestamp = timestamp;
+    return message;
+}
+
 /// FIFO scripted chat client for the compaction trigger tests. Records every
 /// request (for context-rebuild assertions), serves queued responses in order,
 /// and optionally gates one request until `release_gate()` — a stopped request
@@ -119,7 +132,7 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return ai::assistant_text_message("default fake response");
+            co_return scripted_fallback("default fake response", model, 1718000000123);
         }
         auto response = std::move(responses.front());
         responses.pop_front();
@@ -469,7 +482,7 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return ai::assistant_text_message("default fake response");
+            co_return scripted_fallback("default fake response", model, wall_clock_ms() + request_count);
         }
         auto response = std::move(responses.front());
         responses.pop_front();

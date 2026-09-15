@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace cch::ai {
 
@@ -38,22 +40,41 @@ enum class AssistantStopReason {
     Aborted,
 };
 
+/// One row of the pi `stopReason` wire vocabulary. The table below is the one
+/// source for both directions, so the serializer and any parser reading this
+/// vocabulary cannot drift apart (#665).
+struct StopReasonWireName {
+    AssistantStopReason reason{};
+    std::string_view wire_name{};
+};
+
+inline constexpr std::array<StopReasonWireName, 6> kStopReasonNames{{
+        {AssistantStopReason::Pending, "pending"},
+        {AssistantStopReason::Stop, "stop"},
+        {AssistantStopReason::Length, "length"},
+        {AssistantStopReason::ToolUse, "toolUse"},
+        {AssistantStopReason::Error, "error"},
+        {AssistantStopReason::Aborted, "aborted"},
+}};
+
 [[nodiscard]] inline std::string stop_reason_to_string(AssistantStopReason reason) {
-    switch (reason) {
-    case AssistantStopReason::Pending:
-        return "pending";
-    case AssistantStopReason::Stop:
-        return "stop";
-    case AssistantStopReason::Length:
-        return "length";
-    case AssistantStopReason::ToolUse:
-        return "toolUse";
-    case AssistantStopReason::Error:
-        return "error";
-    case AssistantStopReason::Aborted:
-        return "aborted";
+    for (const auto& entry : kStopReasonNames) {
+        if (entry.reason == reason) {
+            return std::string{entry.wire_name};
+        }
     }
     return "error";
+}
+
+/// The inverse of `stop_reason_to_string`; `std::nullopt` for a wire value the
+/// vocabulary does not carry.
+[[nodiscard]] inline std::optional<AssistantStopReason> stop_reason_from_string(std::string_view wire_name) {
+    for (const auto& entry : kStopReasonNames) {
+        if (entry.wire_name == wire_name) {
+            return entry.reason;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace cch::ai

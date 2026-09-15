@@ -236,7 +236,9 @@ canonical_message(const support::JsonValue &message) {
 
 [[nodiscard]] support::JsonValue
 canonical_message(const ai::MessageVariant &message) {
-    auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
+    auto dto = harness::session::detail::to_message_dto(message);
+    REQUIRE(dto);
+    auto serialized = support::write_json(*dto);
     REQUIRE(serialized);
     auto parsed = support::read_json(*serialized);
     REQUIRE(parsed);

@@ -444,16 +444,19 @@ struct EntryBaseResult {
     return metadata;
 }
 
-[[nodiscard]] detail::MessageEntryDto to_dto(
-    std::string entry_id,
-    const ai::MessageVariant& message,
-    std::optional<std::string> parent_id = std::nullopt,
-    std::int64_t timestamp = 0) {
+[[nodiscard]] support::Expected<detail::MessageEntryDto> to_dto(std::string entry_id,
+        const ai::MessageVariant& message,
+        std::optional<std::string> parent_id = std::nullopt,
+        std::int64_t timestamp = 0) {
     detail::MessageEntryDto dto;
     dto.id = std::move(entry_id);
     dto.parentId = nullable_string(parent_id);
     dto.timestamp = format_iso_timestamp_ms(timestamp);
-    dto.message = detail::to_message_dto(message);
+    auto message_dto = detail::to_message_dto(message);
+    if (!message_dto) {
+        return std::unexpected(message_dto.error());
+    }
+    dto.message = std::move(*message_dto);
     return dto;
 }
 
@@ -994,8 +997,11 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     std::optional<std::string> parent_id) const {
     auto redacted = redacted_message(message);
     auto base = fresh_entry_base(parent_id);
-    auto entry_json = support::write_json(
-        to_dto(base.id, redacted, base.parent_id, base.timestamp_ms));
+    auto entry_dto = to_dto(base.id, redacted, base.parent_id, base.timestamp_ms);
+    if (!entry_dto) {
+        return std::unexpected(entry_dto.error());
+    }
+    auto entry_json = support::write_json(*entry_dto);
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }
@@ -1176,7 +1182,11 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
         std::vector<detail::MessageDto> tail;
         tail.reserve(value.retained_tail->size());
         for (const auto& message : *value.retained_tail) {
-            tail.push_back(detail::to_message_dto(message));
+            auto message_dto = detail::to_message_dto(message);
+            if (!message_dto) {
+                return std::unexpected(message_dto.error());
+            }
+            tail.push_back(std::move(*message_dto));
         }
         dto.retainedTail = std::move(tail);
     }
@@ -1308,7 +1318,11 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         dto.id = std::move(base.id);
         dto.parentId = std::move(base.parentId);
         dto.timestamp = std::move(base.timestamp);
-        dto.message = detail::to_message_dto(*entry.message);
+        auto message_dto = detail::to_message_dto(*entry.message);
+        if (!message_dto) {
+            return std::unexpected(message_dto.error());
+        }
+        dto.message = std::move(*message_dto);
         return serialize_tree_entry(dto);
     }
     case SessionEntryKind::ModelChange: {
@@ -1396,7 +1410,11 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
             std::vector<detail::MessageDto> tail;
             tail.reserve(value.retained_tail->size());
             for (const auto& message : *value.retained_tail) {
-                tail.push_back(detail::to_message_dto(message));
+                auto message_dto = detail::to_message_dto(message);
+                if (!message_dto) {
+                    return std::unexpected(message_dto.error());
+                }
+                tail.push_back(std::move(*message_dto));
             }
             dto.retainedTail = std::move(tail);
         }

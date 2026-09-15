@@ -51,6 +51,12 @@ struct RecordedRuntimeCall {
     coding_agent::ModelRuntimeTestStreamOptions options;
 };
 
+/// The deterministic response timestamp scripted Providers substitute for the
+/// `assistant_text_message` default of 0. Real adapters stamp a real epoch
+/// value and the session writer requires one, so a fake that leaves the
+/// default describes a record the harness cannot read back (#665).
+inline constexpr std::int64_t kScriptedResponseTimestampMs = 1'718'000'000'123;
+
 /// Mutable controls shared by the scripted Provider Definitions installed in
 /// one concrete ModelRuntime. The state is separate from the runtime so tests
 /// can vary provider responses without manufacturing a ModelRuntime subtype.
@@ -120,6 +126,29 @@ public:
                         context = std::move(context),
                         options = std::move(options)](ai::AssistantEventSink sink)
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    const std::string response_api = model.api;
+                    const std::string response_provider = model.provider;
+                    const std::string response_model = model.id;
+                    // Fill only what a scripted response left unset, the way a
+                    // real adapter supplies its own identity and a real epoch
+                    // timestamp; a record the harness cannot read back is what
+                    // #665 closes.
+                    const auto stamp_response = [response_api, response_provider, response_model](
+                                                        ai::AssistantMessage message) {
+                        if (message.api.empty()) {
+                            message.api = response_api;
+                        }
+                        if (message.provider.empty()) {
+                            message.provider = response_provider;
+                        }
+                        if (message.model.empty()) {
+                            message.model = response_model;
+                        }
+                        if (message.timestamp == 0) {
+                            message.timestamp = kScriptedResponseTimestampMs;
+                        }
+                        return message;
+                    };
                     const std::size_t call_index = control->calls.size();
                     control->calls.push_back(RecordedRuntimeCall{
                             .model = std::move(model),
@@ -129,7 +158,7 @@ public:
                     const auto& stop_token = control->calls.back().options.stop_token;
 
                     if (stop_token.stop_requested()) {
-                        auto terminal = ai::assistant_text_message("");
+                        auto terminal = stamp_response(ai::assistant_text_message(""));
                         terminal.stop_reason = ai::AssistantStopReason::Aborted;
                         terminal.error_message = "Request was aborted";
                         if (sink) {
@@ -148,7 +177,7 @@ public:
                     }
 
                     if (control->emit_partial_before_gate && control->gate_at && call_index == *control->gate_at) {
-                        auto partial = ai::assistant_text_message("streaming in flight");
+                        auto partial = stamp_response(ai::assistant_text_message("streaming in flight"));
                         if (sink) {
                             CCH_TRY_VOID(sink(ai::AssistantStartEvent{.partial = partial}));
                             CCH_TRY_VOID(sink(ai::TextDeltaEvent{
@@ -171,7 +200,7 @@ public:
                     }
 
                     if (stop_token.stop_requested()) {
-                        auto terminal = ai::assistant_text_message("");
+                        auto terminal = stamp_response(ai::assistant_text_message(""));
                         terminal.stop_reason = ai::AssistantStopReason::Aborted;
                         terminal.error_message = "Request was aborted";
                         if (sink) {
@@ -190,10 +219,11 @@ public:
                     }
 
                     if (control->responses.empty()) {
-                        co_return ai::assistant_text_message(control->gated_response);
+                        co_return stamp_response(ai::assistant_text_message(control->gated_response));
                     }
                     auto response = std::move(control->responses.front());
                     control->responses.pop_front();
+                    response = stamp_response(std::move(response));
                     if (sink) {
                         if (response.stop_reason == ai::AssistantStopReason::Error ||
                                 response.stop_reason == ai::AssistantStopReason::Aborted) {

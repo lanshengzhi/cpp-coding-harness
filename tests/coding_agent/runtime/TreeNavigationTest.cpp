@@ -269,6 +269,7 @@ public:
                     message.api = model.api;
                     message.provider = model.provider;
                     message.model = model.id;
+                    message.timestamp = 1718000000123;
                     if (sink) {
                         (void)sink(ai::AssistantStartEvent{message});
                     }

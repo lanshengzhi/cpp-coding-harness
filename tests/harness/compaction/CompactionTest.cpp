@@ -231,7 +231,9 @@ template <typename T> [[nodiscard]] T run_awaitable(boost::asio::awaitable<T> aw
     }
     support::JsonValue messages{support::JsonValue::array_t{}};
     for (const auto& message : call.context.messages) {
-        auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
+        auto dto = harness::session::detail::to_message_dto(message);
+        REQUIRE(dto);
+        auto serialized = support::write_json(*dto);
         REQUIRE(serialized);
         auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);
@@ -935,7 +937,9 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(context.messages[0]));
     support::JsonValue rebuild{support::JsonValue::array_t{}};
     for (const auto& message : context.messages) {
-        auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
+        auto dto = harness::session::detail::to_message_dto(message);
+        REQUIRE(dto);
+        auto serialized = support::write_json(*dto);
         REQUIRE(serialized);
         auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);
