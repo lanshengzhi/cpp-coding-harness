@@ -215,7 +215,7 @@ The approved pattern is the #632 scoping (ProjectionStreamTest 100-chunk cost bo
 
 ## 14. Validation-enforced — reviewers skip exact violations
 
-- Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 or §16 conformance (ADR 0039).
+- Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 or §16 conformance (ADR 0039), and a pass is never acceptance of the property the rule is named for (`docs/agents/validation.md` §Acceptance discipline).
 - Compiler diagnostics remain review findings: `-Wall -Wextra -Wpedantic` are enabled without warnings-as-errors.
 - Formatting of added or modified lines is checked against `.clang-format` by `scripts/format-check.sh` (CI runs it as the formatting gate). Reviewers skip findings that duplicate its patch; untouched lines stay outside the gate.
 - For code changes that compile and pass the required suite, report remaining §2–§13 and §16 violations. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
