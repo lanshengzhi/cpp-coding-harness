@@ -1,8 +1,11 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace cch::ai {
 
@@ -36,24 +39,53 @@ enum class AssistantStopReason {
     Length,
     Error,
     Aborted,
+    /// One past the last wire reason. It exists only so the `stopReason`
+    /// vocabulary below can be checked for completeness at compile time:
+    /// extending this enum without extending `kStopReasonNames` (or the
+    /// reverse) fails the assertion under the table (#665).
+    Count,
 };
 
+/// One row of the pi `stopReason` wire vocabulary. The table below is the one
+/// source for both directions, so the serializer and any parser reading this
+/// vocabulary cannot drift apart (#665).
+struct StopReasonWireName {
+    AssistantStopReason reason{};
+    std::string_view wire_name{};
+};
+
+inline constexpr std::array<StopReasonWireName, 6> kStopReasonNames{{
+        {AssistantStopReason::Pending, "pending"},
+        {AssistantStopReason::Stop, "stop"},
+        {AssistantStopReason::Length, "length"},
+        {AssistantStopReason::ToolUse, "toolUse"},
+        {AssistantStopReason::Error, "error"},
+        {AssistantStopReason::Aborted, "aborted"},
+}};
+
+/// The table names every reason and no more. This replaces the exhaustiveness
+/// `-Wswitch` gave the former `switch`: a new enumerator that leaves the table
+/// short is a hard compile error, not a silent `"error"` fallback (#665).
+static_assert(kStopReasonNames.size() == static_cast<std::size_t>(AssistantStopReason::Count));
+
 [[nodiscard]] inline std::string stop_reason_to_string(AssistantStopReason reason) {
-    switch (reason) {
-    case AssistantStopReason::Pending:
-        return "pending";
-    case AssistantStopReason::Stop:
-        return "stop";
-    case AssistantStopReason::Length:
-        return "length";
-    case AssistantStopReason::ToolUse:
-        return "toolUse";
-    case AssistantStopReason::Error:
-        return "error";
-    case AssistantStopReason::Aborted:
-        return "aborted";
+    for (const auto& entry : kStopReasonNames) {
+        if (entry.reason == reason) {
+            return std::string{entry.wire_name};
+        }
     }
     return "error";
+}
+
+/// The inverse of `stop_reason_to_string`; `std::nullopt` for a wire value the
+/// vocabulary does not carry.
+[[nodiscard]] inline std::optional<AssistantStopReason> stop_reason_from_string(std::string_view wire_name) {
+    for (const auto& entry : kStopReasonNames) {
+        if (entry.wire_name == wire_name) {
+            return entry.reason;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace cch::ai

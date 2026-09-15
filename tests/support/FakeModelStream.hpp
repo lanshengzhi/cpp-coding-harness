@@ -5,6 +5,7 @@
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "ai/ModelStreamBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -51,22 +52,26 @@ public:
     [[nodiscard]] ai::ModelStreamFactory factory() {
         auto self = shared_from_this();
         return ai::ModelStreamFactory{
-            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options)
-                -> ai::ModelStream {
-                self->calls.push_back(RecordedStreamSimpleCall{
-                    std::move(model), std::move(context), std::move(options)});
-                return ai::ModelStream{ai::ModelStreamProducer{
-                        [self](ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) mutable noexcept {
-                            boost::asio::post(cch::support::detail::t_initiating_executor,
-                                    [self, sink = std::move(sink), completion = std::move(completion)]() mutable {
-                                        self->script(std::move(sink), std::move(completion));
-                                    });
-                        }}};
-            }};
+                [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options) -> ai::ModelStream {
+                    ai::Model response_model = model;
+                    self->calls.push_back(
+                            RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
+                    return ai::ModelStream{ai::ModelStreamProducer{
+                            [self, response_model = std::move(response_model)](ai::AssistantEventSink sink,
+                                    ai::ModelStreamCompletion completion) mutable noexcept {
+                                boost::asio::post(cch::support::detail::t_initiating_executor,
+                                        [self,
+                                                response_model = std::move(response_model),
+                                                sink = std::move(sink),
+                                                completion = std::move(completion)]() mutable {
+                                            self->script(std::move(sink), std::move(completion), response_model);
+                                        });
+                            }}};
+                }};
     }
 
     /// Script one accepted request (runs on the consuming executor).
-    void script(ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) {
+    void script(ai::AssistantEventSink sink, ai::ModelStreamCompletion completion, const ai::Model& response_model) {
         // The sink is a move-only weak-backpressured channel: a failing sink
         // completes the stream with its error exactly once. `emit` returns
         // false after completing, so the caller stops scripting.
@@ -90,7 +95,7 @@ public:
         // Accepted-call cancellation completes through exactly one aborted
         // terminal event plus the agreeing final AssistantMessage (ADR 0020).
         if (call.options.stop_token.stop_requested()) {
-            auto terminal = ai::assistant_text_message("");
+            auto terminal = stamped_response(ai::assistant_text_message(""), response_model);
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "Request was aborted";
             ++terminal_events;
@@ -108,11 +113,12 @@ public:
         }
 
         if (responses.empty()) {
-            completion(ai::assistant_text_message("default fake response"));
+            completion(stamped_response(ai::assistant_text_message("default fake response"), response_model));
             return;
         }
         auto response = std::move(responses.front());
         responses.pop_front();
+        response = stamped_response(std::move(response), response_model);
         if (response.stop_reason == ai::AssistantStopReason::Error ||
             response.stop_reason == ai::AssistantStopReason::Aborted) {
             // Exactly one terminal event plus the agreeing final message

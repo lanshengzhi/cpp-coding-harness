@@ -53,6 +53,7 @@ public:
         response.provider = "immediate-fake";
         response.api = "fake";
         response.model = model.id;
+        response.timestamp = 1718000000123;
         co_return response;
                 });
     }

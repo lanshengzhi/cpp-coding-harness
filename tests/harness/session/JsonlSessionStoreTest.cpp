@@ -1072,3 +1072,34 @@ TEST_CASE("extended message types survive session append and load", "[harness][s
     CHECK(std::get<ai::BranchSummaryMessage>(loaded->messages[1]).summary == "Branch resolved");
     CHECK(std::get<ai::BranchSummaryMessage>(loaded->messages[1]).from_id == "abc12345");
 }
+
+TEST_CASE("a session append the parser could not read back writes no record",
+        "[harness][session][store][issue665][compat-pi]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "unreadable-append.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_message("kept")).status);
+    const auto before = read_all(path);
+
+    // An assistant record without the identity and real timestamp a provider
+    // supplies is one the parser rejects, so the writer must not persist it
+    // (#665).
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{
+            .text = "unreadable",
+            .text_signature = std::nullopt,
+    });
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    const auto append = store->append(ai::MessageVariant{assistant});
+    REQUIRE_FALSE(append.status);
+    CHECK(append.status.error().code == support::ErrorCode::JsonSerialize);
+    CHECK(append.entries.empty());
+    CHECK(read_all(path) == before);
+
+    // The session stays usable for a record that can be read back.
+    REQUIRE(store->append(user_message("after")).status);
+    const auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->messages.size() == 2);
+}

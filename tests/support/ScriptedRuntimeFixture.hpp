@@ -120,6 +120,10 @@ public:
                         context = std::move(context),
                         options = std::move(options)](ai::AssistantEventSink sink)
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    // The identity a real adapter would report for this
+                    // request; the request model itself is moved into the
+                    // recorded call below, so keep a copy (#665).
+                    const ai::Model response_model = model;
                     const std::size_t call_index = control->calls.size();
                     control->calls.push_back(RecordedRuntimeCall{
                             .model = std::move(model),
@@ -129,7 +133,7 @@ public:
                     const auto& stop_token = control->calls.back().options.stop_token;
 
                     if (stop_token.stop_requested()) {
-                        auto terminal = ai::assistant_text_message("");
+                        auto terminal = stamped_response(ai::assistant_text_message(""), response_model);
                         terminal.stop_reason = ai::AssistantStopReason::Aborted;
                         terminal.error_message = "Request was aborted";
                         if (sink) {
@@ -148,7 +152,8 @@ public:
                     }
 
                     if (control->emit_partial_before_gate && control->gate_at && call_index == *control->gate_at) {
-                        auto partial = ai::assistant_text_message("streaming in flight");
+                        auto partial =
+                                stamped_response(ai::assistant_text_message("streaming in flight"), response_model);
                         if (sink) {
                             CCH_TRY_VOID(sink(ai::AssistantStartEvent{.partial = partial}));
                             CCH_TRY_VOID(sink(ai::TextDeltaEvent{
@@ -171,7 +176,7 @@ public:
                     }
 
                     if (stop_token.stop_requested()) {
-                        auto terminal = ai::assistant_text_message("");
+                        auto terminal = stamped_response(ai::assistant_text_message(""), response_model);
                         terminal.stop_reason = ai::AssistantStopReason::Aborted;
                         terminal.error_message = "Request was aborted";
                         if (sink) {
@@ -190,10 +195,11 @@ public:
                     }
 
                     if (control->responses.empty()) {
-                        co_return ai::assistant_text_message(control->gated_response);
+                        co_return stamped_response(ai::assistant_text_message(control->gated_response), response_model);
                     }
                     auto response = std::move(control->responses.front());
                     control->responses.pop_front();
+                    response = stamped_response(std::move(response), response_model);
                     if (sink) {
                         if (response.stop_reason == ai::AssistantStopReason::Error ||
                                 response.stop_reason == ai::AssistantStopReason::Aborted) {

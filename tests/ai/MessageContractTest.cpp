@@ -6,6 +6,7 @@
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/StreamEvent.hpp>
+#include <cch/ai/Usage.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -13,7 +14,9 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 using namespace cch;
@@ -311,4 +314,24 @@ TEST_CASE("default-constructed AI contracts are empty passive values", "[ai][con
     ai::AssistantErrorEvent error;
     CHECK(error.error.content.empty());
     CHECK_FALSE(error.failure.has_value());
+}
+
+// The pi `stopReason` wire vocabulary is one table (#665). This case pins the
+// wire strings themselves: a table edit that keeps the round trip consistent
+// would still break the pi session contract.
+TEST_CASE("assistant stop reason wire vocabulary matches pi's strings", "[ai][u3][contract][issue665][compat-pi]") {
+    const std::pair<ai::AssistantStopReason, std::string_view> expected[] = {
+            {ai::AssistantStopReason::Pending, "pending"},
+            {ai::AssistantStopReason::Stop, "stop"},
+            {ai::AssistantStopReason::Length, "length"},
+            {ai::AssistantStopReason::ToolUse, "toolUse"},
+            {ai::AssistantStopReason::Error, "error"},
+            {ai::AssistantStopReason::Aborted, "aborted"},
+    };
+    for (const auto& [reason, wire_name] : expected) {
+        CHECK(ai::stop_reason_to_string(reason) == wire_name);
+        CHECK(ai::stop_reason_from_string(wire_name) == reason);
+    }
+
+    CHECK_FALSE(ai::stop_reason_from_string("future_reason").has_value());
 }

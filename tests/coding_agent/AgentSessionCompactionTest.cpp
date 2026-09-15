@@ -12,10 +12,11 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/ExpectedMacros.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -41,6 +42,7 @@
 
 using namespace cch;
 using tests::run_awaitable;
+using tests::stamped_response;
 
 namespace {
 
@@ -119,7 +121,7 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return ai::assistant_text_message("default fake response");
+            co_return stamped_response(ai::assistant_text_message("default fake response"), model);
         }
         auto response = std::move(responses.front());
         responses.pop_front();
@@ -469,7 +471,7 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return ai::assistant_text_message("default fake response");
+            co_return stamped_response(ai::assistant_text_message("default fake response"), model);
         }
         auto response = std::move(responses.front());
         responses.pop_front();

@@ -126,7 +126,9 @@ namespace {
 }
 
 [[nodiscard]] support::JsonValue cpp_message_json(const ai::MessageVariant& message) {
-    auto serialized = support::write_json(harness::session::detail::to_message_dto(message));
+    auto dto = harness::session::detail::to_message_dto(message);
+    REQUIRE(dto);
+    auto serialized = support::write_json(*dto);
     REQUIRE(serialized);
     auto parsed = support::read_json(*serialized);
     REQUIRE(parsed);

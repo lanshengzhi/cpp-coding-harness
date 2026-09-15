@@ -28,6 +28,8 @@ std::string_view stop_reason_name(ai::AssistantStopReason reason) {
         return "error";
     case ai::AssistantStopReason::Aborted:
         return "aborted";
+    case ai::AssistantStopReason::Count:
+        break;
     }
     return "unknown";
 }
