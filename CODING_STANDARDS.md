@@ -156,6 +156,8 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, the `streamSimple` request surface (`Model` argument + `ProviderStreamOptions`), message, and Session Entry contracts remain credential-free (ADR 0019). Added or modified request paths use the approved credential carriers.
 
+10.7. Every addition or removal of redaction states which ADR, issue, or code comment authorizes it, in a code comment or the tracking ticket. A redaction change with no stated authority is not made (#666: ADR 0028 forbids re-proposing redaction of User Bash text values, while ADR 0026:23 keeps the remaining redaction mandatory).
+
 ## 11. Tests
 
 11.1. Use formal Catch2 v3 from the pinned dependency graph through its imported target. Include Catch2's public headers directly; the local Catch-compatible imitation and compatibility headers are prohibited.
