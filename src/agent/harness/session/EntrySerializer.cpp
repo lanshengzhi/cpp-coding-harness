@@ -672,6 +672,26 @@ void redact_assistant_content(ai::AssistantContent& content) {
         content);
 }
 
+void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
+    entry.type = support::redact_text(std::move(entry.type));
+    if (entry.error) {
+        auto& error = *entry.error;
+        if (error.name) {
+            *error.name = support::redact_text(std::move(*error.name));
+        }
+        error.message = support::redact_text(std::move(error.message));
+        if (error.stack) {
+            *error.stack = support::redact_text(std::move(*error.stack));
+        }
+        if (error.code) {
+            *error.code = support::redact_text(std::move(*error.code));
+        }
+    }
+    if (entry.details) {
+        entry.details = redact_json_value(*entry.details);
+    }
+}
+
 [[nodiscard]] ai::MessageVariant redacted_message(const ai::MessageVariant& message) {
     auto redacted = message;
     std::visit(
@@ -686,7 +706,20 @@ void redact_assistant_content(ai::AssistantContent& content) {
                 if (concrete.error_message) {
                     concrete.error_message = support::redact_text(std::move(*concrete.error_message));
                 }
+                // Provider/tool diagnostics carry free-form error text; they
+                // were silently omitted before #666. ADR 0028 narrows the raw
+                // rule to User Bash text only and leaves non-User-Bash
+                // diagnostics under ADR 0026:23's mandatory redaction.
+                if (concrete.diagnostics) {
+                    for (auto& entry : *concrete.diagnostics) {
+                        redact_diagnostic_entry(entry);
+                    }
+                }
             } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
+                // `command` stays raw (ADR 0028:30, re-proposal rejected).
+                // `output` keeps its existing redaction; whether it should
+                // follow ADR 0028's raw-output clause is a separately-tracked
+                // adjudication, not part of #666.
                 concrete.output = support::redact_text(std::move(concrete.output));
             } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
                 for (auto& block : concrete.content) {
@@ -696,9 +729,16 @@ void redact_assistant_content(ai::AssistantContent& content) {
                     concrete.details = redact_json_value(*concrete.details);
                 }
             } else if constexpr (std::is_same_v<T, ai::BranchSummaryMessage>) {
-                // Summary text is already plain; no further redaction needed
+                // Summaries are model-generated from context that can contain
+                // raw User Bash text (ADR 0028) and stored model/user content,
+                // so "already plain" does not hold and they are redacted like
+                // any other conversational text (#666). The separate
+                // compaction/branch-summary *entry* writers build their DTOs
+                // directly and are a separately-tracked gap (out of #666).
+                concrete.summary = support::redact_text(std::move(concrete.summary));
             } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
-                // Summary text is already plain; no further redaction needed
+                // Same rationale as BranchSummaryMessage above.
+                concrete.summary = support::redact_text(std::move(concrete.summary));
             } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
                 if (auto* text = std::get_if<std::string>(&concrete.content)) {
                     *text = support::redact_text(std::move(*text));
