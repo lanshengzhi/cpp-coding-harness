@@ -6,8 +6,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <fstream>
+#include <optional>
 #include <sstream>
+#include <string>
 #include <variant>
+#include <vector>
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -1102,4 +1105,93 @@ TEST_CASE("a session append the parser could not read back writes no record",
     const auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
     REQUIRE(loaded->messages.size() == 2);
+}
+
+TEST_CASE("Compaction and branch-summary entries redact secret-shaped text at the persistence boundary",
+        "[harness][session][u9][issue675][spec]") {
+    // #675: `serialize_compaction` and `serialize_branch_summary` built their
+    // DTOs from the entry value directly instead of through `redacted_message`,
+    // so `summary`, `details`, and the compaction retained tail reached the pi
+    // v3 wire as written. This case drives the real write path (append on a
+    // `JsonlSessionStore` plus a byte read of the file it writes) and asserts on
+    // the persisted text, never on "some function was called".
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "summary-redacted.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+
+    // The three shapes `support::redact_text` recognizes: the `sk-` prefix, the
+    // `AKIA` prefix, and a secret-key assignment. Each appears once as plain
+    // text and once inside a JSON `details` leaf.
+    const std::string compaction_summary =
+            "compacted history with api_key=compaction-summary-value and AKIAIOSFODNN7EXAMPLE";
+    auto compaction_details = support::read_json(
+            R"({"token":"sk-compaction-detail-secret","note":"OPENAI_API_KEY=compaction-detail-value"})");
+    REQUIRE(compaction_details);
+
+    ai::UserMessage kept_user;
+    kept_user.content =
+            std::vector<ai::Content>{ai::TextContent{"kept user with sk-retained-tail-secret", std::nullopt}};
+    kept_user.timestamp = 1718000000123;
+    std::vector<ai::MessageVariant> retained_tail{ai::MessageVariant{std::move(kept_user)}};
+
+    REQUIRE(store->append_compaction(std::nullopt,
+            harness::session::CompactionEntryValue{
+                    .summary = compaction_summary,
+                    .first_kept_entry_id = "first-kept",
+                    .tokens_before = 50000,
+                    .retained_tail = std::move(retained_tail),
+                    .details = std::move(*compaction_details),
+                    .from_hook = true,
+            }));
+
+    const std::string branch_summary =
+            "explored branch with sk-branch-summary-secret and PASSWORD=branch-summary-value";
+    auto branch_details = support::read_json(R"({"modifiedFiles":["b.txt"],"secret":"AKIAIOSFODNN7EXAMPLE"})");
+    REQUIRE(branch_details);
+    REQUIRE(store->append_branch_summary(
+            std::nullopt, "from-entry", branch_summary, std::move(*branch_details), false));
+
+    const auto raw = read_all(path);
+    // The safe neighbours prove the very lines that carried the secrets reached
+    // disk, so "absent" below cannot mean "never written".
+    CHECK(raw.find(R"("firstKeptEntryId":"first-kept")") != std::string::npos);
+    CHECK(raw.find(R"("tokensBefore":50000)") != std::string::npos);
+    CHECK(raw.find(R"("fromId":"from-entry")") != std::string::npos);
+    CHECK(raw.find(R"("modifiedFiles":["b.txt"])") != std::string::npos);
+    // The redactor's marker is in the persisted bytes, so the omissions below
+    // are redaction rather than fields the writer dropped.
+    CHECK(raw.find("[REDACTED]") != std::string::npos);
+
+    CHECK(raw.find("AKIAIOSFODNN7EXAMPLE") == std::string::npos);
+    CHECK(raw.find("compaction-summary-value") == std::string::npos);
+    CHECK(raw.find("sk-compaction-detail-secret") == std::string::npos);
+    CHECK(raw.find("compaction-detail-value") == std::string::npos);
+    CHECK(raw.find("sk-retained-tail-secret") == std::string::npos);
+    CHECK(raw.find("sk-branch-summary-secret") == std::string::npos);
+    CHECK(raw.find("branch-summary-value") == std::string::npos);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 3);
+    // The reloaded values carry the marker in the exact leaf the fixture
+    // planted a secret in, which is the non-vacuous form of "the secret is
+    // gone": an unwritten or dropped field could not produce this text.
+    const auto& compaction = require_entry_value<harness::session::CompactionEntryValue>(loaded->entries[1]);
+    CHECK(compaction.summary.find("[REDACTED]") != std::string::npos);
+    CHECK(compaction.summary.find("AKIAIOSFODNN7EXAMPLE") == std::string::npos);
+    CHECK(compaction.summary.find("compaction-summary-value") == std::string::npos);
+    REQUIRE(compaction.details.has_value());
+    const auto& details = compaction.details->get<support::JsonValue::object_t>();
+    CHECK(details.at("token").get<std::string>() == "[REDACTED]");
+    CHECK(details.at("note").get<std::string>() == "OPENAI_API_KEY=[REDACTED]");
+    REQUIRE(compaction.retained_tail.has_value());
+    REQUIRE(compaction.retained_tail->size() == 1);
+    CHECK(text_from_message(compaction.retained_tail->front()).find("[REDACTED]") != std::string::npos);
+
+    const auto& branch = require_entry_value<harness::session::BranchSummaryEntryValue>(loaded->entries[2]);
+    CHECK(branch.summary.find("[REDACTED]") != std::string::npos);
+    CHECK(branch.summary.find("branch-summary-value") == std::string::npos);
+    REQUIRE(branch.details.has_value());
+    CHECK(branch.details->get<support::JsonValue::object_t>().at("secret").get<std::string>() == "[REDACTED]");
 }

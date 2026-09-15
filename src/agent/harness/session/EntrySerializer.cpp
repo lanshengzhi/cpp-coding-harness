@@ -734,7 +734,8 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
                 // so "already plain" does not hold and they are redacted like
                 // any other conversational text (#666). The separate
                 // compaction/branch-summary *entry* writers build their DTOs
-                // directly and are a separately-tracked gap (out of #666).
+                // directly instead of through this function, so they carry the
+                // same rule in `redact_summary_entry_text` (#675).
                 concrete.summary = support::redact_text(std::move(concrete.summary));
             } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
                 // Same rationale as BranchSummaryMessage above.
@@ -762,6 +763,24 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
         },
         redacted);
     return redacted;
+}
+
+/// The free-text pair a summary-bearing entry value carries.
+///
+/// The compaction and branch-summary *entry* writers build their DTOs straight
+/// from these values rather than through `redacted_message`, so before #675
+/// both fields reached the pi v3 wire as written. The routing is the one the
+/// message path already uses — `support::redact_text` for free text,
+/// `redact_json_value` for JSON — so the two paths agree field for field.
+///
+/// Authority: #675 (the entry writers bypassed redaction altogether) under
+/// ADR 0026:23, which keeps non-User-Bash text redaction mandatory. Neither
+/// field is exempt and neither is User Bash text, so no exemption applies.
+void redact_summary_entry_text(std::string& summary, std::optional<support::JsonValue>& details) {
+    summary = support::redact_text(std::move(summary));
+    if (details) {
+        details = redact_json_value(*details);
+    }
 }
 
 } // namespace
@@ -1227,6 +1246,19 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     if (value.retained_tail && value.retained_tail->empty()) {
         value.retained_tail.reset();
     }
+    // Redact before the value is mirrored into the DTO and the live entry, so
+    // the line and the live tree agree exactly as they do on the message path.
+    redact_summary_entry_text(value.summary, value.details);
+    if (value.retained_tail) {
+        // The retained tail inherits `redacted_message`'s exemption list
+        // unchanged (notably ADR 0028's User Bash text); this path adds none.
+        for (auto& message : *value.retained_tail) {
+            message = redacted_message(message);
+        }
+    }
+    // Deliberately raw, one reason per field: `first_kept_entry_id` is an entry
+    // identifier (the exemption recorded for `BranchSummaryMessage.from_id`),
+    // and `tokens_before`, `usage`, and `from_hook` carry no text.
     detail::CompactionDto dto;
     dto.id = base.id;
     dto.parentId = nullable_string(parent_id);
@@ -1267,6 +1299,10 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     std::optional<support::JsonValue> details,
     std::optional<bool> from_hook,
     std::optional<ai::Usage> usage) const {
+    redact_summary_entry_text(summary, details);
+    // Deliberately raw, one reason per field: `from_id` is an entry identifier
+    // (the exemption recorded for `BranchSummaryMessage.from_id`), and `usage`
+    // and `from_hook` carry no text.
     auto base = fresh_entry_base(parent_id);
     detail::BranchSummaryDto dto;
     dto.id = base.id;
