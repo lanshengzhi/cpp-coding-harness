@@ -1,5 +1,6 @@
 .pi-subagents/
 .qoder/
+.scratch/
 build/
 build-*/
 benchmark-build/
