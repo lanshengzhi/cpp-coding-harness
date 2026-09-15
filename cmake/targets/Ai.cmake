@@ -41,7 +41,6 @@ cch_parity_declare_target(
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
-        glaze::glaze@glaze
         OpenSSL::SSL@openssl
         OpenSSL::Crypto@openssl
     INTERFACE_DEPENDS

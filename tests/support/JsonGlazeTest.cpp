@@ -1,6 +1,8 @@
-// AI-side Glaze case: the shared Glaze reader's nesting limit. The AI context
-// JSON surface that lived in `src/ai/glaze/AiJson.hpp` was removed with #652,
-// and the pi message JSON mapping is owned and tested by the session module
+// The shared private Glaze reader's nesting limit. `read_json<glz::generic>`
+// lives in `support/JsonGlaze.hpp`, so this case belongs to the support shard,
+// which declares `glaze::glaze` explicitly (#670). The AI context JSON surface
+// that lived in `src/ai/glaze/AiJson.hpp` was removed with #652, and the pi
+// message JSON mapping is owned and tested by the session module
 // (`SessionMessageJsonTest`, ADR 0056).
 
 #include "support/Json.hpp"
@@ -14,7 +16,7 @@
 
 using namespace cch;
 
-TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2][glaze][compat-pi]") {
+TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[support][glaze][u2][compat-pi]") {
     constexpr std::size_t kMaximumDepth = 256;
     std::string accepted_json(kMaximumDepth, '[');
     accepted_json += '0';
