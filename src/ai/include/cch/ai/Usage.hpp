@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -38,6 +39,11 @@ enum class AssistantStopReason {
     Length,
     Error,
     Aborted,
+    /// One past the last wire reason. It exists only so the `stopReason`
+    /// vocabulary below can be checked for completeness at compile time:
+    /// extending this enum without extending `kStopReasonNames` (or the
+    /// reverse) fails the assertion under the table (#665).
+    Count,
 };
 
 /// One row of the pi `stopReason` wire vocabulary. The table below is the one
@@ -56,6 +62,11 @@ inline constexpr std::array<StopReasonWireName, 6> kStopReasonNames{{
         {AssistantStopReason::Error, "error"},
         {AssistantStopReason::Aborted, "aborted"},
 }};
+
+/// The table names every reason and no more. This replaces the exhaustiveness
+/// `-Wswitch` gave the former `switch`: a new enumerator that leaves the table
+/// short is a hard compile error, not a silent `"error"` fallback (#665).
+static_assert(kStopReasonNames.size() == static_cast<std::size_t>(AssistantStopReason::Count));
 
 [[nodiscard]] inline std::string stop_reason_to_string(AssistantStopReason reason) {
     for (const auto& entry : kStopReasonNames) {

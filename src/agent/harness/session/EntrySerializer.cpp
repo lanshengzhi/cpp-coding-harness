@@ -460,6 +460,22 @@ struct EntryBaseResult {
     return dto;
 }
 
+/// Map a retained-tail message list into session DTOs, failing on the first
+/// message the session writer cannot serialize (#665).
+[[nodiscard]] support::Expected<std::vector<detail::MessageDto>> to_message_dtos(
+        const std::vector<ai::MessageVariant>& messages) {
+    std::vector<detail::MessageDto> dtos;
+    dtos.reserve(messages.size());
+    for (const auto& message : messages) {
+        auto dto = detail::to_message_dto(message);
+        if (!dto) {
+            return std::unexpected(dto.error());
+        }
+        dtos.push_back(std::move(*dto));
+    }
+    return dtos;
+}
+
 [[nodiscard]] SessionEntryKind kind_from_type(const std::string& type) {
     if (type == "header" || type == "session") return SessionEntryKind::Header;
     if (type == "message") return SessionEntryKind::Message;
@@ -1179,16 +1195,11 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     dto.firstKeptEntryId = value.first_kept_entry_id;
     dto.tokensBefore = value.tokens_before;
     if (value.retained_tail) {
-        std::vector<detail::MessageDto> tail;
-        tail.reserve(value.retained_tail->size());
-        for (const auto& message : *value.retained_tail) {
-            auto message_dto = detail::to_message_dto(message);
-            if (!message_dto) {
-                return std::unexpected(message_dto.error());
-            }
-            tail.push_back(std::move(*message_dto));
+        auto tail = to_message_dtos(*value.retained_tail);
+        if (!tail) {
+            return std::unexpected(tail.error());
         }
-        dto.retainedTail = std::move(tail);
+        dto.retainedTail = std::move(*tail);
     }
     if (value.details) {
         auto details_json = support::write_json(*value.details);
@@ -1407,16 +1418,11 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         dto.firstKeptEntryId = value.first_kept_entry_id;
         dto.tokensBefore = value.tokens_before;
         if (value.retained_tail.has_value()) {
-            std::vector<detail::MessageDto> tail;
-            tail.reserve(value.retained_tail->size());
-            for (const auto& message : *value.retained_tail) {
-                auto message_dto = detail::to_message_dto(message);
-                if (!message_dto) {
-                    return std::unexpected(message_dto.error());
-                }
-                tail.push_back(std::move(*message_dto));
+            auto tail = to_message_dtos(*value.retained_tail);
+            if (!tail) {
+                return std::unexpected(tail.error());
             }
-            dto.retainedTail = std::move(tail);
+            dto.retainedTail = std::move(*tail);
         }
         if (value.details) {
             auto details_json = support::write_json(*value.details);

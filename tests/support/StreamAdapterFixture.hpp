@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cch/ai/Auth.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/Model.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include "ai/providers/StreamTransport.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -10,6 +12,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -20,6 +24,28 @@
 #include <vector>
 
 namespace cch::tests {
+
+/// Give a scripted assistant response the identity and real epoch timestamp
+/// every real adapter supplies. Only what the caller left unset is filled
+/// (`api`/`provider`/`model`, and the `assistant_text_message` timestamp
+/// default of 0), so a test's own values survive while its terminal stays a
+/// record the session writer can persist and read back (#665).
+[[nodiscard]] inline ai::AssistantMessage stamped_response(ai::AssistantMessage message, const ai::Model& model) {
+    constexpr std::int64_t kResponseTimestampMs = 1'718'000'000'123;
+    if (message.api.empty()) {
+        message.api = model.api;
+    }
+    if (message.provider.empty()) {
+        message.provider = model.provider;
+    }
+    if (message.model.empty()) {
+        message.model = model.id;
+    }
+    if (message.timestamp == 0) {
+        message.timestamp = kResponseTimestampMs;
+    }
+    return message;
+}
 
 /// Stop reasons of every non-terminal (partial) assistant event, in emission
 /// order. Terminal done/error events are excluded.

@@ -531,7 +531,7 @@ TEST_CASE("assistant message write and read reject an empty response identity",
             [](const ai::AssistantMessage& message, const std::string& json, std::string_view field) {
                 const auto written = write_message_json(ai::MessageVariant{message});
                 REQUIRE_FALSE(written);
-                CHECK(written.error().code == support::ErrorCode::JsonParse);
+                CHECK(written.error().code == support::ErrorCode::JsonSerialize);
                 CHECK(written.error().detail.find(field) != std::string::npos);
 
                 const auto read = read_message_json(json);
@@ -562,7 +562,7 @@ TEST_CASE("assistant message write and read reject a non-real timestamp",
 
     const auto written = write_message_json(ai::MessageVariant{assistant});
     REQUIRE_FALSE(written);
-    CHECK(written.error().code == support::ErrorCode::JsonParse);
+    CHECK(written.error().code == support::ErrorCode::JsonSerialize);
     CHECK(written.error().detail.find("timestamp") != std::string::npos);
 
     const auto read = read_message_json(assistant_identity_json("openai-completions", "openai", "gpt-test", 0));

@@ -141,3 +141,28 @@ no failure at all — the compiler catches renames and deletions, and no field-c
 exists. **Adjudicated: keep the deliberate duplication**, since the evidence supports the value it was
 accepted for, and handle the guard's blind spots as separate defects rather than by reopening the
 duplication decision.
+
+### Row 1 follow-up: the assistant guard converges fail-closed (Issue #665)
+
+The same probe found the assistant identity and timestamp invariants enforced on one side only: the
+parser required non-empty `api`, `provider`, and `model` plus a real Unix epoch `timestamp`, while
+`to_message_dto` wrote whatever it was given. The serializer could therefore emit a record the parser
+rejected, which is a session file the harness cannot resume.
+
+**Adjudicated: converge fail-closed** — `require_assistant_message_identity`
+(`src/agent/harness/session/SessionMessageJson.hpp`) is one check called by both directions, and
+`to_message_dto` returns a failing `Expected` for the assistant arm, propagated by `EntrySerializer`
+to `JsonlSessionStore::append`. The direction follows the product's own contract: a provider response
+always carries the requested model's identity — `Model.api` is validated non-empty at model
+resolution — and all three adapters plus the error terminal stamp api/provider/model and a real
+epoch timestamp (`OpenAIResponsesAdapter.cpp`, `AnthropicMessagesAdapter.cpp`,
+`OpenAICodexResponsesAdapter.cpp`, `Models.cpp` `terminal_failure`). No production path synthesizes an
+incomplete assistant message, so rejecting one at the write boundary cannot fail a real turn. The
+write-side failure is classified `JsonSerialize` and the parse-side one `JsonParse`; both come from the
+same check.
+
+Two residual limits are accepted. A record whose identity is incomplete is now unrepresentable in the
+scripted test fakes, which repair only the fields a caller left unset, so the guard is exercised at
+the DTO boundary rather than through a fake provider; and the `stopReason` vocabulary is single-sourced
+in `kStopReasonNames` (non-`switch` code), kept complete by the `AssistantStopReason::Count` sentinel
+and the assertion under that table.

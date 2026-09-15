@@ -5,6 +5,7 @@
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "ai/ModelStreamBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -32,28 +33,6 @@ struct RecordedStreamSimpleCall {
     ai::AiContext context;
     ai::SimpleStreamOptions options;
 };
-
-/// Fill the response identity and a real epoch timestamp a real adapter always
-/// supplies. The caller's queued values are kept; only what a scripted
-/// Provider left unset (api/provider/model, or the `assistant_text_message`
-/// timestamp default of 0) is repaired, so its terminal is a record the
-/// harness can persist and read back (#665).
-[[nodiscard]] inline ai::AssistantMessage stamped_response(ai::AssistantMessage message, const ai::Model& model) {
-    constexpr std::int64_t kResponseTimestampMs = 1'718'000'000'123;
-    if (message.api.empty()) {
-        message.api = model.api;
-    }
-    if (message.provider.empty()) {
-        message.provider = model.provider;
-    }
-    if (message.model.empty()) {
-        message.model = model.id;
-    }
-    if (message.timestamp == 0) {
-        message.timestamp = kResponseTimestampMs;
-    }
-    return message;
-}
 
 /// Scripted, recording narrow fake for the Agent's AI-owned `ModelStream`
 /// seam (ADR 0040 / #453). Records every stream request and returns queued
@@ -194,7 +173,8 @@ public:
     }
 
     /// Recorded per-turn calls in issue order.
-    std::vector<RecordedStreamSimpleCall> calls; /// Count of terminal (error/aborted) events delivered to the sink.
+    std::vector<RecordedStreamSimpleCall> calls;
+    /// Count of terminal (error/aborted) events delivered to the sink.
     int terminal_events{0};
     /// Scripted terminal failure category for the #326 six-category channel.
     /// When set, scripted error-terminal responses carry a failure of this

@@ -12,10 +12,11 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/ExpectedMacros.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -41,6 +42,7 @@
 
 using namespace cch;
 using tests::run_awaitable;
+using tests::stamped_response;
 
 namespace {
 
@@ -73,19 +75,6 @@ struct TestPaths {
     auto summary = ai::assistant_text_message("## Goal\nCompacted history summary");
     summary.usage = big_usage();
     return summary;
-}
-
-/// A scripted default response carrying the identity and real epoch timestamp
-/// every real adapter stamps. Session files require them, so a fallback that
-/// omits them describes a record the harness cannot read back (#665).
-[[nodiscard]] ai::AssistantMessage scripted_fallback(
-        std::string text, const ai::Model& model, ai::TimestampMs timestamp) {
-    auto message = ai::assistant_text_message(std::move(text));
-    message.provider = "sdk-host";
-    message.api = "fake";
-    message.model = model.id;
-    message.timestamp = timestamp;
-    return message;
 }
 
 /// FIFO scripted chat client for the compaction trigger tests. Records every
@@ -132,7 +121,7 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return scripted_fallback("default fake response", model, 1718000000123);
+            co_return stamped_response(ai::assistant_text_message("default fake response"), model);
         }
         auto response = std::move(responses.front());
         responses.pop_front();
@@ -482,7 +471,7 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            co_return scripted_fallback("default fake response", model, wall_clock_ms() + request_count);
+            co_return stamped_response(ai::assistant_text_message("default fake response"), model);
         }
         auto response = std::move(responses.front());
         responses.pop_front();

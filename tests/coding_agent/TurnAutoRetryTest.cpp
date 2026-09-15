@@ -23,6 +23,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -50,6 +51,7 @@
 #include <vector>
 
 using namespace cch;
+using tests::stamped_response;
 
 namespace {
 
@@ -134,15 +136,9 @@ public:
             co_return terminal;
         }
         if (responses.empty()) {
-            auto fallback = ai::assistant_text_message("default fake response");
             // Session files require the response identity and a real epoch
-            // timestamp on assistant messages; stamp the same deterministic
-            // value the queued responses receive below.
-            fallback.provider = "sdk-host";
-            fallback.api = "fake";
-            fallback.model = model.id;
-            fallback.timestamp = 1718000000123;
-            co_return fallback;
+            // timestamp on assistant messages; a real adapter supplies both.
+            co_return stamped_response(ai::assistant_text_message("default fake response"), model);
         }
         auto response = std::move(responses.front());
         responses.pop_front();
