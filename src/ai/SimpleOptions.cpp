@@ -3,7 +3,6 @@
 #include "support/Json.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -15,15 +14,6 @@
 namespace cch::ai {
 namespace {
 
-constexpr std::array<ModelThinkingLevel, 7> kThinkingLevels{
-    ModelThinkingLevel::Off,
-    ModelThinkingLevel::Minimal,
-    ModelThinkingLevel::Low,
-    ModelThinkingLevel::Medium,
-    ModelThinkingLevel::High,
-    ModelThinkingLevel::XHigh,
-    ModelThinkingLevel::Max,
-};
 constexpr std::uint64_t kCharactersPerToken = 4;
 constexpr std::uint64_t kEstimatedImageCharacters = 4800;
 constexpr std::uint64_t kContextSafetyTokens = 4096;
@@ -169,7 +159,8 @@ std::vector<ModelThinkingLevel> get_supported_thinking_levels(const Model& model
     }
 
     std::vector<ModelThinkingLevel> result;
-    for (const auto level : kThinkingLevels) {
+    for (const auto& entry : kModelThinkingLevels) {
+        const auto level = entry.first;
         const auto found = model.thinking_level_map
             ? model.thinking_level_map->find(level)
             : ThinkingLevelMap::const_iterator{};
@@ -192,19 +183,20 @@ ModelThinkingLevel clamp_thinking_level(
     if (std::ranges::find(available, requested) != available.end()) {
         return requested;
     }
-    const auto requested_position = std::ranges::find(kThinkingLevels, requested);
-    if (requested_position == kThinkingLevels.end()) {
+    const auto requested_position =
+            std::ranges::find(kModelThinkingLevels, requested, [](const auto& entry) { return entry.first; });
+    if (requested_position == kModelThinkingLevels.end()) {
         return available.empty() ? ModelThinkingLevel::Off : available.front();
     }
-    for (auto current = requested_position; current != kThinkingLevels.end(); ++current) {
-        if (std::ranges::find(available, *current) != available.end()) {
-            return *current;
+    for (auto current = requested_position; current != kModelThinkingLevels.end(); ++current) {
+        if (std::ranges::find(available, current->first) != available.end()) {
+            return current->first;
         }
     }
-    for (auto current = requested_position; current != kThinkingLevels.begin();) {
+    for (auto current = requested_position; current != kModelThinkingLevels.begin();) {
         --current;
-        if (std::ranges::find(available, *current) != available.end()) {
-            return *current;
+        if (std::ranges::find(available, current->first) != available.end()) {
+            return current->first;
         }
     }
     return available.empty() ? ModelThinkingLevel::Off : available.front();

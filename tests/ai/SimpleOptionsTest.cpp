@@ -37,6 +37,41 @@ TEST_CASE("Thinking levels preserve pi null and explicit extended mapping semant
           ai::ModelThinkingLevel::XHigh);
 }
 
+TEST_CASE("Thinking level clamp walks pi's published vocabulary order", "[ai][simple-options][issue669][spec]") {
+    // The expected orders below are pi's literal vocabulary order, independent
+    // of how the clamp obtains its walk sequence.
+    const std::vector<ai::ModelThinkingLevel> vocabulary{
+            ai::ModelThinkingLevel::Off,
+            ai::ModelThinkingLevel::Minimal,
+            ai::ModelThinkingLevel::Low,
+            ai::ModelThinkingLevel::Medium,
+            ai::ModelThinkingLevel::High,
+            ai::ModelThinkingLevel::XHigh,
+            ai::ModelThinkingLevel::Max,
+    };
+    CHECK(ai::get_supported_thinking_levels(tests::make_full_thinking_model("mapped")) == vocabulary);
+
+    // A model supporting only the vocabulary's two ends widens to the nearest
+    // supported level above the request, so the walk order is observable there.
+    const ai::ThinkingLevelMap ends_map{
+            {ai::ModelThinkingLevel::Off, std::nullopt},
+            {ai::ModelThinkingLevel::Minimal, "minimal"},
+            {ai::ModelThinkingLevel::Low, std::nullopt},
+            {ai::ModelThinkingLevel::Medium, std::nullopt},
+            {ai::ModelThinkingLevel::High, std::nullopt},
+            {ai::ModelThinkingLevel::XHigh, std::nullopt},
+            {ai::ModelThinkingLevel::Max, "max"},
+    };
+    const auto sparse = tests::make_reasoning_model("sparse", ends_map);
+    const std::vector<ai::ModelThinkingLevel> supported_ends{
+            ai::ModelThinkingLevel::Minimal,
+            ai::ModelThinkingLevel::Max,
+    };
+    CHECK(ai::get_supported_thinking_levels(sparse) == supported_ends);
+    CHECK(ai::clamp_thinking_level(sparse, ai::ModelThinkingLevel::Medium) == ai::ModelThinkingLevel::Max);
+    CHECK(ai::clamp_thinking_level(sparse, ai::ModelThinkingLevel::High) == ai::ModelThinkingLevel::Max);
+}
+
 TEST_CASE("string-level clamp matches pi clampThinkingLevel across the seven-level set",
         "[ai][simple-options][issue352][spec]") {
     auto partial = tests::make_model("partial", "deepseek", "openai-responses");
