@@ -128,16 +128,18 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // The session id is forwarded as the per-turn `sessionId` streamSimple
     // option (pi harness `sessionMetadata.id`).
     options.session_id = session_.metadata.session_id;
-    // pi `sdk.ts` wires `convertToLlm` (`core/messages.ts`, which drops
-    // `excludeFromContext` bash messages) into the Agent at construction; the
-    // deleted `transform_context` hook's filter re-homes here, exactly like
-    // pi's harness boundary (agent-loop.ts `streamAssistantResponse`). The
-    // provider conversion layer repeats the drop defensively.
-    options.convert_to_llm = [](std::vector<ai::MessageVariant> messages) {
-        std::erase_if(messages,
-                [](const ai::MessageVariant& message) { return ai::excluded_from_provider_context(message); });
-        return support::AsyncResult<std::vector<ai::MessageVariant>>{std::move(messages)};
-    };
+    // The Session installs no `convertToLlm` hook: the `excludeFromContext`
+    // rule is applied on exactly one path, the provider-boundary conversion
+    // (`ai::extended_message_to_user_message` drops excluded messages and the
+    // conversion loop keeps them invisible to tool-call pairing — see
+    // `MessageConversion.cpp`; #650, #668). The port is shared with the
+    // compaction path, so one home serves both consumers. pi reaches its single drop
+    // drop the same way: `sdk.ts` wires `convertToLlmWithBlockImages`, that
+    // shared function, into the Agent rather than adding a second filter. A
+    // request whose messages are all excluded therefore reaches the provider
+    // with zero messages instead of failing at a Session-level guard; the
+    // Agent's generic `convertToLlm returned no messages` guard stays the
+    // contract for hosts that do install a hook.
     // The System Prompt is built at session construction in pi's exact shape
     // (ADR 0036 G4; `core/agent-session.ts` `_rebuildSystemPrompt` +
     // `core/system-prompt.ts` `buildSystemPrompt`) and flows into every run

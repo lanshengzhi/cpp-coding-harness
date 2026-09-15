@@ -298,6 +298,15 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
             continue;
         }
 
+        // An excluded message never enters the provider context, so it stays
+        // invisible to the tool-call pairing state machine as well: pi's
+        // `convertToLlm` drops it before the pairing transform ever sees the
+        // sequence. Reaching the fallthrough below would flush a pending tool
+        // call whose result arrives right after it, synthesizing a "No result
+        // provided" orphan beside the real result (#668).
+        if (excluded_from_provider_context(message)) {
+            continue;
+        }
         flush_orphans();
         if (const auto* user = std::get_if<UserMessage>(&message)) {
             auto transformed = *user;
