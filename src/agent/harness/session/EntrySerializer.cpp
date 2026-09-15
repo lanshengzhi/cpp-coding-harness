@@ -716,11 +716,11 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
                     }
                 }
             } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
-                // `command` stays raw (ADR 0028:30, re-proposal rejected).
-                // `output` keeps its existing redaction; whether it should
-                // follow ADR 0028's raw-output clause is a separately-tracked
-                // adjudication, not part of #666.
-                concrete.output = support::redact_text(std::move(concrete.output));
+                // Both User Bash text values are stored raw, so this branch
+                // carries no redaction. `command` (ADR 0028:30, re-proposal
+                // rejected) and `output` (ADR 0028's Output section, "No
+                // redaction", adjudicated in #677 option 甲 and applied here
+                // under #679).
             } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
                 for (auto& block : concrete.content) {
                     redact_content(block);

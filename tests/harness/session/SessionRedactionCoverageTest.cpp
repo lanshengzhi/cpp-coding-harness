@@ -136,9 +136,10 @@ struct Exemption {
 
 /// Fields the write path deliberately leaves raw. Every entry states the
 /// record that authorizes the exemption; a field may not be exempted "because
-/// the test was red" (#666). `BashExecutionMessage.output` is absent here: it
-/// is redacted today, and whether that should follow ADR 0028's raw-output
-/// clause is a separate adjudication.
+/// the test was red" (#666). `BashExecutionMessage.output` is exempt: ADR 0028's
+/// Output section records "No redaction" for User Bash output, #677 chose
+/// option 甲 on that basis, and #679 removed the redaction this test used to
+/// require.
 constexpr std::array kExemptions{
         Exemption{"AssistantMessage.api", "ADR 0029/0033 provider identity, not conversational text"},
         Exemption{"AssistantMessage.provider", "ADR 0029/0033 provider identity, not conversational text"},
@@ -169,6 +170,9 @@ constexpr std::array kExemptions{
         Exemption{"ToolResultMessage.content[].data", "Binary image payload; redaction would corrupt it"},
         Exemption{"ToolResultMessage.content[].mime_type", "Media type, not free text"},
         Exemption{"BashExecutionMessage.command", "ADR 0028:30 User Bash command is raw by accepted decision"},
+        Exemption{"BashExecutionMessage.output",
+                "ADR 0028 Output section \"No redaction\" for User Bash output; adjudicated in #677 option 甲 and "
+                "applied under #679"},
         Exemption{"BashExecutionMessage.full_output_path", "Spill artifact path, not conversational text"},
         Exemption{"CustomMessage.custom_type", "Extension discriminator, not free text"},
         Exemption{"CustomMessage.content[].text_signature",
