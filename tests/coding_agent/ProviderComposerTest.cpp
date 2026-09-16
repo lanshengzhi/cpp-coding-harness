@@ -392,6 +392,34 @@ TEST_CASE("config-only provider composes from models.json plus the openai-respon
     CHECK(models.front().input == std::vector<ai::ModelInput>{ai::ModelInput::Text});
 }
 
+TEST_CASE("a config-only provider with an unknown api still composes its model",
+        "[coding_agent][provider-composer][issue671][spec]") {
+    tests::TempWorkspace workspace;
+    // The unknown api is a parse warning, never a rejection: the provider and
+    // its model reach the catalog with the api intact, and only the stream
+    // dispatch reports "has no API implementation" (#671).
+    const auto config = load_models_json(workspace, R"({
+      "providers": {
+        "deepseek": {
+          "name": "DeepSeek",
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "openai-responses",
+          "apiKey": "dummy-deepseek-key",
+          "models": [{"id": "deepseek-v4-flash", "api": "made-up-api"}]
+        }
+      }
+    })");
+    REQUIRE(config.warnings().size() == 1);
+    std::optional<std::string> error;
+    auto change = coding_agent::compose_provider("deepseek", std::nullopt, config, composer_options(), error);
+    CHECK_FALSE(error.has_value());
+    REQUIRE(change.definition.has_value());
+    const auto& models = change.definition->models;
+    REQUIRE(models.size() == 1);
+    CHECK(models.front().id == "deepseek-v4-flash");
+    CHECK(models.front().api == "made-up-api");
+}
+
 TEST_CASE("config-only provider without apiKey still composes but resolves no auth",
         "[coding_agent][provider-composer][issue345][spec]") {
     tests::TempWorkspace workspace;

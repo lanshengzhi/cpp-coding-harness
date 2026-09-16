@@ -60,7 +60,11 @@ struct ModelsJsonProvider {
 /// Immutable, credential-blind `models.json` snapshot (pi `ModelConfig`). One
 /// load per `refresh()`. Invalid or unreadable content resolves to an empty
 /// user config plus a diagnostic string; a missing file resolves to an empty
-/// config with no diagnostic.
+/// config with no diagnostic. An accepted config additionally records one
+/// non-fatal warning for every declared `api` value outside pi's api
+/// vocabulary: the file is shared with pi, whose schema accepts any non-empty
+/// string, so an unrecognized value is a likely typo and never a reason to
+/// drop the providers (ADR 0033, #671).
 class ModelConfig {
 public:
     ModelConfig() = default;
@@ -76,16 +80,20 @@ public:
         std::string_view provider_id) const;
     [[nodiscard]] std::vector<std::string> provider_ids() const;
     [[nodiscard]] const std::optional<std::string>& error() const { return error_; }
+    /// Non-fatal parse warnings in declaration order; always empty on a
+    /// rejected config (`error()` set).
+    [[nodiscard]] const std::vector<std::string>& warnings() const { return warnings_; }
     [[nodiscard]] bool empty() const { return providers_.empty(); }
 
 private:
-    explicit ModelConfig(
-        std::map<std::string, ModelsJsonProvider, std::less<>> providers,
-        std::optional<std::string> error)
-        : providers_(std::move(providers)), error_(std::move(error)) {}
+    explicit ModelConfig(std::map<std::string, ModelsJsonProvider, std::less<>> providers,
+            std::optional<std::string> error,
+            std::vector<std::string> warnings = {})
+        : providers_(std::move(providers)), error_(std::move(error)), warnings_(std::move(warnings)) {}
 
     std::map<std::string, ModelsJsonProvider, std::less<>> providers_;
     std::optional<std::string> error_;
+    std::vector<std::string> warnings_;
 };
 
 } // namespace cch::coding_agent
