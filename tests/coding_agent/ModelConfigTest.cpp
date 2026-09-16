@@ -5,9 +5,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 
 using namespace cch;
 
@@ -194,6 +197,93 @@ TEST_CASE("the frozen complete Model fixture preserves the null-aware thinking l
     REQUIRE(plain_provider.has_value());
     REQUIRE(plain_provider->models.has_value());
     CHECK_FALSE(plain_provider->models->front().thinking_level_map.has_value());
+}
+
+TEST_CASE("ModelConfig warns on an unknown model api without dropping the provider",
+        "[coding_agent][model-config][issue671][spec]") {
+    tests::TempWorkspace workspace;
+    // pi's models.json schema accepts any non-empty api string and the file is
+    // shared with pi, so an unrecognized value warns instead of rejecting the
+    // whole all-or-nothing config (#671).
+    auto config = load_models_json(workspace, R"({
+      "providers": {
+        "deepseek": {
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "openai-responses",
+          "models": [{"id": "deepseek-v4-flash", "api": "gpt-5-turbo"}]
+        }
+      }
+    })");
+    CHECK_FALSE(config.error().has_value());
+    CHECK_FALSE(config.empty());
+    const auto ids = config.provider_ids();
+    REQUIRE(ids.size() == 1);
+    CHECK(ids.front() == "deepseek");
+    REQUIRE(config.warnings().size() == 1);
+    CHECK(config.warnings().front().find("providers.deepseek.models[0].api") != std::string::npos);
+    CHECK(config.warnings().front().find("gpt-5-turbo") != std::string::npos);
+}
+
+TEST_CASE("ModelConfig warns on an unknown provider-level api a model inherits",
+        "[coding_agent][model-config][issue671][spec]") {
+    tests::TempWorkspace workspace;
+    // A provider-level api is the default a model without its own api inherits
+    // (`ProviderComposer` `model_from_json`), so an unknown value there reaches
+    // `Model.api` just the same (#671).
+    auto config = load_models_json(workspace, R"({
+      "providers": {
+        "deepseek": {
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "made-up-api",
+          "models": [{"id": "deepseek-v4-flash"}]
+        }
+      }
+    })");
+    CHECK_FALSE(config.error().has_value());
+    CHECK_FALSE(config.empty());
+    REQUIRE(config.warnings().size() == 1);
+    CHECK(config.warnings().front().find("providers.deepseek.api") != std::string::npos);
+    CHECK(config.warnings().front().find("made-up-api") != std::string::npos);
+}
+
+TEST_CASE("ModelConfig records no warning for every api in pi's vocabulary",
+        "[coding_agent][model-config][issue671][spec]") {
+    // pi `KnownApi` (`packages/ai/src/types.ts` at the frozen baseline). Every
+    // value here is a legitimate models.json api — including
+    // `openai-completions`, which this harness has no adapter for (ADR 0033) —
+    // so the vocabulary check stays silent for all of them.
+    constexpr std::array<std::string_view, 10> kPiKnownApis{
+            "openai-completions",
+            "mistral-conversations",
+            "openai-responses",
+            "azure-openai-responses",
+            "openai-codex-responses",
+            "anthropic-messages",
+            "bedrock-converse-stream",
+            "google-generative-ai",
+            "google-vertex",
+            "pi-messages",
+    };
+    std::string models;
+    for (std::size_t index = 0; index < kPiKnownApis.size(); ++index) {
+        if (!models.empty()) {
+            models += ",";
+        }
+        models +=
+                "{\"id\":\"model-" + std::to_string(index) + "\",\"api\":\"" + std::string{kPiKnownApis[index]} + "\"}";
+    }
+    tests::TempWorkspace workspace;
+    auto config = load_models_json(workspace, R"({"providers":{"deepseek":{
+      "baseUrl":"https://api.deepseek.example/v1",
+      "api":"openai-responses",
+      "models":[)" + models + R"(]}}})");
+    CHECK_FALSE(config.error().has_value());
+    CHECK(config.warnings().empty());
+    // The models survive, so "no warning" is not an empty config in disguise.
+    const auto provider = config.provider("deepseek");
+    REQUIRE(provider.has_value());
+    REQUIRE(provider->models.has_value());
+    CHECK(provider->models->size() == kPiKnownApis.size());
 }
 
 TEST_CASE("ModelConfig unknown provider fields are ignored (no compat surface)",

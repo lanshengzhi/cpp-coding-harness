@@ -2,10 +2,13 @@
 
 #include "support/Json.hpp"
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -21,11 +24,49 @@ using cch::support::JsonValue;
     return path + "." + std::string{child};
 }
 
+/// pi's api vocabulary (`KnownApi`, `packages/ai/src/types.ts` at the frozen
+/// baseline `83114817`): the values a `models.json` `api` may legitimately
+/// carry. This is a value-domain check, not an adapter registry — only three
+/// of these have a C++ adapter (ADR 0033), and the rest reach a stream-time
+/// failure exactly like any other unadapted api.
+///
+/// debt: a static copy of pi's list, so a baseline bump that adds or renames an
+/// api name warns spuriously until this table is extended. Upgrade when the
+/// pinned parity baseline moves.
+constexpr std::array<std::string_view, 10> kKnownModelApis{
+        "openai-completions",
+        "mistral-conversations",
+        "openai-responses",
+        "azure-openai-responses",
+        "openai-codex-responses",
+        "anthropic-messages",
+        "bedrock-converse-stream",
+        "google-generative-ai",
+        "google-vertex",
+        "pi-messages",
+};
+
+[[nodiscard]] bool is_known_model_api(std::string_view api) {
+    return std::ranges::find(kKnownModelApis, api) != kKnownModelApis.end();
+}
+
+[[nodiscard]] std::string known_model_apis_text() {
+    std::string text;
+    for (const auto& api : kKnownModelApis) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+        text += api;
+    }
+    return text;
+}
+
 class ConfigValidator {
 public:
     explicit ConfigValidator(std::string root) : root_(std::move(root)) {}
 
     [[nodiscard]] bool has_errors() const { return !errors_.empty(); }
+    [[nodiscard]] const std::vector<std::string>& warnings() const { return warnings_; }
     [[nodiscard]] std::string error_text() const {
         std::string text;
         for (const auto& error : errors_) {
@@ -39,6 +80,21 @@ public:
 
     void error(std::string path, std::string message) {
         errors_.push_back(dotted_path(root_, path) + ": " + std::move(message));
+    }
+
+    void warning(std::string path, std::string message) {
+        warnings_.push_back(dotted_path(root_, path) + ": " + std::move(message));
+    }
+
+    /// Records one warning for a declared `api` value outside pi's vocabulary.
+    /// The value stays usable, so the provider and its models are never
+    /// dropped; an unadapted api still fails at stream time (#671).
+    void warn_unknown_api(std::string_view api, std::string path) {
+        if (is_known_model_api(api)) {
+            return;
+        }
+        warning(std::move(path),
+                "Unknown model api \"" + std::string{api} + "\"; pi's known apis: " + known_model_apis_text());
     }
 
     /// Returns the value if it is the expected type, otherwise records an
@@ -304,6 +360,7 @@ private:
 
     std::string root_;
     std::vector<std::string> errors_;
+    std::vector<std::string> warnings_;
 };
 
 [[nodiscard]] bool read_file_content(
@@ -353,7 +410,11 @@ private:
         model.id = *id;
     }
     model.name = validator.optional_string(*object, "name", dotted_path(path, "name"));
-    model.api = validator.optional_string(*object, "api", dotted_path(path, "api"));
+    const auto model_api_path = dotted_path(path, "api");
+    model.api = validator.optional_string(*object, "api", model_api_path);
+    if (model.api) {
+        validator.warn_unknown_api(*model.api, model_api_path);
+    }
     model.base_url = validator.optional_string(*object, "baseUrl", dotted_path(path, "baseUrl"));
     model.reasoning = validator.optional_bool(*object, "reasoning", dotted_path(path, "reasoning"));
     model.thinking_level_map = validator.optional_thinking_level_map(
@@ -406,7 +467,11 @@ private:
     provider.name = validator.optional_string(*object, "name", dotted_path(path, "name"));
     provider.base_url = validator.optional_string(*object, "baseUrl", dotted_path(path, "baseUrl"));
     provider.api_key = validator.optional_string(*object, "apiKey", dotted_path(path, "apiKey"));
-    provider.api = validator.optional_string(*object, "api", dotted_path(path, "api"));
+    const auto provider_api_path = dotted_path(path, "api");
+    provider.api = validator.optional_string(*object, "api", provider_api_path);
+    if (provider.api) {
+        validator.warn_unknown_api(*provider.api, provider_api_path);
+    }
     provider.headers = validator.optional_string_map(
         *object, "headers", dotted_path(path, "headers"));
 
@@ -502,7 +567,7 @@ ModelConfig ModelConfig::load(const std::filesystem::path& path) {
             "Invalid models.json schema:\n" + validator.error_text() +
                 "\n\nFile: " + path.string());
     }
-    return ModelConfig(std::move(providers), std::nullopt);
+    return ModelConfig(std::move(providers), std::nullopt, validator.warnings());
 }
 
 std::optional<ModelsJsonProvider> ModelConfig::provider(
