@@ -15,7 +15,7 @@ enum class AdapterKind {
 };
 
 /// Build one transport-independent wire payload using the shared normalized
-/// history and streamSimple values. No provider SDK DTO crosses this boundary.
+/// history and the caller's stream options. No provider SDK DTO crosses this boundary.
 [[nodiscard]] support::Expected<support::JsonValue> build_adapter_payload(
     AdapterKind adapter,
     const Model& model,

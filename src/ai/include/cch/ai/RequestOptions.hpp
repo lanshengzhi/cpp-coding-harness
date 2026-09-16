@@ -20,7 +20,7 @@ enum class CacheRetention { None, Short, Long };
 using RequestHeaders = std::map<std::string, std::optional<std::string>, std::less<>>;
 using TransformHeadersHook = std::move_only_function<cch::support::Expected<RequestHeaders>(RequestHeaders)>;
 
-/// Exact caller-facing option set accepted by Models::streamSimple at the
+/// Exact caller-facing option set accepted by Models::stream at the
 /// frozen pi baseline. Authentication and the transform hook are stripped
 /// before Provider dispatch.
 struct SimpleStreamOptions {

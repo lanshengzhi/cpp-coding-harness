@@ -121,7 +121,7 @@ public:
 
     /// Produce one AI-owned move-only `ModelStream` for a single turn
     /// (ADR 0040 / #455). The returned value is consumed exactly once through
-    /// `run`/`start`/`consume`; its closure shares this Models Runtime's
+    /// `run`/`start`; its closure shares this Models Runtime's
     /// lifetime and captures the consuming executor privately. The sink is
     /// supplied at consumption, keeping `ModelStream` composable and free of
     /// third-party execution types. Model/provider/auth/request failures
