@@ -15,7 +15,7 @@ We therefore replace the parity authority with the **Product Architecture Contra
 Partial supersession, stated clause by clause:
 
 - **ADR 0024 — superseded.** The frozen pi baseline no longer pins Supported Capabilities; "matching pi semantics" stops being the default and becomes a per-capability product decision. Issue #2 is closed with a pointer here. Observed pi behavior is demoted from *baseline* to *evidence*.
-- **ADR 0039 — retained mechanism, replaced referent.** The Owner Package graph and the gate stand; what the gate certifies changes from pi-attributed ownership to the Product Architecture Contract. `cch_ai`, `cch_agent_core`, `cch_tui`, and `cch_support` are unaffected. `cch_coding_agent`'s scope (Session + Models Runtime + CLI + TUI in one target) is the first boundary the contract rejects; its split follows in the re-gate ticket.
+- **ADR 0039 — retained mechanism, replaced referent.** The Owner Package graph and the gate stand; what the gate certifies changes from pi-attributed ownership to the Product Architecture Contract. `cch_ai`, `cch_agent_core`, `cch_tui`, and `cch_support` are unaffected. `cch_coding_agent`'s scope (Session + Models Runtime + CLI + TUI in one target) is the first boundary the contract rejects; the split landed as the `frontend_tui` and `frontend_cli` implementation targets, and the role-keyed allowlist that keeps the headless owner off those edges is recorded in the addendum below.
 - **ADR 0040 — retained in full.** The serialized Runtime lifecycle is an engineering decision, not a pi concession. What changes later (per the review) is *who owns* serialization: the Runtime host, not each caller's discipline.
 - **ADR 0051 / 0052 — retained, and their promise is unfinished.** The projection stream already states "every fact a projection needs to render arrives through the one stream"; today's push-only tool patches with no snapshot slice under-deliver that promise. Completing the Read Model is program work, not a direction change.
 
@@ -42,7 +42,7 @@ Not everything pi-shaped is a compromise. We keep: the serialized Runtime (ADR 0
 ## Consequences
 
 - Issue #2 (parity map) is closed as superseded; `docs/agents/pi-parity.md` is rewritten as the product architecture-contract guide in the re-gate ticket.
-- The de-pi program's first tickets: re-gate the manifest and split `frontend_tui`/`frontend_cli` out of `cch_coding_agent`; complete the projection Read Model; audit the test suite into `spec` / `compat-pi` / `diverge` labels; structured inference-failure classification; own config namespace with one-time pi import.
+- The de-pi program's first tickets: re-gate the manifest and split `frontend_tui`/`frontend_cli` out of `cch_coding_agent` (split landed — see the addendum); complete the projection Read Model; audit the test suite into `spec` / `compat-pi` / `diverge` labels; structured inference-failure classification; own config namespace with one-time pi import.
 - Every migration chain must end by deleting its old entry — dual state sources and dual execution paths are forbidden as steady states, and manifest exceptions must carry an owner and a removal ticket.
 - Glossary terms recorded in CONTEXT.md: Product Architecture Contract, Compat Layer; Parity Baseline and the Parity map terms are marked historical.
 

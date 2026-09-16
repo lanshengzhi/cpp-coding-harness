@@ -13,10 +13,22 @@ The repository has four authoritative Capability Owner Packages and one pi-neutr
 | `cch_ai` | owner | `src/ai/` | `<cch/ai/...>` | Model, Provider, authentication, model-stream (ADR 0029, ADR 0040) | none |
 | `cch_agent_core` | owner | `src/agent/` | `<cch/agent/...>` | Agent loop, agent harness, and Tool behavior (ADR 0005, ADR 0039) | `cch_ai` |
 | `cch_tui` | owner | `src/tui/` | `<cch/tui/...>` | Reusable terminal, input, rendering, TUI toolkit (ADR 0025) | none |
-| `cch_coding_agent` | owner (private) | `src/coding_agent/` + `src/cli/` | `<cch/coding_agent/...>` | Agent Session, Models Runtime, Native TUI application, CLI, Runtime composition (ADR 0036, ADR 0040) | `cch_agent_core`, `cch_ai`; `cch_tui` only for its non-`owner` targets (manifest `implementation_owner_dependencies`) |
+| `cch_coding_agent` | owner (private) | `src/coding_agent/` (headless core; `src/coding_agent/tui/` belongs to `frontend_tui`) | `<cch/coding_agent/...>` | Agent Session, Models Runtime (ADR 0036, ADR 0040) | `cch_agent_core`, `cch_ai`; `cch_tui` only for its non-`owner` targets (manifest `implementation_owner_dependencies`) |
 | `cch_support` | support | `src/support/` | `<cch/support/...>` | Pi-neutral C++ values and mechanics (`AsyncResult`, `Expected`, `JsonValue`, ADR 0046) | none |
 
-The `pike` executable compiles only `src/main.cpp` (role `composition`, owner `cch_coding_agent`) over the `cch_coding_agent` library.
+The `pike` executable compiles only `src/main.cpp` (role `composition`, owner `cch_coding_agent`) and depends only on the `frontend_cli` implementation target.
+
+### Implementation and composition targets
+
+Owner packages are the authority layer. Repository-private targets that are not Owners build the product on top of them; the manifest records their `role`, and the headless-no-frontend invariant is enforced on these edges rather than on include spelling alone (ADR 0053 addendum; #658).
+
+| Target | Role | Source Root | Owner | Depends On |
+|---|---|---|---|---|
+| `frontend_tui` | implementation | `src/coding_agent/tui/` | `cch_coding_agent` | `cch_coding_agent`, `cch_agent_core`, `cch_ai`, `cch_tui`, `cch_support` |
+| `frontend_cli` | implementation | `src/cli/` | `cch_coding_agent` | `frontend_tui`, `cch_coding_agent`, `cch_agent_core`, `cch_ai`, `cch_tui`, `cch_support` |
+| `pike` | composition | `src/main.cpp` | `cch_coding_agent` | `frontend_cli` |
+
+`cch_coding_agent` itself depends on neither frontend: the only `cch_tui` edges in the repository are the two implementation targets'. `pike` is a thin closure — it compiles only the entry point and holds no Owner edge of its own.
 
 Every production source compiles once; the production graph is acyclic. Every unlisted cross-Owner edge is forbidden and fails closed at configure/test time via the Parity Architecture Gate (`ctest --preset vcpkg -L architecture`).
 
@@ -26,8 +38,8 @@ One line per package. Headers are the stable pointers; class lists are not enume
 
 - `cch_agent_core`: Agent loop consumes abstract `Tool` values (`<cch/agent/AgentTool.hpp>`), `ToolRegistry`, and `cch::ai` `MessageVariant` + `ModelStreamFactory`; emits `AgentLifecycleEvent` to weak observers vs strong committer. Harness exposes abstract `AsyncFileSystem` (`harness/FileSystem.hpp`) / `AsyncShell` (`harness/Shell.hpp`); concrete file/shell adapters stay private to `src/agent/harness/`. Built-in tools (`<cch/agent/tools/ToolFactories.hpp>`) depend only on the abstract filesystem/shell. Assembly (binding Harness file/shell to Tools, injecting tools into Agent, wiring Agent events to `SessionStore`) lives outside core in `cch_coding_agent` (`src/coding_agent/runtime/SessionFactory.cpp`, `SessionEventCommitment`).
 - `cch_ai`: owns Model, Provider, authentication, and model-stream (`<cch/ai/...>`); wire adapters and OAuth flows stay private under `src/ai/`. `ai::Models` is the sole Provider composition and Request Authentication owner; its graph is not exposed to downstream Owners.
-- `cch_tui`: owns reusable terminal, input, rendering, and TUI toolkit (`<cch/tui/...>`); the product TUI lives in `cch_coding_agent`.
-- `cch_coding_agent`: repository-private composition of all Owner packages into `pike` (Agent Session, Models Runtime, prompt, Native TUI application, CLI from `src/cli/`); the Models Runtime privately holds `ai::Models` and exposes passive catalog/status values plus an AI-owned `ModelStreamFactory`, while `SessionFactory` remains the sole assembly point.
+- `cch_tui`: owns reusable terminal, input, rendering, and TUI toolkit (`<cch/tui/...>`); the product TUI lives in the `frontend_tui` implementation target (`src/coding_agent/tui/`, owner `cch_coding_agent`).
+- `cch_coding_agent`: repository-private headless core (Agent Session, Models Runtime); the product frontends are its implementation targets — `frontend_tui` (Native TUI, `src/coding_agent/tui/`) and `frontend_cli` (CLI, `src/cli/`) — and `pike` composes only the latter; the Models Runtime privately holds `ai::Models` and exposes passive catalog/status values plus an AI-owned `ModelStreamFactory`, while `SessionFactory` remains the sole assembly point.
 - `cch_support`: pi-neutral C++ values and mechanics only (`<cch/support/...>`); owns no Supported Capability, depends on no Capability Owner Package.
 
 ## Passive value contracts
