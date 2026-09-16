@@ -1,22 +1,24 @@
 # Coding Standards
 
-Code-level rules for this repository, written to be cited. Every rule is checkable against a diff: a reviewer can point at a hunk and name the rule it breaks (e.g. `CODING_STANDARDS.md §5.3`).
+Code-level rules for this repository, written to be cited. Every rule is checkable against a change and its relevant contracts: a finding names the changed hunk, the violated rule (e.g. `CODING_STANDARDS.md §5.3`), and any contextual evidence needed to establish the violation.
 
 ## 1. Scope and precedence
 
 1.1. This file is the single source of truth for code-level conventions: mechanical style, naming, error handling, async, ownership, function structure and local state, tests, CMake.
 
-1.2. Architecture guardrails live in `docs/agents/architecture.md`, domain language in `CONTEXT.md`, and decision rationale in `docs/adr/`. This file records their checkable code-level consequences and cites the authoritative layer without duplicating its rationale or definitions. Each layer wins within its own scope; this file wins on code-level questions.
+1.2. Architecture guardrails live in `docs/agents/architecture.md`, domain language in `CONTEXT.md`, and decision rationale in `docs/adr/`. This file records their checkable code-level consequences and governs implementation choices within those boundaries. Report a conflict with an authoritative contract rather than using a code convention to override it.
 
 1.3. In review, a documented rule here overrides generic style baselines (such as the Fowler smell baseline used by `/skill:code-review`): where this file endorses something a baseline would flag, the baseline yields.
 
-1.4. Reviewers skip only exact violations that required validation rejects — see §14. A non-failing compiler diagnostic is not tool-enforced and remains a valid finding.
+1.4. Review every rule applicable to the changed code, using the exact-violation exclusions in §14.
 
 1.5. This file stays small enough to read whole on every implementation and review: a new rule generalizes or displaces an existing one where it can, rather than only accreting. A rule that has never been cited in review and is fully validation-enforced (§14) is a pruning candidate; the removal is recorded in its issue.
 
+1.6. Keep rule identifiers stable: append new identifiers without renumbering or reusing existing ones. When merging or replacing a rule, keep its old identifier resolvable through a single-hop mapping in §15; record a retirement when no successor exists. These mappings locate current rules, not retroactive judgments: historical findings use the rule text at the cited revision.
+
 ## 2. Mechanical style
 
-2.1. Formatting on added or modified lines conforms to `.clang-format` (1TBS braces, 4-space indent, 120-column limit, `*`/`&` binding to the type), enforced by `scripts/format-check.sh` (see §14). Reviewers skip findings that duplicate its patch; untouched lines stay outside that gate.
+2.1. Formatting on added or modified lines conforms to `.clang-format`; untouched lines stay outside that gate. See §14 for enforcement and review exclusions.
 
 2.2. Write `const` west of the type: `const std::string&`. East-const (`std::string const`) does not appear in this codebase.
 
@@ -26,7 +28,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 2.5. Include order, one blank line between groups: (1) corresponding header, (2) project headers, (3) third-party (`boost/`, `glaze/`), (4) standard library.
 
-2.6. Include spelling: Owner Interface headers use their one canonical `<cch/...>` angle include. Private headers use the owning target's declared private root and quoted canonical spelling; the corresponding header is quoted by basename. Never use relative climbs, basenames outside the corresponding source/header pair, absolute paths, or macro-generated project includes. Legacy relative includes predate this rule—see §15.
+2.6. Include spelling: Owner Interface headers use their one canonical `<cch/...>` angle include. Private headers use the owning target's declared private root and quoted canonical spelling; the corresponding header is quoted by basename. Never use relative climbs, basenames outside the corresponding source/header pair, absolute paths, or macro-generated project includes.
 
 2.7. Close every namespace with a comment: `} // namespace cch::agent`.
 
@@ -72,15 +74,15 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 5.3. Error-propagation macros are support implementation machinery and never appear in Owner Interfaces. Use the owning operation's return form (`return`, `co_return`, or callback completion) consistently; do not add a second error channel.
 
-5.4. Exceptions are not an error mechanism. Do not throw for control flow; before asynchronous initiation, convert ordinary throwable setup failures to the operation's expected error channel. After initiation, producer initiation and terminal completion are `noexcept`; weak-observer exceptions are caught, boundedly diagnosed, and deactivate the observer (ADR 0017; ADR 0040).
+5.4. Before asynchronous initiation, report ordinary setup failures through the operation's expected error channel. Producer initiation and terminal completion are `noexcept` contracts (ADR 0040). Exception-enabled fallback handling is scoped by §5.7.
 
 5.5. Filesystem calls use the `std::error_code` overloads, not the throwing overloads.
 
 5.6. The standard error check is if-init: `if (auto result = f(...); !result) { ... }`.
 
-5.7. Project-owned production and test targets are designed for the strict no-exception configuration. The strict build uses `-fno-exceptions`; `throw`, `try`/`catch`, and exception propagation are not ordinary failure paths. Expected failures use `Expected`/`std::error_code`, while invariant violations terminate.
+5.7. Project-owned production and test targets use the strict no-exception configuration by default (`CCH_STRICT_NO_EXCEPTIONS=ON`): ordinary failures use `Expected`/`std::error_code`, and invariant violations terminate. `CCH_STRICT_NO_EXCEPTIONS=OFF` is a warned local debugging deviation, not a supported failure channel. In the guarded fallback paths, catch ordinary setup and weak-observer exceptions and translate them into the declared error or observer-failure path (§5.4, §6.3); `#if !defined(BOOST_ASIO_NO_EXCEPTIONS)` excludes those handlers from strict compilation. Neither mode uses throws for control flow (ADR 0042; `docs/agents/validation.md` §Strict no-exception validation).
 
-5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. The only allowed exception pointer is in the private AI completion bridge, where the exception-enabled fallback configuration maps it once to an `Expected` error, while `BOOST_ASIO_NO_EXCEPTIONS` treats a non-null pointer as a fatal Runtime invariant; it is never rethrown or forwarded across an Owner boundary. The Parity Architecture Gate's versioned exception allowlist is authoritative for this private detail.
+5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. Exception pointers are confined to the private completion bridges named by `cmake/parity/manifest.json`'s `exception_policy.allowed_exception_ptr_sources` (ADR 0042, ADR 0046). In the exception-enabled fallback a non-null pointer maps once to an `Expected` error; under `BOOST_ASIO_NO_EXCEPTIONS` it terminates as a Runtime invariant. It is never rethrown or forwarded across an Owner boundary.
 
 ## 6. Async and connections
 
@@ -88,7 +90,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (`docs/agents/architecture.md` §Connection strength; ADR 0040). A stored callback's copyability says nothing about referent lifetime. Asynchronous callbacks, stored operations, and coroutine lambdas MUST use explicit value capture or init-capture (`[x = std::move(x)]`); never implicit capture (`[&]`, `[=]`), and never capture `this` or local references across asynchronous boundaries without a documented lifetime guarantee per §7.5.
 
-6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends; catch, diagnose, and deactivate a throwing observer without vetoing progress or persistence (ADR 0017; ADR 0040).
+6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends. Reported observer failures receive bounded diagnostics and deactivate the faulty observer without vetoing progress or persistence; exception-enabled fallback handling follows §5.7 (ADR 0017; ADR 0040; ADR 0042).
 
 6.4. Cancellation is supplied explicitly as `std::stop_token`; each Capability Owner resolves cancellation/completion races into its honest domain outcome. Session Abort and Session Close are idempotent; Close never cancels an admitted Session Event Commitment or required persistence work (ADR 0020; ADR 0040).
 
@@ -150,7 +152,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.3. Bounded output goes through the owning package's declared output/presentation budgets. No ad hoc `substr` truncation of model- or user-visible text, and process pipes continue draining after retained output reaches its bound (ADR 0040).
 
-10.4. Filesystem authorization lives in `src/agent/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspaceFileSystem{FdWalk,Legacy,Pi,Temp}.cpp`. Three resolution scopes: addressed-path (metadata, listing, removal — workspace-contained, absolute-path and `..` rejection, symlink-escape checks), read (workspace plus authorized skill roots), and write (pi `resolveToCwd` per #619 — absolute paths honored anywhere after lexical normalization, with the no-follow symlink policy and atomic writes applied uniformly). File tools route through it; no parallel path-validation logic.
+10.4. Filesystem authorization lives in `src/agent/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspaceFileSystem{FdWalk,Legacy,Pi,Temp}.cpp`. Three resolution scopes: addressed-path (metadata, listing, removal — workspace-contained, absolute-path and `..` rejection, symlink-escape checks), read (workspace plus authorized skill roots), and write (pi `resolveToCwd` per #619 — absolute paths honored anywhere after lexical normalization, with the no-follow symlink policy and atomic writes applied uniformly). File tools route through it; flag a file-tool path that bypasses its authorization or duplicates its authorization checks elsewhere. Path handling for unrelated capabilities is outside this rule (`docs/agents/architecture.md` §Security and containment).
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 
@@ -176,24 +178,11 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.8. Hold-and-release test doubles gate on the counted, latched `tests::ReleaseGate` (`tests/support/ReleaseGate.hpp`) — never a hand-rolled max-expiry `steady_timer` cancel. A `release()` that arrives before the double arms the gate is stored and consumed by the next wait, so release/arm ordering races cannot hang a test; one permit releases one waiter, preserving per-operation re-arming. Cancellation wake-ups use `interrupt()`, which records no permit, and the wait is guarded by a `stop_requested()` check.
 
-11.9. Functional assertions run on every lane; wall-clock performance assertions run only on non-instrumented lanes. A wall-clock performance assertion is a `CHECK`/`REQUIRE` comparing a measured elapsed time against a tight bound to enforce speed (benchmark and cost contracts, e.g. sub-millisecond render or microsecond publication bounds). Generous liveness backstops that prove completion or hang-freedom (second-scale timeouts, prompt-shutdown bounds, PTY drain completion) are not performance assertions and stay on every lane. Scope the performance check under the sanitizer compiler macros and keep every functional assertion outside the guard so sanitizer lanes still execute the behavior:
-
-```cpp
-#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
-    // Sanitizers impose systematic overhead (measured ~55x/~2.5x on CI, issue #632), so
-    // wall-clock bounds are meaningless under instrumentation. The functional assertions
-    // above still execute on sanitizer lanes; only the timing contract is scoped out.
-    (void)elapsed;
-#else
-    CHECK(elapsed < kBound);
-#endif
-```
-
-The approved pattern is the #632 scoping (ProjectionStreamTest 100-chunk cost bound, ChatContainerTest flat-time bound). Bounds are never loosened silently: a threshold change cites measured evidence, and runner-resourcing failures are quarantined via the workflow exclusion with owner and rationale (the #632 workflow comment), not re-tuned to the runner.
+11.9. Functional assertions run on every lane; wall-clock performance assertions run only on non-instrumented lanes. A performance assertion compares elapsed time against a tight bound to enforce speed. Generous completion or hang-freedom backstops (second-scale timeouts, prompt shutdown, PTY drain completion) are liveness checks, not performance assertions, and stay on every lane. Guard only the performance assertion, keeping behavior and functional assertions outside the guard; see `docs/agents/validation.md` §Sanitizer timing checks for the pattern. Threshold changes cite measured evidence; runner-resourcing failures use that document's §Test quarantine, with owner and rationale, rather than retuned bounds.
 
 ## 12. CMake
 
-12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` (authoritative Owner libraries: `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library). The legal direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai}`; `cch_coding_agent -> cch_tui` is legal only from a target whose role is not `owner`, which the manifest records in `implementation_owner_dependencies` so the headless owner library cannot reach the frontend. The same role split governs the direct-include edge check. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets (ADR 0039, ADR 0053).
+12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` (authoritative Owner libraries: `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library). The legal direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai}`; `cch_coding_agent -> cch_tui` is legal only from a target whose role is not `owner`, which the manifest records in `implementation_owner_dependencies` so the headless owner library cannot reach the frontend. The same role split governs the direct-include edge check. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets. Flag a cross-Owner dependency not permitted for the source target's Owner and role by `cmake/parity/manifest.json` (ADR 0039, ADR 0053).
 
 12.2. Use the central CMake constructors for every production target. Each declaration names exactly one role (`owner`, `implementation`, `support`, `composition`, or classified `external`), one Owner where applicable, its explicit source set, unconditional direct dependencies, and defaults. Every production source compiles once; the production graph is acyclic. Do not bypass the constructors with ad hoc target declarations.
 
@@ -217,18 +206,30 @@ The approved pattern is the #632 scoping (ProjectionStreamTest 100-chunk cost bo
 
 ## 14. Validation-enforced — reviewers skip exact violations
 
-- Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 or §16 conformance (ADR 0039), and a pass is never acceptance of the property the rule is named for (`docs/agents/validation.md` §Acceptance discipline).
-- Compiler diagnostics remain review findings: `-Wall -Wextra -Wpedantic` are enabled without warnings-as-errors.
-- Formatting of added or modified lines is checked against `.clang-format` by `scripts/format-check.sh` (CI runs it as the formatting gate). Reviewers skip findings that duplicate its patch; untouched lines stay outside the gate.
-- For code changes that compile and pass the required suite, report remaining §2–§13 and §16 violations. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
+- Skip a finding only when required validation necessarily rejects that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader code-rule conformance (ADR 0039), and a pass is never acceptance of the property the rule is named for (`docs/agents/validation.md` §Acceptance discipline).
+- A non-failing compiler diagnostic remains a review finding.
+- For §2.1, the required formatting gate is `scripts/format-check.sh`; skip findings that duplicate its patch. Invocation and repair instructions live in `docs/agents/validation.md` §Formatting gate.
+- Report every applicable code-rule violation in the changed scope that is not excluded above. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
 
 ## 15. Known exceptions and migrations
+
+### Sanctioned deviations
 
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
 - **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.
 - **Native TUI immediate preview frames (ADR 0051):** the coalesced immediate preview tier in `InteractiveEngine::post_invalidate` (uncounted preview renders that consume neither the snapshot version nor the dirty state and never re-arm the ticker schedule) is a sanctioned latency-first deviation from ADR 0051's ticker-only projection pacing; the rationale and pi parity evidence live in that ADR's deviation section (#614). The ~33 ms frame ticker remains the authoritative counted frame.
+
+### Citation migrations
+
+Commit `e0dee7fb` (2026-09-04) renumbered mechanical rules before §1.6 established stable identifiers. References using its parent's numbering map directly to the current rules:
+
+- Old §2.1 (1TBS braces), §2.2, §2.4, §2.5 → §2.1 (`.clang-format`); old §2.3 → §2.2.
+- Old §2.6 → §2.3; old §2.7 → §2.4; old §2.8 → §2.5.
+- Old §2.9 → §2.6; old §2.10 → §2.7; old §2.11 → §2.8.
+
+These version-qualified mappings are citation navigation, not permission for legacy code deviations.
 
 ## 16. Minimal implementation
 

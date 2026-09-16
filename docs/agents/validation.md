@@ -49,6 +49,21 @@ Report the CI form — `scripts/format-check.sh <merge-base>` — before deliver
 
 Fresh Validation is the environment-level tier: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`. Reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. Do not run it for ordinary code edits. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039), not the per-change default.
 
+### Sanitizer timing checks
+
+When a test adds or changes a wall-clock assertion, classify it under [CODING_STANDARDS.md §11.9](../../CODING_STANDARDS.md#11-tests). For a performance assertion, use the sanitizer guard below; keep the measured operation and every functional assertion outside it:
+
+```cpp
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Sanitizer overhead invalidates this performance bound; functional assertions still run.
+    (void)elapsed;
+#else
+    CHECK(elapsed < kBound);
+#endif
+```
+
+The measurement history and original test examples are recorded in issue #632. For runner-sensitive failures, use §Test quarantine below.
+
 ### Test quarantine
 
 Flaky or runner-sensitive tests have one standard home instead of ad-hoc per-PR exclusions (issues #632, #634):
