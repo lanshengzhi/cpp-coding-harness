@@ -52,7 +52,6 @@ cch_parity_declare_target(
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
-        glaze::glaze@glaze
         WebP::webpdecoder@webp
     INTERFACE_DEPENDS
         cch_agent_core
@@ -173,7 +172,6 @@ cch_parity_declare_target(
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
-        glaze::glaze@glaze
     INTERFACE_DEPENDS
         cch_coding_agent
         cch_agent_core

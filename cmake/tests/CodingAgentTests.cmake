@@ -26,6 +26,7 @@ include_guard(GLOBAL)
         PRIVATE
             cch_agent_core
             Boost::headers
+            glaze::glaze
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_harness_tools PRIVATE
@@ -101,6 +102,7 @@ include_guard(GLOBAL)
             cch_coding_agent
             frontend_tui
             Boost::headers
+            glaze::glaze
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_coding_agent PRIVATE
