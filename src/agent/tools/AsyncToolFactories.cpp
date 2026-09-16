@@ -251,8 +251,11 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
     }
 
     // pi edit.ts: strip the BOM, detect and preserve the dominant line
-    // ending, then apply every edit against the LF-normalized content.
-    auto read = co_await support::detail::await_async_result(filesystem->readTextFile(parsed->path, stop_token));
+    // ending, then apply every edit against the LF-normalized content. The
+    // read resolves through the write scope (pi resolveToCwd, #619) so edit
+    // can address any path writeFile can.
+    auto read = co_await support::detail::await_async_result(
+            filesystem->read_text_file_for_write(parsed->path, stop_token));
     if (!read) {
         co_return error_result_from(read.error());
     }
@@ -448,13 +451,13 @@ agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncFileSystem>
     agent::Tool tool;
     tool.definition = ai::Tool{
             "write",
-            "Create or overwrite a text file inside the workspace. Parent directories are created automatically.",
+            // pi `core/tools/write.ts` description and schema wording (verbatim).
+            "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. "
+            "Automatically creates parent directories.",
             object_schema(
                     {
-                            {"path",
-                                    typed_schema(
-                                            "string", "Workspace-relative path, or absolute path in the workspace")},
-                            {"content", typed_schema("string", "File content")},
+                            {"path", typed_schema("string", "Path to the file to write (relative or absolute)")},
+                            {"content", typed_schema("string", "Content to write to the file")},
                     },
                     {"path", "content"}),
     };
@@ -499,9 +502,7 @@ agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncFileSystem> files
             "Do not include large unchanged regions just to connect distant changes.",
             object_schema(
                     {
-                            {"path",
-                                    typed_schema(
-                                            "string", "Path to edit (workspace-relative, or absolute in workspace)")},
+                            {"path", typed_schema("string", "Path to the file to edit (relative or absolute)")},
                             {"edits", edits_schema},
                     },
                     {"path", "edits"}),

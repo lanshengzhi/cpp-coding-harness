@@ -283,7 +283,7 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
         }
     }
 
-    auto target = resolve_addressed_path(path);
+    auto target = resolve_write_path(path);
     if (!target) {
         return std::unexpected(util_error_to_file_error(target.error(), path));
     }

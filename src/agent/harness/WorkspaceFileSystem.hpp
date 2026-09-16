@@ -16,14 +16,23 @@
 
 namespace cch::harness {
 
-/// Workspace-scoped filesystem operations with containment and symlink safety.
+/// Workspace-scoped filesystem operations with path authorization and
+/// symlink safety.
 ///
-/// Addressed-path operations accept workspace-relative paths and absolute
-/// paths normalizing inside the workspace root, and reject ".." escapes and
-/// symlinks that resolve outside the workspace. Read operations additionally
-/// accept absolute paths under the session's authorized skill roots; writes
-/// stay workspace-contained. Metadata and listing use lstat-equivalent
-/// no-follow semantics.
+/// Addressed-path (metadata, listing, removal) operations accept
+/// workspace-relative paths and absolute paths normalizing inside the
+/// workspace root, and reject ".." escapes and symlinks that resolve outside
+/// the workspace. Read operations additionally accept absolute paths under
+/// the session's authorized skill roots. Write-scoped operations (`writeFile`,
+/// `appendFile`, and the edit read-modify-write read `read_text_file_for_write`)
+/// follow pi `resolveToCwd` semantics (#619): absolute paths are honored
+/// anywhere after lexical normalization, relative paths resolve against the
+/// workspace root, and ".." segments are resolved by normalization rather
+/// than rejected; pi's `resolveToCwd` preprocessing (unicode-space
+/// normalization, leading-"@" stripping, `~` expansion) applies as well.
+/// The no-follow symlink policy and atomic writes apply uniformly across
+/// both scopes. Metadata and listing use lstat-equivalent no-follow
+/// semantics.
 class AsyncLocalFileSystem;
 class AsyncLocalShell;
 
@@ -42,9 +51,15 @@ public:
     [[nodiscard]] support::Expected<std::filesystem::path> resolve_addressed_path(const std::string& requested) const;
 
     /// Read-scoped resolution: the addressed-path contract plus absolute
-    /// paths under the authorized skill roots. Writes keep using
-    /// `resolve_addressed_path` so they stay workspace-contained.
+    /// paths under the authorized skill roots.
     [[nodiscard]] support::Expected<std::filesystem::path> resolve_read_path(const std::string& requested) const;
+
+    /// Write-scoped resolution (pi `resolveToCwd`, #619): pi preprocessing
+    /// (unicode-space normalization, leading-"@" stripping, `~` expansion),
+    /// then absolute paths are honored anywhere after lexical normalization;
+    /// relative paths resolve against the workspace root with ".." handled
+    /// by normalization rather than rejection.
+    [[nodiscard]] support::Expected<std::filesystem::path> resolve_write_path(const std::string& requested) const;
 
     // Legacy tool-shaped operations used by private project-resource adapters.
     [[nodiscard]] support::Expected<std::string> read_existing_file(
@@ -62,6 +77,10 @@ public:
     [[nodiscard]] std::expected<std::vector<std::string>, FileError> readTextLines(
             const std::string& path, std::optional<int> maxLines = std::nullopt, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<BinaryData, FileError> readBinaryFile(
+            const std::string& path, std::stop_token stop_token = {}) const;
+    /// The edit read-modify-write read: like `readTextFile` but resolved
+    /// through the write scope instead of the contained read scope.
+    [[nodiscard]] std::expected<std::string, FileError> read_text_file_for_write(
             const std::string& path, std::stop_token stop_token = {}) const;
     [[nodiscard]] std::expected<void, FileError> writeFile(
             const std::string& path, const WriteContent& content, std::stop_token stop_token = {}) const;
@@ -117,6 +136,15 @@ private:
     [[nodiscard]] support::Expected<support::UniqueFd> open_authorized_skill_parent(
             const std::filesystem::path& target, int* failure_errno = nullptr) const;
     [[nodiscard]] support::Expected<void> validate_directory(const std::filesystem::path& target) const;
+    /// Shared open tail for regular-file reads once the addressed parent is
+    /// held open: no-follow inspection, symlink refusal, and size reporting.
+    [[nodiscard]] std::expected<support::UniqueFd, FileError> open_regular_file_in_parent(
+            int parent_fd, const std::string& filename, const std::string& requested, std::uintmax_t* size) const;
+    [[nodiscard]] std::expected<std::string, FileError> read_bounded_from_open_file(int file_fd,
+            std::uintmax_t file_size,
+            const std::string& requested,
+            std::size_t max_bytes,
+            std::stop_token stop_token) const;
     [[nodiscard]] std::expected<support::UniqueFd, FileError> open_regular_file_for_read(
             const std::string& requested, std::uintmax_t* size, std::stop_token stop_token = {}) const;
     [[nodiscard]] support::Expected<void> create_parent_directories(const std::filesystem::path& target) const;

@@ -32,6 +32,23 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
         *failure_errno = 0;
     }
 
+    const auto parent = target.parent_path().lexically_normal();
+    const auto relative = parent.lexically_relative(root_);
+    if (!relative.empty() && relative != "." && (relative.is_absolute() || *relative.begin() == "..")) {
+        // Write-scoped operations honor absolute paths outside the workspace
+        // (#619): anchor the same per-component no-follow walk at the
+        // filesystem root. Resolution is the authorization gate; this branch
+        // is mechanism only, reachable today only for write-scoped targets.
+        support::UniqueFd filesystem_root(::open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (!filesystem_root) {
+            remember_errno(failure_errno, errno);
+            return std::unexpected(
+                    workspace_error("could not open filesystem root: " + std::string(std::strerror(errno))));
+        }
+        return walk_child_directories(
+                std::move(filesystem_root), parent.lexically_relative("/"), create_missing, failure_errno);
+    }
+
     auto root_guard = open_workspace_root();
     const int root_error = errno;
     if (!root_guard) {
@@ -39,8 +56,6 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
         return std::unexpected(root_guard.error());
     }
 
-    const auto parent = target.parent_path().lexically_normal();
-    const auto relative = parent.lexically_relative(root_);
     if (relative.empty() || relative == ".") {
         support::UniqueFd duplicate(::dup(root_guard->get()));
         if (!duplicate) {
@@ -49,9 +64,6 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
                     workspace_error("could not duplicate workspace fd: " + std::string(std::strerror(errno))));
         }
         return duplicate;
-    }
-    if (relative.is_absolute()) {
-        return std::unexpected(workspace_error("parent path escapes workspace"));
     }
 
     return walk_child_directories(support::UniqueFd(root_guard->release()), relative, create_missing, failure_errno);

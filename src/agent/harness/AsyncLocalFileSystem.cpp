@@ -96,6 +96,17 @@ support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::readTextFile(
                     const WorkspaceFileSystem& fs) { return fs.readTextFile(path, stop_token); });
 }
 
+support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::read_text_file_for_write(
+        std::string path, std::stop_token stop_token) {
+    return filesystem_detail::submit_filesystem_operation<std::string>(impl_->runtime_target,
+            impl_->filesystem,
+            filesystem_detail::file_read_charge(path.size()),
+            stop_token,
+            path,
+            [path = std::move(path), stop_token](
+                    const WorkspaceFileSystem& fs) { return fs.read_text_file_for_write(path, stop_token); });
+}
+
 support::AsyncResult<std::vector<std::string>, FileError> AsyncLocalFileSystem::readTextLines(
         std::string path, std::optional<int> maxLines, std::stop_token stop_token) {
     return filesystem_detail::submit_filesystem_operation<std::vector<std::string>>(impl_->runtime_target,

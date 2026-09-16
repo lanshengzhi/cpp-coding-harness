@@ -60,7 +60,7 @@ Generic and serialization machinery stays local. Glaze DTOs, schema conversion, 
 
 ## Security and containment
 
-Shell, file, environment-variable, provider, and session changes preserve workspace containment, secret redaction, output truncation, and the documented “not a sandbox” boundary.
+Shell, file, environment-variable, provider, and session changes preserve the filesystem authorization scopes (contained addressed/read paths; pi `resolveToCwd` write scope per #619), secret redaction, output truncation, and the documented “not a sandbox” boundary.
 
 ## Retired surfaces
 

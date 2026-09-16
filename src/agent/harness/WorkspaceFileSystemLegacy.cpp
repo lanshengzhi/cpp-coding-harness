@@ -3,6 +3,7 @@
 #include "AtomicWrite.hpp"
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 
@@ -71,6 +72,109 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_
         return std::unexpected(
                 workspace_error("path escapes workspace: " + requested +
                                 "; use a workspace-relative path, or an absolute path under " + root_.string()));
+    }
+    return target;
+}
+
+std::expected<std::string, FileError> WorkspaceFileSystem::read_text_file_for_write(
+        const std::string& path, std::stop_token stop_token) const {
+    if (stop_token.stop_requested()) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::Aborted,
+                .message = "Operation aborted",
+                .path = std::string{path},
+        });
+    }
+
+    auto target = resolve_write_path(path);
+    if (!target) {
+        return std::unexpected(util_error_to_file_error(target.error(), path));
+    }
+
+    int parent_errno = 0;
+    auto parent_guard = open_parent_directory(*target, false, &parent_errno);
+    if (!parent_guard) {
+        if (parent_errno == ENOENT) {
+            return std::unexpected(FileError{
+                    .code = FileErrorCode::NotFound,
+                    .message = "path not found: " + path,
+                    .path = std::string{path},
+            });
+        }
+        return std::unexpected(util_error_to_file_error(parent_guard.error(), path));
+    }
+
+    std::uintmax_t file_size = 0;
+    auto fd = open_regular_file_in_parent(parent_guard->get(), target->filename().string(), path, &file_size);
+    if (!fd) {
+        return std::unexpected(fd.error());
+    }
+    return read_bounded_from_open_file(fd->get(), file_size, path, kFileSystemCapacity.max_file_bytes, stop_token);
+}
+
+namespace {
+
+/// pi `utils/paths.ts` UNICODE_SPACES (verbatim set): no-break and narrow
+/// no-break style spaces normalize to an ASCII space before resolution.
+[[nodiscard]] std::string normalize_unicode_spaces(std::string_view input) {
+    std::string out;
+    out.reserve(input.size());
+    for (std::size_t i = 0; i < input.size();) {
+        const auto byte = static_cast<unsigned char>(input[i]);
+        if (byte == 0xC2 && i + 1 < input.size() && static_cast<unsigned char>(input[i + 1]) == 0xA0) {
+            out += ' ';
+            i += 2;
+            continue;
+        }
+        if (byte == 0xE2 && i + 2 < input.size()) {
+            const auto b1 = static_cast<unsigned char>(input[i + 1]);
+            const auto b2 = static_cast<unsigned char>(input[i + 2]);
+            if ((b1 == 0x80 && ((b2 >= 0x80 && b2 <= 0x8A) || b2 == 0xAF)) || (b1 == 0x81 && b2 == 0x9F)) {
+                out += ' ';
+                i += 3;
+                continue;
+            }
+        }
+        if (byte == 0xE3 && i + 2 < input.size() && static_cast<unsigned char>(input[i + 1]) == 0x80 &&
+                static_cast<unsigned char>(input[i + 2]) == 0x80) {
+            out += ' ';
+            i += 3;
+            continue;
+        }
+        out += input[i++];
+    }
+    return out;
+}
+
+} // namespace
+
+support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_write_path(const std::string& requested) const {
+    if (requested.empty()) {
+        return std::unexpected(workspace_error("path is required; use a workspace-relative path or an absolute path"));
+    }
+    if (requested.find('\0') != std::string::npos) {
+        return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
+    }
+    // pi resolveToCwd semantics (#619): normalize unicode spaces, strip a
+    // leading "@" mention prefix, and expand "~" against $HOME (pi
+    // normalizePath), then honor absolute paths after lexical normalization
+    // regardless of containment; relative paths resolve against the
+    // workspace root with ".." handled by normalization rather than
+    // rejection. pi's file:// URL conversion is not mirrored: URLs are not
+    // paths on this seam. The open-time no-follow symlink guards still apply.
+    std::string preprocessed = normalize_unicode_spaces(requested);
+    if (preprocessed.starts_with('@')) {
+        preprocessed.erase(0, 1);
+    }
+    if (preprocessed == "~" || preprocessed.starts_with("~/")) {
+        if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0') {
+            preprocessed = home + preprocessed.substr(1);
+        }
+    }
+    const std::filesystem::path queried(preprocessed);
+    auto target = queried.is_absolute() ? queried.lexically_normal() : (root_ / queried).lexically_normal();
+    if (target != root_ && target.filename().empty()) {
+        target = target.parent_path();
     }
     return target;
 }
@@ -154,8 +258,13 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
     }
 
     const auto filename = target->filename().string();
+    return open_regular_file_in_parent(parent_guard->get(), filename, requested, size);
+}
+
+std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_in_parent(
+        int parent_fd, const std::string& filename, const std::string& requested, std::uintmax_t* size) const {
     struct stat status{};
-    if (::fstatat(parent_guard->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+    if (::fstatat(parent_fd, filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
         if (errno == ENOENT) {
             return std::unexpected(FileError{
                     .code = FileErrorCode::NotFound,
@@ -186,8 +295,7 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
 
     // O_NONBLOCK is harmless for regular files and closes the FIFO race
     // between the no-follow type check and openat.
-    support::UniqueFd fd(
-            ::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
+    support::UniqueFd fd(::openat(parent_fd, filename.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
     if (!fd) {
         if (errno == ELOOP) {
             return std::unexpected(FileError{
@@ -253,6 +361,14 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bo
     if (!fd) {
         return std::unexpected(fd.error());
     }
+    return read_bounded_from_open_file(fd->get(), file_size, requested, max_bytes, stop_token);
+}
+
+std::expected<std::string, FileError> WorkspaceFileSystem::read_bounded_from_open_file(int file_fd,
+        std::uintmax_t file_size,
+        const std::string& requested,
+        std::size_t max_bytes,
+        std::stop_token stop_token) const {
     if (file_size > max_bytes) {
         return std::unexpected(FileError{
                 .code = FileErrorCode::ResourceLimit,
@@ -265,7 +381,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bo
     content.reserve(static_cast<std::size_t>(file_size));
     char buffer[4096];
     ssize_t n = 0;
-    while ((n = ::read(fd->get(), buffer, sizeof(buffer))) > 0) {
+    while ((n = ::read(file_fd, buffer, sizeof(buffer))) > 0) {
         if (stop_token.stop_requested()) {
             return std::unexpected(FileError{
                     .code = FileErrorCode::Aborted,
@@ -295,7 +411,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bo
 
 support::Expected<std::size_t> WorkspaceFileSystem::write_file(
         const std::string& requested, std::string_view content, bool create_parents, std::stop_token stop_token) const {
-    auto target = resolve_addressed_path(requested);
+    auto target = resolve_write_path(requested);
     if (!target) {
         return std::unexpected(target.error());
     }

@@ -1626,7 +1626,8 @@ struct PreparedAssemblyTarget final {
     std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
     // Tool reads serve the loaded skill directories alongside the workspace
     // (#629); the set stays live so `/reload` refreshes it in place. Writes
-    // stay workspace-contained.
+    // resolve with pi `resolveToCwd` semantics: absolute paths are honored
+    // anywhere after normalization (#619).
     auto skill_read_roots = std::make_shared<harness::AuthorizedSkillRoots>();
     skill_read_roots->set(collect_skill_read_roots(skills));
     auto filesystem =

@@ -46,6 +46,11 @@ public:
     support::AsyncResult<std::string, harness::FileError> absolutePath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
     support::AsyncResult<std::string, harness::FileError> joinPath(std::vector<std::string>, std::stop_token) override { return ready_file(std::string{}); }
     support::AsyncResult<std::string, harness::FileError> readTextFile(std::string, std::stop_token stop_token) override { last_stop_token = stop_token; return ready_file(std::string{}); }
+    support::AsyncResult<std::string, harness::FileError> read_text_file_for_write(
+            std::string, std::stop_token stop_token) override {
+        last_stop_token = stop_token;
+        return ready_file(std::string{});
+    }
     support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(std::string, std::optional<int>, std::stop_token stop_token) override { last_stop_token = stop_token; return ready_file(std::vector<std::string>{}); }
     support::AsyncResult<harness::BinaryData, harness::FileError> readBinaryFile(std::string, std::stop_token) override { return ready_file(harness::BinaryData{}); }
     support::AsyncResult<void, harness::FileError> writeFile(std::string path, harness::WriteContent content, std::stop_token stop_token) override {
@@ -673,4 +678,56 @@ TEST_CASE("async read tool serves absolute paths inside the workspace and under 
     });
     REQUIRE(outside);
     CHECK(outside->is_error);
+}
+
+TEST_CASE("async write tool writes an absolute path outside the workspace with pi wording",
+        "[tools][async][issue619][compat-pi][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_write_file_tool(filesystem);
+
+    // pi `core/tools/write.ts` description and schema wording (verbatim).
+    CHECK(tool.definition.description == "Write content to a file. Creates the file if it doesn't exist, "
+                                         "overwrites if it does. Automatically creates parent directories.");
+    CHECK(tool.definition.parameters.at("properties").at("path").at("description").get<std::string>() ==
+            "Path to the file to write (relative or absolute)");
+    CHECK(tool.definition.parameters.at("properties").at("content").at("description").get<std::string>() ==
+            "Content to write to the file");
+
+    const auto target = (outside.path() / "nested" / "created.txt").string();
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("write", "{\"path\":\"" + target + "\",\"content\":\"outside body\"}"),
+                std::stop_token{},
+                agent::ToolUpdateSink{});
+    });
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    CHECK(outside.read("nested/created.txt") == "outside body");
+}
+
+TEST_CASE("async edit tool edits an absolute path outside the workspace with pi wording",
+        "[tools][async][issue619][compat-pi][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("scratch/note.txt", "before body");
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_edit_tool(filesystem);
+
+    // pi `core/tools/edit.ts` path schema wording (verbatim); the tool
+    // description already matches pi and stays unchanged.
+    CHECK(tool.definition.parameters.at("properties").at("path").at("description").get<std::string>() ==
+            "Path to the file to edit (relative or absolute)");
+
+    const auto target = (outside.path() / "scratch" / "note.txt").string();
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("edit",
+                                    "{\"path\":\"" + target +
+                                            "\",\"edits\":[{\"oldText\":\"before body\",\"newText\":\"after body\"}]}"),
+                std::stop_token{},
+                agent::ToolUpdateSink{});
+    });
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    CHECK(outside.read("scratch/note.txt") == "after body");
 }

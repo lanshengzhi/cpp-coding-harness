@@ -331,6 +331,7 @@ TEST_CASE("every async filesystem operation observes a pre-requested cancellatio
     check_file_operation_aborted(runtime.run(filesystem.absolutePath("note.txt", stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.joinPath({"nested", "note.txt"}, stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.readTextFile("note.txt", stop_token)));
+    check_file_operation_aborted(runtime.run(filesystem.read_text_file_for_write("note.txt", stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.readTextLines("note.txt", std::nullopt, stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.readBinaryFile("note.txt", stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.writeFile("note.txt", std::string{"changed"}, stop_token)));
@@ -364,6 +365,37 @@ TEST_CASE("async local filesystem adapter preserves file read and write safety",
     auto escaped = runtime.run(filesystem.readTextFile("../outside.txt", std::stop_token{}));
     REQUIRE_FALSE(escaped);
     CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+    runtime.close();
+}
+
+TEST_CASE("async local filesystem honors absolute write-scoped paths outside the workspace",
+        "[harness][async][u6][spec][issue619]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("scratch/log.txt", "first\n");
+    TestRuntime runtime;
+    harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
+
+    // pi resolveToCwd semantics (#619): writeFile, appendFile, and the edit
+    // read-modify-write read honor absolute paths anywhere; the contained
+    // read scope is unchanged.
+    const auto target = (outside.path() / "nested" / "created.txt").string();
+    auto written = runtime.run(filesystem.writeFile(target, std::string{"created"}, std::stop_token{}));
+    REQUIRE(written);
+    CHECK(outside.read("nested/created.txt") == "created");
+
+    auto read = runtime.run(
+            filesystem.read_text_file_for_write((outside.path() / "scratch" / "log.txt").string(), std::stop_token{}));
+    REQUIRE(read);
+    CHECK(*read == "first\n");
+
+    auto appended = runtime.run(filesystem.appendFile(target, std::string{"-appended"}, std::stop_token{}));
+    REQUIRE(appended);
+    CHECK(outside.read("nested/created.txt") == "created-appended");
+
+    auto blocked = runtime.run(filesystem.readTextFile(target, std::stop_token{}));
+    REQUIRE_FALSE(blocked);
+    CHECK(blocked.error().code == harness::FileErrorCode::PermissionDenied);
     runtime.close();
 }
 

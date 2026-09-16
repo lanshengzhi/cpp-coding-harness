@@ -53,6 +53,8 @@ public:
             std::vector<std::string> parts, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<std::string, FileError> readTextFile(
             std::string path, std::stop_token stop_token) override;
+    [[nodiscard]] support::AsyncResult<std::string, FileError> read_text_file_for_write(
+            std::string path, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<std::vector<std::string>, FileError> readTextLines(
             std::string path, std::optional<int> maxLines, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<BinaryData, FileError> readBinaryFile(

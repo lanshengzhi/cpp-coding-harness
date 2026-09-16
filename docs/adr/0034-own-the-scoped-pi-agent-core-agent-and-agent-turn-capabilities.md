@@ -37,3 +37,23 @@ The Agent and Agent Turn capabilities the three scoped provider paths require ar
 - [#327](https://github.com/lanshengzhi/cpp-coding-harness/issues/327) (resume re-resolution contract) and [#328](https://github.com/lanshengzhi/cpp-coding-harness/issues/328) (OAuth lifecycle, auth guidance ownership).
 - Frozen pi baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2`: `packages/agent/src/harness/agent-harness.ts`, `packages/agent/src/{agent-loop,agent,stream-fn,types}.ts`, `packages/agent/src/harness/{types,session/session,compaction/compaction}.ts`, `packages/coding-agent/src/core/{agent-session,agent-session-runtime,sdk,model-resolver,defaults,auth-guidance,settings-manager,messages}.ts`, `packages/coding-agent/src/core/tools/index.ts`.
 - ADR [0014](0014-follow-pi-agent-turn-lifecycle-order.md), [0020](0020-make-cancellation-a-supported-end-to-end-capability.md), [0021](0021-let-the-agent-module-own-the-stateful-agent.md), [0022](0022-bound-agent-input-queues-explicitly.md), [0026](0026-separate-user-bash-from-model-bash-authorization.md), [0027](0027-keep-prompt-cancellation-with-the-admission-owner.md), [0028](0028-pass-user-bash-text-values-through-raw-like-pi.md) remain the carriers this record builds on.
+
+## Addendum: write/edit path scope follows pi `resolveToCwd` (Issue #619)
+
+The "Tool execution" consequence above originally shipped with write/edit paths workspace-contained,
+an intentional hardening divergence under ADR 0026's "containment" guardrail. #619 re-adjudicated:
+the maintainer chose full pi alignment over the constrained temp-dir escape hatch. The `write` and
+`edit` tools therefore resolve paths exactly like pi's `resolveToCwd`: absolute paths are honored
+anywhere after lexical normalization, relative paths resolve against the workspace root, and `..`
+segments are resolved by normalization rather than rejected; `write` still auto-creates parent
+directories. Tool schema and description wording matches pi ("relative or absolute").
+
+The harness-owned `AsyncFileSystem` capability seam (pi has no fs seam) gained
+`read_text_file_for_write`: the edit read-modify-write read resolves through the write scope, while
+`readTextFile` keeps the contained read scope (workspace plus authorized skill roots) so the #629
+revocation contract is untouched. Write-scope resolution mirrors pi `resolveToCwd` preprocessing —
+unicode-space normalization, leading-`@` stripping, and `~` expansion against `$HOME`; pi's
+`file://` URL conversion is not mirrored (URLs are not paths on this seam). The no-follow symlink
+policy and atomic writes apply uniformly in both scopes; only containment is lifted for writes.
+ADR 0026:23's "containment" divergence is henceforth scoped to the addressed-path and read scopes,
+shell-cwd containment, and bash authorization — it no longer covers the write path scope.
