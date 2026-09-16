@@ -10,8 +10,8 @@
 namespace cch::ai {
 
 /// Model-facing conversation state for one request. Model identity is not
-/// carried here; it is the concrete Model argument of `streamSimple` and
-/// `Provider::stream` (ADR 0019).
+/// carried here; it is the concrete Model argument of `Models::stream`
+/// (ADR 0019).
 struct AiContext {
     std::optional<std::string> system_prompt{};
     std::vector<MessageVariant> messages{};
