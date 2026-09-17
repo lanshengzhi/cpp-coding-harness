@@ -14,6 +14,43 @@
 
 using namespace cch;
 
+namespace {
+
+/// Restores a directory mode on scope exit so a failed REQUIRE or SKIP
+/// cannot leave an unsearchable directory behind for TempWorkspace
+/// cleanup. The permission-denied fixture depends on the mode actually
+/// denying path resolution.
+class ScopedDirectoryMode {
+public:
+    ScopedDirectoryMode(const std::filesystem::path& path, mode_t mode) : path_(path) {
+        struct stat status{};
+        has_original_ = ::stat(path_.c_str(), &status) == 0;
+        if (has_original_) {
+            original_ = status.st_mode & 07777;
+        }
+        installed_ = ::chmod(path_.c_str(), mode) == 0;
+    }
+
+    ScopedDirectoryMode(const ScopedDirectoryMode&) = delete;
+    ScopedDirectoryMode& operator=(const ScopedDirectoryMode&) = delete;
+
+    ~ScopedDirectoryMode() {
+        if (has_original_) {
+            (void)::chmod(path_.c_str(), original_);
+        }
+    }
+
+    [[nodiscard]] bool installed() const { return installed_; }
+
+private:
+    std::filesystem::path path_;
+    mode_t original_{0};
+    bool has_original_{false};
+    bool installed_{false};
+};
+
+} // namespace
+
 TEST_CASE("WorkspaceFileSystem reads an existing file inside workspace", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world");
@@ -904,4 +941,87 @@ TEST_CASE("WorkspaceFileSystem rejections name the accepted path form",
     REQUIRE_FALSE(escaped);
     CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
     CHECK(escaped.error().message.find("NUL") != std::string::npos);
+}
+
+TEST_CASE("WorkspaceFileSystem reports permission denial for unsearchable external parents",
+        "[harness][filesystem][u2][spec][issue702]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("denied/child.txt", "hidden");
+    outside.write("sealed/child.txt", "hidden");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    const auto denied = outside.path() / "denied";
+    const auto sealed = outside.path() / "sealed";
+    ScopedDirectoryMode denied_mode(denied, 0400);
+    ScopedDirectoryMode sealed_mode(sealed, 0000);
+    REQUIRE(denied_mode.installed());
+    REQUIRE(sealed_mode.installed());
+
+    // Platform prerequisite (CODING_STANDARDS 11.3): the mode must actually
+    // deny path resolution. Root or CAP_DAC_OVERRIDE bypasses it, so probe
+    // the real syscall result and skip rather than assert on a permissive
+    // host.
+    struct stat probe{};
+    if (::stat((denied / "child.txt").c_str(), &probe) == 0 || ::stat((sealed / "child.txt").c_str(), &probe) == 0) {
+        SKIP("chmod-based denial is unavailable for this process; skipping the permission-denied fixture");
+    }
+
+    // 0400 permits opening the parent for reading but denies searching it,
+    // so exists() fails in the final stat rather than the parent walk.
+    auto denied_exists = fs->exists((denied / "child.txt").string());
+    REQUIRE_FALSE(denied_exists);
+    CHECK(denied_exists.error().code == harness::FileErrorCode::PermissionDenied);
+
+    // 0000 denies opening the parent itself, exercising the parent-walk
+    // branch of the same mapping.
+    auto sealed_exists = fs->exists((sealed / "child.txt").string());
+    REQUIRE_FALSE(sealed_exists);
+    CHECK(sealed_exists.error().code == harness::FileErrorCode::PermissionDenied);
+
+    // canonicalPath() reports the same EACCES instead of NotFound.
+    auto denied_canonical = fs->canonicalPath((denied / "child.txt").string());
+    REQUIRE_FALSE(denied_canonical);
+    CHECK(denied_canonical.error().code == harness::FileErrorCode::PermissionDenied);
+
+    auto sealed_canonical = fs->canonicalPath((sealed / "child.txt").string());
+    REQUIRE_FALSE(sealed_canonical);
+    CHECK(sealed_canonical.error().code == harness::FileErrorCode::PermissionDenied);
+
+    // The sibling mutation audit: mkdirat fails EACCES on the same 0400
+    // parent, and must be PermissionDenied rather than Invalid.
+    auto denied_create = fs->createDir((denied / "new").string(), false);
+    REQUIRE_FALSE(denied_create);
+    CHECK(denied_create.error().code == harness::FileErrorCode::PermissionDenied);
+
+    // The workspace root itself takes the direct-root metadata branch,
+    // which must not claim NotFound when the root cannot be opened.
+    ScopedDirectoryMode root_mode(workspace.path(), 0000);
+    REQUIRE(root_mode.installed());
+    auto root_info = fs->fileInfo(".");
+    REQUIRE_FALSE(root_info);
+    CHECK(root_info.error().code == harness::FileErrorCode::PermissionDenied);
+
+    // A genuinely absent path still returns false/NotFound.
+    auto missing_exists = fs->exists((outside.path() / "missing.txt").string());
+    REQUIRE(missing_exists);
+    CHECK_FALSE(*missing_exists);
+
+    auto missing_canonical = fs->canonicalPath((outside.path() / "missing.txt").string());
+    REQUIRE_FALSE(missing_canonical);
+    CHECK(missing_canonical.error().code == harness::FileErrorCode::NotFound);
+
+    // The root metadata branch keeps ENOENT as NotFound when the workspace
+    // root itself is gone; only real permission failures take the
+    // PermissionDenied branch.
+    tests::TempWorkspace vanished;
+    auto vanished_fs = harness::WorkspaceFileSystem::create(vanished.path());
+    REQUIRE(vanished_fs);
+    std::error_code remove_ec;
+    std::filesystem::remove_all(vanished.path(), remove_ec);
+    REQUIRE_FALSE(remove_ec);
+    auto vanished_info = vanished_fs->fileInfo(".");
+    REQUIRE_FALSE(vanished_info);
+    CHECK(vanished_info.error().code == harness::FileErrorCode::NotFound);
 }

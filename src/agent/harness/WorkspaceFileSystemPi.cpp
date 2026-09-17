@@ -14,6 +14,25 @@
 #include <unistd.h>
 
 namespace cch::harness {
+namespace {
+
+/// Whether an errno names a permission failure. The metadata operations
+/// must report these as PermissionDenied instead of folding them into
+/// Invalid or NotFound (issue #702).
+[[nodiscard]] bool is_permission_errno(int errno_value) noexcept {
+    return errno_value == EACCES || errno_value == EPERM;
+}
+
+/// The honest outcome for a path the process may not resolve.
+[[nodiscard]] FileError permission_denied_error(const std::string& path) {
+    return FileError{
+            .code = FileErrorCode::PermissionDenied,
+            .message = "permission denied: " + path,
+            .path = path,
+    };
+}
+
+} // namespace
 
 std::expected<std::string, FileError> WorkspaceFileSystem::absolutePath(const std::string& path) const {
     auto resolved = resolve_to_cwd(path);
@@ -381,8 +400,19 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
     // Roots (the workspace root or a filesystem root) have no addressable
     // parent; open them directly instead of the parent+filename walk.
     if (*resolved == root_ || *resolved == resolved->root_path()) {
-        auto root_fd = open_root_directory(*resolved);
-        if (!root_fd || ::fstat(root_fd->get(), &st) != 0) {
+        int root_errno = 0;
+        auto root_fd = open_root_directory(*resolved, &root_errno);
+        if (!root_fd) {
+            if (root_errno == ENOENT) {
+                return std::unexpected(FileError{
+                        .code = FileErrorCode::NotFound,
+                        .message = "path not found: " + path,
+                        .path = path,
+                });
+            }
+            return std::unexpected(util_error_to_file_error(root_fd.error(), path));
+        }
+        if (::fstat(root_fd->get(), &st) != 0) {
             return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
         }
     } else {
@@ -401,9 +431,8 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
                 return std::unexpected(
                         FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
             }
-            if (errno == EACCES) {
-                return std::unexpected(
-                        FileError{FileErrorCode::PermissionDenied, "permission denied: " + path, std::string{path}});
+            if (is_permission_errno(errno)) {
+                return std::unexpected(permission_denied_error(path));
             }
             return std::unexpected(FileError{FileErrorCode::Unknown, "could not stat: " + path, std::string{path}});
         }
@@ -573,6 +602,11 @@ std::expected<std::string, FileError> WorkspaceFileSystem::canonicalPath(const s
     std::error_code ec;
     auto canonical = std::filesystem::canonical(*resolved, ec);
     if (ec) {
+        // An unsearchable parent surfaces as a real EACCES here; report it
+        // honestly instead of claiming the path is missing (issue #702).
+        if (ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted) {
+            return std::unexpected(permission_denied_error(path));
+        }
         return std::unexpected(
                 FileError{FileErrorCode::NotFound, "could not canonicalize: " + path, std::string{path}});
     }
@@ -609,6 +643,9 @@ std::expected<bool, FileError> WorkspaceFileSystem::exists(const std::string& pa
     if (::fstatat(parent_fd->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
         if (errno == ENOENT || errno == ENOTDIR) {
             return false;
+        }
+        if (is_permission_errno(errno)) {
+            return std::unexpected(permission_denied_error(path));
         }
         return std::unexpected(FileError{FileErrorCode::Invalid, "could not check path: " + path, std::string{path}});
     }
@@ -648,9 +685,11 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(const std::string&
                     .path = std::string{path},
             });
         }
-        return std::unexpected(FileError{FileErrorCode::Invalid,
-                "could not create directory: " + std::string(std::strerror(errno)),
-                std::string{path}});
+        return std::unexpected(FileError{
+                .code = is_permission_errno(errno) ? FileErrorCode::PermissionDenied : FileErrorCode::Invalid,
+                .message = "could not create directory: " + std::string(std::strerror(errno)),
+                .path = std::string{path},
+        });
     }
     return {};
 }
