@@ -26,10 +26,17 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_workspace_root() 
     return fd;
 }
 
-support::Expected<support::UniqueFd> WorkspaceFileSystem::open_root_directory(const std::filesystem::path& root) const {
+support::Expected<support::UniqueFd> WorkspaceFileSystem::open_root_directory(
+        const std::filesystem::path& root, int* failure_errno) const {
+    if (failure_errno) {
+        *failure_errno = 0;
+    }
     support::UniqueFd fd(::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    const int open_error = errno;
     if (!fd) {
-        return std::unexpected(workspace_error("could not open root directory: " + std::string(std::strerror(errno))));
+        remember_errno(failure_errno, open_error);
+        return std::unexpected(
+                workspace_error("could not open root directory: " + std::string(std::strerror(open_error))));
     }
     return fd;
 }
