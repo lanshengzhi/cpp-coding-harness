@@ -55,15 +55,15 @@ public:
             std::stop_token stop_token = {});
 
     /// Compose all filesystem capabilities that Session Assembly may use.
-    /// Every returned capability shares the request's one Runtime root target;
-    /// explicit resource paths are authorized only when they fall under one
-    /// of the known workspace, ancestor, Agent Config, or user roots.
-    [[nodiscard]] static ProjectResourceFileSystems make_authorized_project_resource_filesystems(
+    /// Every returned capability shares the request's one Runtime root
+    /// target. Explicit CLI resource paths need no capability of their own:
+    /// each resolves through the workspace capability's uniform pi
+    /// `resolveToCwd` resolution at load time (ADR 0057).
+    [[nodiscard]] static ProjectResourceFileSystems make_project_resource_filesystems(
             std::shared_ptr<harness::RuntimeRoot> runtime_root,
             std::filesystem::path workspace,
             std::filesystem::path agent_config_directory,
-            std::filesystem::path home_directory,
-            std::vector<std::string> explicit_paths = {});
+            std::filesystem::path home_directory);
 
     /// The CLI-facts merge the door performs (issue #507, absorbed from the
     /// interactive composition host): engine-resolved session trust wins —

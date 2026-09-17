@@ -196,39 +196,6 @@ template <typename T, typename E>
     }
     const auto home = request.home_directory.value_or(coding_agent::home_directory());
     result.user_agents_root = make_async_filesystem(normalized_absolute(home / ".agents"));
-
-    std::vector<std::string> explicit_paths = request.skill_paths;
-    explicit_paths.insert(explicit_paths.end(), request.theme_paths.begin(), request.theme_paths.end());
-    for (const auto& input : request.explicit_prompt_templates) {
-        explicit_paths.push_back(input.path);
-    }
-    if (request.system_prompt && !request.system_prompt->empty()) {
-        explicit_paths.push_back(*request.system_prompt);
-    }
-    for (const auto& input : request.append_system_prompt) {
-        if (!input.empty()) {
-            explicit_paths.push_back(input);
-        }
-    }
-    for (const auto& raw_path : explicit_paths) {
-        const auto raw = std::filesystem::path{raw_path};
-        const auto candidate = normalized_absolute(raw.is_absolute() ? raw : workspace / raw);
-        std::shared_ptr<harness::AsyncFileSystem> capability;
-        if (path_is_under(result.workspace->workspace(), candidate)) {
-            capability = result.workspace;
-        } else if (result.agent_config_directory &&
-                   path_is_under(result.agent_config_directory->workspace(), candidate)) {
-            capability = result.agent_config_directory;
-        } else if (result.user_agents_root && path_is_under(result.user_agents_root->workspace(), candidate)) {
-            capability = result.user_agents_root;
-        }
-        if (capability) {
-            result.explicit_paths.push_back(coding_agent::AuthorizedResourcePath{
-                    .path = candidate.string(),
-                    .filesystem = std::move(capability),
-            });
-        }
-    }
     return result;
 }
 

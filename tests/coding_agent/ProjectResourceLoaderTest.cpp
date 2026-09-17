@@ -1,6 +1,8 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/SkillFormatting.hpp"
 #include "support/LegacyAsyncLoader.hpp"
+#include "support/ScopedEnvVar.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -170,12 +172,13 @@ TEST_CASE("project resource loader --theme explicit paths load directories and f
     request.theme_paths = {"explicit.json", "explicit-dir", "not-theme.txt"};
     auto result = fix.load(std::move(request));
 
-    // Explicit paths stay effective without trust and collect in CLI order.
+    // Explicit paths stay effective without trust and collect in CLI order;
+    // the recorded source path is the capability-resolved absolute path.
     REQUIRE(result.resources.themes.size() == 3);
-    CHECK(result.resources.themes[0].path == "explicit.json");
+    CHECK(result.resources.themes[0].path == (fix.workspace.path() / "explicit.json").string());
     CHECK(result.resources.themes[0].scope == coding_agent::SourceScope::Temporary);
-    CHECK(result.resources.themes[1].path == "explicit-dir/one.json");
-    CHECK(result.resources.themes[2].path == "explicit-dir/two.json");
+    CHECK(result.resources.themes[1].path == (fix.workspace.path() / "explicit-dir" / "one.json").string());
+    CHECK(result.resources.themes[2].path == (fix.workspace.path() / "explicit-dir" / "two.json").string());
     CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "theme path is not a json file"));
 
     // `--no-themes` drops discovery but keeps explicit paths.
@@ -185,7 +188,7 @@ TEST_CASE("project resource loader --theme explicit paths load directories and f
     no_themes_request.theme_paths = {"explicit.json"};
     const auto no_themes = fix.load(std::move(no_themes_request));
     REQUIRE(no_themes.resources.themes.size() == 1);
-    CHECK(no_themes.resources.themes[0].path == "explicit.json");
+    CHECK(no_themes.resources.themes[0].path == (fix.workspace.path() / "explicit.json").string());
 }
 
 TEST_CASE("project resource loader missing --theme paths carry pi's two non-fatal diagnostics",
@@ -883,6 +886,170 @@ TEST_CASE("project resource loader missing --skill paths carry pi's two diagnost
     CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Error, "Skill path does not exist"));
     CHECK(result.resources.skills.empty());
     CHECK(result.fatal_errors.empty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #700: explicit resource paths resolve once through the capability's uniform
+// pi resolveToCwd resolution — no authorization list, no pseudo paths.
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("project resource loader loads an explicit --skill path outside every known root",
+        "[coding_agent][project-resource-loader][issue700][spec]") {
+    LoaderFixture fix;
+    tests::TempWorkspace external;
+    external.write("outside-skill/SKILL.md",
+            "---\n"
+            "name: outside-skill\n"
+            "description: Skill outside every known root.\n"
+            "---\n"
+            "Outside body.\n");
+    const auto skill_file = (external.path() / "outside-skill" / "SKILL.md").string();
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.skill_paths.push_back(skill_file);
+
+    auto result = fix.load(std::move(request));
+
+    // No "resource path is not authorized": the capability resolves any path.
+    CHECK_FALSE(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "not authorized"));
+    CHECK(result.fatal_errors.empty());
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].name == "outside-skill");
+    CHECK(result.resources.skills[0].filePath == skill_file);
+    CHECK(result.resources.skills[0].baseDir == (external.path() / "outside-skill").string());
+}
+
+TEST_CASE("project resource loader resolves a @-prefixed --skill path and /skill expands its body",
+        "[coding_agent][project-resource-loader][issue700][spec]") {
+    LoaderFixture fix;
+    tests::TempWorkspace external;
+    external.write("mention-skill/SKILL.md",
+            "---\n"
+            "name: mention-skill\n"
+            "description: Mention-prefixed skill.\n"
+            "---\n"
+            "Mention body.\n");
+    const auto skill_file = (external.path() / "mention-skill" / "SKILL.md").string();
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.skill_paths.push_back("@" + skill_file);
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(result.fatal_errors.empty());
+    REQUIRE(result.resources.skills.size() == 1);
+    // The capability's resolved path becomes the skill's filePath/baseDir —
+    // not the raw "@"-prefixed input joined against the workspace.
+    CHECK(result.resources.skills[0].filePath == skill_file);
+    CHECK(result.resources.skills[0].baseDir == (external.path() / "mention-skill").string());
+
+    // pi `_expandSkillCommand` reads the resolved filePath at invocation time.
+    const auto expanded = coding_agent::expandSkillCommand("/skill:mention-skill", result.resources.skills);
+    CHECK(expanded.find("Mention body.") != std::string::npos);
+}
+
+TEST_CASE("project resource loader resolves a ~-prefixed --skill path against $HOME",
+        "[coding_agent][project-resource-loader][issue700][spec]") {
+    LoaderFixture fix;
+    tests::TempWorkspace home;
+    home.write("home-skill/SKILL.md",
+            "---\n"
+            "name: home-skill\n"
+            "description: Home-relative skill.\n"
+            "---\n"
+            "Home body.\n");
+    const tests::ScopedEnvVar home_env{"HOME", home.path().string()};
+    REQUIRE(home_env.ok());
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.home_directory = home.path();
+    request.skill_paths.push_back("~/home-skill/SKILL.md");
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(result.fatal_errors.empty());
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].filePath == (home.path() / "home-skill" / "SKILL.md").string());
+    CHECK(result.resources.skills[0].baseDir == (home.path() / "home-skill").string());
+
+    const auto expanded = coding_agent::expandSkillCommand("/skill:home-skill", result.resources.skills);
+    CHECK(expanded.find("Home body.") != std::string::npos);
+}
+
+TEST_CASE("project resource loader loads an explicit --prompt-template path outside every known root",
+        "[coding_agent][project-resource-loader][issue700][spec]") {
+    LoaderFixture fix;
+    tests::TempWorkspace external;
+    external.write("outside-prompt.md",
+            "---\n"
+            "description: Outside prompt.\n"
+            "---\n"
+            "Outside prompt body.\n");
+    const auto prompt_file = (external.path() / "outside-prompt.md").string();
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.explicit_prompt_templates.push_back({.path = prompt_file, .is_file = true});
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(result.fatal_errors.empty());
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(result.resources.prompt_templates[0].name == "outside-prompt");
+    CHECK(result.resources.prompt_templates[0].filePath == prompt_file);
+}
+
+TEST_CASE("project resource loader resolves @-prefixed and ~-prefixed --prompt-template paths",
+        "[coding_agent][project-resource-loader][issue700][spec]") {
+    LoaderFixture fix;
+    tests::TempWorkspace external;
+    external.write("mention-prompt.md",
+            "---\n"
+            "description: Mention prompt.\n"
+            "---\n"
+            "Mention prompt body.\n");
+    tests::TempWorkspace home;
+    home.write("home-prompt.md",
+            "---\n"
+            "description: Home prompt.\n"
+            "---\n"
+            "Home prompt body.\n");
+    const tests::ScopedEnvVar home_env{"HOME", home.path().string()};
+    REQUIRE(home_env.ok());
+    const auto mention_file = (external.path() / "mention-prompt.md").string();
+    const auto home_file = (home.path() / "home-prompt.md").string();
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.home_directory = home.path();
+    request.explicit_prompt_templates.push_back({.path = "@" + mention_file, .is_file = true});
+    request.explicit_prompt_templates.push_back({.path = "~/home-prompt.md", .is_file = true});
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(result.fatal_errors.empty());
+    REQUIRE(result.resources.prompt_templates.size() == 2);
+    CHECK(result.resources.prompt_templates[0].name == "mention-prompt");
+    CHECK(result.resources.prompt_templates[0].filePath == mention_file);
+    CHECK(result.resources.prompt_templates[1].name == "home-prompt");
+    CHECK(result.resources.prompt_templates[1].filePath == home_file);
+}
+
+TEST_CASE("project resource loader reads a --system-prompt file outside every known root",
+        "[coding_agent][project-resource-loader][issue700][spec]") {
+    LoaderFixture fix;
+    tests::TempWorkspace external;
+    external.write("system.md", "External system prompt.\n");
+    const auto prompt_file = (external.path() / "system.md").string();
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.system_prompt = prompt_file;
+
+    auto result = fix.load(std::move(request));
+
+    // An existing file is read; the path string itself must not become the
+    // prompt text.
+    REQUIRE(result.resources.system_prompt.has_value());
+    CHECK(*result.resources.system_prompt == "External system prompt.\n");
+    CHECK(result.resources.system_prompt_source == prompt_file);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

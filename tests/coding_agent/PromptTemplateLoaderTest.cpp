@@ -249,3 +249,36 @@ TEST_CASE("loadPromptTemplates dotfile skipped", "[coding_agent][prompt][loader]
     auto result = coding_agent::loadPromptTemplates(fix.fs, dirs);
     CHECK(result.templates.empty());
 }
+
+TEST_CASE("loadPromptTemplates loads templates from absolute paths outside the workspace root",
+        "[coding_agent][prompt][loader][issue700][spec]") {
+    LoaderTestFixture fix;
+    tests::TempWorkspace external;
+    external.write("outside-file.md",
+            "---\n"
+            "description: Single-file template outside the workspace.\n"
+            "---\n"
+            "Outside file body.\n");
+    external.write("outside-dir/nested.md",
+            "---\n"
+            "description: Directory template outside the workspace.\n"
+            "---\n"
+            "Outside dir body.\n");
+
+    // ADR 0057: an explicit path resolved by the capability is honored
+    // anywhere on the host; the resolved absolute path becomes the template's
+    // filePath.
+    std::vector<coding_agent::PromptTemplateDirSpec> dirs = {
+            {.path = (external.path() / "outside-file.md").string(), .is_file = true},
+            {.path = (external.path() / "outside-dir").string(), .is_file = false},
+    };
+    auto result = coding_agent::loadPromptTemplates(fix.fs, dirs);
+
+    REQUIRE(result.templates.size() == 2);
+    // Templates are name-sorted by the loader.
+    CHECK(result.templates[0].name == "nested");
+    CHECK(result.templates[0].filePath == (external.path() / "outside-dir" / "nested.md").string());
+    CHECK(result.templates[1].name == "outside-file");
+    CHECK(result.templates[1].filePath == (external.path() / "outside-file.md").string());
+    CHECK(result.diagnostics.empty());
+}

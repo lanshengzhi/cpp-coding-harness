@@ -27,9 +27,10 @@ struct SkillSourceContext {
 
 /// A single skill directory specification for skill discovery.
 struct SkillDirSpec {
-    /// Path relative to the filesystem root the scan is addressed against
-    /// (workspace-relative, or relative to the user/`.agents` directory
-    /// filesystem instance created for the scan).
+    /// Path the scan is addressed against: workspace-relative (or relative to
+    /// the user/`.agents` directory filesystem instance created for the
+    /// scan) for discovered sources, or the capability-resolved absolute
+    /// path for explicit `--skill` inputs (ADR 0057).
     std::string path;
     /// When true, root-level .md files in this directory are loaded as skills
     /// (pi "pi" discovery mode: user `~/.pike/agent/skills`, project `.pi/skills`,

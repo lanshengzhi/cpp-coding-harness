@@ -125,8 +125,10 @@ struct ProjectResourceLoadingResult {
     std::vector<ResourceDiagnostic> theme_diagnostics;
 };
 
-/// Canonical asynchronous project-resource loader. The supplied collection is
-/// the complete authorization boundary for every resource source.
+/// Canonical asynchronous project-resource loader. The supplied collection
+/// carries the discovery-root capabilities; explicit CLI paths resolve
+/// through the workspace capability's uniform pi `resolveToCwd` resolution
+/// (ADR 0057).
 [[nodiscard]] support::AsyncResult<ProjectResourceLoadingResult, harness::FileError> load_project_resources(
         ProjectResourceFileSystems filesystems,
         const ProjectTrustStore& trust_store,

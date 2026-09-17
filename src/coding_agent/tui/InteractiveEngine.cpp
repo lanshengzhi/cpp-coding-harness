@@ -93,7 +93,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
                                        ? session_->workspace()
                                        : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
         if (!workspace.empty()) {
-            project_resource_filesystems_ = make_authorized_project_resource_filesystems(
+            project_resource_filesystems_ = make_project_resource_filesystems(
                     runtime_root_, workspace, run.agent_config_directory(), coding_agent::home_directory());
         }
     }
@@ -536,7 +536,7 @@ ProjectResourceFileSystems InteractiveEngine::project_resource_filesystems_for(c
     if (!runtime_root_) {
         return {};
     }
-    return make_authorized_project_resource_filesystems(
+    return make_project_resource_filesystems(
             runtime_root_, workspace, agent_config_directory_, coding_agent::home_directory());
 }
 

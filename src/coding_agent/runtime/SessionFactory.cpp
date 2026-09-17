@@ -457,15 +457,6 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
     return (ec ? path : std::move(absolute)).lexically_normal();
 }
 
-[[nodiscard]] bool path_is_under(const std::filesystem::path& root, const std::filesystem::path& candidate) {
-    const auto relative = normalized_capability_root(candidate).lexically_relative(normalized_capability_root(root));
-    if (relative.empty()) {
-        return false;
-    }
-    const auto first = relative.begin();
-    return first == relative.end() || *first != "..";
-}
-
 [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> make_local_resource_filesystem(
         const std::shared_ptr<harness::RuntimeTarget>& target, const std::filesystem::path& root) {
     if (!target || root.empty()) {
@@ -474,12 +465,16 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
     return std::make_shared<harness::AsyncLocalFileSystem>(target, normalized_capability_root(root));
 }
 
-[[nodiscard]] ProjectResourceFileSystems make_authorized_resource_filesystems(
+/// Compose the resource-loading capability collection: the workspace, its
+/// ancestor chain, the Agent Config Directory, and the user `.agents` root.
+/// Explicit CLI resource paths need no entry here — each resolves through
+/// the workspace capability's uniform pi `resolveToCwd` resolution at load
+/// time (ADR 0057).
+[[nodiscard]] ProjectResourceFileSystems compose_project_resource_filesystems(
         const std::shared_ptr<harness::RuntimeTarget>& target,
         std::filesystem::path workspace,
         const std::filesystem::path& agent_config_directory,
-        const std::filesystem::path& home_directory,
-        const std::vector<std::string>& explicit_paths = {}) {
+        const std::filesystem::path& home_directory) {
     ProjectResourceFileSystems result;
     if (!target || workspace.empty()) {
         return result;
@@ -488,16 +483,6 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
     workspace = normalized_capability_root(workspace);
     result.workspace = make_local_resource_filesystem(target, workspace);
 
-    std::vector<std::pair<std::filesystem::path, std::shared_ptr<harness::AsyncFileSystem>>> known_roots;
-    const auto add_known_root = [&](const std::filesystem::path& root,
-                                        std::shared_ptr<harness::AsyncFileSystem> filesystem) {
-        if (!filesystem || root.empty()) {
-            return;
-        }
-        known_roots.emplace_back(normalized_capability_root(root), std::move(filesystem));
-    };
-    add_known_root(workspace, result.workspace);
-
     auto current = workspace;
     while (true) {
         const auto parent = current.parent_path();
@@ -505,67 +490,19 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
             break;
         }
         current = parent;
-        auto filesystem = make_local_resource_filesystem(target, current);
-        if (filesystem) {
-            result.ancestor_roots.push_back(filesystem);
-            add_known_root(current, std::move(filesystem));
+        if (auto filesystem = make_local_resource_filesystem(target, current)) {
+            result.ancestor_roots.push_back(std::move(filesystem));
         }
     }
 
     if (!agent_config_directory.empty()) {
         result.agent_config_directory = make_local_resource_filesystem(target, agent_config_directory);
-        add_known_root(agent_config_directory, result.agent_config_directory);
     }
     if (!home_directory.empty()) {
         const auto user_agents_root = normalized_capability_root(home_directory) / ".agents";
         result.user_agents_root = make_local_resource_filesystem(target, user_agents_root);
-        add_known_root(user_agents_root, result.user_agents_root);
-    }
-
-    for (const auto& raw_path : explicit_paths) {
-        if (raw_path.empty()) {
-            continue;
-        }
-        const auto raw = std::filesystem::path{raw_path};
-        const auto candidate = normalized_capability_root(raw.is_absolute() ? raw : workspace / raw);
-        std::shared_ptr<harness::AsyncFileSystem> selected;
-        std::size_t selected_length{0};
-        for (const auto& [root, filesystem] : known_roots) {
-            if (!path_is_under(root, candidate)) {
-                continue;
-            }
-            const auto length = root.string().size();
-            if (!selected || length > selected_length) {
-                selected = filesystem;
-                selected_length = length;
-            }
-        }
-        if (selected) {
-            result.explicit_paths.push_back(AuthorizedResourcePath{
-                    .path = candidate.string(),
-                    .filesystem = std::move(selected),
-            });
-        }
     }
     return result;
-}
-
-[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> explicit_resource_filesystem_for(
-        const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
-    const auto candidate = normalized_capability_root(path);
-    std::shared_ptr<harness::AsyncFileSystem> selected;
-    std::size_t selected_length{0};
-    for (const auto& authorized : filesystems.explicit_paths) {
-        if (!authorized.filesystem || !path_is_under(std::filesystem::path{authorized.path}, candidate)) {
-            continue;
-        }
-        const auto length = authorized.path.size();
-        if (!selected || length > selected_length) {
-            selected = authorized.filesystem;
-            selected_length = length;
-        }
-    }
-    return selected;
 }
 
 // Model / runtime resolution
@@ -1089,25 +1026,32 @@ struct SessionTargetNormalizationOptions {
 
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<ExplicitPromptTemplateInput>>>
 make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystems,
-        const std::filesystem::path& workspace,
         const std::vector<std::string>& paths,
         std::stop_token stop_token) {
     std::vector<ExplicitPromptTemplateInput> inputs;
     inputs.reserve(paths.size());
     for (const auto& path : paths) {
         bool is_file = true;
-        const auto raw = std::filesystem::path{path};
-        const auto candidate = normalized_capability_root(raw.is_absolute() ? raw : workspace / raw);
-        if (auto filesystem = explicit_resource_filesystem_for(filesystems, candidate)) {
-            const auto relative = candidate.lexically_relative(normalized_capability_root(filesystem->workspace()));
-            const auto addressed = relative.empty() ? std::string{"."} : relative.string();
-            auto info = co_await support::detail::await_async_result(filesystem->fileInfo(addressed, stop_token));
-            if (!info) {
-                if (info.error().code == harness::FileErrorCode::Aborted) {
-                    co_return std::unexpected(harness::to_util_error(std::move(info.error())));
+        if (filesystems.workspace) {
+            // The workspace capability's uniform pi `resolveToCwd` resolution
+            // (ADR 0057) addresses any explicit path; only an existing
+            // directory flips the file/dir classification.
+            auto resolved =
+                    co_await support::detail::await_async_result(filesystems.workspace->absolutePath(path, stop_token));
+            if (!resolved) {
+                if (resolved.error().code == harness::FileErrorCode::Aborted) {
+                    co_return std::unexpected(harness::to_util_error(std::move(resolved.error())));
                 }
-            } else if (info->kind == harness::FileKind::Directory) {
-                is_file = false;
+            } else {
+                auto info = co_await support::detail::await_async_result(
+                        filesystems.workspace->fileInfo(*resolved, stop_token));
+                if (!info) {
+                    if (info.error().code == harness::FileErrorCode::Aborted) {
+                        co_return std::unexpected(harness::to_util_error(std::move(info.error())));
+                    }
+                } else if (info->kind == harness::FileKind::Directory) {
+                    is_file = false;
+                }
             }
         }
         inputs.push_back(ExplicitPromptTemplateInput{
@@ -1367,23 +1311,8 @@ struct PreparedAssemblyTarget final {
     trust_store_path = std::move(*validated_trust_path);
 
     bool project_trusted = false;
-    std::vector<std::string> explicit_resource_paths = plan.skill_paths;
-    explicit_resource_paths.insert(explicit_resource_paths.end(), plan.theme_paths.begin(), plan.theme_paths.end());
-    explicit_resource_paths.insert(
-            explicit_resource_paths.end(), plan.prompt_template_paths.begin(), plan.prompt_template_paths.end());
-    if (plan.system_prompt && !plan.system_prompt->empty()) {
-        explicit_resource_paths.push_back(*plan.system_prompt);
-    }
-    for (const auto& append : plan.append_system_prompt) {
-        if (!append.empty()) {
-            explicit_resource_paths.push_back(append);
-        }
-    }
-    auto resource_filesystems = make_authorized_resource_filesystems(plan.execution_runtime_target,
-            workspace,
-            coding_agent::agent_config_dir(),
-            coding_agent::home_directory(),
-            explicit_resource_paths);
+    auto resource_filesystems = compose_project_resource_filesystems(
+            plan.execution_runtime_target, workspace, coding_agent::agent_config_dir(), coding_agent::home_directory());
     retained_resource_filesystems = resource_filesystems;
     if (resource_filesystems.workspace) {
         ProjectResourceLoadingRequest resource_request;
@@ -1401,7 +1330,7 @@ struct PreparedAssemblyTarget final {
         resource_request.system_prompt = plan.system_prompt;
         resource_request.append_system_prompt = plan.append_system_prompt;
         auto explicit_templates = co_await make_explicit_template_inputs_async(
-                resource_filesystems, workspace, plan.prompt_template_paths, stop_token);
+                resource_filesystems, plan.prompt_template_paths, stop_token);
         if (!explicit_templates) {
             co_await discard_unpublished_session();
             co_return std::unexpected(std::move(explicit_templates.error()));
@@ -1937,17 +1866,15 @@ struct PreparedAssemblyTarget final {
 
 } // namespace
 
-ProjectResourceFileSystems SessionFactory::make_authorized_project_resource_filesystems(
+ProjectResourceFileSystems SessionFactory::make_project_resource_filesystems(
         std::shared_ptr<harness::RuntimeRoot> runtime_root,
         std::filesystem::path workspace,
         std::filesystem::path agent_config_directory,
-        std::filesystem::path home_directory,
-        std::vector<std::string> explicit_paths) {
-    return make_authorized_resource_filesystems(runtime_root ? runtime_root->make_target() : nullptr,
+        std::filesystem::path home_directory) {
+    return compose_project_resource_filesystems(runtime_root ? runtime_root->make_target() : nullptr,
             std::move(workspace),
             agent_config_directory,
-            home_directory,
-            explicit_paths);
+            home_directory);
 }
 
 coding_agent::CreateAgentSessionResult SessionFactory::publish(AgentSessionAssembly assembly,

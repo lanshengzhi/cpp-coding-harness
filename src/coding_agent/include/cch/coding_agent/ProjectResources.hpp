@@ -12,25 +12,20 @@
 
 namespace cch::coding_agent {
 
-/// One explicitly authorized path capability supplied by coding-agent
-/// composition. Resource loading may select only a capability from this
-/// collection; it never creates a filesystem for a path it discovers.
-struct AuthorizedResourcePath {
-    std::string path;
-    std::shared_ptr<harness::AsyncFileSystem> filesystem;
-};
-
-/// Filesystem capabilities authorized by Session composition for project
+/// Filesystem capabilities supplied by Session composition for project
 /// resource discovery. The vectors contain already-opened capabilities for
-/// the workspace/ancestor and git roots in discovery order. The loader has no
-/// arbitrary-root factory and cannot widen this set.
+/// the workspace/ancestor and git roots in discovery order; the loader never
+/// creates a filesystem for a path it discovers. Explicit CLI paths
+/// (`--skill`/`--prompt-template`/`--theme`, system prompt files) carry no
+/// capability of their own: each resolves once through the workspace
+/// capability's uniform pi `resolveToCwd` resolution and is read through it
+/// (ADR 0057).
 struct ProjectResourceFileSystems {
     std::shared_ptr<harness::AsyncFileSystem> workspace;
     std::vector<std::shared_ptr<harness::AsyncFileSystem>> ancestor_roots;
     std::vector<std::shared_ptr<harness::AsyncFileSystem>> git_roots;
     std::shared_ptr<harness::AsyncFileSystem> agent_config_directory;
     std::shared_ptr<harness::AsyncFileSystem> user_agents_root;
-    std::vector<AuthorizedResourcePath> explicit_paths;
 };
 
 /// pi `SourceScope` subset (`core/source-info.ts`): the scope recorded on a

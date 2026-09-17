@@ -52,10 +52,10 @@ using AsyncSessionReplacementSink =
 
 /// Build the one composition-owned filesystem capability collection used by
 /// Native TUI trust detection. Every capability shares one Runtime target;
-/// the collection includes the workspace, its known ancestor roots, and the
-/// Agent Config Directory and user `.agents` roots when supplied. It never
-/// derives capabilities from a path discovered by resource loading.
-[[nodiscard]] ProjectResourceFileSystems make_authorized_project_resource_filesystems(
+/// the collection includes the workspace, its ancestor roots, and the Agent
+/// Config Directory and user `.agents` roots when supplied. It never derives
+/// capabilities from a path discovered by resource loading.
+[[nodiscard]] ProjectResourceFileSystems make_project_resource_filesystems(
         std::shared_ptr<harness::RuntimeRoot> runtime_root,
         std::filesystem::path workspace,
         std::filesystem::path agent_config_directory,

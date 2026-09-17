@@ -275,37 +275,8 @@ namespace {
     return strip_workspace_root(normalized_absolute(root), normalized_absolute(candidate).string()).has_value();
 }
 
-[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> explicit_filesystem_for(
-        const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
-    const auto candidate = normalized_absolute(path);
-    std::shared_ptr<harness::AsyncFileSystem> best;
-    std::size_t best_length{0};
-    for (const auto& authorized : filesystems.explicit_paths) {
-        if (!authorized.filesystem || !path_is_under(authorized.filesystem->workspace(), candidate) ||
-                !path_is_under(std::filesystem::path{authorized.path}, candidate)) {
-            continue;
-        }
-        const auto length = normalized_absolute(authorized.path).string().size();
-        if (!best || length > best_length) {
-            best = authorized.filesystem;
-            best_length = length;
-        }
-    }
-    return best;
-}
-
-/// Resolve only an explicit capability supplied by composition. Discovered
-/// roots are deliberately not consulted here: an explicit absolute path is
-/// authorized by its matching prefix, never by being a sibling beneath a
-/// workspace, ancestor, or git capability.
-[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> filesystem_for_path(
-        const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
-    return explicit_filesystem_for(filesystems, path);
-}
-
-/// Resolve a path discovered from an already-authorized resource root. This
-/// separate helper keeps discovery traversal from becoming an authorization
-/// fallback for explicit inputs.
+/// Resolve a path discovered from an already-supplied discovery root to the
+/// deepest capability containing it (git worktree traversal).
 [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> discovered_filesystem_for_path(
         const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
     const auto candidate = normalized_absolute(path);
@@ -331,19 +302,6 @@ namespace {
         consider(filesystem);
     }
     return best;
-}
-
-[[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> explicit_resource_filesystem_for(
-        const ProjectResourceFileSystems& filesystems, const std::filesystem::path& path) {
-    return filesystem_for_path(filesystems, path);
-}
-
-[[nodiscard]] harness::FileError unauthorized_resource_path(const std::filesystem::path& path) {
-    return harness::FileError{
-            .code = harness::FileErrorCode::PermissionDenied,
-            .message = "resource path is not authorized",
-            .path = path.string(),
-    };
 }
 
 [[nodiscard]] harness::FileError invalid_filesystem_collection(
@@ -423,55 +381,11 @@ namespace {
         return invalid;
     }
     // A linked worktree's common git repository is often a sibling of the
-    // worktree rather than one of its lexical ancestors. Its capability is
-    // still composition-authorized, so validate presence without imposing
-    // the ancestor relationship used by context roots.
+    // worktree rather than one of its lexical ancestors, so validate presence
+    // without imposing the ancestor relationship used by context roots.
     for (const auto& filesystem : filesystems.git_roots) {
         if (!filesystem) {
             return invalid_filesystem_collection("git roots contains an empty filesystem capability");
-        }
-    }
-
-    std::vector<std::filesystem::path> requested_explicit_paths;
-    const auto add_requested_path = [&](std::string_view raw) {
-        if (raw.empty()) {
-            return;
-        }
-        const auto input = std::filesystem::path{raw};
-        requested_explicit_paths.push_back(normalized_absolute(input.is_absolute() ? input : workspace_root / input));
-    };
-    for (const auto& path : request.skill_paths) {
-        add_requested_path(path);
-    }
-    for (const auto& path : request.theme_paths) {
-        add_requested_path(path);
-    }
-    for (const auto& input : request.explicit_prompt_templates) {
-        add_requested_path(input.path);
-    }
-    if (request.system_prompt && !request.system_prompt->empty()) {
-        add_requested_path(*request.system_prompt);
-    }
-    for (const auto& input : request.append_system_prompt) {
-        add_requested_path(input);
-    }
-
-    for (const auto& authorized : filesystems.explicit_paths) {
-        if (!authorized.filesystem || authorized.path.empty()) {
-            return invalid_filesystem_collection("explicit resource authorization is incomplete");
-        }
-        const auto prefix = normalized_absolute(authorized.path);
-        const auto filesystem_root = normalized_absolute(authorized.filesystem->workspace());
-        if (!path_is_under(filesystem_root, prefix)) {
-            return invalid_filesystem_collection(
-                    "explicit resource authorization path is outside its filesystem root", prefix.string());
-        }
-        const bool matches_request = std::any_of(requested_explicit_paths.begin(),
-                requested_explicit_paths.end(),
-                [&prefix](const auto& requested) { return path_is_under(prefix, requested); });
-        if (!matches_request) {
-            return invalid_filesystem_collection(
-                    "explicit resource authorization has no matching request path", prefix.string());
         }
     }
     return std::nullopt;
@@ -852,32 +766,32 @@ struct AsyncResolvedPrompt {
     std::optional<std::string> source_path;
 };
 
+/// pi `resolvePromptInput`: a CLI/discovered value is file content when it
+/// names an existing file and literal text otherwise. The value resolves once
+/// through the workspace capability's uniform pi `resolveToCwd` resolution
+/// (ADR 0057) — "@"/"~" prefixes and relative inputs included — and the
+/// resolved absolute path is read directly; there is no authorization list.
 [[nodiscard]] detail::AsyncTask<AsyncResolvedPrompt, harness::FileError> resolve_prompt_input_task(
         const ProjectResourceFileSystems& filesystems,
         std::optional<std::string> input,
         std::string description,
         std::vector<ResourceDiagnostic>& diagnostics,
-        bool allow_discovered_path,
         std::stop_token stop_token) {
     AsyncResolvedPrompt result;
     if (!input || input->empty()) {
         co_return result;
     }
 
-    const auto input_path = std::filesystem::path{*input};
-    auto filesystem = input_path.is_absolute() ? explicit_resource_filesystem_for(filesystems, input_path)
-                                               : filesystems.workspace;
-    // Explicit absolute inputs must use the exact path authorization supplied
-    // by composition. Discovered SYSTEM/APPEND files may instead use the
-    // already-authorized workspace/agent capabilities.
-    if (!filesystem && allow_discovered_path) {
-        filesystem = discovered_filesystem_for_path(filesystems, input_path);
-    }
-    if (!filesystem) {
+    auto resolved = co_await std::move(filesystems.workspace->absolutePath(*input, stop_token));
+    if (!resolved) {
+        if (loader_aborted(resolved.error())) {
+            co_return std::unexpected(std::move(resolved.error()));
+        }
+        // A value that cannot resolve as a path is literal text.
         result.text = std::move(input);
         co_return result;
     }
-    auto exists = co_await std::move(filesystem->exists(addressed_path(*filesystem, input_path), stop_token));
+    auto exists = co_await std::move(filesystems.workspace->exists(*resolved, stop_token));
     if (!exists) {
         if (loader_aborted(exists.error())) {
             co_return std::unexpected(std::move(exists.error()));
@@ -889,8 +803,8 @@ struct AsyncResolvedPrompt {
         result.text = std::move(input);
         co_return result;
     }
-    result.source_path = absolute_display_path(*filesystem, input_path);
-    auto content = co_await std::move(filesystem->readTextFile(addressed_path(*filesystem, input_path), stop_token));
+    result.source_path = *resolved;
+    auto content = co_await std::move(filesystems.workspace->readTextFile(*resolved, stop_token));
     if (!content) {
         if (loader_aborted(content.error())) {
             co_return std::unexpected(std::move(content.error()));
@@ -989,22 +903,22 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     const bool project_trusted = result.trust.decision == ProjectTrustDecision::Trusted;
 
     // Prompt templates retain pi's explicit-first, project, then user order.
+    // Each explicit input resolves once through the workspace capability's
+    // uniform pi `resolveToCwd` resolution (ADR 0057); the resolved absolute
+    // path flows into the loader spec and the template's filePath.
     PromptNameTracker prompt_names;
     for (const auto& input : request.explicit_prompt_templates) {
-        const auto input_path = std::filesystem::path{input.path};
-        const auto addressed_input = input_path.is_absolute() ? input_path : workspace / input_path;
-        auto filesystem = explicit_resource_filesystem_for(filesystems, addressed_input);
-        if (!filesystem) {
-            const auto unauthorized = unauthorized_resource_path(addressed_input);
-            result.fatal_errors.push_back(error_diagnostic(unauthorized.message, input.path));
+        auto resolved = co_await std::move(filesystems.workspace->absolutePath(input.path, stop_token));
+        if (!resolved) {
+            if (loader_aborted(resolved.error())) {
+                co_return std::unexpected(std::move(resolved.error()));
+            }
+            result.fatal_errors.push_back(error_diagnostic(resolved.error().message, input.path));
             continue;
         }
-        auto loaded = co_await std::move(loadPromptTemplates(*filesystem,
-                std::vector<PromptTemplateDirSpec>{make_prompt_dir_spec(addressed_path(*filesystem, addressed_input),
-                        input.is_file,
-                        "cli",
-                        SourceScope::Temporary,
-                        std::nullopt)},
+        auto loaded = co_await std::move(loadPromptTemplates(*filesystems.workspace,
+                std::vector<PromptTemplateDirSpec>{
+                        make_prompt_dir_spec(*resolved, input.is_file, "cli", SourceScope::Temporary, std::nullopt)},
                 stop_token));
         if (!loaded) {
             if (loader_aborted(loaded.error())) {
@@ -1063,7 +977,7 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
         }
     }
 
-    // Skills use one name tracker across all authorized roots, so first-wins
+    // Skills use one name tracker across all discovery roots, so first-wins
     // precedence and collision diagnostics remain independent of adapters.
     SkillNameTracker skill_names;
     if (!request.no_skills) {
@@ -1188,16 +1102,20 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             }
         }
     }
+    // Explicit --skill paths resolve once through the workspace capability's
+    // uniform pi `resolveToCwd` resolution (ADR 0057); the resolved absolute
+    // path flows into fileInfo, the loadSkills spec, and the skill's
+    // filePath/baseDir.
     for (const auto& path : request.skill_paths) {
-        const auto skill_path = std::filesystem::path{path};
-        const auto addressed_skill_path = skill_path.is_absolute() ? skill_path : workspace / skill_path;
-        auto filesystem = explicit_resource_filesystem_for(filesystems, addressed_skill_path);
-        if (!filesystem) {
-            skill_sink.push(warning_diagnostic(unauthorized_resource_path(addressed_skill_path).message, path));
+        auto resolved = co_await std::move(filesystems.workspace->absolutePath(path, stop_token));
+        if (!resolved) {
+            if (loader_aborted(resolved.error())) {
+                co_return std::unexpected(std::move(resolved.error()));
+            }
+            skill_sink.push(warning_diagnostic(resolved.error().message, path));
             continue;
         }
-        auto info =
-                co_await std::move(filesystem->fileInfo(addressed_path(*filesystem, addressed_skill_path), stop_token));
+        auto info = co_await std::move(filesystems.workspace->fileInfo(*resolved, stop_token));
         if (!info) {
             if (loader_aborted(info.error())) {
                 co_return std::unexpected(std::move(info.error()));
@@ -1210,8 +1128,9 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             }
             continue;
         }
-        auto loaded = co_await std::move(loadSkills(*filesystem,
-                std::vector<SkillDirSpec>{make_skill_dir_spec(path, true, "cli", SourceScope::Temporary, std::nullopt)},
+        auto loaded = co_await std::move(loadSkills(*filesystems.workspace,
+                std::vector<SkillDirSpec>{
+                        make_skill_dir_spec(*resolved, true, "cli", SourceScope::Temporary, std::nullopt)},
                 stop_token));
         if (!loaded) {
             if (loader_aborted(loaded.error())) {
@@ -1301,16 +1220,19 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             }
         }
     }
+    // Explicit --theme paths resolve once through the workspace capability's
+    // uniform pi `resolveToCwd` resolution (ADR 0057); the resolved absolute
+    // path is read and recorded as the theme's source path.
     for (const auto& path : request.theme_paths) {
-        const auto theme_path = std::filesystem::path{path};
-        const auto addressed_theme_path = theme_path.is_absolute() ? theme_path : workspace / theme_path;
-        auto filesystem = explicit_resource_filesystem_for(filesystems, addressed_theme_path);
-        if (!filesystem) {
-            theme_sink.push(warning_diagnostic(unauthorized_resource_path(addressed_theme_path).message, path));
+        auto resolved = co_await std::move(filesystems.workspace->absolutePath(path, stop_token));
+        if (!resolved) {
+            if (loader_aborted(resolved.error())) {
+                co_return std::unexpected(std::move(resolved.error()));
+            }
+            theme_sink.push(warning_diagnostic(resolved.error().message, path));
             continue;
         }
-        auto info =
-                co_await std::move(filesystem->fileInfo(addressed_path(*filesystem, addressed_theme_path), stop_token));
+        auto info = co_await std::move(filesystems.workspace->fileInfo(*resolved, stop_token));
         if (!info) {
             if (loader_aborted(info.error())) {
                 co_return std::unexpected(std::move(info.error()));
@@ -1325,7 +1247,7 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
         }
         std::vector<std::string> files;
         if (info->kind == harness::FileKind::Directory) {
-            auto listed = co_await std::move(filesystem->listDir(addressed_path(*filesystem, path), stop_token));
+            auto listed = co_await std::move(filesystems.workspace->listDir(*resolved, stop_token));
             if (!listed) {
                 if (loader_aborted(listed.error())) {
                     co_return std::unexpected(std::move(listed.error()));
@@ -1338,21 +1260,21 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             });
             for (const auto& entry : *listed) {
                 if (entry.kind == harness::FileKind::File && entry.name.ends_with(".json")) {
-                    files.push_back(path + "/" + entry.name);
+                    files.push_back(*resolved + "/" + entry.name);
                 }
             }
         } else if (info->kind == harness::FileKind::File) {
-            if (!path.ends_with(".json")) {
+            if (!resolved->ends_with(".json")) {
                 theme_sink.push(warning_diagnostic("theme path is not a json file", path));
                 continue;
             }
-            files.push_back(path);
+            files.push_back(*resolved);
         } else {
             theme_sink.push(warning_diagnostic("theme path is not a json file", path));
             continue;
         }
         for (const auto& file : files) {
-            auto content = co_await std::move(filesystem->readTextFile(addressed_path(*filesystem, file), stop_token));
+            auto content = co_await std::move(filesystems.workspace->readTextFile(file, stop_token));
             if (!content) {
                 if (loader_aborted(content.error())) {
                     co_return std::unexpected(std::move(content.error()));
@@ -1380,14 +1302,12 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     result.resources.agents_files = std::move(*contexts);
 
     std::optional<std::string> system_source = request.system_prompt;
-    bool system_source_discovered = false;
     if (!system_source && project_trusted) {
         auto discovered = co_await std::move(to_async_result(
                 find_existing_path_task(filesystems.workspace, workspace / ".pi/SYSTEM.md", stop_token)));
         if (!discovered) co_return std::unexpected(std::move(discovered.error()));
         if (*discovered) {
             system_source = std::move(**discovered);
-            system_source_discovered = true;
         }
     }
     if (!system_source && filesystems.agent_config_directory && request.agent_config_directory &&
@@ -1397,21 +1317,15 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
         if (!discovered) co_return std::unexpected(std::move(discovered.error()));
         if (*discovered) {
             system_source = std::move(**discovered);
-            system_source_discovered = true;
         }
     }
-    auto resolved_system = co_await std::move(to_async_result(resolve_prompt_input_task(filesystems,
-            std::move(system_source),
-            "system prompt",
-            diagnostics,
-            system_source_discovered,
-            stop_token)));
+    auto resolved_system = co_await std::move(to_async_result(resolve_prompt_input_task(
+            filesystems, std::move(system_source), "system prompt", diagnostics, stop_token)));
     if (!resolved_system) co_return std::unexpected(std::move(resolved_system.error()));
     result.resources.system_prompt = std::move(resolved_system->text);
     result.resources.system_prompt_source = std::move(resolved_system->source_path);
 
     std::vector<std::string> append_sources;
-    bool append_sources_discovered = false;
     if (!request.append_system_prompt.empty()) {
         append_sources = request.append_system_prompt;
     } else {
@@ -1421,7 +1335,6 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             if (!discovered) co_return std::unexpected(std::move(discovered.error()));
             if (*discovered) {
                 append_sources.push_back(std::move(**discovered));
-                append_sources_discovered = true;
             }
         }
         if (append_sources.empty() && filesystems.agent_config_directory && request.agent_config_directory &&
@@ -1433,17 +1346,12 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             if (!discovered) co_return std::unexpected(std::move(discovered.error()));
             if (*discovered) {
                 append_sources.push_back(std::move(**discovered));
-                append_sources_discovered = true;
             }
         }
     }
     for (auto& source : append_sources) {
-        auto resolved = co_await std::move(to_async_result(resolve_prompt_input_task(filesystems,
-                std::optional<std::string>{source},
-                "append system prompt",
-                diagnostics,
-                append_sources_discovered,
-                stop_token)));
+        auto resolved = co_await std::move(to_async_result(resolve_prompt_input_task(
+                filesystems, std::optional<std::string>{source}, "append system prompt", diagnostics, stop_token)));
         if (!resolved) co_return std::unexpected(std::move(resolved.error()));
         if (resolved->text) {
             result.resources.append_system_prompt.push_back(std::move(*resolved->text));

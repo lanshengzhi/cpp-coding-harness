@@ -529,11 +529,11 @@ namespace {
         if (stop_token.stop_requested()) {
             co_return std::unexpected(async_aborted_error());
         }
-        auto dir_path = strip_workspace_root(fs.workspace(), dir_spec.path);
-        if (!dir_path) {
-            continue;
-        }
-        auto info = co_await std::move(fs.fileInfo(*dir_path, stop_token));
+        // pi `resolveToCwd` (ADR 0057): absolute paths are honored anywhere,
+        // so an explicit path outside the workspace root passes through
+        // unchanged rather than being skipped.
+        const auto dir_path = async_read_path(fs, dir_spec.path);
+        auto info = co_await std::move(fs.fileInfo(dir_path, stop_token));
         if (!info) {
             if (async_aborted(info.error())) {
                 co_return std::unexpected(std::move(info.error()));
@@ -543,7 +543,7 @@ namespace {
                         .type = "warning",
                         .code = SkillDiagnosticCode::file_info_failed,
                         .message = info.error().message,
-                        .path = *dir_path,
+                        .path = dir_path,
                         .collision = std::nullopt,
                 });
             }
@@ -551,7 +551,7 @@ namespace {
         }
 
         harness::FileKind kind = info->kind;
-        std::string spec_path = *dir_path;
+        std::string spec_path = dir_path;
         if (kind == harness::FileKind::Symlink) {
             auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, spec_path), stop_token));
             if (!canonical) {
@@ -581,12 +581,12 @@ namespace {
                         .type = "warning",
                         .code = SkillDiagnosticCode::invalid_metadata,
                         .message = "skill path is not a markdown file",
-                        .path = *dir_path,
+                        .path = dir_path,
                         .collision = std::nullopt,
                 });
                 continue;
             }
-            const auto display_file_path = async_absolute_path(fs, *dir_path);
+            const auto display_file_path = async_absolute_path(fs, dir_path);
             auto file_result = co_await std::move(to_async_result(
                     load_skill_from_file_task(fs, spec_path, display_file_path, dir_spec.source_context, stop_token)));
             if (!file_result) {
@@ -613,7 +613,7 @@ namespace {
         }
 
         auto dir_result = co_await std::move(to_async_result(
-                load_skills_from_dir_task(fs, spec_path, *dir_path, dir_spec, *dir_path, IgnoreMatcher{}, stop_token)));
+                load_skills_from_dir_task(fs, spec_path, dir_path, dir_spec, dir_path, IgnoreMatcher{}, stop_token)));
         if (!dir_result) {
             co_return std::unexpected(std::move(dir_result.error()));
         }

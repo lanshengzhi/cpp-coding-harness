@@ -804,3 +804,39 @@ TEST_CASE("async loadSkills reads a renamed in-root symlink with the local adapt
     CHECK(result->skills.front().baseDir == (workspace.path() / "scan" / "renamed-skill").string());
     CHECK(result->diagnostics.empty());
 }
+
+TEST_CASE("loadSkills loads skills from absolute paths outside the workspace root",
+        "[coding_agent][skill][loader][issue700][spec]") {
+    SkillTestFixture fix;
+    tests::TempWorkspace external;
+    external.write("outside-dir/solo/SKILL.md",
+            "---\n"
+            "name: outside-solo\n"
+            "description: Directory skill outside the workspace.\n"
+            "---\n"
+            "Outside dir body.\n");
+    external.write("outside-file.md",
+            "---\n"
+            "name: outside-file\n"
+            "description: Single-file skill outside the workspace.\n"
+            "---\n"
+            "Outside file body.\n");
+
+    // ADR 0057: an explicit path resolved by the capability is honored
+    // anywhere on the host; the resolved absolute path becomes the skill's
+    // filePath/baseDir.
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+            {.path = (external.path() / "outside-dir").string(), .include_root_files = false},
+            {.path = (external.path() / "outside-file.md").string(), .include_root_files = true},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 2);
+    CHECK(result.skills[0].name == "outside-solo");
+    CHECK(result.skills[0].filePath == (external.path() / "outside-dir" / "solo" / "SKILL.md").string());
+    CHECK(result.skills[0].baseDir == (external.path() / "outside-dir" / "solo").string());
+    CHECK(result.skills[1].name == "outside-file");
+    CHECK(result.skills[1].filePath == (external.path() / "outside-file.md").string());
+    CHECK(result.skills[1].baseDir == external.path().string());
+    CHECK(result.diagnostics.empty());
+}

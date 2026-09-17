@@ -33,12 +33,11 @@ namespace {
 
 } // namespace
 
-ProjectResourceFileSystems make_authorized_project_resource_filesystems(
-        std::shared_ptr<harness::RuntimeRoot> runtime_root,
+ProjectResourceFileSystems make_project_resource_filesystems(std::shared_ptr<harness::RuntimeRoot> runtime_root,
         std::filesystem::path workspace,
         std::filesystem::path agent_config_directory,
         std::filesystem::path home_directory) {
-    return runtime::SessionFactory::make_authorized_project_resource_filesystems(std::move(runtime_root),
+    return runtime::SessionFactory::make_project_resource_filesystems(std::move(runtime_root),
             std::move(workspace),
             std::move(agent_config_directory),
             std::move(home_directory));
@@ -361,7 +360,7 @@ InteractiveSessionRun InteractiveSessionRunBuilder::build() {
     if (!state_->project_resource_filesystems.workspace && state_->runtime_root) {
         const auto workspace = intent_workspace(state_->session_intent);
         if (!workspace.empty()) {
-            state_->project_resource_filesystems = make_authorized_project_resource_filesystems(
+            state_->project_resource_filesystems = make_project_resource_filesystems(
                     state_->runtime_root, workspace, state_->agent_config_directory, coding_agent::home_directory());
         }
     }
