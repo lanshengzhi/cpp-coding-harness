@@ -2,7 +2,7 @@
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 #include "support/LegacyAsyncLoader.hpp"
-#include "support/ScopedEnvVar.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -958,8 +958,7 @@ TEST_CASE("project resource loader resolves a ~-prefixed --skill path against $H
             "description: Home-relative skill.\n"
             "---\n"
             "Home body.\n");
-    const tests::ScopedEnvVar home_env{"HOME", home.path().string()};
-    REQUIRE(home_env.ok());
+    const tests::EnvVarGuard home_env{"HOME", home.path().string()};
 
     coding_agent::ProjectResourceLoadingRequest request;
     request.home_directory = home.path();
@@ -1013,8 +1012,7 @@ TEST_CASE("project resource loader resolves @-prefixed and ~-prefixed --prompt-t
             "description: Home prompt.\n"
             "---\n"
             "Home prompt body.\n");
-    const tests::ScopedEnvVar home_env{"HOME", home.path().string()};
-    REQUIRE(home_env.ok());
+    const tests::EnvVarGuard home_env{"HOME", home.path().string()};
     const auto mention_file = (external.path() / "mention-prompt.md").string();
     const auto home_file = (home.path() / "home-prompt.md").string();
 

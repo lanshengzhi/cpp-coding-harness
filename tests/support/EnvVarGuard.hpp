@@ -27,6 +27,11 @@ public:
         }
     }
 
+    // A scoped process-environment override is not movable: two destructors
+    // restoring the same variable would interleave unpredictably.
+    EnvVarGuard(EnvVarGuard&&) = delete;
+    EnvVarGuard& operator=(EnvVarGuard&&) = delete;
+
     ~EnvVarGuard() {
         if (previous_) {
             setenv(name_.c_str(), previous_->c_str(), 1);

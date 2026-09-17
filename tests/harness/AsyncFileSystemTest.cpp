@@ -1,5 +1,5 @@
 #include "support/FakeAsyncFileSystem.hpp"
-#include "support/ScopedEnvVar.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalFileSystem.hpp>
@@ -474,8 +474,7 @@ TEST_CASE("async local filesystem strips '@' prefixes and expands '~' on read pa
 
     tests::TempWorkspace fake_home;
     fake_home.write("home.txt", "home body");
-    const tests::ScopedEnvVar home{"HOME", fake_home.path().string()};
-    REQUIRE(home.ok());
+    const tests::EnvVarGuard home{"HOME", fake_home.path().string()};
     auto tilde = runtime.run(filesystem.readTextFile("~/home.txt", {}));
     REQUIRE(tilde);
     CHECK(*tilde == "home body");
