@@ -17,3 +17,5 @@ The Execution Environment remains the complete filesystem-and-Shell capability b
 - `AsyncLocalFileSystem` directly owns the private `WorkspaceFileSystem` containment implementation; `AsyncLocalShell` owns Shell and process behavior; the combined and synchronous Local execution-environment pass-through modules are removed.
 - Repository-internal callers migrate in one replacement with no compatibility overload or alias; the Pike Runtime is the only product and exposes no C++ SDK or ABI promise.
 - Tests use filesystem and Shell fakes independently, retain concrete Linux containment tests, and delete evidence that only protected the removed inheritance shape.
+
+> Historical note: the `WorkspaceFileSystem` containment implementation and the concrete Linux containment tests named above are retired by [ADR 0057](0057-retire-workspace-containment-and-align-path-resolution-with-pi-resolvetocwd.md) (uniform pi `resolveToCwd` resolution under host user process permissions). The composition decision itself — two independent seams owned by their Local adapters — is unchanged.

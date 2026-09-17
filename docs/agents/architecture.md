@@ -60,11 +60,11 @@ Generic and serialization machinery stays local. Glaze DTOs, schema conversion, 
 
 ## Security and containment
 
-Shell, file, environment-variable, provider, and session changes preserve the filesystem authorization scopes (contained addressed/read paths; pi `resolveToCwd` write scope per #619), secret redaction, output truncation, and the documented “not a sandbox” boundary.
+Filesystem access aligns with host user process permissions: all path resolution follows pi's `resolveToCwd` contract uniformly, with no workspace containment, path allowlists, or resolution-scope splits (ADR 0057). Shell, file, environment-variable, provider, and session changes preserve the remaining security policies — secret redaction, output truncation, the bash environment filter, and the no-follow symlink policy with atomic writes — and the documented “not a sandbox” boundary.
 
 ## Retired surfaces
 
-Keep the clean end state: the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, and compatibility-only empty flags remain absent.
+Keep the clean end state: the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, compatibility-only empty flags, and fail-closed workspace containment with its split path-resolution scopes remain absent.
 
 ## Authoritative ADR index
 
@@ -76,3 +76,4 @@ Minimal routing set; the full rationale lives in `docs/adr/`.
 | Async operations & Runtime | [ADR 0040](../adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md) | Move-only `AsyncResult`, `RuntimeRoot`, admission lanes, serialized execution domains |
 | Shared message variant | [ADR 0005](../adr/0005-keep-provider-and-product-messages-in-their-owning-modules.md) | `cch_ai` owns `MessageVariant`; `cch_agent_core` consolidates agent & harness |
 | Released product identity | [ADR 0045](../adr/0045-name-the-released-runtime-pike-and-preserve-owner-package-names.md) | Single released product is `pike`; Owner packages preserve internal names |
+| Path resolution & containment | [ADR 0057](../adr/0057-retire-workspace-containment-and-align-path-resolution-with-pi-resolvetocwd.md) | Uniform pi `resolveToCwd` resolution at host-process permissions; workspace containment and scope splits retired |

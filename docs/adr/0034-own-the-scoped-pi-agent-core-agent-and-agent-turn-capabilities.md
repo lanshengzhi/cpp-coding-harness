@@ -40,6 +40,8 @@ The Agent and Agent Turn capabilities the three scoped provider paths require ar
 
 ## Addendum: write/edit path scope follows pi `resolveToCwd` (Issue #619)
 
+> Superseded by [ADR 0057](0057-retire-workspace-containment-and-align-path-resolution-with-pi-resolvetocwd.md): the scope split this addendum records is retired. Every filesystem operation — read, write, edit, metadata, listing, removal, and directory creation — and the shell working directory resolve uniformly through the pi `resolveToCwd` contract; the contained read scope, `read_text_file_for_write`, and the `AuthorizedSkillRoots` allowlist are removed under #696.
+
 The "Tool execution" consequence above originally shipped with write/edit paths workspace-contained,
 an intentional hardening divergence under ADR 0026's "containment" guardrail. #619 re-adjudicated:
 the maintainer chose full pi alignment over the constrained temp-dir escape hatch. The `write` and

@@ -15,6 +15,8 @@ is the recorded, explicit override for those values. ADR 0026's other
 guardrails (output-bounding, environment-filtering, workspace containment,
 quiescent-close) remain in force.
 
+> The workspace-containment guardrail named above is retired by [ADR 0057](0057-retire-workspace-containment-and-align-path-resolution-with-pi-resolvetocwd.md): filesystem path resolution uniformly follows pi `resolveToCwd` under host user process permissions. This ADR's raw-text pass-through decision and the remaining guardrails (output-bounding, environment-filtering, quiescent-close) are unaffected.
+
 ## Aligned value pipeline (verified against pi source at the baseline)
 
 Command (pi `interactive-mode.ts` submit path, `agent-session.ts`
@@ -91,6 +93,7 @@ Error diagnostics: passed through without redaction.
   the AI provider-message seam, so that redaction aligns rather than
   diverges. Output-bounding, environment-filtering, workspace containment,
   and quiescent-close policies are untouched.
+  (Workspace containment was later retired by ADR 0057; the other three stand.)
 - The parity map's User Bash entry records this divergence narrowing when
   the work lands. Architecture reviews should not re-propose redacting or
   sanitizing User Bash text values.
