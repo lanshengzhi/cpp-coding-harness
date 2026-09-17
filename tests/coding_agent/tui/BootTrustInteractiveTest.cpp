@@ -301,6 +301,10 @@ TEST_CASE("no-approve flag overrides the boot trust prompt to untrusted",
     BootTrustRun run;
     run.start(fixture, std::move(request), tests::make_scripted_fake_models());
 
+    // pi renderProjectTrustWarningIfNeeded: the untrusted-project warning
+    // renders in the chat once the untrusted Session has installed; wait for
+    // the rendered outcome rather than a drain.
+    run.wait_for_screen("Use /trust to save a trust decision");
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
     CHECK(screen.find("This project is not trusted.") != std::string::npos);
@@ -475,6 +479,10 @@ TEST_CASE("default project trust never skips the boot prompt and warns",
     BootTrustRun run;
     run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
 
+    // pi renderProjectTrustWarningIfNeeded: the untrusted-project warning
+    // renders in the chat once the untrusted Session has installed; wait for
+    // the rendered outcome rather than a drain.
+    run.wait_for_screen("Use /trust to save a trust decision");
     const auto screen = visible_screen(run.terminal);
     CHECK(screen.find("Trust project folder?") == std::string::npos);
     CHECK(screen.find("This project is not trusted.") != std::string::npos);

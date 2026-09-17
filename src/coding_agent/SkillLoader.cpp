@@ -199,27 +199,56 @@ namespace {
     return (fs.workspace() / path).lexically_normal().string();
 }
 
-/// Canonical paths are authority-bearing results. A symlink target is usable
-/// only when it remains inside the capability root; an absolute target outside
-/// the root must never be passed back to a filesystem operation as a fallback.
-[[nodiscard]] std::optional<std::string> contained_async_path(
-        const harness::AsyncFileSystem& fs, std::string_view file_path) {
-    std::error_code ec;
-    const auto root = std::filesystem::absolute(fs.workspace(), ec).lexically_normal();
-    if (ec) {
-        return std::nullopt;
-    }
+/// A symlink entry resolved to its canonical target for loading.
+struct ResolvedSymlinkTarget {
+    std::string canonical_path;
+    harness::FileKind target_kind{harness::FileKind::File};
+};
 
-    const std::filesystem::path path{file_path};
-    const auto absolute_path = path.is_absolute() ? path.lexically_normal() : (root / path).lexically_normal();
-    auto relative_path = strip_workspace_root(root, absolute_path.string());
-    if (!relative_path) {
-        return std::nullopt;
+/// Resolve a symlink entry to its canonical target. ADR 0057: the loader
+/// holds no workspace-target gate — the canonical target resolves like any
+/// other absolute path. A target the capability cannot resolve or inspect
+/// surfaces a warning diagnostic carrying the capability's own error (for
+/// example its no-follow refusal) instead of vanishing silently. `fs` and
+/// `diagnostics` must outlive the coroutine; callers await it in-frame.
+[[nodiscard]] detail::AsyncTask<std::optional<ResolvedSymlinkTarget>, harness::FileError> resolve_symlink_target_task(
+        harness::AsyncFileSystem& fs,
+        std::string addressed_path,
+        std::string diagnostic_path,
+        std::vector<SkillDiagnostic>& diagnostics,
+        std::stop_token stop_token) {
+    auto canonical = co_await std::move(fs.canonicalPath(std::move(addressed_path), stop_token));
+    if (!canonical) {
+        if (async_aborted(canonical.error())) {
+            co_return std::unexpected(std::move(canonical.error()));
+        }
+        diagnostics.push_back(SkillDiagnostic{
+                .type = "warning",
+                .code = SkillDiagnosticCode::file_info_failed,
+                .message = canonical.error().message,
+                .path = std::move(diagnostic_path),
+                .collision = std::nullopt,
+        });
+        co_return std::optional<ResolvedSymlinkTarget>{};
     }
-    if (relative_path->empty()) {
-        return std::string{"."};
+    auto target_info = co_await std::move(fs.fileInfo(*canonical, stop_token));
+    if (!target_info) {
+        if (async_aborted(target_info.error())) {
+            co_return std::unexpected(std::move(target_info.error()));
+        }
+        diagnostics.push_back(SkillDiagnostic{
+                .type = "warning",
+                .code = SkillDiagnosticCode::file_info_failed,
+                .message = target_info.error().message,
+                .path = std::move(diagnostic_path),
+                .collision = std::nullopt,
+        });
+        co_return std::optional<ResolvedSymlinkTarget>{};
     }
-    return relative_path;
+    co_return std::optional<ResolvedSymlinkTarget>{ResolvedSymlinkTarget{
+            .canonical_path = std::move(*canonical),
+            .target_kind = target_info->kind,
+    }};
 }
 
 [[nodiscard]] detail::AsyncTask<SkillLoadResult, harness::FileError> load_skill_from_file_task(
@@ -383,42 +412,34 @@ namespace {
             }
             co_return std::optional<std::string>{};
         }
-        auto contained = contained_async_path(fs, *canonical);
-        if (!contained) {
-            co_return std::optional<std::string>{};
-        }
-        co_return std::optional<std::string>{async_absolute_path(fs, *contained)};
+        // ADR 0057: the canonical path is the dedupe identity wherever it
+        // lands; there is no loader-side workspace-target gate.
+        co_return std::optional<std::string>{std::move(*canonical)};
     };
 
-    // One SKILL.md per directory, matching pi's traversal order.
+    // One SKILL.md per directory, matching pi's traversal order. A SKILL.md
+    // whose symlink cannot resolve is diagnosed once here; the walk loop below
+    // re-encounters the same entry and must not repeat the diagnostic.
+    std::optional<std::string> diagnosed_symlink_failure;
     for (const auto& entry : entries) {
         if (entry.name != "SKILL.md") {
             continue;
         }
         std::string actual_file_path = async_read_path(fs, entry.path);
         if (entry.kind == harness::FileKind::Symlink) {
-            auto canonical = co_await std::move(fs.canonicalPath(actual_file_path, stop_token));
-            if (!canonical) {
-                if (async_aborted(canonical.error())) {
-                    co_return std::unexpected(std::move(canonical.error()));
-                }
+            auto resolved = co_await std::move(to_async_result(resolve_symlink_target_task(
+                    fs, std::move(actual_file_path), entry.path, result.diagnostics, stop_token)));
+            if (!resolved) {
+                co_return std::unexpected(std::move(resolved.error()));
+            }
+            if (!*resolved) {
+                diagnosed_symlink_failure = entry.path;
                 continue;
             }
-            auto target_path = contained_async_path(fs, *canonical);
-            if (!target_path) {
+            if ((*resolved)->target_kind != harness::FileKind::File) {
                 continue;
             }
-            auto target_info = co_await std::move(fs.fileInfo(*target_path, stop_token));
-            if (!target_info) {
-                if (async_aborted(target_info.error())) {
-                    co_return std::unexpected(std::move(target_info.error()));
-                }
-                continue;
-            }
-            if (target_info->kind != harness::FileKind::File) {
-                continue;
-            }
-            actual_file_path = std::move(*target_path);
+            actual_file_path = std::move((*resolved)->canonical_path);
         } else if (entry.kind != harness::FileKind::File) {
             continue;
         }
@@ -450,29 +471,22 @@ namespace {
         if (entry.name.empty() || entry.name.front() == '.' || entry.name == "node_modules") {
             continue;
         }
+        if (diagnosed_symlink_failure && entry.path == *diagnosed_symlink_failure) {
+            continue;
+        }
         harness::FileKind kind = entry.kind;
         std::string actual_entry_path = async_read_path(fs, entry.path);
         if (kind == harness::FileKind::Symlink) {
-            auto canonical = co_await std::move(fs.canonicalPath(actual_entry_path, stop_token));
-            if (!canonical) {
-                if (async_aborted(canonical.error())) {
-                    co_return std::unexpected(std::move(canonical.error()));
-                }
+            auto resolved = co_await std::move(to_async_result(resolve_symlink_target_task(
+                    fs, std::move(actual_entry_path), entry.path, result.diagnostics, stop_token)));
+            if (!resolved) {
+                co_return std::unexpected(std::move(resolved.error()));
+            }
+            if (!*resolved) {
                 continue;
             }
-            auto target_path = contained_async_path(fs, *canonical);
-            if (!target_path) {
-                continue;
-            }
-            auto target_info = co_await std::move(fs.fileInfo(*target_path, stop_token));
-            if (!target_info) {
-                if (async_aborted(target_info.error())) {
-                    co_return std::unexpected(std::move(target_info.error()));
-                }
-                continue;
-            }
-            kind = target_info->kind;
-            actual_entry_path = std::move(*target_path);
+            kind = (*resolved)->target_kind;
+            actual_entry_path = std::move((*resolved)->canonical_path);
         }
 
         const auto display_entry_path = display_dir_path + "/" + entry.name;
@@ -553,26 +567,16 @@ namespace {
         harness::FileKind kind = info->kind;
         std::string spec_path = dir_path;
         if (kind == harness::FileKind::Symlink) {
-            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, spec_path), stop_token));
-            if (!canonical) {
-                if (async_aborted(canonical.error())) {
-                    co_return std::unexpected(std::move(canonical.error()));
-                }
+            auto resolved = co_await std::move(to_async_result(resolve_symlink_target_task(
+                    fs, async_read_path(fs, spec_path), dir_path, result.diagnostics, stop_token)));
+            if (!resolved) {
+                co_return std::unexpected(std::move(resolved.error()));
+            }
+            if (!*resolved) {
                 continue;
             }
-            auto target_path = contained_async_path(fs, *canonical);
-            if (!target_path) {
-                continue;
-            }
-            auto target = co_await std::move(fs.fileInfo(*target_path, stop_token));
-            if (!target) {
-                if (async_aborted(target.error())) {
-                    co_return std::unexpected(std::move(target.error()));
-                }
-                continue;
-            }
-            kind = target->kind;
-            spec_path = std::move(*target_path);
+            kind = (*resolved)->target_kind;
+            spec_path = std::move((*resolved)->canonical_path);
         }
 
         if (kind == harness::FileKind::File) {

@@ -757,7 +757,8 @@ TEST_CASE("async loadSkills reads a renamed in-root symlink file", "[coding_agen
     CHECK(result->diagnostics.empty());
 }
 
-TEST_CASE("async loadSkills rejects an outside symlink target", "[coding_agent][skill][async][issue559][spec]") {
+TEST_CASE("async loadSkills diagnoses symlink targets the capability refuses to resolve",
+        "[coding_agent][skill][async][issue559][issue701][spec]") {
     tests::FakeAsyncFileSystem filesystem("/workspace");
     filesystem.add_directory("scan");
     filesystem.add_symlink("scan/SKILL.md", "/outside/SKILL.md");
@@ -771,16 +772,26 @@ TEST_CASE("async loadSkills rejects an outside symlink target", "[coding_agent][
 
     REQUIRE(result);
     CHECK(result->skills.empty());
-    CHECK(result->diagnostics.empty());
+    // ADR 0057: the loader holds no workspace-target gate, so the
+    // capability's refusal surfaces as its own diagnostic instead of a
+    // silent skip.
+    std::vector<std::string> diagnosed_paths;
+    for (const auto& diagnostic : result->diagnostics) {
+        CHECK(diagnostic.code == coding_agent::SkillDiagnosticCode::file_info_failed);
+        CHECK(diagnostic.message.find("outside fake workspace") != std::string::npos);
+        diagnosed_paths.push_back(diagnostic.path);
+    }
+    std::sort(diagnosed_paths.begin(), diagnosed_paths.end());
+    CHECK(diagnosed_paths == std::vector<std::string>{"/workspace/scan/SKILL.md", "/workspace/scan/outside-directory"});
 }
 
-TEST_CASE("async loadSkills reads a renamed in-root symlink with the local adapter",
-        "[coding_agent][skill][async][local][issue559][spec]") {
+TEST_CASE("async loadSkills follows renamed symlinks with the local adapter",
+        "[coding_agent][skill][async][local][issue559][issue701][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside_workspace;
     workspace.write("real-skill/SKILL.md", "---\nname: real-skill\ndescription: Loaded locally.\n---\nBody.\n");
-    outside_workspace.write(
-            "outside-skill/SKILL.md", "---\nname: outside-skill\ndescription: Must not load.\n---\nBody.\n");
+    outside_workspace.write("outside-skill/SKILL.md",
+            "---\nname: outside-skill\ndescription: Loaded through an external symlink.\n---\nBody.\n");
     std::error_code error;
     std::filesystem::create_directories(workspace.path() / "scan", error);
     REQUIRE_FALSE(error);
@@ -799,9 +810,17 @@ TEST_CASE("async loadSkills reads a renamed in-root symlink with the local adapt
             }));
 
     REQUIRE(result);
-    REQUIRE(result->skills.size() == 1);
-    CHECK(result->skills.front().filePath == (workspace.path() / "scan" / "renamed-skill" / "SKILL.md").string());
-    CHECK(result->skills.front().baseDir == (workspace.path() / "scan" / "renamed-skill").string());
+    // ADR 0057: the loader holds no workspace-target gate — a symlink target
+    // outside the workspace resolves like any other absolute path. Both
+    // skills load with the aliased display paths, matching pi's join(dir,
+    // name) file paths.
+    REQUIRE(result->skills.size() == 2);
+    CHECK(result->skills[0].name == "outside-skill");
+    CHECK(result->skills[0].filePath == (workspace.path() / "scan" / "outside-skill" / "SKILL.md").string());
+    CHECK(result->skills[0].baseDir == (workspace.path() / "scan" / "outside-skill").string());
+    CHECK(result->skills[1].name == "real-skill");
+    CHECK(result->skills[1].filePath == (workspace.path() / "scan" / "renamed-skill" / "SKILL.md").string());
+    CHECK(result->skills[1].baseDir == (workspace.path() / "scan" / "renamed-skill").string());
     CHECK(result->diagnostics.empty());
 }
 
@@ -839,4 +858,125 @@ TEST_CASE("loadSkills loads skills from absolute paths outside the workspace roo
     CHECK(result.skills[1].filePath == (external.path() / "outside-file.md").string());
     CHECK(result.skills[1].baseDir == external.path().string());
     CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills loads an explicit skill file addressed through an absolute path containing ..",
+        "[coding_agent][skill][loader][issue701][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("skills/dotdot/SKILL.md",
+            "---\n"
+            "name: dotdot-skill\n"
+            "description: Addressed through a .. path.\n"
+            "---\n"
+            "Body.\n");
+
+    // ADR 0057: `..` segments resolve by lexical normalization — the same
+    // contract the capability enforces — rather than by rejection.
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+            {.path = fix.skillPath("skills/../skills/dotdot/SKILL.md"),
+                    .include_root_files = true,
+                    .source_context = {.source = "cli",
+                            .scope = coding_agent::SourceScope::Temporary,
+                            .base_dir = std::nullopt}},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "dotdot-skill");
+    CHECK(result.skills[0].filePath == fix.skillPath("skills/dotdot/SKILL.md"));
+    CHECK(result.skills[0].baseDir == fix.skillPath("skills/dotdot"));
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills loads skills from a directory addressed through an absolute path containing ..",
+        "[coding_agent][skill][loader][issue701][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("tree/nested/SKILL.md",
+            "---\n"
+            "name: nested-skill\n"
+            "description: Found through a .. directory path.\n"
+            "---\n"
+            "Body.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+            {.path = fix.skillPath("tree/../tree"), .include_root_files = false},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "nested-skill");
+    CHECK(result.skills[0].filePath == fix.skillPath("tree/nested/SKILL.md"));
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills follows a spec-level symlink to a skill directory outside the workspace",
+        "[coding_agent][skill][loader][issue701][spec]") {
+    SkillTestFixture fix;
+    tests::TempWorkspace external;
+    external.write("linked-skill/SKILL.md",
+            "---\n"
+            "name: linked-skill\n"
+            "description: Reached through an external symlink.\n"
+            "---\n"
+            "Body.\n");
+    std::error_code error;
+    std::filesystem::create_directory_symlink(external.path() / "linked-skill", fix.workspace.path() / "linked", error);
+    REQUIRE_FALSE(error);
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+            {.path = fix.skillPath("linked"), .include_root_files = true},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "linked-skill");
+    CHECK(result.skills[0].filePath == fix.skillPath("linked/SKILL.md"));
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills follows a symlinked SKILL.md to a file outside the workspace",
+        "[coding_agent][skill][loader][issue701][spec]") {
+    SkillTestFixture fix;
+    tests::TempWorkspace external;
+    external.write("outside-file.md",
+            "---\n"
+            "name: outside-file\n"
+            "description: SKILL.md symlinked outside the workspace.\n"
+            "---\n"
+            "Body.\n");
+    std::error_code error;
+    std::filesystem::create_directories(fix.workspace.path() / "scan", error);
+    REQUIRE_FALSE(error);
+    std::filesystem::create_symlink(
+            external.path() / "outside-file.md", fix.workspace.path() / "scan" / "SKILL.md", error);
+    REQUIRE_FALSE(error);
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+            {.path = fix.skillPath("scan"), .include_root_files = false},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "outside-file");
+    CHECK(result.skills[0].filePath == fix.skillPath("scan/SKILL.md"));
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills diagnoses a spec-level symlink the capability cannot resolve",
+        "[coding_agent][skill][loader][issue701][spec]") {
+    SkillTestFixture fix;
+    std::error_code error;
+    std::filesystem::create_directory_symlink(
+            fix.workspace.path() / "missing-target", fix.workspace.path() / "dangling", error);
+    REQUIRE_FALSE(error);
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+            {.path = fix.skillPath("dangling"), .include_root_files = true},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    CHECK(result.skills.empty());
+    REQUIRE(result.diagnostics.size() == 1);
+    CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::file_info_failed);
+    CHECK(result.diagnostics[0].path == "dangling");
 }
