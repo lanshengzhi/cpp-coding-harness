@@ -1,5 +1,5 @@
 #include "agent/harness/WorkspaceFileSystem.hpp"
-#include "support/ScopedEnvVar.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -596,8 +596,7 @@ TEST_CASE("WorkspaceFileSystem applies pi resolveToCwd preprocessing to read pat
     // "~" expands against $HOME (pi expandTilde) before resolution.
     tests::TempWorkspace fake_home;
     fake_home.write("documents/home.txt", "home body");
-    const tests::ScopedEnvVar home{"HOME", fake_home.path().string()};
-    REQUIRE(home.ok());
+    const tests::EnvVarGuard home{"HOME", fake_home.path().string()};
     auto tilde = fs->readTextFile("~/documents/home.txt");
     REQUIRE(tilde);
     CHECK(*tilde == "home body");

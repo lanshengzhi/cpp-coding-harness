@@ -4,6 +4,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
+#include <format>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -19,15 +20,11 @@ void remember_errno(int* failure_errno, int value) noexcept {
 } // namespace
 
 support::Expected<support::UniqueFd> WorkspaceFileSystem::open_workspace_root() const {
-    support::UniqueFd fd(::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
-    if (!fd) {
-        return std::unexpected(workspace_error("could not open workspace root: " + std::string(std::strerror(errno))));
-    }
-    return fd;
+    return open_root_directory(root_, "workspace root");
 }
 
 support::Expected<support::UniqueFd> WorkspaceFileSystem::open_root_directory(
-        const std::filesystem::path& root, int* failure_errno) const {
+        const std::filesystem::path& root, std::string_view description, int* failure_errno) const {
     if (failure_errno) {
         *failure_errno = 0;
     }
@@ -36,7 +33,7 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_root_directory(
     if (!fd) {
         remember_errno(failure_errno, open_error);
         return std::unexpected(
-                workspace_error("could not open root directory: " + std::string(std::strerror(open_error))));
+                workspace_error(std::format("could not open {}: {}", description, std::strerror(open_error))));
     }
     return fd;
 }
@@ -126,8 +123,7 @@ support::Expected<void> WorkspaceFileSystem::validate_directory(const std::files
     // Roots (the workspace root or a filesystem root) have no addressable
     // parent; opening them directly is the validation.
     if (target == root_ || target == target.root_path()) {
-        auto root_guard = open_root_directory(target);
-        if (!root_guard) {
+        if (auto root_guard = open_root_directory(target); !root_guard) {
             return std::unexpected(root_guard.error());
         }
         return {};

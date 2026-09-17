@@ -109,11 +109,13 @@ private:
     [[nodiscard]] support::Expected<std::filesystem::path> resolve_to_cwd(const std::string& requested) const;
 
     [[nodiscard]] support::Expected<support::UniqueFd> open_workspace_root() const;
-    /// Open a root path directly (O_DIRECTORY, no-follow). Roots have no
-    /// addressable parent, so the parent+filename walk cannot open them.
-    /// Reports the underlying errno through `failure_errno` when non-null.
-    [[nodiscard]] support::Expected<support::UniqueFd> open_root_directory(
-            const std::filesystem::path& root, int* failure_errno = nullptr) const;
+    /// Open a root path directly (O_DIRECTORY, no-follow), naming the root in
+    /// the failure message. Roots have no addressable parent, so the
+    /// parent+filename walk cannot open them. Reports the underlying errno
+    /// through `failure_errno` when non-null.
+    [[nodiscard]] support::Expected<support::UniqueFd> open_root_directory(const std::filesystem::path& root,
+            std::string_view description = "root directory",
+            int* failure_errno = nullptr) const;
     [[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
             const std::filesystem::path& target, bool create_missing, int* failure_errno = nullptr) const;
     [[nodiscard]] support::Expected<support::UniqueFd> walk_child_directories(support::UniqueFd base,

@@ -401,7 +401,7 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
     // parent; open them directly instead of the parent+filename walk.
     if (*resolved == root_ || *resolved == resolved->root_path()) {
         int root_errno = 0;
-        auto root_fd = open_root_directory(*resolved, &root_errno);
+        auto root_fd = open_root_directory(*resolved, "root directory", &root_errno);
         if (!root_fd) {
             if (root_errno == ENOENT) {
                 return std::unexpected(FileError{
@@ -470,11 +470,11 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
     // Roots (the workspace root or a filesystem root) have no addressable
     // parent; open them directly instead of the parent+filename walk.
     if (*resolved == root_ || *resolved == resolved->root_path()) {
-        auto root_fd = open_root_directory(*resolved);
-        if (!root_fd) {
+        if (auto root_fd = open_root_directory(*resolved); !root_fd) {
             return std::unexpected(util_error_to_file_error(root_fd.error(), path));
+        } else {
+            directory_fd = std::move(*root_fd);
         }
-        directory_fd = std::move(*root_fd);
     } else {
         int parent_errno = 0;
         auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
@@ -622,8 +622,7 @@ std::expected<bool, FileError> WorkspaceFileSystem::exists(const std::string& pa
     // Roots (the workspace root or a filesystem root) have no addressable
     // parent; opening them directly answers existence.
     if (*resolved == root_ || *resolved == resolved->root_path()) {
-        auto root_fd = open_root_directory(*resolved);
-        if (!root_fd) {
+        if (auto root_fd = open_root_directory(*resolved); !root_fd) {
             return std::unexpected(util_error_to_file_error(root_fd.error(), path));
         }
         return true;

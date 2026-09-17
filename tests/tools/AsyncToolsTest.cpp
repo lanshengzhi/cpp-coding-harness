@@ -1,4 +1,4 @@
-#include "support/ScopedEnvVar.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalFileSystem.hpp>
@@ -710,8 +710,7 @@ TEST_CASE("async read tool strips '@' prefixes and expands '~' on external paths
     // "~" expands against $HOME before resolution.
     tests::TempWorkspace fake_home;
     fake_home.write("notes/home.md", "home body");
-    const tests::ScopedEnvVar home{"HOME", fake_home.path().string()};
-    REQUIRE(home.ok());
+    const tests::EnvVarGuard home{"HOME", fake_home.path().string()};
     auto tilde_result = run_tool([&]() {
         return tool.execute(
                 invocation("read", "{\"path\":\"~/notes/home.md\"}"), std::stop_token{}, agent::ToolUpdateSink{});
