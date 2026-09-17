@@ -1,3 +1,4 @@
+#include "support/ScopedEnvVar.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalFileSystem.hpp>
@@ -190,7 +191,7 @@ TEST_CASE("built-in tools default to exclusive execution", "[tools][async][spec]
     CHECK(bash.concurrency == agent::ToolConcurrency::Exclusive);
 }
 
-TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6][spec]") {
+TEST_CASE("async read_file tool uses Glaze typed args", "[tools][async][u6][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "line1\nline2\n");
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
@@ -680,6 +681,44 @@ TEST_CASE("async read tool serves absolute paths inside and outside the workspac
     });
     REQUIRE(missing);
     CHECK(missing->is_error);
+}
+
+TEST_CASE("async read tool strips '@' prefixes and expands '~' on external paths", "[tools][async][issue699][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("docs/file.md", "mention body");
+
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    // No workspace or skill-root allowlist remains in the tool contract (ADR
+    // 0057); the path schema carries pi's read.ts wording (verbatim).
+    CHECK(tool.definition.description == "Read a text file at a relative or absolute path");
+    CHECK(tool.definition.parameters.at("properties").at("path").at("description").get<std::string>() ==
+            "Path to the file to read (relative or absolute)");
+
+    // Leading "@" prompt mentions strip before resolution (ADR 0057).
+    const auto mentioned = "@" + (outside.path() / "docs" / "file.md").string();
+    auto at_result = run_tool([&]() {
+        return tool.execute(
+                invocation("read", "{\"path\":\"" + mentioned + "\"}"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+    REQUIRE(at_result);
+    CHECK_FALSE(at_result->is_error);
+    CHECK(ai::text_from_content(at_result->content).find("mention body") != std::string::npos);
+
+    // "~" expands against $HOME before resolution.
+    tests::TempWorkspace fake_home;
+    fake_home.write("notes/home.md", "home body");
+    const tests::ScopedEnvVar home{"HOME", fake_home.path().string()};
+    REQUIRE(home.ok());
+    auto tilde_result = run_tool([&]() {
+        return tool.execute(
+                invocation("read", "{\"path\":\"~/notes/home.md\"}"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+    REQUIRE(tilde_result);
+    CHECK_FALSE(tilde_result->is_error);
+    CHECK(ai::text_from_content(tilde_result->content).find("home body") != std::string::npos);
 }
 
 TEST_CASE("async write tool writes an absolute path outside the workspace with pi wording",

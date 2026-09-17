@@ -1,4 +1,5 @@
 #include "support/FakeAsyncFileSystem.hpp"
+#include "support/ScopedEnvVar.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/agent/harness/LocalFileSystem.hpp>
@@ -407,6 +408,78 @@ TEST_CASE("async local filesystem honors absolute paths outside the workspace",
     auto read_back = runtime.run(filesystem.readTextFile(target, std::stop_token{}));
     REQUIRE(read_back);
     CHECK(*read_back == "created-appended");
+    runtime.close();
+}
+
+TEST_CASE("async local filesystem operates on external absolute paths uniformly",
+        "[harness][async][u6][spec][issue699]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("dir/note.txt", "l1\nl2\n");
+    TestRuntime runtime;
+    harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
+
+    // No containment (ADR 0057): metadata, listing, existence, creation, and
+    // removal all operate on valid external absolute paths.
+    const auto dir = (outside.path() / "dir").string();
+
+    auto info = runtime.run(filesystem.fileInfo(dir + "/note.txt", {}));
+    REQUIRE(info);
+    CHECK(info->kind == harness::FileKind::File);
+    CHECK(info->size == 6);
+
+    auto listing = runtime.run(filesystem.listDir(dir, {}));
+    REQUIRE(listing);
+    CHECK(listing->size() == 1);
+
+    auto present = runtime.run(filesystem.exists(dir + "/note.txt", {}));
+    REQUIRE(present);
+    CHECK(*present);
+
+    auto created = runtime.run(filesystem.createDir(dir + "/nested", true, {}));
+    CHECK(created);
+    std::error_code created_ec;
+    CHECK(std::filesystem::is_directory(outside.path() / "dir" / "nested", created_ec));
+
+    auto lines = runtime.run(filesystem.readTextLines(dir + "/note.txt", std::nullopt, {}));
+    REQUIRE(lines);
+    CHECK(lines->size() == 2);
+
+    auto removed = runtime.run(filesystem.remove(dir + "/nested", true, {}));
+    CHECK(removed);
+    std::error_code removed_ec;
+    CHECK_FALSE(std::filesystem::exists(outside.path() / "dir" / "nested", removed_ec));
+
+    runtime.close();
+}
+
+TEST_CASE("async local filesystem strips '@' prefixes and expands '~' on read paths",
+        "[harness][async][u6][spec][issue699]") {
+    tests::TempWorkspace workspace;
+    workspace.write("local.txt", "local");
+    tests::TempWorkspace outside;
+    outside.write("external.txt", "external");
+    TestRuntime runtime;
+    harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
+
+    // pi resolveToCwd preprocessing (ADR 0057): leading "@" mention prefixes
+    // strip before resolution, and "~" expands against $HOME.
+    auto at_relative = runtime.run(filesystem.readTextFile("@local.txt", {}));
+    REQUIRE(at_relative);
+    CHECK(*at_relative == "local");
+
+    auto at_absolute = runtime.run(filesystem.readTextFile("@" + (outside.path() / "external.txt").string(), {}));
+    REQUIRE(at_absolute);
+    CHECK(*at_absolute == "external");
+
+    tests::TempWorkspace fake_home;
+    fake_home.write("home.txt", "home body");
+    const tests::ScopedEnvVar home{"HOME", fake_home.path().string()};
+    REQUIRE(home.ok());
+    auto tilde = runtime.run(filesystem.readTextFile("~/home.txt", {}));
+    REQUIRE(tilde);
+    CHECK(*tilde == "home body");
+
     runtime.close();
 }
 

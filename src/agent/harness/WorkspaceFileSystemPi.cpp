@@ -35,11 +35,10 @@ std::expected<std::string, FileError> WorkspaceFileSystem::joinPath(const std::v
         }
         result /= part;
     }
-    auto rel = result.lexically_normal().lexically_relative(root_);
-    if (rel.is_absolute() || (!rel.empty() && *rel.begin() == "..")) {
-        return std::unexpected(FileError{FileErrorCode::Invalid, "path escapes workspace", std::nullopt});
-    }
-    return result.string();
+    // No containment (ADR 0057): segments join against the workspace root
+    // and normalize lexically; results landing outside the root are
+    // returned, not rejected.
+    return result.lexically_normal().string();
 }
 
 std::expected<std::string, FileError> WorkspaceFileSystem::readTextFile(
@@ -627,8 +626,12 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(const std::string&
         return {};
     }
 
-    auto parent_fd = open_parent_directory(*resolved, recursive);
+    int parent_errno = 0;
+    auto parent_fd = open_parent_directory(*resolved, recursive, &parent_errno);
     if (!parent_fd) {
+        if (parent_errno == ENOENT) {
+            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+        }
         return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
     }
     const auto filename = resolved->filename().string();
@@ -665,8 +668,12 @@ std::expected<void, FileError> WorkspaceFileSystem::remove(
         return std::unexpected(FileError{FileErrorCode::Invalid, "cannot remove filesystem root", std::string{path}});
     }
 
-    auto parent_fd = open_parent_directory(*resolved, false);
+    int parent_errno = 0;
+    auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
     if (!parent_fd) {
+        if (parent_errno == ENOENT) {
+            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+        }
         return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
     }
 

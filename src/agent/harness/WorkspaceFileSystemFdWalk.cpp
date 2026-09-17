@@ -85,9 +85,6 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::walk_child_directories
         if (part == "." || part.empty()) {
             continue;
         }
-        if (part == "..") {
-            return std::unexpected(workspace_error("parent path escapes workspace"));
-        }
 
         support::UniqueFd next_fd(
                 ::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));

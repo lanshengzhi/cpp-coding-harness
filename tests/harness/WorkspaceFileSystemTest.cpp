@@ -1,4 +1,5 @@
 #include "agent/harness/WorkspaceFileSystem.hpp"
+#include "support/ScopedEnvVar.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -409,6 +410,23 @@ TEST_CASE("WorkspaceFileSystem absolutePath and joinPath", "[harness][filesystem
     CHECK(*joined == (workspace.path() / "sub" / "file.txt").string());
 }
 
+TEST_CASE("WorkspaceFileSystem joinPath joins segments without workspace containment",
+        "[harness][filesystem][u2][spec][issue699]") {
+    tests::TempWorkspace workspace;
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    // No containment (ADR 0057): joined segments that normalize outside the
+    // workspace root are returned after lexical normalization, not rejected.
+    auto escaped = fs->joinPath({"..", "sibling.txt"});
+    REQUIRE(escaped);
+    CHECK(*escaped == (workspace.path().parent_path() / "sibling.txt").string());
+
+    auto absolute = fs->joinPath({"/tmp", "joined.txt"});
+    REQUIRE(absolute);
+    CHECK(*absolute == "/tmp/joined.txt");
+}
+
 TEST_CASE("WorkspaceFileSystem accepts absolute paths inside the workspace",
         "[harness][filesystem][u2][spec][issue618]") {
     tests::TempWorkspace workspace;
@@ -454,6 +472,98 @@ TEST_CASE("WorkspaceFileSystem honors absolute paths outside the workspace",
     auto missing = fs->readTextFile((outside.path() / "nope.txt").string());
     REQUIRE_FALSE(missing);
     CHECK(missing.error().code == harness::FileErrorCode::NotFound);
+}
+
+TEST_CASE("WorkspaceFileSystem metadata listing and mutation operate outside the workspace",
+        "[harness][filesystem][u2][spec][issue699]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("dir/note.txt", "l1\nl2\nl3\n");
+    outside.write("dir/bin.dat", std::string{"\x01\x02", 2});
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    // No containment (ADR 0057): every operation accepts a valid external
+    // absolute path and surfaces ordinary OS-level results.
+    const auto dir = (outside.path() / "dir").string();
+
+    auto info = fs->fileInfo(dir + "/note.txt");
+    REQUIRE(info);
+    CHECK(info->name == "note.txt");
+    CHECK(info->kind == harness::FileKind::File);
+    CHECK(info->size == 9);
+
+    auto listing = fs->listDir(dir);
+    REQUIRE(listing);
+    CHECK(listing->size() == 2);
+
+    auto present = fs->exists(dir + "/note.txt");
+    REQUIRE(present);
+    CHECK(*present);
+    auto absent = fs->exists(dir + "/missing.txt");
+    REQUIRE(absent);
+    CHECK_FALSE(*absent);
+
+    auto lines = fs->readTextLines(dir + "/note.txt");
+    REQUIRE(lines);
+    CHECK(lines->size() == 3);
+
+    auto binary = fs->readBinaryFile(dir + "/bin.dat");
+    REQUIRE(binary);
+    CHECK(binary->size() == 2);
+
+    auto created = fs->createDir(dir + "/new/nested", true);
+    CHECK(created);
+    std::error_code created_ec;
+    CHECK(std::filesystem::is_directory(outside.path() / "dir" / "new" / "nested", created_ec));
+
+    // A missing external parent surfaces the OS-level NotFound, not a
+    // containment rejection.
+    auto missing_create = fs->createDir(dir + "/absent/nested", false);
+    REQUIRE_FALSE(missing_create);
+    CHECK(missing_create.error().code == harness::FileErrorCode::NotFound);
+    auto missing_remove = fs->remove(dir + "/absent/deep.txt");
+    REQUIRE_FALSE(missing_remove);
+    CHECK(missing_remove.error().code == harness::FileErrorCode::NotFound);
+
+    auto removed_file = fs->remove(dir + "/bin.dat");
+    CHECK(removed_file);
+    std::error_code bin_ec;
+    CHECK_FALSE(std::filesystem::exists(outside.path() / "dir" / "bin.dat", bin_ec));
+
+    auto removed_tree = fs->remove(dir + "/new", true);
+    CHECK(removed_tree);
+    std::error_code tree_ec;
+    CHECK_FALSE(std::filesystem::exists(outside.path() / "dir" / "new", tree_ec));
+}
+
+TEST_CASE("WorkspaceFileSystem applies pi resolveToCwd preprocessing to read paths",
+        "[harness][filesystem][u2][spec][issue699]") {
+    tests::TempWorkspace workspace;
+    workspace.write("local.txt", "local");
+    tests::TempWorkspace outside;
+    outside.write("external.txt", "external");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    // Leading "@" mention prefixes strip before resolution (pi
+    // normalizePath), for workspace-relative and absolute read targets.
+    auto at_relative = fs->readTextFile("@local.txt");
+    REQUIRE(at_relative);
+    CHECK(*at_relative == "local");
+
+    auto at_absolute = fs->readTextFile("@" + (outside.path() / "external.txt").string());
+    REQUIRE(at_absolute);
+    CHECK(*at_absolute == "external");
+
+    // "~" expands against $HOME (pi expandTilde) before resolution.
+    tests::TempWorkspace fake_home;
+    fake_home.write("documents/home.txt", "home body");
+    const tests::ScopedEnvVar home{"HOME", fake_home.path().string()};
+    REQUIRE(home.ok());
+    auto tilde = fs->readTextFile("~/documents/home.txt");
+    REQUIRE(tilde);
+    CHECK(*tilde == "home body");
 }
 
 TEST_CASE("WorkspaceFileSystem resolves '..' segments lexically against the workspace root",
