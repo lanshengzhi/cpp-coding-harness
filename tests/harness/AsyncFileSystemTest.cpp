@@ -182,10 +182,12 @@ TEST_CASE("complete filesystem fake models success cancellation and typed failur
     CHECK(cleanup_result->error().code == harness::FileErrorCode::ResourceLimit);
 }
 
-TEST_CASE("Local filesystem adapter preserves containment and cancellation",
-        "[harness][filesystem][local][issue558][spec]") {
+TEST_CASE("Local filesystem adapter resolves paths uniformly and preserves cancellation",
+        "[harness][filesystem][local][issue558][issue696][issue698][spec]") {
     tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
     workspace.write("nested/note.txt", "hello");
+    outside.write("escape.txt", "outside");
     TestRuntime runtime;
     harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
 
@@ -193,9 +195,17 @@ TEST_CASE("Local filesystem adapter preserves containment and cancellation",
     REQUIRE(read);
     CHECK(*read == "hello");
 
-    auto escaped = runtime.run(filesystem.readTextFile("../outside.txt", {}));
-    REQUIRE_FALSE(escaped);
-    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+    // Uniform pi resolveToCwd resolution (ADR 0057): absolute paths outside
+    // the workspace read like any other path.
+    auto absolute = runtime.run(filesystem.readTextFile((outside.path() / "escape.txt").string(), {}));
+    REQUIRE(absolute);
+    CHECK(*absolute == "outside");
+
+    // A missing path outside the workspace surfaces the OS-level NotFound,
+    // not a containment error.
+    auto missing = runtime.run(filesystem.readTextFile("../missing-outside.txt", {}));
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().code == harness::FileErrorCode::NotFound);
 
     std::stop_source stop_source;
     stop_source.request_stop();
@@ -331,7 +341,6 @@ TEST_CASE("every async filesystem operation observes a pre-requested cancellatio
     check_file_operation_aborted(runtime.run(filesystem.absolutePath("note.txt", stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.joinPath({"nested", "note.txt"}, stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.readTextFile("note.txt", stop_token)));
-    check_file_operation_aborted(runtime.run(filesystem.read_text_file_for_write("note.txt", stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.readTextLines("note.txt", std::nullopt, stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.readBinaryFile("note.txt", stop_token)));
     check_file_operation_aborted(runtime.run(filesystem.writeFile("note.txt", std::string{"changed"}, stop_token)));
@@ -362,30 +371,32 @@ TEST_CASE("async local filesystem adapter preserves file read and write safety",
     REQUIRE(read);
     CHECK(*read == "hello");
 
+    // Uniform resolution (ADR 0057): ".." resolves lexically against the
+    // workspace root; a missing target surfaces OS-level NotFound rather
+    // than a containment error.
     auto escaped = runtime.run(filesystem.readTextFile("../outside.txt", std::stop_token{}));
     REQUIRE_FALSE(escaped);
-    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK(escaped.error().code == harness::FileErrorCode::NotFound);
     runtime.close();
 }
 
-TEST_CASE("async local filesystem honors absolute write-scoped paths outside the workspace",
-        "[harness][async][u6][spec][issue619]") {
+TEST_CASE("async local filesystem honors absolute paths outside the workspace",
+        "[harness][async][u6][spec][issue619][issue696][issue698]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside;
     outside.write("scratch/log.txt", "first\n");
     TestRuntime runtime;
     harness::AsyncLocalFileSystem filesystem(runtime.make_target(), workspace.path());
 
-    // pi resolveToCwd semantics (#619): writeFile, appendFile, and the edit
-    // read-modify-write read honor absolute paths anywhere; the contained
-    // read scope is unchanged.
+    // Uniform pi resolveToCwd semantics (ADR 0057): read, write, and append
+    // all honor absolute paths anywhere; there is no separate write scope.
     const auto target = (outside.path() / "nested" / "created.txt").string();
     auto written = runtime.run(filesystem.writeFile(target, std::string{"created"}, std::stop_token{}));
     REQUIRE(written);
     CHECK(outside.read("nested/created.txt") == "created");
 
-    auto read = runtime.run(
-            filesystem.read_text_file_for_write((outside.path() / "scratch" / "log.txt").string(), std::stop_token{}));
+    auto read =
+            runtime.run(filesystem.readTextFile((outside.path() / "scratch" / "log.txt").string(), std::stop_token{}));
     REQUIRE(read);
     CHECK(*read == "first\n");
 
@@ -393,9 +404,9 @@ TEST_CASE("async local filesystem honors absolute write-scoped paths outside the
     REQUIRE(appended);
     CHECK(outside.read("nested/created.txt") == "created-appended");
 
-    auto blocked = runtime.run(filesystem.readTextFile(target, std::stop_token{}));
-    REQUIRE_FALSE(blocked);
-    CHECK(blocked.error().code == harness::FileErrorCode::PermissionDenied);
+    auto read_back = runtime.run(filesystem.readTextFile(target, std::stop_token{}));
+    REQUIRE(read_back);
+    CHECK(*read_back == "created-appended");
     runtime.close();
 }
 

@@ -659,15 +659,42 @@ TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3][spec]") {
     CHECK(result->exitCode == 0);
 }
 
-TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3][spec]") {
+TEST_CASE("pi-shaped exec honors cwd outside the workspace", "[harness][u3][issue696][issue698][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("note.txt", "outside");
+    harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
+
+    // The shell working directory resolves through the same pi resolveToCwd
+    // contract as every other path (ADR 0057): absolute paths anywhere, and
+    // ".." segments normalized lexically against the workspace root.
+    harness::ExecOptions absolute;
+    absolute.cwd = outside.path().string();
+    auto result = run_awaitable_pi(shell.exec("cat note.txt", std::move(absolute)));
+    REQUIRE(result);
+    CHECK(result->stdout_output.find("outside") != std::string::npos);
+    CHECK(result->exitCode == 0);
+
+    harness::ExecOptions relative;
+    relative.cwd = "../" + outside.path().filename().string();
+    auto escaped = run_awaitable_pi(shell.exec("cat note.txt", std::move(relative)));
+    REQUIRE(escaped);
+    CHECK(escaped->stdout_output.find("outside") != std::string::npos);
+    CHECK(escaped->exitCode == 0);
+}
+
+TEST_CASE("pi-shaped exec honors filesystem-root cwd", "[harness][u3][issue698][spec]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true);
 
+    // The filesystem root resolves like any other path even though the
+    // parent+filename walk cannot address it.
     harness::ExecOptions opts;
-    opts.cwd = "../outside";
+    opts.cwd = "/";
     auto result = run_awaitable_pi(shell.exec("pwd", std::move(opts)));
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == harness::ExecutionErrorCode::SpawnError);
+    REQUIRE(result);
+    CHECK(result->stdout_output == "/\n");
+    CHECK(result->exitCode == 0);
 }
 
 TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[harness][u3][spec]") {

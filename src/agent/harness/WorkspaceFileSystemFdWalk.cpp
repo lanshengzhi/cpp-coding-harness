@@ -26,6 +26,14 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_workspace_root() 
     return fd;
 }
 
+support::Expected<support::UniqueFd> WorkspaceFileSystem::open_root_directory(const std::filesystem::path& root) const {
+    support::UniqueFd fd(::open(root.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    if (!fd) {
+        return std::unexpected(workspace_error("could not open root directory: " + std::string(std::strerror(errno))));
+    }
+    return fd;
+}
+
 support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
         const std::filesystem::path& target, bool create_missing, int* failure_errno) const {
     if (failure_errno) {
@@ -35,10 +43,10 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::open_parent_directory(
     const auto parent = target.parent_path().lexically_normal();
     const auto relative = parent.lexically_relative(root_);
     if (!relative.empty() && relative != "." && (relative.is_absolute() || *relative.begin() == "..")) {
-        // Write-scoped operations honor absolute paths outside the workspace
-        // (#619): anchor the same per-component no-follow walk at the
+        // Uniform pi resolveToCwd resolution honors absolute paths anywhere
+        // (ADR 0057): anchor the same per-component no-follow walk at the
         // filesystem root. Resolution is the authorization gate; this branch
-        // is mechanism only, reachable today only for write-scoped targets.
+        // is mechanism only.
         support::UniqueFd filesystem_root(::open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
         if (!filesystem_root) {
             remember_errno(failure_errno, errno);
@@ -110,44 +118,11 @@ support::Expected<support::UniqueFd> WorkspaceFileSystem::walk_child_directories
     return current_guard;
 }
 
-support::Expected<support::UniqueFd> WorkspaceFileSystem::open_authorized_skill_parent(
-        const std::filesystem::path& target, int* failure_errno) const {
-    if (failure_errno != nullptr) {
-        *failure_errno = 0;
-    }
-    const std::filesystem::path* authorizing = nullptr;
-    // The snapshot is bound to a local so the borrowed authorizing pointer
-    // stays valid across the open below even if a concurrent skill refresh
-    // replaces the set; resolve-time and open-time authorization then also
-    // observe the same roots.
-    std::shared_ptr<const std::vector<std::filesystem::path>> skill_snapshot;
-    if (skill_read_roots_ != nullptr) {
-        skill_snapshot = skill_read_roots_->snapshot();
-        authorizing = authorizing_skill_root(target, *skill_snapshot);
-    }
-    if (authorizing == nullptr) {
-        return std::unexpected(workspace_error("no loaded skill directory authorizes: " + target.string()));
-    }
-    // The authorizing root opens without following a final symlink, so a
-    // symlinked skill directory fails closed here; intermediate components
-    // stay no-follow through the shared walk below.
-    support::UniqueFd base_guard(::open(authorizing->c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
-    if (!base_guard) {
-        remember_errno(failure_errno, errno);
-        return std::unexpected(workspace_error("could not open skill directory: " + std::string(std::strerror(errno))));
-    }
-    const auto relative = target.parent_path().lexically_relative(*authorizing);
-    if (relative.is_absolute() || (!relative.empty() && relative != "." && *relative.begin() == "..")) {
-        return std::unexpected(workspace_error("parent path escapes skill directory"));
-    }
-    // Reads never create directories: missing skill content surfaces as
-    // NotFound through the caller's parent_errno handling.
-    return walk_child_directories(std::move(base_guard), relative, /* create_missing */ false, failure_errno);
-}
-
 support::Expected<void> WorkspaceFileSystem::validate_directory(const std::filesystem::path& target) const {
-    if (target == root_) {
-        auto root_guard = open_workspace_root();
+    // Roots (the workspace root or a filesystem root) have no addressable
+    // parent; opening them directly is the validation.
+    if (target == root_ || target == target.root_path()) {
+        auto root_guard = open_root_directory(target);
         if (!root_guard) {
             return std::unexpected(root_guard.error());
         }

@@ -3,43 +3,12 @@
 #include "AsyncFileSystemOperations.hpp"
 #include "WorkspaceFileSystem.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <memory>
-#include <mutex>
 #include <utility>
 #include <vector>
 
 namespace cch::harness {
-
-void AuthorizedSkillRoots::set(std::vector<std::filesystem::path> roots) {
-    std::vector<std::filesystem::path> normalized;
-    normalized.reserve(roots.size());
-    for (auto& root : roots) {
-        if (root.empty() || !root.is_absolute()) {
-            continue;
-        }
-        auto candidate = root.lexically_normal();
-        if (candidate.filename().empty()) {
-            candidate = candidate.parent_path();
-        }
-        if (candidate == candidate.root_path()) {
-            // A filesystem root would authorize every absolute path.
-            continue;
-        }
-        if (std::ranges::find(normalized, candidate) == normalized.end()) {
-            normalized.push_back(std::move(candidate));
-        }
-    }
-    const auto fresh = std::make_shared<const std::vector<std::filesystem::path>>(std::move(normalized));
-    const std::lock_guard guard(mutex_);
-    roots_ = fresh;
-}
-
-std::shared_ptr<const std::vector<std::filesystem::path>> AuthorizedSkillRoots::snapshot() const {
-    const std::lock_guard guard(mutex_);
-    return roots_;
-}
 
 struct AsyncLocalFileSystem::Impl final {
     Impl(std::shared_ptr<RuntimeTarget> runtime_target, std::shared_ptr<WorkspaceFileSystem> filesystem)
@@ -49,11 +18,10 @@ struct AsyncLocalFileSystem::Impl final {
     std::shared_ptr<WorkspaceFileSystem> filesystem;
 };
 
-AsyncLocalFileSystem::AsyncLocalFileSystem(std::shared_ptr<RuntimeTarget> runtime_target,
-        std::filesystem::path workspace,
-        std::shared_ptr<const AuthorizedSkillRoots> skill_read_roots)
-    : impl_(std::make_shared<Impl>(std::move(runtime_target),
-              std::make_shared<WorkspaceFileSystem>(std::move(workspace), std::move(skill_read_roots)))) {}
+AsyncLocalFileSystem::AsyncLocalFileSystem(
+        std::shared_ptr<RuntimeTarget> runtime_target, std::filesystem::path workspace)
+    : impl_(std::make_shared<Impl>(
+              std::move(runtime_target), std::make_shared<WorkspaceFileSystem>(std::move(workspace)))) {}
 
 AsyncLocalFileSystem::AsyncLocalFileSystem(AsyncLocalFileSystem&&) noexcept = default;
 AsyncLocalFileSystem& AsyncLocalFileSystem::operator=(AsyncLocalFileSystem&&) noexcept = default;
@@ -94,17 +62,6 @@ support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::readTextFile(
             path,
             [path = std::move(path), stop_token](
                     const WorkspaceFileSystem& fs) { return fs.readTextFile(path, stop_token); });
-}
-
-support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::read_text_file_for_write(
-        std::string path, std::stop_token stop_token) {
-    return filesystem_detail::submit_filesystem_operation<std::string>(impl_->runtime_target,
-            impl_->filesystem,
-            filesystem_detail::file_read_charge(path.size()),
-            stop_token,
-            path,
-            [path = std::move(path), stop_token](
-                    const WorkspaceFileSystem& fs) { return fs.read_text_file_for_write(path, stop_token); });
 }
 
 support::AsyncResult<std::vector<std::string>, FileError> AsyncLocalFileSystem::readTextLines(

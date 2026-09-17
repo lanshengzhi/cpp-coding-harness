@@ -16,7 +16,7 @@
 namespace cch::harness {
 
 std::expected<std::string, FileError> WorkspaceFileSystem::absolutePath(const std::string& path) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
@@ -50,7 +50,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::readTextFile(
 std::expected<std::vector<std::string>, FileError> WorkspaceFileSystem::readTextLines(
         const std::string& path, std::optional<int> maxLines, std::stop_token stop_token) const {
     if (maxLines && *maxLines <= 0) {
-        auto resolved = resolve_addressed_path(path);
+        auto resolved = resolve_to_cwd(path);
         if (!resolved) {
             return std::unexpected(util_error_to_file_error(resolved.error(), path));
         }
@@ -283,7 +283,7 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
         }
     }
 
-    auto target = resolve_write_path(path);
+    auto target = resolve_to_cwd(path);
     if (!target) {
         return std::unexpected(util_error_to_file_error(target.error(), path));
     }
@@ -373,14 +373,16 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
 }
 
 std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::string& path) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
 
     struct stat st{};
-    if (*resolved == root_) {
-        auto root_fd = open_workspace_root();
+    // Roots (the workspace root or a filesystem root) have no addressable
+    // parent; open them directly instead of the parent+filename walk.
+    if (*resolved == root_ || *resolved == resolved->root_path()) {
+        auto root_fd = open_root_directory(*resolved);
         if (!root_fd || ::fstat(root_fd->get(), &st) != 0) {
             return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
         }
@@ -431,14 +433,16 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
 
 std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
         const std::string& path, std::stop_token stop_token) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
 
     support::UniqueFd directory_fd;
-    if (*resolved == root_) {
-        auto root_fd = open_workspace_root();
+    // Roots (the workspace root or a filesystem root) have no addressable
+    // parent; open them directly instead of the parent+filename walk.
+    if (*resolved == root_ || *resolved == resolved->root_path()) {
+        auto root_fd = open_root_directory(*resolved);
         if (!root_fd) {
             return std::unexpected(util_error_to_file_error(root_fd.error(), path));
         }
@@ -563,7 +567,7 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
 }
 
 std::expected<std::string, FileError> WorkspaceFileSystem::canonicalPath(const std::string& path) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
@@ -573,21 +577,19 @@ std::expected<std::string, FileError> WorkspaceFileSystem::canonicalPath(const s
         return std::unexpected(
                 FileError{FileErrorCode::NotFound, "could not canonicalize: " + path, std::string{path}});
     }
-    if (!inside_lexically(canonical)) {
-        return std::unexpected(
-                FileError{FileErrorCode::Invalid, "canonical path escapes workspace: " + path, std::string{path}});
-    }
     return canonical.string();
 }
 
 std::expected<bool, FileError> WorkspaceFileSystem::exists(const std::string& path) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
 
-    if (*resolved == root_) {
-        auto root_fd = open_workspace_root();
+    // Roots (the workspace root or a filesystem root) have no addressable
+    // parent; opening them directly answers existence.
+    if (*resolved == root_ || *resolved == resolved->root_path()) {
+        auto root_fd = open_root_directory(*resolved);
         if (!root_fd) {
             return std::unexpected(util_error_to_file_error(root_fd.error(), path));
         }
@@ -615,11 +617,13 @@ std::expected<bool, FileError> WorkspaceFileSystem::exists(const std::string& pa
 }
 
 std::expected<void, FileError> WorkspaceFileSystem::createDir(const std::string& path, bool recursive) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
-    if (*resolved == root_) {
+    if (*resolved == root_ || *resolved == resolved->root_path()) {
+        // The workspace root and every filesystem root already exist as
+        // directories.
         return {};
     }
 
@@ -650,12 +654,15 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(const std::string&
 
 std::expected<void, FileError> WorkspaceFileSystem::remove(
         const std::string& path, bool recursive, std::stop_token stop_token) const {
-    auto resolved = resolve_addressed_path(path);
+    auto resolved = resolve_to_cwd(path);
     if (!resolved) {
         return std::unexpected(util_error_to_file_error(resolved.error(), path));
     }
     if (*resolved == root_) {
         return std::unexpected(FileError{FileErrorCode::Invalid, "cannot remove workspace root", std::string{path}});
+    }
+    if (*resolved == resolved->root_path()) {
+        return std::unexpected(FileError{FileErrorCode::Invalid, "cannot remove filesystem root", std::string{path}});
     }
 
     auto parent_fd = open_parent_directory(*resolved, false);

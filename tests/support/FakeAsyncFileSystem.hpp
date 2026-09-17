@@ -101,13 +101,6 @@ public:
         return ready(node->second.content);
     }
 
-    support::AsyncResult<std::string, harness::FileError> read_text_file_for_write(
-            std::string path, std::stop_token stop_token) override {
-        // The fake models the contained read scope only; write-scoped reads
-        // reuse the same behavior for its workspace-relative fixtures.
-        return readTextFile(std::move(path), stop_token);
-    }
-
     support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(
             std::string path, std::optional<int> max_lines, std::stop_token stop_token) override {
         if (auto error = failure(stop_token, path)) {

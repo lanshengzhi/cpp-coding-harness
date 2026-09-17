@@ -252,10 +252,9 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> edit_
 
     // pi edit.ts: strip the BOM, detect and preserve the dominant line
     // ending, then apply every edit against the LF-normalized content. The
-    // read resolves through the write scope (pi resolveToCwd, #619) so edit
-    // can address any path writeFile can.
-    auto read = co_await support::detail::await_async_result(
-            filesystem->read_text_file_for_write(parsed->path, stop_token));
+    // read resolves through the same pi resolveToCwd path resolution as the
+    // write below (ADR 0057), so edit can address any path writeFile can.
+    auto read = co_await support::detail::await_async_result(filesystem->readTextFile(parsed->path, stop_token));
     if (!read) {
         co_return error_result_from(read.error());
     }

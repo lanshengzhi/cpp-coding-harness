@@ -15,10 +15,8 @@ namespace cch::harness {
 
 WorkspaceFileSystem::WorkspaceFileSystem() : temporary_state_(std::make_shared<TemporaryState>()) {}
 
-WorkspaceFileSystem::WorkspaceFileSystem(
-        std::filesystem::path workspace, std::shared_ptr<const AuthorizedSkillRoots> skill_read_roots)
-    : root_(canonicalized(std::move(workspace))), skill_read_roots_(std::move(skill_read_roots)),
-      temporary_state_(std::make_shared<TemporaryState>()) {}
+WorkspaceFileSystem::WorkspaceFileSystem(std::filesystem::path workspace)
+    : root_(canonicalized(std::move(workspace))), temporary_state_(std::make_shared<TemporaryState>()) {}
 
 support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::filesystem::path& workspace) {
     std::error_code ec;
@@ -26,90 +24,6 @@ support::Expected<WorkspaceFileSystem> WorkspaceFileSystem::create(const std::fi
         return std::unexpected(workspace_error("workspace does not exist or is not a directory"));
     }
     return WorkspaceFileSystem(workspace);
-}
-
-support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_addressed_path(
-        const std::string& requested) const {
-    if (requested.empty()) {
-        return std::unexpected(workspace_error(
-                "path is required; use a workspace-relative path, or an absolute path under " + root_.string()));
-    }
-    if (requested.find('\0') != std::string::npos) {
-        return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
-    }
-    std::filesystem::path queried(requested);
-    if (queried.is_absolute()) {
-        // Absolute paths are accepted when they normalize to a location inside
-        // the workspace root. Anything else stays rejected: the open-time
-        // symlink guards below still apply to accepted paths.
-        auto target = queried.lexically_normal();
-        if (target != root_ && target.filename().empty()) {
-            target = target.parent_path();
-        }
-        if (!inside_lexically(target)) {
-            return std::unexpected(
-                    workspace_error("path is outside the workspace: " + requested +
-                                    "; use a workspace-relative path, or an absolute path under " + root_.string()));
-        }
-        return target;
-    }
-    auto normalized = queried.lexically_normal();
-    for (const auto& part : normalized) {
-        if (part == "..") {
-            return std::unexpected(
-                    workspace_error("path escapes workspace: " + requested +
-                                    "; use a workspace-relative path, or an absolute path under " + root_.string()));
-        }
-    }
-    if (normalized == ".") {
-        return root_;
-    }
-    auto target = (root_ / normalized).lexically_normal();
-    if (target != root_ && target.filename().empty()) {
-        target = target.parent_path();
-    }
-    if (!inside_lexically(target)) {
-        return std::unexpected(
-                workspace_error("path escapes workspace: " + requested +
-                                "; use a workspace-relative path, or an absolute path under " + root_.string()));
-    }
-    return target;
-}
-
-std::expected<std::string, FileError> WorkspaceFileSystem::read_text_file_for_write(
-        const std::string& path, std::stop_token stop_token) const {
-    if (stop_token.stop_requested()) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::Aborted,
-                .message = "Operation aborted",
-                .path = std::string{path},
-        });
-    }
-
-    auto target = resolve_write_path(path);
-    if (!target) {
-        return std::unexpected(util_error_to_file_error(target.error(), path));
-    }
-
-    int parent_errno = 0;
-    auto parent_guard = open_parent_directory(*target, false, &parent_errno);
-    if (!parent_guard) {
-        if (parent_errno == ENOENT) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::NotFound,
-                    .message = "path not found: " + path,
-                    .path = std::string{path},
-            });
-        }
-        return std::unexpected(util_error_to_file_error(parent_guard.error(), path));
-    }
-
-    std::uintmax_t file_size = 0;
-    auto fd = open_regular_file_in_parent(parent_guard->get(), target->filename().string(), path, &file_size);
-    if (!fd) {
-        return std::unexpected(fd.error());
-    }
-    return read_bounded_from_open_file(fd->get(), file_size, path, kFileSystemCapacity.max_file_bytes, stop_token);
 }
 
 namespace {
@@ -148,14 +62,14 @@ namespace {
 
 } // namespace
 
-support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_write_path(const std::string& requested) const {
+support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_to_cwd(const std::string& requested) const {
     if (requested.empty()) {
         return std::unexpected(workspace_error("path is required; use a workspace-relative path or an absolute path"));
     }
     if (requested.find('\0') != std::string::npos) {
         return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
     }
-    // pi resolveToCwd semantics (#619): normalize unicode spaces, strip a
+    // pi resolveToCwd semantics (ADR 0057): normalize unicode spaces, strip a
     // leading "@" mention prefix, and expand "~" against $HOME (pi
     // normalizePath), then honor absolute paths after lexical normalization
     // regardless of containment; relative paths resolve against the
@@ -179,54 +93,6 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_write_path
     return target;
 }
 
-const std::filesystem::path* WorkspaceFileSystem::authorizing_skill_root(
-        const std::filesystem::path& target, const std::vector<std::filesystem::path>& roots) const {
-    const std::filesystem::path* best = nullptr;
-    std::size_t best_length = 0;
-    for (const auto& root : roots) {
-        const auto relative = target.lexically_relative(root);
-        if (relative.empty() || relative == "." || relative.is_absolute()) {
-            continue;
-        }
-        if (*relative.begin() == "..") {
-            continue;
-        }
-        // Longest authorizing root wins when roots nest.
-        const auto length = root.string().size();
-        if (best == nullptr || length > best_length) {
-            best = &root;
-            best_length = length;
-        }
-    }
-    return best;
-}
-
-support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_read_path(const std::string& requested) const {
-    if (requested.find('\0') != std::string::npos) {
-        return std::unexpected(workspace_error("NUL bytes are not allowed in paths"));
-    }
-    if (auto addressed = resolve_addressed_path(requested); addressed) {
-        return addressed;
-    } else {
-        auto error = std::move(addressed.error());
-        const std::filesystem::path queried(requested);
-        if (!queried.is_absolute()) {
-            return std::unexpected(std::move(error));
-        }
-        auto target = queried.lexically_normal();
-        if (target.filename().empty()) {
-            target = target.parent_path();
-        }
-        if (skill_read_roots_ != nullptr && authorizing_skill_root(target, *skill_read_roots_->snapshot()) != nullptr) {
-            return target;
-        }
-        return std::unexpected(
-                workspace_error("path is outside the workspace and no loaded skill directory: " + requested +
-                                "; use a workspace-relative path, an absolute path under " + root_.string() +
-                                ", or an absolute path under a loaded skill directory"));
-    }
-}
-
 std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_for_read(
         const std::string& requested, std::uintmax_t* size, std::stop_token stop_token) const {
     if (stop_token.stop_requested()) {
@@ -237,15 +103,13 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
         });
     }
 
-    auto target = resolve_read_path(requested);
+    auto target = resolve_to_cwd(requested);
     if (!target) {
         return std::unexpected(util_error_to_file_error(target.error(), requested));
     }
 
     int parent_errno = 0;
-    support::Expected<support::UniqueFd> parent_guard = inside_lexically(*target)
-                                                                ? open_parent_directory(*target, false, &parent_errno)
-                                                                : open_authorized_skill_parent(*target, &parent_errno);
+    auto parent_guard = open_parent_directory(*target, false, &parent_errno);
     if (!parent_guard) {
         if (parent_errno == ENOENT) {
             return std::unexpected(FileError{
@@ -411,7 +275,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_bounded_from_ope
 
 support::Expected<std::size_t> WorkspaceFileSystem::write_file(
         const std::string& requested, std::string_view content, bool create_parents, std::stop_token stop_token) const {
-    auto target = resolve_write_path(requested);
+    auto target = resolve_to_cwd(requested);
     if (!target) {
         return std::unexpected(target.error());
     }
@@ -464,27 +328,6 @@ FileError WorkspaceFileSystem::util_error_to_file_error(const support::Error& er
         break;
     }
     return FileError{code, error.message, std::string{path}};
-}
-
-bool WorkspaceFileSystem::inside(const std::filesystem::path& path) const {
-    std::error_code ec;
-    auto canonical = std::filesystem::weakly_canonical(path, ec);
-    if (ec) {
-        return false;
-    }
-    return inside_lexically(canonical);
-}
-
-bool WorkspaceFileSystem::inside_lexically(const std::filesystem::path& path) const {
-    auto rel = path.lexically_normal().lexically_relative(root_);
-    if (rel.empty() || rel == ".") {
-        return true;
-    }
-    if (rel.is_absolute()) {
-        return false;
-    }
-    auto first = rel.begin();
-    return first == rel.end() || *first != "..";
 }
 
 std::filesystem::path WorkspaceFileSystem::canonicalized(std::filesystem::path workspace) {

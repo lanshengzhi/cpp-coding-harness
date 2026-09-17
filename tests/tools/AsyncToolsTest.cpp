@@ -45,8 +45,7 @@ public:
     const std::filesystem::path& workspace() const override { return workspace_path_; }
     support::AsyncResult<std::string, harness::FileError> absolutePath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
     support::AsyncResult<std::string, harness::FileError> joinPath(std::vector<std::string>, std::stop_token) override { return ready_file(std::string{}); }
-    support::AsyncResult<std::string, harness::FileError> readTextFile(std::string, std::stop_token stop_token) override { last_stop_token = stop_token; return ready_file(std::string{}); }
-    support::AsyncResult<std::string, harness::FileError> read_text_file_for_write(
+    support::AsyncResult<std::string, harness::FileError> readTextFile(
             std::string, std::stop_token stop_token) override {
         last_stop_token = stop_token;
         return ready_file(std::string{});
@@ -642,16 +641,14 @@ TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", 
     CHECK(result->is_error);
 }
 
-TEST_CASE("async read tool serves absolute paths inside the workspace and under skill roots",
-        "[tools][async][issue618][issue629][spec]") {
+TEST_CASE("async read tool serves absolute paths inside and outside the workspace",
+        "[tools][async][issue618][issue696][issue698][spec]") {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace skill_home;
+    tests::TempWorkspace outside;
     workspace.write("local.txt", "local body");
-    skill_home.write("my-skill/SKILL.md", "skill body");
+    outside.write("my-skill/SKILL.md", "skill body");
 
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "my-skill"});
-    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path(), roots);
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
     const auto inside = (workspace.path() / "local.txt").string();
@@ -663,7 +660,9 @@ TEST_CASE("async read tool serves absolute paths inside the workspace and under 
     CHECK_FALSE(local->is_error);
     CHECK(ai::text_from_content(local->content).find("local body") != std::string::npos);
 
-    const auto skill_file = (skill_home.path() / "my-skill" / "SKILL.md").string();
+    // Skills and prompt mentions carrying absolute paths resolve without an
+    // authorization list (ADR 0057 retires the #629 skill-root allowlist).
+    const auto skill_file = (outside.path() / "my-skill" / "SKILL.md").string();
     auto skill = run_tool([&]() {
         return tool.execute(
                 invocation("read", "{\"path\":\"" + skill_file + "\"}"), std::stop_token{}, agent::ToolUpdateSink{});
@@ -672,12 +671,15 @@ TEST_CASE("async read tool serves absolute paths inside the workspace and under 
     CHECK_FALSE(skill->is_error);
     CHECK(ai::text_from_content(skill->content).find("skill body") != std::string::npos);
 
-    auto outside = run_tool([&]() {
+    // A missing outside file surfaces the OS-level error, not a containment
+    // rejection.
+    const auto missing_file = (outside.path() / "missing.md").string();
+    auto missing = run_tool([&]() {
         return tool.execute(
-                invocation("read", R"({"path":"/etc/hostname"})"), std::stop_token{}, agent::ToolUpdateSink{});
+                invocation("read", "{\"path\":\"" + missing_file + "\"}"), std::stop_token{}, agent::ToolUpdateSink{});
     });
-    REQUIRE(outside);
-    CHECK(outside->is_error);
+    REQUIRE(missing);
+    CHECK(missing->is_error);
 }
 
 TEST_CASE("async write tool writes an absolute path outside the workspace with pi wording",

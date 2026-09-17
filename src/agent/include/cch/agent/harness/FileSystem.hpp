@@ -132,17 +132,10 @@ public:
             std::vector<std::string> parts, std::stop_token stop_token) = 0;
 
     /// Read an entire UTF-8 text file, subject to the fixed file-byte limit.
-    /// Reads resolve through the contained read scope: the workspace plus the
-    /// session's authorized skill roots.
+    /// Paths resolve uniformly through pi `resolveToCwd` semantics (ADR
+    /// 0057): absolute paths are honored anywhere after lexical
+    /// normalization, relative paths resolve against the workspace root.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> readTextFile(
-            std::string path, std::stop_token stop_token) = 0;
-
-    /// The edit read-modify-write read: like `readTextFile` but resolved
-    /// through the write scope (pi `resolveToCwd`, #619): absolute paths are
-    /// honored after lexical normalization, relative paths resolve against
-    /// the workspace root. Ordinary reads keep using `readTextFile` so the
-    /// contained read scope and its revocation contract stay intact.
-    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> read_text_file_for_write(
             std::string path, std::stop_token stop_token) = 0;
 
     /// Read UTF-8 text lines, subject to fixed byte and line limits. maxLines
@@ -155,12 +148,12 @@ public:
             std::string path, std::stop_token stop_token) = 0;
 
     /// Create or overwrite a file, creating parent directories. Paths
-    /// resolve through the write scope (see `read_text_file_for_write`).
+    /// resolve through pi `resolveToCwd` (see `readTextFile`).
     [[nodiscard]] virtual support::AsyncResult<void, FileError> writeFile(
             std::string path, WriteContent content, std::stop_token stop_token) = 0;
 
     /// Create or append to a file, creating parent directories. Paths
-    /// resolve through the write scope (see `read_text_file_for_write`).
+    /// resolve through pi `resolveToCwd` (see `readTextFile`).
     [[nodiscard]] virtual support::AsyncResult<void, FileError> appendFile(
             std::string path, WriteContent content, std::stop_token stop_token) = 0;
 

@@ -4,41 +4,19 @@
 
 #include <filesystem>
 #include <memory>
-#include <mutex>
 #include <vector>
 
 namespace cch::harness {
 
 class RuntimeTarget;
 
-/// Deliberately shared live state (not a passive value contract): the set of
-/// out-of-workspace skill base directories the session tool filesystem serves
-/// reads from. Session Assembly replaces the set at construction and on every
-/// `/reload` skill refresh, so reads always observe the loaded skill set;
-/// revocation is the set no longer containing the root. Copy-on-write
-/// snapshots keep concurrent read-path lookups consistent.
-class AuthorizedSkillRoots final {
-public:
-    AuthorizedSkillRoots() = default;
-    // Normalizes entries to absolute lexical form. Non-absolute entries are
-    // dropped: skill base directories are absolute by loader contract.
-    void set(std::vector<std::filesystem::path> roots);
-    [[nodiscard]] std::shared_ptr<const std::vector<std::filesystem::path>> snapshot() const;
-
-private:
-    mutable std::mutex mutex_;
-    std::shared_ptr<const std::vector<std::filesystem::path>> roots_{
-            std::make_shared<const std::vector<std::filesystem::path>>()};
-};
-
 /// Local filesystem Adapter for the complete asynchronous filesystem
-/// capability. All containment-sensitive work delegates to the private
-/// WorkspaceFileSystem implementation through the adapter's private state.
+/// capability. All path resolution and filesystem work delegate to the
+/// private WorkspaceFileSystem implementation through the adapter's private
+/// state, resolving uniformly through pi `resolveToCwd` semantics (ADR 0057).
 class AsyncLocalFileSystem final : public AsyncFileSystem {
 public:
-    AsyncLocalFileSystem(std::shared_ptr<RuntimeTarget> runtime_target,
-            std::filesystem::path workspace,
-            std::shared_ptr<const AuthorizedSkillRoots> skill_read_roots = nullptr);
+    AsyncLocalFileSystem(std::shared_ptr<RuntimeTarget> runtime_target, std::filesystem::path workspace);
     AsyncLocalFileSystem(AsyncLocalFileSystem&&) noexcept;
     AsyncLocalFileSystem& operator=(AsyncLocalFileSystem&&) noexcept;
     ~AsyncLocalFileSystem() override;
@@ -52,8 +30,6 @@ public:
     [[nodiscard]] support::AsyncResult<std::string, FileError> joinPath(
             std::vector<std::string> parts, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<std::string, FileError> readTextFile(
-            std::string path, std::stop_token stop_token) override;
-    [[nodiscard]] support::AsyncResult<std::string, FileError> read_text_file_for_write(
             std::string path, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<std::vector<std::string>, FileError> readTextLines(
             std::string path, std::optional<int> maxLines, std::stop_token stop_token) override;

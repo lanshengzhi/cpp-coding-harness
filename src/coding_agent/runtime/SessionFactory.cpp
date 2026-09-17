@@ -1624,14 +1624,10 @@ struct PreparedAssemblyTarget final {
     // local capabilities; the former SDK host-provided environment injection
     // is gone.
     std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
-    // Tool reads serve the loaded skill directories alongside the workspace
-    // (#629); the set stays live so `/reload` refreshes it in place. Writes
-    // resolve with pi `resolveToCwd` semantics: absolute paths are honored
-    // anywhere after normalization (#619).
-    auto skill_read_roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    skill_read_roots->set(collect_skill_read_roots(skills));
-    auto filesystem =
-            std::make_shared<harness::AsyncLocalFileSystem>(plan.execution_runtime_target, workspace, skill_read_roots);
+    // All tool paths resolve with pi `resolveToCwd` semantics (ADR 0057):
+    // absolute paths are honored anywhere after normalization; there is no
+    // workspace containment or skill-root allowlist.
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(plan.execution_runtime_target, workspace);
     auto shell = std::make_shared<harness::AsyncLocalShell>(plan.execution_runtime_target,
             workspace,
             /* bash_available */ true,
@@ -1884,7 +1880,6 @@ struct PreparedAssemblyTarget final {
     services.model_runtime_owned = plan.model_runtime_owned;
     services.settings_manager = std::move(snapshot.manager);
     services.filesystem = std::move(filesystem);
-    services.skill_read_roots = std::move(skill_read_roots);
     services.runtime_target = plan.execution_runtime_target;
     services.user_shell = std::move(user_shell);
     if (!services.user_shell && plan.provide_user_shell) {

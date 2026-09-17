@@ -44,11 +44,6 @@ public:
         return immediate<std::string>(path, stop_token, [&] { return filesystem_.readTextFile(path); });
     }
 
-    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> read_text_file_for_write(
-            std::string path, std::stop_token stop_token) override {
-        return immediate<std::string>(path, stop_token, [&] { return filesystem_.read_text_file_for_write(path); });
-    }
-
     [[nodiscard]] support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(
             std::string path, std::optional<int> max_lines, std::stop_token stop_token) override {
         return immediate<std::vector<std::string>>(

@@ -1,7 +1,6 @@
 #include "agent/harness/WorkspaceFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/LocalFileSystem.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -431,32 +430,43 @@ TEST_CASE("WorkspaceFileSystem accepts absolute paths inside the workspace",
     CHECK(missing.error().code == harness::FileErrorCode::NotFound);
 }
 
-TEST_CASE("WorkspaceFileSystem rejects absolute paths outside the workspace",
-        "[harness][filesystem][u2][spec][issue618]") {
+TEST_CASE("WorkspaceFileSystem honors absolute paths outside the workspace",
+        "[harness][filesystem][u2][spec][issue696][issue698]") {
     tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("note.txt", "outside body");
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
 
-    auto abs = fs->absolutePath("/etc/passwd");
-    REQUIRE_FALSE(abs);
+    // Uniform pi resolveToCwd resolution (ADR 0057): absolute paths are
+    // honored anywhere on the host filesystem.
+    const auto target = (outside.path() / "note.txt").string();
+    auto abs = fs->absolutePath(target);
+    REQUIRE(abs);
+    CHECK(*abs == target);
 
-    auto read = fs->readTextFile("/etc/passwd");
-    REQUIRE_FALSE(read);
-    CHECK(read.error().code == harness::FileErrorCode::PermissionDenied);
+    auto read = fs->readTextFile(target);
+    REQUIRE(read);
+    CHECK(*read == "outside body");
 
-    auto escaped = fs->readTextFile((workspace.path() / ".." / "outside.txt").string());
-    REQUIRE_FALSE(escaped);
-    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+    // A missing outside path surfaces the OS-level NotFound, not a
+    // containment rejection.
+    auto missing = fs->readTextFile((outside.path() / "nope.txt").string());
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().code == harness::FileErrorCode::NotFound);
 }
 
-TEST_CASE("WorkspaceFileSystem rejects path escapes", "[harness][filesystem][u2][spec]") {
+TEST_CASE("WorkspaceFileSystem resolves '..' segments lexically against the workspace root",
+        "[harness][filesystem][u2][spec][issue696][issue698]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
 
+    // pi resolveToCwd: a ".." segment normalizes against the workspace root
+    // and lands in its parent directory rather than being rejected.
     auto abs = fs->absolutePath("../outside.txt");
-    REQUIRE_FALSE(abs);
-    CHECK(abs.error().code == harness::FileErrorCode::PermissionDenied);
+    REQUIRE(abs);
+    CHECK(*abs == (fs->root().parent_path() / "outside.txt").string());
 }
 
 TEST_CASE("WorkspaceFileSystem writes an absolute path under the OS temp directory",
@@ -556,22 +566,18 @@ TEST_CASE("WorkspaceFileSystem applies pi resolveToCwd preprocessing to write pa
     CHECK(fake_home.read("tilde/note.txt") == "home");
 }
 
-TEST_CASE("WorkspaceFileSystem write scope reads and appends outside the workspace",
-        "[harness][filesystem][u2][spec][issue619]") {
+TEST_CASE("WorkspaceFileSystem reads and appends outside the workspace",
+        "[harness][filesystem][u2][spec][issue619][issue696][issue698]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside;
     outside.write("scratch/log.txt", "first\n");
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
 
-    // The edit read-modify-write path reads through the write scope; the
-    // contained read scope still rejects the same path.
+    // Uniform pi resolveToCwd resolution (ADR 0057): one read operation
+    // serves workspace and outside paths; there is no separate write scope.
     const auto target = (outside.path() / "scratch" / "log.txt").string();
-    auto blocked = fs->readTextFile(target);
-    REQUIRE_FALSE(blocked);
-    CHECK(blocked.error().code == harness::FileErrorCode::PermissionDenied);
-
-    auto read = fs->read_text_file_for_write(target);
+    auto read = fs->readTextFile(target);
     REQUIRE(read);
     CHECK(*read == "first\n");
 
@@ -580,8 +586,8 @@ TEST_CASE("WorkspaceFileSystem write scope reads and appends outside the workspa
     CHECK(outside.read("scratch/log.txt") == "first\nsecond\n");
 }
 
-TEST_CASE("WorkspaceFileSystem write scope refuses symlinks outside the workspace",
-        "[harness][filesystem][u2][spec][issue619]") {
+TEST_CASE("WorkspaceFileSystem refuses symlinks outside the workspace",
+        "[harness][filesystem][u2][spec][issue619][issue696][issue698]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside;
     outside.write("realdir/target.txt", "secret");
@@ -606,7 +612,7 @@ TEST_CASE("WorkspaceFileSystem write scope refuses symlinks outside the workspac
     std::error_code exists_ec;
     CHECK_FALSE(std::filesystem::exists(outside.path() / "realdir" / "new.txt", exists_ec));
 
-    auto linked_read = fs->read_text_file_for_write((outside.path() / "link.txt").string());
+    auto linked_read = fs->readTextFile((outside.path() / "link.txt").string());
     REQUIRE_FALSE(linked_read);
     CHECK(linked_read.error().code == harness::FileErrorCode::PermissionDenied);
 }
@@ -672,162 +678,120 @@ TEST_CASE("WorkspaceFileSystem enforces reviewed path and file contracts", "[har
             root_entries->begin(), root_entries->end(), [](const auto& entry) { return entry.name == "fifo"; }));
 }
 
-TEST_CASE("WorkspaceFileSystem reads absolute paths under authorized skill roots",
-        "[harness][filesystem][u2][spec][issue629]") {
+TEST_CASE("WorkspaceFileSystem reads absolute paths outside the workspace without an authorization list",
+        "[harness][filesystem][u2][spec][issue696][issue698]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace skill_home;
     skill_home.write("my-skill/SKILL.md", "skill body");
     skill_home.write("my-skill/refs/extra.md", "extra");
     workspace.write("local.txt", "local");
 
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "my-skill"});
-    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
 
-    auto skill = fs.readTextFile((skill_home.path() / "my-skill" / "SKILL.md").string());
+    // Skills carrying absolute paths resolve without an authorization list
+    // (ADR 0057 retires the #629 skill-root allowlist).
+    auto skill = fs->readTextFile((skill_home.path() / "my-skill" / "SKILL.md").string());
     REQUIRE(skill);
     CHECK(*skill == "skill body");
 
-    auto nested = fs.readTextFile((skill_home.path() / "my-skill" / "refs" / "extra.md").string());
+    auto nested = fs->readTextFile((skill_home.path() / "my-skill" / "refs" / "extra.md").string());
     REQUIRE(nested);
     CHECK(*nested == "extra");
 
-    auto local = fs.readTextFile("local.txt");
+    auto local = fs->readTextFile("local.txt");
     REQUIRE(local);
     CHECK(*local == "local");
 }
 
-TEST_CASE("WorkspaceFileSystem rejects non-skill outside reads while writes follow pi scope",
-        "[harness][filesystem][u2][spec][issue629][issue619]") {
+TEST_CASE("WorkspaceFileSystem reads and writes outside paths uniformly",
+        "[harness][filesystem][u2][spec][issue619][issue696][issue698]") {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace skill_home;
-    skill_home.write("my-skill/SKILL.md", "skill body");
+    tests::TempWorkspace outside;
+    outside.write("my-skill/SKILL.md", "skill body");
+    outside.write("unrelated.md", "unrelated");
 
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "my-skill"});
-    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
 
-    auto other = fs.readTextFile((skill_home.path() / "unrelated.md").string());
-    REQUIRE_FALSE(other);
-    CHECK(other.error().code == harness::FileErrorCode::PermissionDenied);
+    // No containment and no allowlist (ADR 0057): outside paths read like
+    // any other path, including through ".." lexical normalization.
+    auto other = fs->readTextFile((outside.path() / "unrelated.md").string());
+    REQUIRE(other);
+    CHECK(*other == "unrelated");
 
-    auto escaped = fs.readTextFile((skill_home.path() / "my-skill" / ".." / "unrelated.md").string());
-    REQUIRE_FALSE(escaped);
-    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
+    auto escaped = fs->readTextFile((outside.path() / "my-skill" / ".." / "unrelated.md").string());
+    REQUIRE(escaped);
+    CHECK(*escaped == "unrelated");
 
-    // Writes are no longer workspace-contained (#619): an absolute path under
-    // an authorized skill root is honored like any other absolute path. The
-    // skill roots authorize reads only; they neither gate nor forbid writes.
-    auto write = fs.writeFile((skill_home.path() / "my-skill" / "written.md").string(), std::string{"x"});
+    auto write = fs->writeFile((outside.path() / "my-skill" / "written.md").string(), std::string{"x"});
     REQUIRE(write);
     std::error_code exists_ec;
-    CHECK(std::filesystem::exists(skill_home.path() / "my-skill" / "written.md", exists_ec));
+    CHECK(std::filesystem::exists(outside.path() / "my-skill" / "written.md", exists_ec));
 }
 
-TEST_CASE("WorkspaceFileSystem refuses symlinks under authorized skill roots",
-        "[harness][filesystem][u2][spec][issue629]") {
+TEST_CASE("WorkspaceFileSystem refuses symlink reads outside the workspace",
+        "[harness][filesystem][u2][spec][issue629][issue696][issue698]") {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace skill_home;
-    skill_home.write("outside-target.txt", "secret");
-    skill_home.write("my-skill/SKILL.md", "skill body");
+    tests::TempWorkspace outside;
+    outside.write("outside-target.txt", "secret");
+    outside.write("my-skill/SKILL.md", "skill body");
+    std::error_code symlink_ec;
     std::filesystem::create_symlink(
-            skill_home.path() / "outside-target.txt", skill_home.path() / "my-skill" / "link.md");
+            outside.path() / "outside-target.txt", outside.path() / "my-skill" / "link.md", symlink_ec);
+    REQUIRE(!symlink_ec);
 
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "my-skill"});
-    harness::WorkspaceFileSystem fs(workspace.path(), roots);
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
 
-    auto linked = fs.readTextFile((skill_home.path() / "my-skill" / "link.md").string());
+    // The no-follow symlink policy applies uniformly, outside the workspace
+    // as inside it.
+    auto linked = fs->readTextFile((outside.path() / "my-skill" / "link.md").string());
     REQUIRE_FALSE(linked);
     CHECK(linked.error().code == harness::FileErrorCode::PermissionDenied);
 }
 
-TEST_CASE("WorkspaceFileSystem revokes skill roots on refresh", "[harness][filesystem][u2][spec][issue629]") {
-    tests::TempWorkspace workspace;
-    tests::TempWorkspace skill_home;
-    skill_home.write("my-skill/SKILL.md", "skill body");
-    const auto skill_file = (skill_home.path() / "my-skill" / "SKILL.md").string();
-
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "my-skill"});
-    harness::WorkspaceFileSystem fs(workspace.path(), roots);
-
-    auto before = fs.readTextFile(skill_file);
-    REQUIRE(before);
-
-    roots->set({});
-    auto after = fs.readTextFile(skill_file);
-    REQUIRE_FALSE(after);
-    CHECK(after.error().code == harness::FileErrorCode::PermissionDenied);
-}
-
-TEST_CASE("WorkspaceFileSystem rejections name the accepted path form", "[harness][filesystem][u2][spec][issue618]") {
+TEST_CASE("WorkspaceFileSystem addresses the filesystem root uniformly", "[harness][filesystem][u2][spec][issue698]") {
     tests::TempWorkspace workspace;
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
 
-    auto outside = fs->readTextFile("/etc/hostname");
-    REQUIRE_FALSE(outside);
-    CHECK(outside.error().code == harness::FileErrorCode::PermissionDenied);
-    CHECK(outside.error().message.find("workspace-relative path") != std::string::npos);
+    // pi resolveToCwd resolves "/" to the filesystem root; metadata, listing,
+    // and existence operate on it like any other path even though the
+    // parent+filename walk cannot address a root.
+    auto info = fs->fileInfo("/");
+    REQUIRE(info);
+    CHECK(info->kind == harness::FileKind::Directory);
 
-    auto escaped = fs->readTextFile("../outside.txt");
+    auto listing = fs->listDir("/");
+    REQUIRE(listing);
+    CHECK_FALSE(listing->empty());
+
+    auto root_exists = fs->exists("/");
+    REQUIRE(root_exists);
+    CHECK(*root_exists);
+
+    auto created = fs->createDir("/", true);
+    REQUIRE(created);
+
+    auto removed = fs->remove("/", true);
+    REQUIRE_FALSE(removed);
+    CHECK(removed.error().code == harness::FileErrorCode::Invalid);
+}
+
+TEST_CASE("WorkspaceFileSystem rejections name the accepted path form",
+        "[harness][filesystem][u2][spec][issue696][issue698]") {
+    tests::TempWorkspace workspace;
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    auto empty = fs->readTextFile("");
+    REQUIRE_FALSE(empty);
+    CHECK(empty.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK(empty.error().message.find("use a workspace-relative path or an absolute path") != std::string::npos);
+
+    auto escaped = fs->readTextFile(std::string{"../outside.txt\0suffix", 21});
     REQUIRE_FALSE(escaped);
     CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
-    CHECK(escaped.error().message.find("workspace-relative path") != std::string::npos);
-}
-
-TEST_CASE("WorkspaceFileSystem rejects NUL bytes before skill-root authorization",
-        "[harness][filesystem][u2][spec][issue629]") {
-    tests::TempWorkspace workspace;
-    tests::TempWorkspace skill_home;
-    skill_home.write("my-skill/SKILL.md", "skill body");
-
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "my-skill"});
-    harness::WorkspaceFileSystem fs(workspace.path(), roots);
-
-    std::string poisoned = (skill_home.path() / "my-skill" / "SKILL.md").string();
-    poisoned.push_back('\0');
-    poisoned += "suffix";
-    auto read = fs.readTextFile(poisoned);
-    REQUIRE_FALSE(read);
-    CHECK(read.error().code == harness::FileErrorCode::PermissionDenied);
-}
-
-TEST_CASE(
-        "WorkspaceFileSystem normalizes and filters skill-root entries", "[harness][filesystem][u2][spec][issue629]") {
-    tests::TempWorkspace skill_home;
-
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({
-            skill_home.path() / "my-skill",
-            std::filesystem::path{"relative/skill"},
-            std::filesystem::path{},
-            skill_home.path() / "my-skill" / ".",
-            std::filesystem::path{"/"},
-    });
-    const auto snapshot = roots->snapshot();
-    REQUIRE(snapshot);
-    REQUIRE(snapshot->size() == 1);
-    CHECK((*snapshot)[0] == skill_home.path() / "my-skill");
-}
-
-TEST_CASE("WorkspaceFileSystem longest skill root wins and fails closed on symlinks",
-        "[harness][filesystem][u2][spec][issue629]") {
-    tests::TempWorkspace workspace;
-    tests::TempWorkspace skill_home;
-    skill_home.write("target/file.md", "elsewhere");
-    skill_home.write("outer/placeholder.txt", "local");
-    std::filesystem::create_symlink(skill_home.path() / "target", skill_home.path() / "outer" / "link");
-
-    auto roots = std::make_shared<harness::AuthorizedSkillRoots>();
-    roots->set({skill_home.path() / "outer", skill_home.path() / "outer" / "link"});
-    harness::WorkspaceFileSystem fs(workspace.path(), roots);
-
-    // Both roots authorize the target lexically; the longest (symlinked)
-    // root must win and fail closed instead of falling back to the outer one.
-    auto linked = fs.readTextFile((skill_home.path() / "outer" / "link" / "file.md").string());
-    REQUIRE_FALSE(linked);
-    CHECK(linked.error().code == harness::FileErrorCode::PermissionDenied);
+    CHECK(escaped.error().message.find("NUL") != std::string::npos);
 }

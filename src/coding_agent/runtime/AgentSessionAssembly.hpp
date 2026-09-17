@@ -10,7 +10,6 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 #include <optional>
@@ -18,24 +17,6 @@
 #include <vector>
 
 namespace cch::coding_agent::runtime {
-
-/// Collect the distinct base directories of the loaded skills as read
-/// authorization roots for the session tool filesystem (#629). Skill base
-/// directories are absolute by loader contract; anything else is dropped.
-[[nodiscard]] inline std::vector<std::filesystem::path> collect_skill_read_roots(const std::vector<Skill>& skills) {
-    std::vector<std::filesystem::path> roots;
-    roots.reserve(skills.size());
-    for (const auto& skill : skills) {
-        const std::filesystem::path candidate(skill.baseDir);
-        if (candidate.empty() || !candidate.is_absolute()) {
-            continue;
-        }
-        if (std::ranges::find(roots, candidate) == roots.end()) {
-            roots.push_back(candidate);
-        }
-    }
-    return roots;
-}
 
 /// Agent Session configuration resolved by Session Assembly (pi
 /// `AgentSessionConfig` subset): queue bounds, the resolved Model, and the

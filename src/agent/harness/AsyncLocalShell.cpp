@@ -154,10 +154,11 @@ std::expected<harness::ProcessRequest, ExecutionError> AsyncLocalShell::Impl::ma
         });
     }
 
-    // Validate cwd override through workspace containment.
+    // Validate cwd overrides through the same pi resolveToCwd resolution as
+    // every other filesystem path (ADR 0057).
     std::filesystem::path working_dir = filesystem.root();
     if (options.cwd) {
-        auto resolved = filesystem.resolve_addressed_path(*options.cwd);
+        auto resolved = filesystem.resolve_to_cwd(*options.cwd);
         if (!resolved) {
             return std::unexpected(ExecutionError{
                     .code = ExecutionErrorCode::SpawnError,
