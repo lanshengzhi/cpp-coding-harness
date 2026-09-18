@@ -5,6 +5,7 @@
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
+#include "support/AiScenarioKit.hpp"
 #include "support/ScriptedWebSocket.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/Json.hpp"
@@ -29,9 +30,13 @@ namespace {
 
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
+using tests::event_names;
 using tests::partial_stop_reasons;
+using tests::read_fixture_text;
 using tests::run_async_result;
 using tests::run_awaitable;
+using tests::run_models;
+using tests::RunResult;
 using tests::ScriptedTransport;
 using tests::ScriptedWebSocket;
 using tests::ScriptedWebSocketTransport;
@@ -42,20 +47,6 @@ using tests::TransportAttempt;
 constexpr std::string_view kCodexToken =
     "aaa.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjX3Rlc3QifX0=.bbb";
 constexpr std::string_view kCodexAccountId = "acc_test";
-
-struct RunResult {
-    support::Expected<ai::AssistantMessage> result;
-    std::vector<ai::AssistantStreamEvent> events;
-};
-
-[[nodiscard]] std::string read_fixture_text(std::string_view relative_path) {
-    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-ai/" +
-                             std::string{relative_path};
-    std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
-}
 
 [[nodiscard]] ai::Model codex_model() {
     auto model = tests::make_model(
@@ -87,22 +78,13 @@ struct CodexHarness {
     CodexHarness harness;
     harness.http = std::make_shared<ScriptedTransport>();
     harness.ws = std::make_shared<ScriptedWebSocketTransport>();
-    harness.models = std::make_shared<ai::Models>(
-        std::make_shared<EmptyCredentialStore>(),
-        std::make_shared<EmptyAuthContext>());
-    tests::ScriptedProviderDefinition definition;
-    definition.definition = ai::ProviderDefinition{
-            .id = "openai-codex",
-            .name = "openai-codex",
-            .models = {model},
-            .auth = ai::providers::make_env_api_key_auth("API key", {}),
-    };
-    definition.transport = tests::ScriptedTransportOptions{
-            .http_transport = harness.http,
-            .ws_transport = harness.ws,
-            .codex_cache_config = cache_config,
-    };
-    REQUIRE(tests::apply_scripted_provider(*harness.models, std::move(definition)));
+    harness.models = tests::make_scripted_models(model,
+            tests::ScriptedTransportOptions{
+                    .http_transport = harness.http,
+                    .ws_transport = harness.ws,
+                    .codex_cache_config = cache_config,
+            });
+    REQUIRE(harness.models);
     return harness;
 }
 
@@ -128,22 +110,6 @@ struct CodexHarness {
         },
     });
     return context;
-}
-
-[[nodiscard]] RunResult run_codex(
-    ai::Models& models,
-    const ai::Model& model,
-    ai::AiContext context,
-    ai::SimpleStreamOptions options) {
-    std::vector<ai::AssistantStreamEvent> events;
-    auto stream = models.stream(model, std::move(context), std::move(options));
-    auto result = run_async_result(
-        std::move(stream).run(
-        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
-    return RunResult{.result = std::move(result), .events = std::move(events)};
 }
 
 [[nodiscard]] ai::AiContext user_context(std::string text) {
@@ -190,30 +156,6 @@ struct CodexHarness {
     });
     context.tools.push_back(lookup_tool());
     return context;
-}
-
-[[nodiscard]] std::string event_name(const ai::AssistantStreamEvent& event) {
-    if (std::holds_alternative<ai::AssistantStartEvent>(event)) return "start";
-    if (std::holds_alternative<ai::ThinkingStartEvent>(event)) return "thinking_start";
-    if (std::holds_alternative<ai::ThinkingDeltaEvent>(event)) return "thinking_delta";
-    if (std::holds_alternative<ai::ThinkingEndEvent>(event)) return "thinking_end";
-    if (std::holds_alternative<ai::TextStartEvent>(event)) return "text_start";
-    if (std::holds_alternative<ai::TextDeltaEvent>(event)) return "text_delta";
-    if (std::holds_alternative<ai::TextEndEvent>(event)) return "text_end";
-    if (std::holds_alternative<ai::ToolCallStartEvent>(event)) return "toolcall_start";
-    if (std::holds_alternative<ai::ToolCallDeltaEvent>(event)) return "toolcall_delta";
-    if (std::holds_alternative<ai::ToolCallEndEvent>(event)) return "toolcall_end";
-    if (std::holds_alternative<ai::AssistantDoneEvent>(event)) return "done";
-    return "error";
-}
-
-[[nodiscard]] std::vector<std::string> event_names(
-    const std::vector<ai::AssistantStreamEvent>& events) {
-    std::vector<std::string> result;
-    for (const auto& event : events) {
-        result.push_back(event_name(event));
-    }
-    return result;
 }
 
 [[nodiscard]] std::string json_string(const support::JsonValue& value) {
@@ -299,7 +241,7 @@ TEST_CASE("Codex streams the frozen WS request and event sequence through Models
     options.session_id = "session-1";
     options.cache_retention = ai::CacheRetention::Long;
     options.timeout_ms = 4321;
-    auto run = run_codex(*harness.models, codex_model(), request_context(), std::move(options));
+    auto run = run_models(*harness.models, codex_model(), request_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
@@ -394,11 +336,7 @@ TEST_CASE("Codex emits a string user message as one input_text and omits an empt
     options.session_id = "session-1";
     options.cache_retention = ai::CacheRetention::Long;
     options.timeout_ms = 4321;
-    auto run = run_codex(
-        *harness.models,
-        codex_model(),
-        string_content_context(),
-        std::move(options));
+    auto run = run_models(*harness.models, codex_model(), string_content_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
@@ -457,11 +395,7 @@ TEST_CASE("Codex emits an empty string user message as one input_text (WS)",
     options.session_id = "session-1";
     options.cache_retention = ai::CacheRetention::Long;
     options.timeout_ms = 4321;
-    auto run = run_codex(
-        *harness.models,
-        codex_model(),
-        empty_string_context(),
-        std::move(options));
+    auto run = run_models(*harness.models, codex_model(), empty_string_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
@@ -506,7 +440,7 @@ TEST_CASE("Codex falls back to SSE with a diagnostic when WebSocket connect fail
     options.session_id = "session-1";
     options.cache_retention = ai::CacheRetention::Long;
     options.timeout_ms = 4321;
-    auto run = run_codex(*harness.models, codex_model(), request_context(), std::move(options));
+    auto run = run_models(*harness.models, codex_model(), request_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
@@ -568,7 +502,7 @@ TEST_CASE("Codex falls back to SSE when the WebSocket is idle before the first e
     options.api_key = std::string{kCodexToken};
     options.session_id = "ws-idle-before-start";
     options.timeout_ms = 50;
-    auto run = run_codex(*harness.models, codex_model(), request_context(), std::move(options));
+    auto run = run_models(*harness.models, codex_model(), request_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
@@ -607,7 +541,7 @@ TEST_CASE("Codex surfaces WebSocket failures after the first event without SSE f
     options.api_key = std::string{kCodexToken};
     options.session_id = "post-start-failure";
     options.timeout_ms = 50;
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -662,9 +596,7 @@ TEST_CASE("Codex retries previous_response_not_found once on WebSocket",
     ai::SimpleStreamOptions first_options;
     first_options.api_key = std::string{kCodexToken};
     first_options.session_id = "missing-continuation";
-    auto first_run = run_codex(
-        *harness.models, model,
-        user_context("Say hello"), std::move(first_options));
+    auto first_run = run_models(*harness.models, model, user_context("Say hello"), std::move(first_options));
     REQUIRE(first_run.result);
     CHECK(first_run.result->response_id == "resp_terminal");
 
@@ -681,8 +613,7 @@ TEST_CASE("Codex retries previous_response_not_found once on WebSocket",
     ai::SimpleStreamOptions second_options;
     second_options.api_key = std::string{kCodexToken};
     second_options.session_id = "missing-continuation";
-    auto second_run = run_codex(
-        *harness.models, model, std::move(second_context), std::move(second_options));
+    auto second_run = run_models(*harness.models, model, std::move(second_context), std::move(second_options));
 
     REQUIRE(second_run.result);
     CHECK(second_run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -728,7 +659,7 @@ TEST_CASE("Codex retries websocket_connection_limit_reached once before start",
 
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -755,14 +686,14 @@ TEST_CASE("Codex marks a session SSE-only after a WebSocket failure", "[ai][prov
     ai::SimpleStreamOptions first_options;
     first_options.api_key = std::string{kCodexToken};
     first_options.session_id = "session-sse-only";
-    auto first_run = run_codex(*harness.models, model, {}, std::move(first_options));
+    auto first_run = run_models(*harness.models, model, {}, std::move(first_options));
     REQUIRE(first_run.result);
     CHECK(first_run.result->stop_reason == ai::AssistantStopReason::Stop);
 
     ai::SimpleStreamOptions second_options;
     second_options.api_key = std::string{kCodexToken};
     second_options.session_id = "session-sse-only";
-    auto second_run = run_codex(*harness.models, model, {}, std::move(second_options));
+    auto second_run = run_models(*harness.models, model, {}, std::move(second_options));
     REQUIRE(second_run.result);
     CHECK(second_run.result->stop_reason == ai::AssistantStopReason::Stop);
 
@@ -785,9 +716,7 @@ TEST_CASE("Codex reuses session sockets and sends previous_response_id input del
     ai::SimpleStreamOptions first_options;
     first_options.api_key = std::string{kCodexToken};
     first_options.session_id = "session-1";
-    auto first_run = run_codex(
-        *harness.models, model,
-        user_context("Use the tool"), std::move(first_options));
+    auto first_run = run_models(*harness.models, model, user_context("Use the tool"), std::move(first_options));
     REQUIRE(first_run.result);
     CHECK(first_run.result->stop_reason == ai::AssistantStopReason::Stop);
 
@@ -804,8 +733,7 @@ TEST_CASE("Codex reuses session sockets and sends previous_response_id input del
     ai::SimpleStreamOptions second_options;
     second_options.api_key = std::string{kCodexToken};
     second_options.session_id = "session-1";
-    auto second_run = run_codex(
-        *harness.models, model, std::move(second_context), std::move(second_options));
+    auto second_run = run_models(*harness.models, model, std::move(second_context), std::move(second_options));
 
     REQUIRE(second_run.result);
     CHECK(second_run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -851,9 +779,7 @@ TEST_CASE("Codex opens a fresh socket after the idle close window", "[ai][provid
         ai::SimpleStreamOptions options;
         options.api_key = std::string{kCodexToken};
         options.session_id = "aged-ws-session";
-        auto run = run_codex(
-            *harness.models, model,
-            user_context("Say hello"), std::move(options));
+        auto run = run_models(*harness.models, model, user_context("Say hello"), std::move(options));
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     }
@@ -871,9 +797,7 @@ TEST_CASE("Codex opens a fresh socket after the idle close window", "[ai][provid
         ai::SimpleStreamOptions options;
         options.api_key = std::string{kCodexToken};
         options.session_id = "aged-ws-session";
-        auto run = run_codex(
-            *age_harness.models, model,
-            user_context("Say hello"), std::move(options));
+        auto run = run_models(*age_harness.models, model, user_context("Say hello"), std::move(options));
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     }
@@ -900,9 +824,7 @@ TEST_CASE("Codex closes one-shot sockets when cacheRetention is none", "[ai][pro
         options.api_key = std::string{kCodexToken};
         options.session_id = "one-off-summary";
         options.cache_retention = ai::CacheRetention::None;
-        auto run = run_codex(
-            *harness.models, model,
-            user_context("Say hello"), std::move(options));
+        auto run = run_models(*harness.models, model, user_context("Say hello"), std::move(options));
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     }
@@ -941,7 +863,7 @@ TEST_CASE("Codex WebSocket termination matrix maps statuses", "[ai][provider][co
 
         ai::SimpleStreamOptions options;
         options.api_key = std::string{kCodexToken};
-        auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+        auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == test_case.expected);
@@ -965,7 +887,7 @@ TEST_CASE("Codex WebSocket termination matrix maps statuses", "[ai][provider][co
         ScriptedWebSocketTransport::ConnectScript{.session = session});
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(run.result->error_message);
@@ -988,7 +910,7 @@ TEST_CASE("Codex cancellation closes the socket and yields one aborted terminal"
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
     options.stop_token = stop.get_token();
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
@@ -1006,7 +928,7 @@ TEST_CASE("Codex rejects tokens without a chatgpt_account_id claim", "[ai][provi
     auto harness = make_codex_harness(codex_model());
     ai::SimpleStreamOptions options;
     options.api_key = "not-a-jwt-token";
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -1042,7 +964,7 @@ TEST_CASE("Codex SSE retries per the shared policy and never retries quota failu
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
     options.max_retries = 1;
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -1065,8 +987,7 @@ TEST_CASE("Codex SSE retries per the shared policy and never retries quota failu
     ai::SimpleStreamOptions quota_options;
     quota_options.api_key = std::string{kCodexToken};
     quota_options.max_retries = 3;
-    auto quota = run_codex(
-        *quota_harness.models, codex_model(), {}, std::move(quota_options));
+    auto quota = run_models(*quota_harness.models, codex_model(), {}, std::move(quota_options));
     REQUIRE(quota.result);
     CHECK(quota.result->stop_reason == ai::AssistantStopReason::Error);
     CHECK(quota_harness.http->requests.size() == 1);
@@ -1081,7 +1002,7 @@ TEST_CASE("Codex API errors never fall back to SSE", "[ai][provider][codex][issu
 
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -1098,7 +1019,7 @@ TEST_CASE("Codex API errors never fall back to SSE", "[ai][provider][codex][issu
 
     ai::SimpleStreamOptions failed_options;
     failed_options.api_key = std::string{kCodexToken};
-    auto failed_run = run_codex(*failed_harness.models, codex_model(), {}, std::move(failed_options));
+    auto failed_run = run_models(*failed_harness.models, codex_model(), {}, std::move(failed_options));
 
     REQUIRE(failed_run.result);
     CHECK(failed_run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -1131,9 +1052,7 @@ TEST_CASE("Codex scopes cached sockets to the authenticated account", "[ai][prov
         ai::SimpleStreamOptions options;
         options.api_key = token;
         options.session_id = "shared-session";
-        auto run = run_codex(
-            *harness.models, model,
-            user_context("Say hello"), std::move(options));
+        auto run = run_models(*harness.models, model, user_context("Say hello"), std::move(options));
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     }
@@ -1164,7 +1083,7 @@ TEST_CASE("Codex preserves post-merge transformed headers on the SSE fallback",
         headers.insert_or_assign("x-custom", "custom-value");
         return headers;
     };
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -1186,7 +1105,7 @@ TEST_CASE("Codex protocol errors never fall back to SSE", "[ai][provider][codex]
 
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -1244,7 +1163,7 @@ TEST_CASE("Codex WS partials start pending and flip to stop at final_answer",
 
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -1281,7 +1200,7 @@ TEST_CASE("Codex SSE stream ending still pending is a terminal error", "[ai][pro
 
     ai::SimpleStreamOptions options;
     options.api_key = std::string{kCodexToken};
-    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+    auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
@@ -1327,7 +1246,7 @@ TEST_CASE("Codex SSE terminal matrix maps statuses and treats DONE as non-termin
 
         ai::SimpleStreamOptions options;
         options.api_key = std::string{kCodexToken};
-        auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+        auto run = run_models(*harness.models, codex_model(), {}, std::move(options));
 
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == test_case.expected);

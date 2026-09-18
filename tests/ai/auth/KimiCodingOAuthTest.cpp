@@ -1,10 +1,12 @@
 #include "ai/auth/DevicePoll.hpp"
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
+#include "support/FakeOAuthHttpClient.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
+#include "support/StreamAdapterFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,29 +29,11 @@
 #include <vector>
 
 using namespace cch;
+using tests::FakeOAuthHttpClient;
+using tests::run_async_result;
+using tests::run_awaitable;
 
 namespace {
-
-template <typename T>
-T run_awaitable(boost::asio::awaitable<T> operation) {
-    boost::asio::io_context io;
-    auto result = boost::asio::co_spawn(io, std::move(operation), boost::asio::use_future);
-    io.run();
-    return result.get();
-}
-
-template <typename T, typename E>
-std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
-    boost::asio::io_context io;
-    auto future = boost::asio::co_spawn(
-            io,
-            [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
-                co_return co_await cch::support::detail::await_async_result(std::move(op));
-            }(std::move(result)),
-            boost::asio::use_future);
-    io.run();
-    return future.get();
-}
 
 std::string query_param(const std::string& text, const std::string& key) {
     const auto query_start = text.find('?');
@@ -70,81 +54,6 @@ std::string device_authorization_json() {
 std::string token_json() {
     return R"({"access_token":"dummy-access-token","refresh_token":"dummy-refresh-token","expires_in":3600})";
 }
-
-class FakeOAuthHttpClient final : public ai::auth::OAuthHttpClient {
-public:
-    struct Request {
-        std::string url;
-        std::map<std::string, std::string, std::less<>> headers;
-        std::string body;
-        std::stop_token stop_token;
-    };
-    struct ScriptedResponse {
-        int status{200};
-        std::string body;
-    };
-
-    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> post(
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token) override {
-        requests.push_back(Request{
-            url,
-            std::move(headers),
-            std::move(body),
-            stop_token,
-        });
-        if (fail_first_n_requests > 0) {
-            --fail_first_n_requests;
-            if (stop_token.stop_requested()) {
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Cancelled,
-                    "fake client cancelled"));
-            }
-            co_return std::unexpected(failure_error.value_or(support::make_error(
-                support::ErrorCode::Network,
-                "connection reset")));
-        }
-        if (respond_delay > std::chrono::milliseconds::zero()) {
-            // Emulate a real transport that observes the composed request stop
-            // token while a request is in flight.
-            auto executor = co_await boost::asio::this_coro::executor;
-            boost::asio::steady_timer timer(executor, respond_delay);
-            boost::system::error_code error;
-            co_await timer.async_wait(boost::asio::redirect_error(
-                boost::asio::use_awaitable, error));
-            if (stop_token.stop_requested()) {
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Cancelled,
-                    "fake client cancelled"));
-            }
-        }
-        auto& queue = responses[requests.back().url];
-        if (queue.empty()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Network,
-                "no scripted response for " + requests.back().url));
-        }
-        auto scripted = std::move(queue.front());
-        queue.pop_front();
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "fake client cancelled"));
-        }
-        co_return ai::auth::OAuthHttpResponse{
-            .status_code = scripted.status,
-            .body = std::move(scripted.body),
-        };
-    }
-
-    std::map<std::string, std::deque<ScriptedResponse>, std::less<>> responses;
-    std::vector<Request> requests;
-    std::optional<support::Error> failure_error;
-    int fail_first_n_requests{0};
-    std::chrono::milliseconds respond_delay{0};
-};
 
 ai::AuthInteraction make_interaction(
     std::vector<ai::AuthEvent>* events,
