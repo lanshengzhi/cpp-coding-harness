@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <format>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,6 +19,69 @@ namespace {
 
 /// The ANSI SGR reset pi's truncateToWidth always emits around the ellipsis.
 constexpr std::string_view kSgrReset{"\x1b[0m"};
+
+/// One closed code-point range of pi's CJK line-break set.
+struct CjkBreakRange {
+    char32_t first{0};
+    char32_t last{0};
+};
+
+/// pi's CJK line-break code points as generated range data: utf8proc exposes
+/// no Script_Extensions property, so the set cannot be re-derived here. The
+/// generated include carries pi's regex text, the pinned revision, and its
+/// generator command.
+constexpr CjkBreakRange kCjkBreakRanges[]{
+#define CCH_CJK_BREAK_RANGE(range_first, range_last) {.first = range_first, .last = range_last},
+#include "tui/CjkBreakRanges.inc"
+#undef CCH_CJK_BREAK_RANGE
+};
+
+/// True when the code point is in pi's CJK break set. The generated ranges are
+/// sorted and non-overlapping, so the first one ending at or after the code
+/// point is the only candidate.
+[[nodiscard]] bool is_cjk_break_codepoint(char32_t codepoint) {
+    const auto range = std::ranges::lower_bound(kCjkBreakRanges, codepoint, {}, &CjkBreakRange::last);
+    return range != std::end(kCjkBreakRanges) && codepoint >= range->first;
+}
+
+/// True when the code point is whitespace: the separator class the wrap path
+/// breaks on and the trailing class pi's `wrapSingleLine` removes with
+/// `line.trimEnd()`.
+[[nodiscard]] bool is_whitespace_codepoint(char32_t codepoint) {
+    if (codepoint == ' ') return true;
+    const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
+    return category == UTF8PROC_CATEGORY_ZS || category == UTF8PROC_CATEGORY_ZL || category == UTF8PROC_CATEGORY_ZP;
+}
+
+/// pi's `String.prototype.trimEnd` over a wrapped line: trailing whitespace is
+/// removed only when nothing was appended after it, so a line-end reset keeps
+/// the whitespace that precedes it (`wrapSingleLine`'s final `line.trimEnd()`).
+void trim_end_whitespace(std::string& text) {
+    std::size_t end = text.size();
+    while (end > 0) {
+        std::size_t start = end - 1;
+        while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80)
+            --start;
+        const auto [codepoint, bytes] = detail::decode_utf8(std::string_view(text).substr(start, end - start), 0);
+        if (bytes == 0 || !is_whitespace_codepoint(codepoint)) break;
+        end = start;
+    }
+    text.resize(end);
+}
+
+/// True when any code point of the grapheme cluster is in pi's CJK break set.
+/// pi tests the whole grapheme segment, so a base carrying such a combining
+/// mark is a break opportunity and a cluster is never broken apart.
+[[nodiscard]] bool is_cjk_break_cluster(std::string_view cluster) {
+    std::size_t position = 0;
+    while (position < cluster.size()) {
+        const auto [codepoint, bytes] = detail::decode_utf8(cluster, position);
+        if (bytes == 0) break;
+        if (is_cjk_break_codepoint(codepoint)) return true;
+        position += bytes;
+    }
+    return false;
+}
 
 } // namespace
 
@@ -47,10 +111,10 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
     const auto is_whitespace = [](const detail::TerminalToken& token) {
         if (token.kind != detail::TerminalTokenKind::Grapheme) return false;
         const auto [codepoint, bytes] = detail::decode_utf8(token.text, 0);
-        if (bytes == 0) return false;
-        const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
-        return codepoint == ' ' || category == UTF8PROC_CATEGORY_ZS ||
-               category == UTF8PROC_CATEGORY_ZL || category == UTF8PROC_CATEGORY_ZP;
+        return bytes != 0 && is_whitespace_codepoint(codepoint);
+    };
+    const auto is_cjk_break_token = [](const detail::TerminalToken& token) {
+        return token.kind == detail::TerminalTokenKind::Grapheme && is_cjk_break_cluster(token.text);
     };
 
     std::vector<std::string> lines;
@@ -59,6 +123,8 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
     std::string line;
     std::size_t line_width = 0;
     std::size_t pending_width = 0;
+    std::size_t input_line_start = 0;
+    bool input_line_wrapped = false;
 
     const auto clear_pending = [&]() {
         pending_separator.clear();
@@ -72,11 +138,20 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             style.process_ansi(token.text);
         }
     };
-    const auto finish_line = [&]() {
-        line += style.get_line_end_reset();
+    // A wrap break pushes the current line and starts the next one from the
+    // codes that are still active. pi closes underline/hyperlink only at such a
+    // boundary (`AnsiCodeTracker.getLineEndReset`); the full reset belongs to
+    // the composed row. A caller that breaks on a word boundary trims the line
+    // first, the other two break sites push it as-is.
+    const auto push_line = [&]() {
         lines.push_back(std::move(line));
         line = style.get_active_codes();
         line_width = 0;
+    };
+    const auto push_wrapped_line = [&]() {
+        line += style.get_line_end_reset();
+        push_line();
+        input_line_wrapped = true;
     };
     const auto replay_pending = [&](bool keep_whitespace) {
         for (const auto& pending : pending_separator) {
@@ -86,9 +161,33 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         }
         clear_pending();
     };
-    const auto finish_before_pending = [&]() {
-        finish_line();
-        replay_pending(false);
+    // pi's tokenizer attaches an escape sequence to the next visible grapheme,
+    // so controls staged after the last whitespace belong to the upcoming token
+    // rather than to the line being pushed (`splitIntoTokensWithAnsi`).
+    const auto replay_pending_prefix = [&]() {
+        std::size_t replayable = pending_separator.size();
+        while (replayable > 0 && pending_separator[replayable - 1].kind != detail::TerminalTokenKind::Grapheme) {
+            --replayable;
+        }
+        for (std::size_t position = 0; position < replayable; ++position) {
+            append_token(pending_separator[position]);
+        }
+        pending_separator.erase(
+                pending_separator.begin(), pending_separator.begin() + static_cast<std::ptrdiff_t>(replayable));
+        // The retained entries are zero-width controls.
+        pending_width = 0;
+    };
+    // pi's `wrapSingleLine` runs its trailing `line.trimEnd()` over every line of
+    // an input line that wrapped; an input line that fits keeps its trailing
+    // whitespace. A logical newline is an input-line boundary, not a break.
+    const auto finish_input_line = [&]() {
+        if (input_line_wrapped) {
+            for (std::size_t position = input_line_start; position < lines.size(); ++position) {
+                trim_end_whitespace(lines[position]);
+            }
+        }
+        input_line_start = lines.size();
+        input_line_wrapped = false;
     };
 
     std::size_t index = 0;
@@ -97,11 +196,43 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         if (token.kind == detail::TerminalTokenKind::Newline) {
             if (line_width + pending_width <= width) replay_pending(true);
             else replay_pending(false);
-            finish_line();
+            // pi splits the input on `\r\n|\r|\n` and prefixes each line with
+            // the previous line's active codes: a logical line boundary is not a
+            // wrap break, so it carries no line-end reset.
+            push_line();
+            finish_input_line();
             ++index;
             continue;
         }
-        if (is_whitespace(token)) {
+        // pi attaches ANSI controls to the following whitespace token. Such a
+        // token is not `token.trim() === ""`: when over-long it must use the
+        // same grapheme chunking as a word, rather than an unbounded separator
+        // replay (#704). Inspect a whitespace run only once, before staging it.
+        auto styled_space_end = index;
+        std::size_t styled_space_width = 0;
+        if (is_whitespace(token) && pending_separator.empty()) {
+            bool has_control = index > 0 && (*tokens)[index - 1].kind != detail::TerminalTokenKind::Grapheme &&
+                               (*tokens)[index - 1].kind != detail::TerminalTokenKind::Newline;
+            has_control = has_control || (line_width == 0 && !line.empty());
+            bool pending_control = false;
+            auto position = index;
+            while (position < tokens->size()) {
+                const auto& candidate = (*tokens)[position];
+                if (candidate.kind == detail::TerminalTokenKind::Newline) break;
+                if (candidate.kind == detail::TerminalTokenKind::Grapheme) {
+                    if (!is_whitespace(candidate)) break;
+                    styled_space_width += candidate.width;
+                    styled_space_end = position + 1;
+                    has_control = has_control || pending_control;
+                    pending_control = false;
+                } else {
+                    pending_control = true;
+                }
+                ++position;
+            }
+            if (!has_control || styled_space_width <= width) styled_space_end = index;
+        }
+        if (is_whitespace(token) && styled_space_end == index) {
             pending_separator.push_back(token);
             pending_width += token.width;
             ++index;
@@ -114,23 +245,43 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             continue;
         }
 
+        // pi splits every grapheme matching its CJK break set into a token of
+        // its own (`splitIntoTokensWithAnsi`, utils.ts at the frozen baseline),
+        // so such a grapheme is a break opportunity by itself; every other
+        // token runs to the next whitespace, CJK grapheme, or newline.
         auto word_end = index;
         std::size_t word_width = 0;
-        std::size_t first_grapheme_width = 0;
-        while (word_end < tokens->size()) {
-            const auto& word_token = (*tokens)[word_end];
-            if (word_token.kind == detail::TerminalTokenKind::Newline || is_whitespace(word_token)) break;
-            if (first_grapheme_width == 0 && word_token.kind == detail::TerminalTokenKind::Grapheme) {
-                first_grapheme_width = word_token.width;
-            }
-            word_width += word_token.width;
+        if (styled_space_end != index) {
+            word_width = styled_space_width;
+            word_end = styled_space_end;
+        } else if (is_cjk_break_token(token)) {
+            word_width = token.width;
             ++word_end;
+        } else {
+            while (word_end < tokens->size()) {
+                const auto& word_token = (*tokens)[word_end];
+                if (word_token.kind == detail::TerminalTokenKind::Newline || is_whitespace(word_token) ||
+                        is_cjk_break_token(word_token)) {
+                    break;
+                }
+                word_width += word_token.width;
+                ++word_end;
+            }
         }
 
         if (word_width <= width) {
             if (line_width + pending_width + word_width > width) {
-                if (line_width != 0) finish_before_pending();
-                else replay_pending(false);
+                // pi breaks here only when the line already carries visible
+                // content (`currentVisibleLength > 0`), and the whitespace it
+                // has already appended counts toward that, so a deferred
+                // whitespace-only prefix still pushes a row.
+                if (line_width != 0 || pending_width != 0) {
+                    replay_pending_prefix();
+                    // pi trims the line it breaks at, then appends the reset.
+                    trim_end_whitespace(line);
+                    push_wrapped_line();
+                }
+                replay_pending(false);
             } else {
                 replay_pending(true);
             }
@@ -138,13 +289,27 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             continue;
         }
 
-        if (line_width + pending_width + first_grapheme_width <= width) {
-            replay_pending(true);
-        } else if (line_width != 0) {
-            finish_before_pending();
-        } else {
-            replay_pending(false);
+        // A token longer than the width starts on a fresh line: pi pushes the
+        // current line whenever it holds anything at all (`if (currentLine)`,
+        // which a whitespace-only prefix satisfies) and chunks the token at
+        // exactly the width from the new line (`wrapSingleLine` and
+        // `breakLongWord`, utils.ts at the frozen baseline); it never fills the
+        // remainder of the current line.
+        // debt: a zero-width control staged immediately after visible content
+        // is emitted at the end of the pushed line, where pi stages it on the
+        // continuation line (`wrap_text("中文\x1b[31mABCDEFGHIJ", 4)` here is
+        // ["中文\x1b[31m", "\x1b[31mABCD", …] versus pi's ["中文",
+        // "\x1b[31mABCD", …]); the rows render identically. Upgrade when a
+        // composed surface observes a control's position within a row.
+        if (line_width != 0 || !pending_separator.empty()) {
+            replay_pending_prefix();
+            // A pure whitespace separator may itself exceed the width. pi
+            // drops its overflowing whitespace before the long-word push;
+            // trim before the reset, which otherwise protects those spaces.
+            if (line_width > width) trim_end_whitespace(line);
+            push_wrapped_line();
         }
+        replay_pending(false);
 
         while (index < word_end) {
             const auto& word_token = (*tokens)[index++];
@@ -160,15 +325,18 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
                         word_token.width,
                         width)));
             }
-            if (line_width != 0 && line_width + word_token.width > width) finish_line();
+            if (line_width != 0 && line_width + word_token.width > width) push_wrapped_line();
             append_token(word_token);
         }
     }
 
     if (line_width + pending_width <= width) replay_pending(true);
     else replay_pending(false);
-    line += style.get_line_end_reset();
+    // pi `wrapSingleLine` appends the line-end reset only where it breaks a
+    // line: "No reset at end of final line - let caller handle it". The full
+    // reset for the row belongs to the composed-line boundary.
     lines.push_back(std::move(line));
+    finish_input_line();
     return lines;
 }
 
@@ -184,12 +352,17 @@ support::Expected<std::string> truncate_text(
     auto width_result = detail::token_width(*tokens);
     if (!width_result) return std::unexpected(width_result.error());
 
-    detail::AnsiStyleState style;
     if (*width_result <= max_width) {
+        detail::AnsiStyleState style;
         auto result = detail::normalized_text(*tokens);
         for (const auto& token : *tokens) {
             if (token.kind != detail::TerminalTokenKind::Grapheme) style.process_ansi(token.text);
         }
+        // debt: this fits path closes underline/hyperlink before padding, where
+        // pi pads inside the still-open span (`truncateToWidth("\x1b[4mabc", 8,
+        // "", true)` is "\x1b[4mabc     " in pi and
+        // "\x1b[4mabc\x1b[24m     " here); upgrade when a composed surface
+        // pads a line carrying an open underline/hyperlink.
         result += style.get_line_end_reset();
         if (pad) result.append(max_width - *width_result, ' ');
         return result;
@@ -209,22 +382,26 @@ support::Expected<std::string> truncate_text(
 
     std::string result;
     std::size_t collected_width = 0;
+    // debt: a zero-width control immediately preceding the first non-fitting
+    // grapheme is kept before the always-on reset, where pi holds it pending
+    // and drops it (`truncate_text("\x1b[4ma\x1b[31mbcdef", 4, "...")` here is
+    // "\x1b[4ma\x1b[31m\x1b[0m...\x1b[0m" versus pi's
+    // "\x1b[4ma\x1b[0m...\x1b[0m"); the rows render identically. Upgrade when
+    // a composed surface observes a control's position within a truncated
+    // line.
     for (const auto& token : *tokens) {
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
             result += token.text;
-            style.process_ansi(token.text);
             continue;
         }
         if (collected_width + token.width > target_width) break;
         result += token.text;
         collected_width += token.width;
     }
-    // pi's finalizeTruncatedResult always wraps the ellipsis in SGR resets,
-    // styled or not (utils.ts at the frozen baseline); the line-end reset
-    // already closes active styles, so only add the pre reset when nothing
-    // is active.
-    result += style.get_line_end_reset();
-    if (!result.ends_with(kSgrReset)) result += kSgrReset;
+    // pi's `finalizeTruncatedResult` is exactly
+    // `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"` (utils.ts at the frozen
+    // baseline); the always-on resets close whatever the kept prefix left open.
+    result += kSgrReset;
     result += ellipsis;
     if (!ellipsis.empty()) result += kSgrReset;
     if (pad) result.append(max_width - collected_width - ellipsis_width, ' ');

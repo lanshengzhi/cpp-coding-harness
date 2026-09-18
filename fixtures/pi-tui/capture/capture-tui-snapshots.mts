@@ -447,6 +447,11 @@ const utils = {
 		{ name: "no-ellipsis", input: "abcdef", width: 4, ellipsis: "", pad: false, output: truncateToWidth("abcdef", 4, "") },
 		{ name: "cjk", input: "你好世界", width: 5, ellipsis: "", pad: false, output: truncateToWidth("你好世界", 5, "") },
 		{ name: "zero", input: "abc", width: 0, ellipsis: "...", pad: false, output: truncateToWidth("abc", 0) },
+		// Issue #704 review fix: `finalizeTruncatedResult` is
+		// `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"`, with no underline or
+		// hyperlink close before the always-on reset.
+		{ name: "underline", input: "\x1b[4mabcdefgh", width: 4, ellipsis: "...", pad: false, output: truncateToWidth("\x1b[4mabcdefgh", 4) },
+		{ name: "hyperlink", input: "\x1b]8;;u\x07abcdefgh\x1b]8;;\x07", width: 4, ellipsis: "...", pad: false, output: truncateToWidth("\x1b]8;;u\x07abcdefgh\x1b]8;;\x07", 4) },
 	],
 	wrap: [
 		{ name: "plain", input: "hello world foo bar", width: 8, output: wrapTextWithAnsi("hello world foo bar", 8) },
@@ -454,6 +459,57 @@ const utils = {
 		{ name: "ansi", input: "\x1b[31mred\x1b[0m and blue", width: 10, output: wrapTextWithAnsi("\x1b[31mred\x1b[0m and blue", 10) },
 		{ name: "newlines", input: "one\ntwo", width: 20, output: wrapTextWithAnsi("one\ntwo", 20) },
 		{ name: "wide-grapheme", input: "ab 😀 cd", width: 3, output: wrapTextWithAnsi("ab 😀 cd", 3) },
+		// Issue #705: CJK break opportunities (one case per script in
+		// `cjkBreakRegex`) behind a partially filled line, a mark-bearing
+		// cluster, a styled run before a long token, and a long token after a
+		// partial line. Every styled input closes its style inside a physical
+		// line; reset placement across a break belongs to #707, not here.
+		{ name: "cjk-han-after-partial-line", input: "abcdefghijklm 中文测试", width: 20, output: wrapTextWithAnsi("abcdefghijklm 中文测试", 20) },
+		{ name: "cjk-hiragana-marks-after-partial-line", input: "abcdefghijklm か\u3099き\u3099く\u3099", width: 18, output: wrapTextWithAnsi("abcdefghijklm か\u3099き\u3099く\u3099", 18) },
+		{ name: "cjk-katakana-after-partial-line", input: "abcdefghijklm カタカナテスト", width: 20, output: wrapTextWithAnsi("abcdefghijklm カタカナテスト", 20) },
+		{ name: "cjk-hangul-after-partial-line", input: "abcdefghijklm 안녕하세요", width: 20, output: wrapTextWithAnsi("abcdefghijklm 안녕하세요", 20) },
+		{ name: "cjk-bopomofo-after-partial-line", input: "abcdefghijklm ㄅㄆㄇㄈㄉㄊ", width: 20, output: wrapTextWithAnsi("abcdefghijklm ㄅㄆㄇㄈㄉㄊ", 20) },
+		// The cluster is the unit pi tests: a base outside the set carrying a
+		// mark inside it is a break opportunity, and the cluster is never split.
+		{ name: "cjk-mark-cluster-break-opportunity", input: "abcdef g\u3099h", width: 8, output: wrapTextWithAnsi("abcdef g\u3099h", 8) },
+		{ name: "cjk-styled-span-before-long-token", input: "\x1b[31m中文\x1b[0m abcdefghijklmnop", width: 10, output: wrapTextWithAnsi("\x1b[31m中文\x1b[0m abcdefghijklmnop", 10) },
+		{ name: "long-path-after-partial-line", input: "see /usr/share/doc/unicode-width-0.2.0/README.md now", width: 20, output: wrapTextWithAnsi("see /usr/share/doc/unicode-width-0.2.0/README.md now", 20) },
+		// Issue #704 review fixes: `wrapSingleLine` pushes the current line
+		// whenever it holds anything (`if (currentLine)`), attaches an escape
+		// sequence to the next visible grapheme, and trims every line of an
+		// input line that wrapped.
+		{ name: "long-token-after-space-prefix", input: "  ABCDEFGH", width: 4, output: wrapTextWithAnsi("  ABCDEFGH", 4) },
+		{ name: "long-token-after-underline-space-prefix", input: "\x1b[4m ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b[4m ABCDEFGH", 4) },
+		{ name: "long-token-after-hyperlink-space-prefix", input: "\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", 4) },
+		{ name: "long-token-after-staged-control", input: " \x1b[31mABCDEFGH", width: 4, output: wrapTextWithAnsi(" \x1b[31mABCDEFGH", 4) },
+		// Over-long ANSI-bearing whitespace is a non-whitespace token in pi:
+		// it must take breakLongWord before the following word is processed.
+		...[
+			["underline", "\x1b[4m     ABCDEFGH"],
+			["foreground", "\x1b[31m     ABCDEFGH"],
+			["hyperlink", "\x1b]8;;u\x07     ABCDEFGH"],
+			["plain", "     ABCDEFGH"],
+			["staged-control", "     \x1b[31mABCDEFGH"],
+			["fitting-word", "\x1b[4m     ab"],
+			["trailing", "\x1b[4m     "],
+		].map(([name, input]) => ({ name: `overlong-space-prefix-${name}`, input, width: 4, output: wrapTextWithAnsi(input!, 4) })),
+		// A word that fits still pushes the deferred-whitespace line when the
+		// whitespace already fills the width: pi breaks at
+		// `currentVisibleLength > 0`, which the appended whitespace satisfies.
+		{ name: "space-prefix-break", input: "  ab", width: 3, output: wrapTextWithAnsi("  ab", 3) },
+		{ name: "wider-space-prefix-break", input: "     ab", width: 4, output: wrapTextWithAnsi("     ab", 4) },
+		{ name: "styled-space-prefix-break", input: "\x1b[4m abc", width: 3, output: wrapTextWithAnsi("\x1b[4m abc", 3) },
+		{ name: "space-then-control-break", input: "  \x1b[31mab", width: 3, output: wrapTextWithAnsi("  \x1b[31mab", 3) },
+		{ name: "space-prefix-word-fits", input: "  ab", width: 5, output: wrapTextWithAnsi("  ab", 5) },
+		{ name: "wrapped-line-trims-trailing-whitespace", input: "abcdefg  ", width: 5, output: wrapTextWithAnsi("abcdefg  ", 5) },
+		{ name: "fitted-line-keeps-trailing-whitespace", input: "abc  ", width: 5, output: wrapTextWithAnsi("abc  ", 5) },
+		{ name: "newline-keeps-underline-open", input: "\x1b[4mone\ntwo", width: 10, output: wrapTextWithAnsi("\x1b[4mone\ntwo", 10) },
+		{ name: "newline-keeps-hyperlink-open", input: "\x1b]8;;u\x07one\ntwo", width: 10, output: wrapTextWithAnsi("\x1b]8;;u\x07one\ntwo", 10) },
+		// Issue #707: the reset surface across a break. Only underline and the
+		// OSC 8 hyperlink close at a break; foreground and background stay open
+		// for the enclosing span, and the final line carries no reset at all.
+		{ name: "styled-cjk-open-across-break", input: "\x1b[31m中文测试中文测试", width: 4, output: wrapTextWithAnsi("\x1b[31m中文测试中文测试", 4) },
+		{ name: "styled-underline-across-break", input: "\x1b[4mhello world", width: 7, output: wrapTextWithAnsi("\x1b[4mhello world", 7) },
 	],
 	slice: [
 		{ name: "plain", input: "abcdef", start: 1, length: 3, strict: false, output: sliceByColumn("abcdef", 1, 3) },
@@ -541,7 +597,7 @@ const markdownTheme = {
 	codeBlockIndent: "  ",
 };
 
-const markdownCases: Array<{ name: string; markdown: string; width: number }> = [
+const markdownCases: Array<{ name: string; markdown: string; width: number; background?: boolean }> = [
 	{
 		name: "plain-paragraph",
 		markdown: "A plain paragraph with some words to wrap across lines.",
@@ -595,15 +651,43 @@ const markdownCases: Array<{ name: string; markdown: string; width: number }> = 
 		markdown: "<div>plain html</div>",
 		width: 40,
 	},
+	// #707: backgrounded blocks via pi's `defaultTextStyle.bgColor`. The
+	// inline-styled paragraph wraps across lines (its leading wrapped lines
+	// carry an open style), and the fenced code block is the code/diff shape.
+	{
+		name: "background-inline-styles",
+		markdown: "**bold** and `code` and [link](https://example.com) that wraps across lines",
+		width: 20,
+		background: true,
+	},
+	{
+		name: "background-fenced-code",
+		markdown: "```cpp\nint answer = 42;\n```",
+		width: 24,
+		background: true,
+	},
 ];
 
+// The deterministic `defaultTextStyle.bgColor` the C++ differential test
+// rebuilds as the Markdown background hook.
+const markdownBackgroundStyle = { prefix: "\x1b[48;5;22m", suffix: "\x1b[49m" };
+const markdownBackground = (text: string) => `${markdownBackgroundStyle.prefix}${text}${markdownBackgroundStyle.suffix}`;
+
 const markdown = {
+	background: markdownBackgroundStyle,
 	styles: markdownStyles,
-	cases: markdownCases.map(({ name, markdown: source, width }) => ({
+	cases: markdownCases.map(({ name, markdown: source, width, background }) => ({
 		name,
 		markdown: source,
 		width,
-		lines: new Markdown(source, 0, 0, markdownTheme).render(width),
+		...(background ? { background: true } : {}),
+		lines: new Markdown(
+			source,
+			0,
+			0,
+			markdownTheme,
+			background ? { bgColor: markdownBackground } : undefined,
+		).render(width),
 	})),
 };
 

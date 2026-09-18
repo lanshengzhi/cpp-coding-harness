@@ -96,6 +96,31 @@ outputs for a fixed corpus (plain, ANSI-bearing, CJK, emoji/flag/combining, OSC 
 `PiTuiDifferentialTest` byte-compares `visible_width`, `truncate_text` (including pi's always-on
 `\x1b[0m` ellipsis resets), `wrap_text`, `slice_by_column`, and `strip_terminal_sequences`.
 
+The `wrap` corpus carries the #705 break-point cases: a CJK run starting behind a partially
+filled line for every script in pi's `cjkBreakRegex` set (Han; Hiragana with attached combining
+marks; Katakana; Hangul; Bopomofo), a mark-bearing cluster whose base is outside the set, a
+styled span whose style closes inside its physical line, and an over-long token after a partial
+line. It also carries the #707 reset cases: an open foreground style across CJK breaks and an
+open underline across a word break, both reaching the final line, so the corpus pins that only
+underline/hyperlink close at a break and the final line carries no reset. The #704 review fixes
+add the `wrapSingleLine` push and trim cases: a whitespace-only prefix ahead of an over-long token
+(plain, underline, and hyperlink), a control staged after that whitespace, the fit-break push
+where the deferred whitespace already fills the width ahead of a word that would otherwise fit
+(plain, wider, underlined, and control-staged, against the fitted line that keeps its whitespace),
+the trailing-whitespace trim of a wrapped input line against a fitting input line that keeps its
+whitespace, and the logical-newline cases where underline and hyperlink stay open.
+The over-long whitespace-prefix cases cover underline, foreground, hyperlink, plain text,
+a control attached to the following word, a fitting following word, and trailing whitespace.
+They pin both the chunk boundaries and reset bytes; the focused width regression independently
+checks that the originally reported underlined prefix cannot exceed the requested width.
+
+**#704 review scope correction:** the original #705 statement that existing whitespace handling
+already matched pi was disproved by the frozen oracle. The reviewed correction deliberately
+retains pi's empty first row for `wrap_text("  ab", 3)` (`["", "ab"]`, rather than `["ab"]`).
+This is an intentional whitespace behavior change within the text-parity fix, not a claim that
+whitespace behavior is unchanged. The fixture baseline remains `83114817`; no layout or padding
+policy is changed.
+
 ### Fuzzy corpus (`fuzzy.json`)
 
 `fuzzyMatch` scores and `fuzzyFilter` rankings for a fixed corpus (exact-match bonus,
@@ -109,10 +134,12 @@ Rendered output lines of pi's `Markdown` component (baseline `components/markdow
 observable parity surface (ADR 0035): plain paragraphs, inline emphasis/strong/strikethrough/code,
 **strict strikethrough**, fenced code blocks with border/indent, **streamed partial-closing-fence
 trimming**, lists, blockquotes, horizontal rules, **capability-aware OSC 8 link rendering**, and
-HTML passthrough. The recorded deterministic theme (a `styles` table in the snapshot) is rebuilt
+HTML passthrough. The #707 cases add pi's `defaultTextStyle.bgColor` backgrounded blocks — an
+inline-styled wrapping paragraph and a fenced code block — with the recorded `background`
+prefix/suffix. The recorded deterministic theme (a `styles` table in the snapshot) is rebuilt
 as equivalent hooks by `PiTuiDifferentialTest`, including the composition pi performs internally:
-link text gets `link(underline(…))` and blockquote text gets the quote style twice. Byte parity
-holds for every corpus case.
+link text gets `link(underline(…))` and blockquote text gets the quote style twice, and each
+`background` case gets the recorded hook. Byte parity holds for every corpus case.
 
 ### Screen-state goldens (`screen-state.json`) — fork-B evidence
 
@@ -150,6 +177,11 @@ from. Regenerate with:
 ```
 
 `PI_CHECKOUT` overrides the default sibling `../pi`.
+
+`capture/generate-cjk-break-ranges.mts` derives `src/tui/CjkBreakRanges.inc` (pi's CJK
+line-break code points, #705) from the same frozen checkout with the same refusal guard: it
+imports `cjkBreakRegex`, asserts its source text is the recorded one, and emits the ranges the
+regex matches. The generated file carries its own provenance header and regeneration command.
 
 ## Manual evidence (automation-unreachable surfaces)
 
@@ -289,10 +321,19 @@ decode layer dropped `$`-final legacy shift sequences (`\x1b[2$` … `\x1b[8$`) 
 (`\x00` → ctrl+space), and typed uppercase letters lost their case at insertion
 (`detail::printable_text`); all three now carry regression rows in `TuiTest`/`EditorTest` and are
 pinned by the input-decode corpus. The `truncate_text` ellipsis now always carries pi's `\x1b[0m`
-resets. Recorded renderer-side divergences that the corpus intentionally scopes out (documented
-in the README rows above): CJK-with-space long-run wrapping differs from pi's
-`wrapTextWithAnsi` (`UtilsTest` pins the C++ behavior), and pi's multi-line `visibleWidth` sums
-graphemes where the C++ widest-line reading is the deliberate C++ idiom.
+resets. Recorded renderer-side divergences (documented in the README rows above): pi's multi-line
+`visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++ idiom; the
+`truncate_text` fits path closes underline/hyperlink before padding where pi pads inside the
+still-open span (`truncateToWidth("\x1b[4mabc", 8, "", true)` is `"\x1b[4mabc     "` in pi and
+`"\x1b[4mabc\x1b[24m     "` here); a zero-width control staged immediately after visible content
+lands at the end of the pushed line in `wrap_text` where pi stages it on the continuation line
+(`wrap_text("中文\x1b[31mABCDEFGHIJ", 4)` is `["中文\x1b[31m", "\x1b[31mABCD", …]` here and
+`["中文", "\x1b[31mABCD", …]` in pi), so the rows render identically; and `truncate_text` keeps
+the control immediately preceding the first non-fitting grapheme before the always-on reset where
+pi drops it (`truncate_text("\x1b[4ma\x1b[31mbcdef", 4, "...")` is
+`"\x1b[4ma\x1b[31m\x1b[0m...\x1b[0m"` here and `"\x1b[4ma\x1b[0m...\x1b[0m"` in pi), invisible
+and pre-existing. The `truncate_text` fits path is pre-existing, invisible in every shipped
+surface, and the spec's "Padding is not changed" decision excludes it.
 
 Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate report below).
 
@@ -327,10 +368,11 @@ Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate r
    `input-decode.json`; the C++ single-table decoder matches the legacy column by design (ADR
    0035 decoded-event divergence).
 3. **Markdown and wrap byte-parity are scoped to the recorded parity surface**: markdown corpus
-   cases cover streamed-fence trimming, strict strikethrough, code-block border/indent, and
-   capability-aware links (headings are excluded — pi composes per-level bold/underline where the
-   C++ role hook is single-composition); the CJK-with-space wrap case is excluded and pinned by
-   the C++ `UtilsTest` instead.
+   cases cover streamed-fence trimming, strict strikethrough, code-block border/indent,
+   capability-aware links, and the #707 backgrounded blocks (headings are excluded — pi composes
+   per-level bold/underline where the C++ role hook is single-composition); wrap break points,
+   including the CJK break opportunities, the over-long-token path, and the #707 styled-across-a-
+   break reset placement, are byte-parity in the corpus.
 4. **Overlay anchors are caller-set in the C++ model** (the Tui does not default them to the
    viewport); the golden rows set the anchor explicitly, matching pi's position options.
 5. **No live-terminal or network validation** — all evidence is deterministic per the repo

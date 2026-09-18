@@ -21,4 +21,4 @@ Select a user message to copy the active path up to that point into a new sessio
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 ~                                                                                   
-0.0%/128k (auto)                                                                    alpha-1 · medium
+0.0%/128k (auto)                                                                    alpha-1 • medium

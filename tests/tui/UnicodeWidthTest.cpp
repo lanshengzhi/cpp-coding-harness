@@ -2,6 +2,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Utils.hpp>
 
+#include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>
@@ -254,8 +255,33 @@ TEST_CASE("AnsiStyleState generates line-end reset for underline", "[tui][issue4
     AnsiStyleState state;
     state.process_ansi("\x1b[4m");
     CHECK(state.underline);
-    auto reset = state.get_line_end_reset();
-    CHECK(reset == "\x1b[0m"); // all SGR state is terminated at the line boundary
+    // Only underline is closed at the line end; the foreground, background,
+    // and full reset belong to the enclosing background span and the
+    // composed-row reset.
+    CHECK(state.get_line_end_reset() == "\x1b[24m");
+
+    state.process_ansi("\x1b[31m");
+    CHECK(state.get_line_end_reset() == "\x1b[24m");
+
+    state.process_ansi("\x1b[24m");
+    CHECK(state.get_line_end_reset().empty());
+}
+
+TEST_CASE("AnsiStyleState closes an active hyperlink at the line end", "[tui][issue46][unicode][spec]") {
+    AnsiStyleState state;
+    state.process_ansi("\x1b]8;;https://example.com\x07");
+    CHECK(state.get_line_end_reset() == "\x1b]8;;\x07");
+
+    state.process_ansi("\x1b[4m");
+    CHECK(state.get_line_end_reset() == "\x1b[24m\x1b]8;;\x07");
+}
+
+TEST_CASE("apply_line_resets appends one segment reset per composed row", "[tui][issue46][unicode][spec]") {
+    std::vector<std::string> lines{"plain", "\x1b[31mred"};
+    apply_line_resets(lines);
+    CHECK(lines[0] == "plain\x1b[0m\x1b]8;;\x07");
+    CHECK(lines[1] == "\x1b[31mred\x1b[0m\x1b]8;;\x07");
+    CHECK(kSegmentReset == "\x1b[0m\x1b]8;;\x07");
 }
 
 TEST_CASE("AnsiStyleState handles OSC 8 hyperlinks", "[tui][issue46][unicode][spec]") {

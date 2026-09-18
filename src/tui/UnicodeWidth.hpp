@@ -39,6 +39,10 @@ struct AnsiStyleState {
     [[nodiscard]] std::string get_active_codes() const;
     [[nodiscard]] bool has_active_codes() const;
     [[nodiscard]] bool has_sgr_codes() const;
+    /// The reset a component or a wrap break emits inside a physical line:
+    /// underline off (`\x1b[24m`) plus the OSC 8 close. It never carries a
+    /// full reset, so it cannot cancel an enclosing background span (pi
+    /// `AnsiCodeTracker.getLineEndReset`).
     [[nodiscard]] std::string get_line_end_reset() const;
     void process_ansi(std::string_view code);
     void reset();
@@ -92,5 +96,10 @@ struct TerminalToken {
 [[nodiscard]] support::Expected<std::string> prepare_rendered_line(
     std::string_view line,
     std::size_t width);
+
+/// pi's OSC 8 hyperlink close sequence (`utils.ts`/`tui.ts` at the frozen
+/// baseline): the shared tail of the in-line line-end reset and of pi's
+/// `SEGMENT_RESET`.
+inline constexpr std::string_view kOsc8LinkClose{"\x1b]8;;\x07"};
 
 } // namespace cch::tui::detail

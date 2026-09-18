@@ -1,12 +1,17 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Text.hpp>
+#include <cch/tui/Tui.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/RenderedScreen.hpp"
+
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -42,7 +47,7 @@ TEST_CASE("Container renders children stacked vertically", "[tui][issue46][conta
     CHECK(result->lines[1].find("world") != std::string::npos);
 }
 
-TEST_CASE("Container terminates child styling at its line boundary", "[tui][issue46][container][spec]") {
+TEST_CASE("Container leaves child styling for the composed-row reset", "[tui][issue46][container][spec]") {
     cch::tui::Container container;
     REQUIRE(container.add_child(std::make_unique<RawLineComponent>("\x1b[31mred")));
     REQUIRE(container.add_child(std::make_unique<RawLineComponent>("plain")));
@@ -50,7 +55,9 @@ TEST_CASE("Container terminates child styling at its line boundary", "[tui][issu
     const auto result = container.render(8);
     REQUIRE(result);
     REQUIRE(result->lines.size() == 2);
-    CHECK(result->lines[0] == "\x1b[31mred\x1b[0m");
+    // The component boundary carries no reset: the one full reset per row is
+    // appended at the composed-line boundary.
+    CHECK(result->lines[0] == "\x1b[31mred");
     CHECK(result->lines[1] == "plain");
 }
 
@@ -120,7 +127,9 @@ TEST_CASE("Box owns a move-only background hook", "[tui][issue46][container][spe
     const auto result = box.render(2);
     REQUIRE(result);
     REQUIRE(result->lines.size() == 1);
-    CHECK(result->lines[0].ends_with("\x1b[0m"));
+    // The hook's prefix is preserved and the component boundary adds no reset;
+    // padding still happens before the hook.
+    CHECK(result->lines[0] == "\x1b[44mx ");
 }
 
 TEST_CASE("Box rejects null child", "[tui][issue46][container][spec]") {
@@ -166,4 +175,35 @@ TEST_CASE("Spacer can have lines updated", "[tui][issue46][container][spec]") {
     auto result = spacer.render(10);
     REQUIRE(result);
     CHECK(result->lines.size() == 5);
+}
+
+TEST_CASE("Box background covers every cell of a styled row", "[tui][box][background][issue707][spec]") {
+    // Regression for #707: a styled child line used to carry a full reset from
+    // the component boundary, which cancelled the enclosing background so the
+    // tint stopped where the text stopped.
+    auto background = cch::tests::background_hook("\x1b[48;5;22m");
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    auto box = std::make_unique<cch::tui::Box>(1, 1, std::move(background));
+    REQUIRE(box->add_child(std::make_unique<RawLineComponent>("\x1b[2mdim")));
+    REQUIRE(box->add_child(std::make_unique<RawLineComponent>("plain")));
+    REQUIRE(tui.add_child(std::move(box)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Every cell of every row — top and bottom padding, the dim-styled content
+    // row, and the unstyled content row — carries the configured background.
+    cch::tests::check_background_cells(terminal, 4, 8, "48;5;22");
+
+    // Exactly one full reset lands per composed row, after padding and after
+    // the background hook; the background hook's own reset stays before it.
+    const std::vector<std::string> expected_output{
+            "\x1b[?2026h",
+            "\x1b[48;5;22m        \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\x1b[48;5;22m \x1b[2mdim    \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\x1b[48;5;22m plain  \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\x1b[48;5;22m        \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\x1b[?2026l",
+    };
+    CHECK(terminal.output() == expected_output);
 }

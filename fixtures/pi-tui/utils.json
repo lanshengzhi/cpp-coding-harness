@@ -98,6 +98,22 @@
       "ellipsis": "...",
       "pad": false,
       "output": ""
+    },
+    {
+      "name": "underline",
+      "input": "\u001b[4mabcdefgh",
+      "width": 4,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "\u001b[4ma\u001b[0m...\u001b[0m"
+    },
+    {
+      "name": "hyperlink",
+      "input": "\u001b]8;;u\u0007abcdefgh\u001b]8;;\u0007",
+      "width": 4,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "\u001b]8;;u\u0007a\u001b[0m...\u001b[0m"
     }
   ],
   "wrap": [
@@ -148,6 +164,291 @@
         "ab",
         "😀",
         "cd"
+      ]
+    },
+    {
+      "name": "cjk-han-after-partial-line",
+      "input": "abcdefghijklm 中文测试",
+      "width": 20,
+      "output": [
+        "abcdefghijklm 中文测",
+        "试"
+      ]
+    },
+    {
+      "name": "cjk-hiragana-marks-after-partial-line",
+      "input": "abcdefghijklm がぎぐ",
+      "width": 18,
+      "output": [
+        "abcdefghijklm がぎ",
+        "ぐ"
+      ]
+    },
+    {
+      "name": "cjk-katakana-after-partial-line",
+      "input": "abcdefghijklm カタカナテスト",
+      "width": 20,
+      "output": [
+        "abcdefghijklm カタカ",
+        "ナテスト"
+      ]
+    },
+    {
+      "name": "cjk-hangul-after-partial-line",
+      "input": "abcdefghijklm 안녕하세요",
+      "width": 20,
+      "output": [
+        "abcdefghijklm 안녕하",
+        "세요"
+      ]
+    },
+    {
+      "name": "cjk-bopomofo-after-partial-line",
+      "input": "abcdefghijklm ㄅㄆㄇㄈㄉㄊ",
+      "width": 20,
+      "output": [
+        "abcdefghijklm ㄅㄆㄇ",
+        "ㄈㄉㄊ"
+      ]
+    },
+    {
+      "name": "cjk-mark-cluster-break-opportunity",
+      "input": "abcdef g゙h",
+      "width": 8,
+      "output": [
+        "abcdef g゙",
+        "h"
+      ]
+    },
+    {
+      "name": "cjk-styled-span-before-long-token",
+      "input": "\u001b[31m中文\u001b[0m abcdefghijklmnop",
+      "width": 10,
+      "output": [
+        "\u001b[31m中文\u001b[0m",
+        "abcdefghij",
+        "klmnop"
+      ]
+    },
+    {
+      "name": "long-path-after-partial-line",
+      "input": "see /usr/share/doc/unicode-width-0.2.0/README.md now",
+      "width": 20,
+      "output": [
+        "see",
+        "/usr/share/doc/unico",
+        "de-width-0.2.0/READM",
+        "E.md now"
+      ]
+    },
+    {
+      "name": "long-token-after-space-prefix",
+      "input": "  ABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "ABCD",
+        "EFGH"
+      ]
+    },
+    {
+      "name": "long-token-after-underline-space-prefix",
+      "input": "\u001b[4m ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b[4m \u001b[24m",
+        "\u001b[4mABCD\u001b[24m",
+        "\u001b[4mEFGH"
+      ]
+    },
+    {
+      "name": "long-token-after-hyperlink-space-prefix",
+      "input": "\u001b]8;;u\u0007 \u001b]8;;\u0007ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b]8;;u\u0007 \u001b]8;;\u0007",
+        "\u001b]8;;u\u0007\u001b]8;;\u0007ABCD",
+        "EFGH"
+      ]
+    },
+    {
+      "name": "long-token-after-staged-control",
+      "input": " \u001b[31mABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "\u001b[31mABCD",
+        "\u001b[31mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-underline",
+      "input": "\u001b[4m     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b[4m    \u001b[24m",
+        "\u001b[4m \u001b[24m",
+        "\u001b[4mABCD\u001b[24m",
+        "\u001b[4mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-foreground",
+      "input": "\u001b[31m     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b[31m",
+        "\u001b[31m",
+        "\u001b[31mABCD",
+        "\u001b[31mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-hyperlink",
+      "input": "\u001b]8;;u\u0007     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b]8;;u\u0007    \u001b]8;;\u0007",
+        "\u001b]8;;u\u0007 \u001b]8;;\u0007",
+        "\u001b]8;;u\u0007ABCD\u001b]8;;\u0007",
+        "\u001b]8;;u\u0007EFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-plain",
+      "input": "     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "ABCD",
+        "EFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-staged-control",
+      "input": "     \u001b[31mABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "\u001b[31mABCD",
+        "\u001b[31mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-fitting-word",
+      "input": "\u001b[4m     ab",
+      "width": 4,
+      "output": [
+        "\u001b[4m    \u001b[24m",
+        "\u001b[4m ab"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-trailing",
+      "input": "\u001b[4m     ",
+      "width": 4,
+      "output": [
+        "\u001b[4m    \u001b[24m",
+        "\u001b[4m"
+      ]
+    },
+    {
+      "name": "space-prefix-break",
+      "input": "  ab",
+      "width": 3,
+      "output": [
+        "",
+        "ab"
+      ]
+    },
+    {
+      "name": "wider-space-prefix-break",
+      "input": "     ab",
+      "width": 4,
+      "output": [
+        "",
+        "ab"
+      ]
+    },
+    {
+      "name": "styled-space-prefix-break",
+      "input": "\u001b[4m abc",
+      "width": 3,
+      "output": [
+        "\u001b[4m\u001b[24m",
+        "\u001b[4mabc"
+      ]
+    },
+    {
+      "name": "space-then-control-break",
+      "input": "  \u001b[31mab",
+      "width": 3,
+      "output": [
+        "",
+        "\u001b[31mab"
+      ]
+    },
+    {
+      "name": "space-prefix-word-fits",
+      "input": "  ab",
+      "width": 5,
+      "output": [
+        "  ab"
+      ]
+    },
+    {
+      "name": "wrapped-line-trims-trailing-whitespace",
+      "input": "abcdefg  ",
+      "width": 5,
+      "output": [
+        "abcde",
+        "fg"
+      ]
+    },
+    {
+      "name": "fitted-line-keeps-trailing-whitespace",
+      "input": "abc  ",
+      "width": 5,
+      "output": [
+        "abc  "
+      ]
+    },
+    {
+      "name": "newline-keeps-underline-open",
+      "input": "\u001b[4mone\ntwo",
+      "width": 10,
+      "output": [
+        "\u001b[4mone",
+        "\u001b[4mtwo"
+      ]
+    },
+    {
+      "name": "newline-keeps-hyperlink-open",
+      "input": "\u001b]8;;u\u0007one\ntwo",
+      "width": 10,
+      "output": [
+        "\u001b]8;;u\u0007one",
+        "\u001b]8;;u\u0007two"
+      ]
+    },
+    {
+      "name": "styled-cjk-open-across-break",
+      "input": "\u001b[31m中文测试中文测试",
+      "width": 4,
+      "output": [
+        "\u001b[31m中文",
+        "\u001b[31m测试",
+        "\u001b[31m中文",
+        "\u001b[31m测试"
+      ]
+    },
+    {
+      "name": "styled-underline-across-break",
+      "input": "\u001b[4mhello world",
+      "width": 7,
+      "output": [
+        "\u001b[4mhello\u001b[24m",
+        "\u001b[4mworld"
       ]
     }
   ],

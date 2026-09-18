@@ -103,18 +103,41 @@ TEST_CASE("truncate_text preserves ANSI styling at truncation boundary", "[tui][
     CHECK(r->find("\x1b[0m") != std::string::npos);
 }
 
+TEST_CASE("truncate_text wraps the ellipsis in pi's resets", "[tui][issue704][unicode][spec]") {
+    // pi `finalizeTruncatedResult` is exactly
+    // `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"`: it never closes underline or
+    // the hyperlink before the always-on reset (utils.ts at the frozen
+    // baseline).
+    const std::string kHyperlinkOpen{"\x1b]8;;u\x07"};
+    const std::string kHyperlinkClose{"\x1b]8;;\x07"};
+    const auto underlined = truncate_text("\x1b[4mabcdefgh", 4, "...");
+    REQUIRE(underlined);
+    CHECK(*underlined == "\x1b[4ma\x1b[0m...\x1b[0m");
+
+    const auto linked = truncate_text(kHyperlinkOpen + "abcdefgh" + kHyperlinkClose, 4, "...");
+    REQUIRE(linked);
+    CHECK(*linked == kHyperlinkOpen + "a\x1b[0m...\x1b[0m");
+
+    const auto colored = truncate_text("\x1b[31mabcdefgh", 4, "...");
+    REQUIRE(colored);
+    CHECK(*colored == "\x1b[31ma\x1b[0m...\x1b[0m");
+}
+
 TEST_CASE("truncate_text handles zero width", "[tui][issue46][unicode][spec]") {
     auto r = truncate_text("hello", 0);
     REQUIRE(r);
     CHECK(r->empty());
 }
 
-TEST_CASE("wrap_text keeps ANSI controls atomic and terminates every line", "[tui][issue46][unicode][spec]") {
+TEST_CASE("wrap_text keeps ANSI controls atomic across a break", "[tui][issue46][unicode][spec]") {
+    // A break closes underline/hyperlink only: foreground, background, and the
+    // full reset are left for the enclosing background span and the one
+    // composed-row reset, and the final line carries no reset at all.
     const auto result = wrap_text("\x1b[31mABCD", 2);
     REQUIRE(result);
     REQUIRE(result->size() == 2);
-    CHECK((*result)[0] == "\x1b[31mAB\x1b[0m");
-    CHECK((*result)[1] == "\x1b[31mCD\x1b[0m");
+    CHECK((*result)[0] == "\x1b[31mAB");
+    CHECK((*result)[1] == "\x1b[31mCD");
 }
 
 TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui][issue46][unicode][spec]") {
@@ -122,7 +145,8 @@ TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui
     REQUIRE(result);
     REQUIRE(result->size() == 2);
     CHECK((*result)[0] == "\x1b]8;;https://example.com\x07" "A\x1b]8;;\x07");
-    CHECK((*result)[1] == "\x1b]8;;https://example.com\x07" "B\x1b]8;;\x07");
+    CHECK((*result)[1] == "\x1b]8;;https://example.com\x07"
+                          "B");
 }
 
 TEST_CASE("wrap_text rejects a grapheme wider than the line", "[tui][issue46][unicode][spec]") {
@@ -178,7 +202,9 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     CHECK(trailing_terminal.cells()[0][2].grapheme == " ");
     CHECK(trailing_terminal.cells()[0][1].style.fg_color == "31");
     CHECK(trailing_terminal.cells()[0][2].style.fg_color == "31");
-    CHECK(trailing_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    // A raw wrap_text line leaves the enclosing foreground open; the composed
+    // row reset is what closes it.
+    CHECK(trailing_terminal.final_style().fg_color == "31");
 
     const auto wrapped = wrap_text("\x1b[31mA \x1b[0mB", 2);
     REQUIRE(wrapped);
@@ -188,7 +214,9 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
         [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(wrapped_terminal.write((*wrapped)[0]));
-    CHECK(wrapped_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    // The break line carries no full reset, so the foreground stays open until
+    // the composed-row reset.
+    CHECK(wrapped_terminal.final_style().fg_color == "31");
     REQUIRE(wrapped_terminal.set_cursor({.column = 0, .row = 1}));
     REQUIRE(wrapped_terminal.write((*wrapped)[1]));
     CHECK(wrapped_terminal.cells()[0][0].style.fg_color == "31");
@@ -206,8 +234,8 @@ TEST_CASE("wrap_text prefers word boundaries and falls back for long words", "[t
     const auto styled = wrap_text("\x1b[31mhello world", 7);
     REQUIRE(styled);
     REQUIRE(styled->size() == 2);
-    CHECK((*styled)[0] == "\x1b[31mhello\x1b[0m");
-    CHECK((*styled)[1] == "\x1b[31mworld\x1b[0m");
+    CHECK((*styled)[0] == "\x1b[31mhello");
+    CHECK((*styled)[1] == "\x1b[31mworld");
 
     const auto long_word = wrap_text("abcdefgh", 3);
     REQUIRE(long_word);
@@ -215,6 +243,21 @@ TEST_CASE("wrap_text prefers word boundaries and falls back for long words", "[t
     CHECK((*long_word)[0] == "abc");
     CHECK((*long_word)[1] == "def");
     CHECK((*long_word)[2] == "gh");
+
+    // A token longer than the width starts on a fresh line and is chunked at
+    // exactly the width, rather than filling the remainder of the current one
+    // (pi wrapSingleLine + breakLongWord, utils.ts at the frozen baseline).
+    const auto long_after_partial = wrap_text("abc https://example.com/releases/index.html", 8);
+    REQUIRE(long_after_partial);
+    const std::vector<std::string> expected_long{
+            "abc",
+            "https://",
+            "example.",
+            "com/rele",
+            "ases/ind",
+            "ex.html",
+    };
+    CHECK(*long_after_partial == expected_long);
 }
 
 TEST_CASE("wrap_text wraps long ASCII text", "[tui][issue46][unicode][spec]") {
@@ -239,6 +282,121 @@ TEST_CASE("wrap_text preserves literal newlines", "[tui][issue46][unicode][spec]
     CHECK(r->size() == 2);
 }
 
+TEST_CASE("wrap_text emits no line-end reset at a logical newline", "[tui][issue704][unicode][spec]") {
+    // pi splits the input on `\r\n|\r|\n` and prefixes each line with the
+    // previous line's active codes, so a logical line boundary is not a wrap
+    // break and carries no reset.
+    const auto underlined = wrap_text("\x1b[4mone\ntwo", 10);
+    REQUIRE(underlined);
+    const std::vector<std::string> expected_underlined{"\x1b[4mone", "\x1b[4mtwo"};
+    CHECK(*underlined == expected_underlined);
+
+    const auto linked = wrap_text("\x1b]8;;u\x07one\ntwo", 10);
+    REQUIRE(linked);
+    const std::vector<std::string> expected_linked{
+            "\x1b]8;;u\x07one",
+            "\x1b]8;;u\x07two",
+    };
+    CHECK(*linked == expected_linked);
+}
+
+TEST_CASE("wrap_text pushes a whitespace-only prefix before a long token", "[tui][issue704][unicode][spec]") {
+    // pi pushes the current line whenever it holds anything at all
+    // (`wrapSingleLine`'s `if (currentLine)`), so a whitespace-only prefix
+    // produces a row of its own before the token starts on a fresh line.
+    const auto plain = wrap_text("  ABCDEFGH", 4);
+    REQUIRE(plain);
+    const std::vector<std::string> expected_plain{"", "ABCD", "EFGH"};
+    CHECK(*plain == expected_plain);
+
+    // The line-end reset appended after the pushed whitespace keeps it, so the
+    // styled prefix survives; the trailing reset closes underline only.
+    const auto underlined = wrap_text("\x1b[4m ABCDEFGH", 4);
+    REQUIRE(underlined);
+    const std::vector<std::string> expected_underlined{
+            "\x1b[4m \x1b[24m",
+            "\x1b[4mABCD\x1b[24m",
+            "\x1b[4mEFGH",
+    };
+    CHECK(*underlined == expected_underlined);
+
+    const std::string kHyperlinkOpen{"\x1b]8;;u\x07"};
+    const std::string kHyperlinkClose{"\x1b]8;;\x07"};
+    const auto linked = wrap_text(kHyperlinkOpen + " " + kHyperlinkClose + "ABCDEFGH", 4);
+    REQUIRE(linked);
+    const std::vector<std::string> expected_linked{
+            kHyperlinkOpen + " " + kHyperlinkClose,
+            kHyperlinkOpen + kHyperlinkClose + "ABCD",
+            "EFGH",
+    };
+    CHECK(*linked == expected_linked);
+
+    // pi attaches an escape sequence to the next visible grapheme, so a control
+    // staged after the whitespace belongs to the long token, not to the pushed
+    // row.
+    const auto staged = wrap_text(" \x1b[31mABCDEFGH", 4);
+    REQUIRE(staged);
+    const std::vector<std::string> expected_staged{"", "\x1b[31mABCD", "\x1b[31mEFGH"};
+    CHECK(*staged == expected_staged);
+}
+
+TEST_CASE("wrap_text bounds styled whitespace before a long token", "[tui][issue704][unicode][spec]") {
+    const auto wrapped = wrap_text("\x1b[4m     ABCDEFGH", 4);
+    REQUIRE(wrapped);
+    for (const auto& line : *wrapped) {
+        CHECK(visible_width(line) <= 4);
+    }
+}
+
+TEST_CASE("wrap_text trims the trailing whitespace of a wrapped input line", "[tui][issue704][unicode][spec]") {
+    // pi `wrapSingleLine` trims every line of an input line that wrapped.
+    const auto wrapped = wrap_text("abcdefg  ", 5);
+    REQUIRE(wrapped);
+    const std::vector<std::string> expected_wrapped{"abcde", "fg"};
+    CHECK(*wrapped == expected_wrapped);
+
+    // An input line that fits keeps its trailing whitespace.
+    const auto fitted = wrap_text("abc  ", 5);
+    REQUIRE(fitted);
+    const std::vector<std::string> expected_fitted{"abc  "};
+    CHECK(*fitted == expected_fitted);
+}
+
+TEST_CASE("wrap_text pushes a whitespace-only line when the next word cannot fit", "[tui][issue704][unicode][spec]") {
+    // pi breaks when the incoming word would exceed the width and the line
+    // already carries visible content (`wrapSingleLine`'s
+    // `currentVisibleLength > 0`); the whitespace pi has appended counts
+    // toward that, so a whitespace-only prefix pushes a row of its own.
+    const auto plain = wrap_text("  ab", 3);
+    REQUIRE(plain);
+    const std::vector<std::string> expected_plain{"", "ab"};
+    CHECK(*plain == expected_plain);
+
+    const auto wider = wrap_text("     ab", 4);
+    REQUIRE(wider);
+    const std::vector<std::string> expected_wider{"", "ab"};
+    CHECK(*wider == expected_wider);
+
+    // The reset appended after the trimmed whitespace keeps the styled row.
+    const auto underlined = wrap_text("\x1b[4m abc", 3);
+    REQUIRE(underlined);
+    const std::vector<std::string> expected_underlined{"\x1b[4m\x1b[24m", "\x1b[4mabc"};
+    CHECK(*underlined == expected_underlined);
+
+    // A control staged after the whitespace belongs to the next word, not to
+    // the pushed whitespace-only row.
+    const auto staged = wrap_text("  \x1b[31mab", 3);
+    REQUIRE(staged);
+    const std::vector<std::string> expected_staged{"", "\x1b[31mab"};
+    CHECK(*staged == expected_staged);
+
+    // A word that fits with the whitespace keeps the whole line.
+    const auto fitted = wrap_text("  ab", 5);
+    REQUIRE(fitted);
+    const std::vector<std::string> expected_fitted{"  ab"};
+    CHECK(*fitted == expected_fitted);
+}
+
 TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", "[tui][issue46][unicode][spec]") {
     const auto plain = wrap_text("abc 中文测", 4);
     REQUIRE(plain);
@@ -248,9 +406,9 @@ TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", 
     const auto styled = wrap_text("abc \x1b[31m中文测", 4);
     REQUIRE(styled);
     const std::vector<std::string> expected_styled{
-        "abc",
-        "\x1b[31m中文\x1b[0m",
-        "\x1b[31m测\x1b[0m",
+            "abc",
+            "\x1b[31m中文",
+            "\x1b[31m测",
     };
     CHECK(*styled == expected_styled);
 
@@ -264,7 +422,15 @@ TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", 
     CHECK(*linked == expected_linked);
 }
 
-TEST_CASE("wrap_text fills the current line before breaking a long CJK run", "[tui][issue46][unicode][spec]") {
+TEST_CASE("wrap_text fills the current line with CJK break opportunities", "[tui][issue46][unicode][spec]") {
+    // A CJK run behind a partially filled line continues on that line one
+    // grapheme at a time: every grapheme in pi's CJK break set is its own break
+    // opportunity, so the run no longer moves to the next line whole.
+    const auto minimal = wrap_text("abcdefghijklm 中文测试", 20);
+    REQUIRE(minimal);
+    const std::vector<std::string> expected_minimal{"abcdefghijklm 中文测", "试"};
+    CHECK(*minimal == expected_minimal);
+
     const std::string text = "This is an example 中文汉字测试段落内容中文汉字测试段落内容.";
     const auto result = wrap_text(text, 40);
     REQUIRE(result);
@@ -277,7 +443,7 @@ TEST_CASE("wrap_text fills the current line before breaking a long CJK run", "[t
     const auto styled = wrap_text("\x1b[31m" + text + "\x1b[0m", 40);
     REQUIRE(styled);
     REQUIRE(styled->size() == 2);
-    CHECK((*styled)[0] == "\x1b[31mThis is an example 中文汉字测试段落内容\x1b[0m");
+    CHECK((*styled)[0] == "\x1b[31mThis is an example 中文汉字测试段落内容");
     CHECK((*styled)[1] == "\x1b[31m中文汉字测试段落内容.\x1b[0m");
     CHECK(visible_width((*styled)[0]) <= 40);
     CHECK(visible_width((*styled)[1]) <= 40);
@@ -290,6 +456,8 @@ TEST_CASE("wrap_text handles CJK word wrapping", "[tui][issue46][unicode][spec]"
         "\xe4\xb8\xad\xe5\x9b\xbd\xe4\xb8\xad\xe5\x9b\xbd"; // 中国中国
     auto r = wrap_text(long_cjk, 4);
     REQUIRE(r);
+    const std::vector<std::string> expected_cjk{"中国", "中国", "中国", "中国"};
+    CHECK(*r == expected_cjk);
     for (const auto& line : *r) {
         CHECK(visible_width(line) <= 4);
     }

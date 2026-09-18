@@ -25,6 +25,7 @@
 #include "support/ImageCapabilitiesGuard.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "support/Json.hpp"
+#include "support/RenderedScreen.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_message.hpp>
@@ -569,6 +570,11 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
     });
 
     const auto& cases = root.at("cases").get<support::JsonValue::array_t>();
+    // #707: the backgrounded-block cases apply pi's `defaultTextStyle.bgColor`
+    // to the padded line, the surface the composed-row reset must not cut.
+    const auto& background = root.at("background").get<support::JsonValue::object_t>();
+    const auto background_prefix = background.at("prefix").get_string();
+    const auto background_suffix = background.at("suffix").get_string();
     tui::Markdown markdown({}, 0, 0, std::move(style));
     for (const auto& entry : cases) {
         const auto& object = entry.get<support::JsonValue::object_t>();
@@ -576,6 +582,11 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
         const auto context = std::string{"markdown case "} + object.at("name").get_string();
         INFO(context);
 
+        if (field(object, "background") != nullptr) {
+            markdown.set_background_hook(tests::background_hook(background_prefix, background_suffix));
+        } else {
+            markdown.set_background_hook({});
+        }
         markdown.set_text(object.at("markdown").get_string());
         const auto rendered = markdown.render(width);
         REQUIRE(rendered.has_value());
