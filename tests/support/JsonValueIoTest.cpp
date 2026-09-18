@@ -135,6 +135,20 @@ TEST_CASE("JsonValue parser decodes Unicode escapes with surrogate pairs", "[sup
     CHECK_FALSE(support::read_json(R"("\uD83D\u0041")"));
 }
 
+TEST_CASE("JsonValue reader accepts escaped control characters and rejects raw ones",
+        "[support][json][issue724][compat-pi]") {
+    // An escaped control character is legal JSON and must decode...
+    const auto escaped = support::read_json(R"("a\u0004b\u001bc")");
+    REQUIRE(escaped);
+    const auto* text = escaped->get_if<std::string>();
+    REQUIRE(text != nullptr);
+    CHECK(*text == std::string{"a\x04" "b\x1b" "c"});
+
+    // ...while a raw one inside a string stays invalid (RFC 8259).
+    CHECK_FALSE(support::read_json(std::string{"\"a\x01" "b\""}));
+    CHECK_FALSE(support::read_json(std::string{"\"a\x1f" "b\""}));
+}
+
 TEST_CASE("JsonValue parse errors are typed and carry context", "[support][json][t6][compat-pi]") {
     const auto malformed = support::read_json(R"({"a":1,})");
     REQUIRE_FALSE(malformed);
