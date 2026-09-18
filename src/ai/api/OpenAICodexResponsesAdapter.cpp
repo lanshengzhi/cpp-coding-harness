@@ -1,8 +1,11 @@
 #include "OpenAICodexResponsesAdapter.hpp"
 
 #include "MessageConversion.hpp"
+#include "ai/Headers.hpp"
+#include "ai/Timestamps.hpp"
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
+#include "ai/auth/Pkce.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/SseParser.hpp"
@@ -31,14 +34,7 @@ namespace {
 using JsonObject = support::JsonValue::object_t;
 using JsonArray = support::JsonValue::array_t;
 
-[[nodiscard]] TimestampMs current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
-}
-
-constexpr std::string_view kDefaultCodexBaseUrl =
-    "https://chatgpt.com/backend-api";
-constexpr std::string_view kJwtClaimPath = "https://api.openai.com/auth";
+constexpr std::string_view kDefaultCodexBaseUrl = "https://chatgpt.com/backend-api";
 constexpr std::string_view kSseBeta = "responses=experimental";
 constexpr std::string_view kPreviousResponseNotFound =
     "previous_response_not_found";
@@ -55,41 +51,6 @@ struct CodexFailure {
     support::Error error{};
     std::optional<InferenceFailure> inference_failure{std::nullopt};
 };
-
-[[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
-    return std::ranges::equal(left, right, [](char left_character, char right_character) {
-        const auto lower = [](char character) {
-            return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
-        };
-        return lower(left_character) == lower(right_character);
-    });
-}
-
-template <typename Headers> void set_header(Headers& headers, std::string name, std::string value) {
-    std::erase_if(headers, [&name](const auto& header) { return header_name_equal(header.first, name); });
-    headers.emplace(std::move(name), std::move(value));
-}
-
-template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers, std::string_view name) {
-    return std::ranges::any_of(headers,
-            [name](const auto& header) { return header_name_equal(header.first, name) && !header.second.empty(); });
-}
-
-[[nodiscard]] bool header_deleted(const ProviderStreamOptions& options, std::string_view name) {
-    return std::ranges::any_of(
-            options.deleted_headers, [name](const auto& header) { return header_name_equal(header, name); });
-}
-
-template <typename Headers>
-void erase_header(Headers& headers, std::string_view name) {
-    std::erase_if(headers, [name](const auto& header) { return header_name_equal(header.first, name); });
-}
-
-[[nodiscard]] support::Error stream_error(std::string message, std::string detail = {}) {
-    return support::make_error(support::ErrorCode::Stream,
-            providers::bounded_provider_error_detail(std::move(message)),
-            providers::bounded_provider_error_detail(std::move(detail)));
-}
 
 [[nodiscard]] std::string resolve_codex_url(std::string_view base_url) {
     std::string raw = base_url.empty()
@@ -117,88 +78,17 @@ void erase_header(Headers& headers, std::string_view name) {
     return url;
 }
 
-[[nodiscard]] std::optional<std::string> decode_base64(std::string_view input) {
-    constexpr std::string_view kAlphabet =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string cleaned;
-    cleaned.reserve(input.size());
-    for (const char character : input) {
-        if (character == '-') {
-            cleaned.push_back('+');
-        } else if (character == '_') {
-            cleaned.push_back('/');
-        } else if (character == ' ' || character == '\n' ||
-                   character == '\r' || character == '\t') {
-            continue;
-        } else {
-            cleaned.push_back(character);
-        }
-    }
-    std::string result;
-    std::uint32_t accumulator = 0;
-    int accumulator_bits = 0;
-    for (const char character : cleaned) {
-        if (character == '=') {
-            break;
-        }
-        const auto index = kAlphabet.find(character);
-        if (index == std::string_view::npos) {
-            return std::nullopt;
-        }
-        accumulator = (accumulator << 6) | static_cast<std::uint32_t>(index);
-        accumulator_bits += 6;
-        if (accumulator_bits >= 8) {
-            accumulator_bits -= 8;
-            result.push_back(static_cast<char>(
-                (accumulator >> accumulator_bits) & 0xff));
-        }
-    }
-    return result;
-}
-
 /// pi extractAccountId: the Codex token is a ChatGPT JWT whose payload carries
 /// `https://api.openai.com/auth.chatgpt_account_id`. The account id keys the
-/// per-session socket cache and the `chatgpt-account-id` request header.
-[[nodiscard]] support::Expected<std::string> extract_account_id(
-    std::string_view token) {
-    const auto failure = [] { return std::unexpected(stream_error("Failed to extract accountId from token")); };
-    const auto first = token.find('.');
-    if (first == std::string_view::npos) {
-        return failure();
+/// per-session socket cache and the `chatgpt-account-id` request header. The
+/// decode itself is the shared auth JWT walk; failures collapse to the one
+/// Codex-facing stream error.
+[[nodiscard]] support::Expected<std::string> extract_account_id(std::string_view token) {
+    auto account = auth::extract_account_id(token);
+    if (!account) {
+        return std::unexpected(providers::make_stream_error("Failed to extract accountId from token"));
     }
-    const auto second = token.find('.', first + 1);
-    if (second == std::string_view::npos ||
-        token.find('.', second + 1) != std::string_view::npos) {
-        return failure();
-    }
-    auto payload = decode_base64(token.substr(first + 1, second - first - 1));
-    if (!payload) {
-        return failure();
-    }
-    auto parsed = support::read_json(*payload);
-    if (!parsed) {
-        return failure();
-    }
-    const auto* payload_object = parsed->get_if<JsonObject>();
-    if (!payload_object) {
-        return failure();
-    }
-    const auto claim = payload_object->find(std::string{kJwtClaimPath});
-    const auto* claim_object = claim != payload_object->end()
-        ? claim->second.get_if<JsonObject>()
-        : nullptr;
-    if (!claim_object) {
-        return failure();
-    }
-    const auto account = claim_object->find("chatgpt_account_id");
-    const auto* account_id = account != claim_object->end() &&
-            account->second.holds<std::string>()
-        ? &account->second.get_string()
-        : nullptr;
-    if (!account_id || account_id->empty()) {
-        return failure();
-    }
-    return *account_id;
+    return std::move(*account);
 }
 
 /// pi buildBaseCodexHeaders plus the per-transport protocol fields. Base
@@ -279,7 +169,8 @@ enum class WsFrameAction { Continue, Terminal };
         if (!response_failed && detail.empty()) {
             detail = serialized_event;
         }
-        return std::unexpected(stream_error(response_failed ? std::move(detail) : "Codex error: " + detail));
+        return std::unexpected(
+                providers::make_stream_error(response_failed ? std::move(detail) : "Codex error: " + detail));
     }
     return processed->terminal ? WsFrameAction::Terminal : WsFrameAction::Continue;
 }
@@ -303,18 +194,19 @@ enum class WsFrameAction { Continue, Terminal };
             .suggested_backoff_ms = std::nullopt,
             .provider_code = provider_code,
         };
-        return std::unexpected(stream_error(event.data));
+        return std::unexpected(providers::make_stream_error(event.data));
     }
     auto parsed = support::read_json(event.data);
     if (!parsed) {
         if (event.event != "message" && !event.event.starts_with("response.")) {
             return {};
         }
-        return std::unexpected(stream_error("Invalid Codex SSE JSON: " + parsed.error().detail));
+        return std::unexpected(providers::make_stream_error("Invalid Codex SSE JSON: " + parsed.error().detail));
     }
     auto* event_object = parsed->get_if<JsonObject>();
     if (!event_object) {
-        return std::unexpected(stream_error("Malformed Codex SSE event", "event data must be a JSON object"));
+        return std::unexpected(
+                providers::make_stream_error("Malformed Codex SSE event", "event data must be a JSON object"));
     }
     CodexFailure failure;
     auto action = process_codex_json_event(
@@ -328,20 +220,6 @@ enum class WsFrameAction { Continue, Terminal };
         return std::unexpected(action.error());
     }
     return {};
-}
-
-void finalize_tool_arguments(ToolCallContent& tool) {
-    tool.arguments = parse_streaming_json(tool.raw_arguments);
-    tool.arguments_valid = true;
-    tool.argument_error = std::nullopt;
-}
-
-[[nodiscard]] support::ExpectedVoid emit_start(AssistantEventSink& sink, AssistantMessage& assistant, bool& started) {
-    if (started) {
-        return {};
-    }
-    started = true;
-    return providers::emit(sink, AssistantStartEvent{.partial = assistant});
 }
 
 /// Adapter-owned terminal completion. The processor deliberately stops before
@@ -414,10 +292,7 @@ struct CodexSocketEntry {
     std::optional<CodexContinuation> continuation;
 };
 
-[[nodiscard]] std::int64_t now_epoch_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-}
+[[nodiscard]] std::int64_t now_epoch_ms() { return current_timestamp_ms(); }
 
 /// pi websocketSessionCache: session-id → account-id → one connection, with
 /// pi's 5-minute idle close and 55-minute hard age. Expiry is checked lazily
@@ -622,7 +497,7 @@ private:
     const support::JsonValue& body) {
     const auto* body_object = body.get_if<JsonObject>();
     if (!body_object) {
-        return std::unexpected(stream_error("Codex request body is not an object"));
+        return std::unexpected(providers::make_stream_error("Codex request body is not an object"));
     }
     JsonObject frame;
     frame.emplace("type", "response.create");
@@ -797,8 +672,8 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         }
         if (!*received) {
             release_socket(false);
-            co_return finish_failed(
-                    stream_error("WebSocket stream closed before response.completed"), CodexFailureKind::Transport);
+            co_return finish_failed(providers::make_stream_error("WebSocket stream closed before response.completed"),
+                    CodexFailureKind::Transport);
         }
         auto parsed = support::read_json(**received);
         if (!parsed) {
@@ -806,7 +681,7 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
                     .kind = CodexFailureKind::Protocol,
                     .code = {},
                     .message = {},
-                    .error = stream_error("Invalid Codex WebSocket JSON: " + parsed.error().detail),
+                    .error = providers::make_stream_error("Invalid Codex WebSocket JSON: " + parsed.error().detail),
             };
             release_socket(false);
             co_return finish_failed(failure.error, CodexFailureKind::Protocol);
@@ -823,7 +698,7 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         if (!api_error_event && !*websocket_started_state) {
             *websocket_started_state = true;
             if (!*started_state) {
-                if (auto emitted = emit_start(sink, assistant, *started_state); !emitted) {
+                if (auto emitted = providers::emit_start(sink, assistant, *started_state); !emitted) {
                     release_socket(false);
                     co_return std::unexpected(emitted.error());
                 }
@@ -850,8 +725,8 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         // pi's assertSuccessfulOutput throws here; the outer loop treats it as
         // a started transport failure (diagnostic + no SSE fallback).
         release_socket(false);
-        co_return finish_failed(
-                stream_error(assistant.error_message.value_or("Codex request failed")), CodexFailureKind::Transport);
+        co_return finish_failed(providers::make_stream_error(assistant.error_message.value_or("Codex request failed")),
+                CodexFailureKind::Transport);
     }
     if (entry && assistant.response_id) {
         auto items = build_responses_continuation_items(model, assistant);
@@ -899,10 +774,11 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
     ProviderStreamOptions options,
     AssistantEventSink sink) {
     if (!http_transport_ || !ws_transport_) {
-        co_return std::unexpected(stream_error("Codex Responses adapter requires HTTP and WebSocket transports"));
+        co_return std::unexpected(
+                providers::make_stream_error("Codex Responses adapter requires HTTP and WebSocket transports"));
     }
     if (model.api != "openai-codex-responses") {
-        co_return std::unexpected(stream_error("Codex Responses adapter received the wrong Model API"));
+        co_return std::unexpected(providers::make_stream_error("Codex Responses adapter received the wrong Model API"));
     }
     if (options.stop_token.stop_requested()) {
         co_return std::unexpected(support::make_error(
@@ -910,7 +786,7 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
             "Request was aborted"));
     }
     if (!options.auth.api_key || options.auth.api_key->empty()) {
-        co_return std::unexpected(stream_error("No API key for provider: " + model.provider));
+        co_return std::unexpected(providers::make_stream_error("No API key for provider: " + model.provider));
     }
 
     AssistantMessage assistant;
@@ -997,9 +873,8 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
                             started);
                 }
                 if (assistant.stop_reason == AssistantStopReason::Error) {
-                    co_return complete_failure(
-                            assistant,
-                            stream_error(assistant.error_message.value_or("Codex request failed")),
+                    co_return complete_failure(assistant,
+                            providers::make_stream_error(assistant.error_message.value_or("Codex request failed")),
                             guarded_sink,
                             std::nullopt,
                             started);

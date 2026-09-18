@@ -1,5 +1,7 @@
 #include "ResponsesEventProcessor.hpp"
 
+#include "ai/JsonAccess.hpp"
+#include "ai/Timestamps.hpp"
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/Termination.hpp"
 #include "ai/api/UsageNormalization.hpp"
@@ -36,52 +38,13 @@ struct Slot {
     std::string partial_arguments{};
 };
 
-[[nodiscard]] const support::JsonValue* member(const JsonObject& value, std::string_view name) {
-    const auto found = value.find(std::string{name});
-    return found == value.end() ? nullptr : &found->second;
-}
-
-[[nodiscard]] const JsonObject* object_member(const JsonObject& value, std::string_view name) {
-    const auto* found = member(value, name);
-    return found ? found->get_if<JsonObject>() : nullptr;
-}
-
-[[nodiscard]] const JsonArray* array_member(const JsonObject& value, std::string_view name) {
-    const auto* found = member(value, name);
-    return found ? found->get_if<JsonArray>() : nullptr;
-}
-
-[[nodiscard]] std::optional<std::string_view> string_member(const JsonObject& value, std::string_view name) {
-    const auto* found = member(value, name);
-    const auto* text = found ? found->get_if<std::string>() : nullptr;
-    return text ? std::optional<std::string_view>{*text} : std::nullopt;
-}
-
-[[nodiscard]] std::optional<std::int64_t> integer_member(const JsonObject& value, std::string_view name) {
-    const auto* found = member(value, name);
-    const auto* number = found ? found->get_if<double>() : nullptr;
-    if (!number || !std::isfinite(*number) || *number < 0 ||
-            *number > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
-        return std::nullopt;
-    }
-    return static_cast<std::int64_t>(*number);
-}
-
 [[nodiscard]] std::optional<std::size_t> output_index(const JsonObject& event) {
-    const auto value = integer_member(event, "output_index");
+    const auto value = json_integer_member(event, "output_index");
     return value ? std::optional<std::size_t>{static_cast<std::size_t>(*value)} : std::nullopt;
 }
 
-void finalize_tool_arguments(ToolCallContent& tool) {
-    // Streaming-tolerant argument parsing matching pi's `parseStreamingJson`
-    // (partial-json semantics), shared with the Anthropic adapter.
-    tool.arguments = parse_streaming_json(tool.raw_arguments);
-    tool.arguments_valid = true;
-    tool.argument_error = std::nullopt;
-}
-
 [[nodiscard]] std::string joined_item_text(const JsonObject& item, std::string_view array_name) {
-    const auto* entries = array_member(item, array_name);
+    const auto* entries = json_array_member(item, array_name);
     if (!entries) {
         return {};
     }
@@ -91,8 +54,8 @@ void finalize_tool_arguments(ToolCallContent& tool) {
         if (!entry_object) {
             continue;
         }
-        const auto text = string_member(*entry_object, "text");
-        const auto refusal = string_member(*entry_object, "refusal");
+        const auto text = json_string_member(*entry_object, "text");
+        const auto refusal = json_string_member(*entry_object, "refusal");
         const auto part = text ? text : refusal;
         if (!part) {
             continue;
@@ -106,7 +69,7 @@ void finalize_tool_arguments(ToolCallContent& tool) {
 }
 
 [[nodiscard]] std::string joined_message_text(const JsonObject& item) {
-    const auto* entries = array_member(item, "content");
+    const auto* entries = json_array_member(item, "content");
     if (!entries) {
         return {};
     }
@@ -116,9 +79,9 @@ void finalize_tool_arguments(ToolCallContent& tool) {
         if (!entry_object) {
             continue;
         }
-        if (const auto text = string_member(*entry_object, "text")) {
+        if (const auto text = json_string_member(*entry_object, "text")) {
             result += *text;
-        } else if (const auto refusal = string_member(*entry_object, "refusal")) {
+        } else if (const auto refusal = json_string_member(*entry_object, "refusal")) {
             result += *refusal;
         }
     }
@@ -129,10 +92,10 @@ void finalize_tool_arguments(ToolCallContent& tool) {
 /// "commentary"|"final_answer"}.
 [[nodiscard]] support::Expected<std::string> text_signature(const JsonObject& item) {
     support::JsonValue::object_t signature{
-            {"id", std::string{string_member(item, "id").value_or("")}},
+            {"id", std::string{json_string_member(item, "id").value_or("")}},
             {"v", 1},
     };
-    if (const auto phase = string_member(item, "phase"); phase == "commentary" || phase == "final_answer") {
+    if (const auto phase = json_string_member(item, "phase"); phase == "commentary" || phase == "final_answer") {
         signature.emplace("phase", std::string{*phase});
     }
     return support::write_json(support::JsonValue{std::move(signature)});
@@ -142,8 +105,8 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
     // pi's `applyMessagePhaseStopReason` (openai-responses-shared.ts): a
     // message output item whose `phase` is `final_answer` flips the running
     // partial from `pending` to `stop` before the item is surfaced.
-    if (const auto type = string_member(item, "type"); type && *type == "message") {
-        if (const auto phase = string_member(item, "phase"); phase && *phase == "final_answer") {
+    if (const auto type = json_string_member(item, "type"); type && *type == "message") {
+        if (const auto phase = json_string_member(item, "phase"); phase && *phase == "final_answer") {
             assistant.stop_reason = AssistantStopReason::Stop;
         }
     }
@@ -157,7 +120,7 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
     if (slots.contains(index)) {
         return {};
     }
-    const auto type = string_member(item, "type");
+    const auto type = json_string_member(item, "type");
     if (!type) {
         return {};
     }
@@ -194,11 +157,11 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
     }
     if (*type == "function_call") {
         const auto content_index = assistant.content.size();
-        auto arguments = std::string{string_member(item, "arguments").value_or("")};
+        auto arguments = std::string{json_string_member(item, "arguments").value_or("")};
         assistant.content.emplace_back(ToolCallContent{
-                .id = std::string{string_member(item, "call_id").value_or("")} + "|" +
-                      std::string{string_member(item, "id").value_or("")},
-                .name = std::string{string_member(item, "name").value_or("")},
+                .id = std::string{json_string_member(item, "call_id").value_or("")} + "|" +
+                      std::string{json_string_member(item, "id").value_or("")},
+                .name = std::string{json_string_member(item, "name").value_or("")},
                 // pi constructs every tool call with an empty arguments object
                 // (parseStreamingJson("")) and fills it from raw arguments.
                 .arguments = support::JsonValue{support::JsonValue::object_t{}},
@@ -228,7 +191,7 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
         AssistantMessage& assistant,
         AssistantEventSink& sink) {
     const auto index = output_index(event);
-    const auto delta = string_member(event, "delta");
+    const auto delta = json_string_member(event, "delta");
     if (!index || !delta) {
         return {};
     }
@@ -302,7 +265,7 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
         AssistantMessage& assistant,
         AssistantEventSink& sink) {
     const auto index = output_index(event);
-    const auto arguments = string_member(event, "arguments");
+    const auto arguments = json_string_member(event, "arguments");
     if (!index || !arguments) {
         return {};
     }
@@ -334,7 +297,7 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
         AssistantMessage& assistant,
         AssistantEventSink& sink) {
     const auto index = output_index(event);
-    const auto* item = object_member(event, "item");
+    const auto* item = json_object_member(event, "item");
     if (!index || !item) {
         return {};
     }
@@ -346,7 +309,7 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
         return {};
     }
     const auto slot = found->second;
-    const auto type = string_member(*item, "type");
+    const auto type = json_string_member(*item, "type");
     if (type == "reasoning" && slot.kind == Slot::Kind::Thinking) {
         auto& block = std::get<ThinkingContent>(assistant.content[slot.content_index]);
         auto content = joined_item_text(*item, "summary");
@@ -396,10 +359,10 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
     }
     if (type == "function_call" && slot.kind == Slot::Kind::ToolCall) {
         auto& block = std::get<ToolCallContent>(assistant.content[slot.content_index]);
-        block.id = std::string{string_member(*item, "call_id").value_or("")} + "|" +
-                   std::string{string_member(*item, "id").value_or("")};
-        block.name = std::string{string_member(*item, "name").value_or("")};
-        block.raw_arguments = std::string{string_member(*item, "arguments").value_or(slot.partial_arguments)};
+        block.id = std::string{json_string_member(*item, "call_id").value_or("")} + "|" +
+                   std::string{json_string_member(*item, "id").value_or("")};
+        block.name = std::string{json_string_member(*item, "name").value_or("")};
+        block.raw_arguments = std::string{json_string_member(*item, "arguments").value_or(slot.partial_arguments)};
         finalize_tool_arguments(block);
         if (auto emitted = providers::emit(sink,
                     ToolCallEndEvent{
@@ -416,18 +379,16 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
 }
 
 [[nodiscard]] ResponsesProviderError provider_error(const JsonObject& event) {
-    const auto* nested = object_member(event, "error");
-    auto code = string_member(event, "code");
+    const auto* nested = json_object_member(event, "error");
+    auto code = json_string_member(event, "code");
     if (!code && nested) {
-        code = string_member(*nested, "code");
+        code = json_string_member(*nested, "code");
     }
-    auto message = string_member(event, "message");
+    auto message = json_string_member(event, "message");
     if (!message && nested) {
-        message = string_member(*nested, "message");
+        message = json_string_member(*nested, "message");
     }
-    const auto now =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-                    .count();
+    const auto now = current_timestamp_ms();
     return ResponsesProviderError{
             .code = code ? std::optional<std::string>{std::string{*code}} : std::nullopt,
             .message = message ? std::optional<std::string>{std::string{*message}} : std::nullopt,
@@ -436,39 +397,40 @@ void apply_message_phase_stop_reason(AssistantMessage& assistant, const JsonObje
 }
 
 void apply_deepseek_usage(const Model& model, const JsonObject& response, AssistantMessage& assistant) {
-    const auto* usage = object_member(response, "usage");
+    const auto* usage = json_object_member(response, "usage");
     if (!usage) {
         return;
     }
-    const auto* input_details = object_member(*usage, "input_tokens_details");
-    const auto* output_details = object_member(*usage, "output_tokens_details");
+    const auto* input_details = json_object_member(*usage, "input_tokens_details");
+    const auto* output_details = json_object_member(*usage, "output_tokens_details");
     assistant.usage = normalize_deepseek_usage(model,
-            integer_member(*usage, "input_tokens").value_or(0),
-            integer_member(*usage, "output_tokens").value_or(0),
-            input_details ? integer_member(*input_details, "cached_tokens").value_or(0) : 0,
-            output_details ? integer_member(*output_details, "reasoning_tokens") : std::nullopt);
-    if (const auto total = integer_member(*usage, "total_tokens")) {
+            json_integer_member(*usage, "input_tokens").value_or(0),
+            json_integer_member(*usage, "output_tokens").value_or(0),
+            input_details ? json_integer_member(*input_details, "cached_tokens").value_or(0) : 0,
+            output_details ? json_integer_member(*output_details, "reasoning_tokens") : std::nullopt);
+    if (const auto total = json_integer_member(*usage, "total_tokens")) {
         assistant.usage.total_tokens = *total;
     }
 }
 
 void apply_codex_usage(const Model& model, const JsonObject& response, AssistantMessage& assistant) {
-    const auto* usage = object_member(response, "usage");
+    const auto* usage = json_object_member(response, "usage");
     if (!usage) {
         return;
     }
-    const auto* input_details = object_member(*usage, "input_tokens_details");
-    const auto* output_details = object_member(*usage, "output_tokens_details");
+    const auto* input_details = json_object_member(*usage, "input_tokens_details");
+    const auto* output_details = json_object_member(*usage, "output_tokens_details");
     assistant.usage = normalize_responses_usage(model,
             ResponsesUsageFields{
-                    .input_tokens = integer_member(*usage, "input_tokens").value_or(0),
-                    .output_tokens = integer_member(*usage, "output_tokens").value_or(0),
-                    .cached_tokens = input_details ? integer_member(*input_details, "cached_tokens").value_or(0) : 0,
+                    .input_tokens = json_integer_member(*usage, "input_tokens").value_or(0),
+                    .output_tokens = json_integer_member(*usage, "output_tokens").value_or(0),
+                    .cached_tokens =
+                            input_details ? json_integer_member(*input_details, "cached_tokens").value_or(0) : 0,
                     .cache_write_tokens =
-                            input_details ? integer_member(*input_details, "cache_write_tokens").value_or(0) : 0,
+                            input_details ? json_integer_member(*input_details, "cache_write_tokens").value_or(0) : 0,
                     .reasoning_tokens =
-                            output_details ? integer_member(*output_details, "reasoning_tokens") : std::nullopt,
-                    .total_tokens = integer_member(*usage, "total_tokens").value_or(0),
+                            output_details ? json_integer_member(*output_details, "reasoning_tokens") : std::nullopt,
+                    .total_tokens = json_integer_member(*usage, "total_tokens").value_or(0),
             });
 }
 
@@ -481,7 +443,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
     // pi's `processResponsesStream` records that a terminal response event
     // arrived before the adapter's final integrity check.
     saw_terminal = true;
-    const auto* response = object_member(event, "response");
+    const auto* response = json_object_member(event, "response");
     if (!response) {
         if (dialect == ResponsesDialect::Codex) {
             assistant.stop_reason = AssistantStopReason::Stop;
@@ -490,16 +452,16 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         return std::unexpected(support::make_error(
                 support::ErrorCode::Stream, "OpenAI Responses terminal event omitted response data"));
     }
-    if (const auto id = string_member(*response, "id"); id && !id->empty()) {
+    if (const auto id = json_string_member(*response, "id"); id && !id->empty()) {
         assistant.response_id = std::string{*id};
     }
-    if (const auto model_id = string_member(*response, "model"); model_id && *model_id != model.id) {
+    if (const auto model_id = json_string_member(*response, "model"); model_id && *model_id != model.id) {
         assistant.response_model = std::string{*model_id};
     }
     if (dialect == ResponsesDialect::DeepSeek) {
         // pi's `finalizeResponse` records the raw wire status for every
         // terminal Responses event, including failures.
-        if (const auto status = string_member(*response, "status"); status && !status->empty()) {
+        if (const auto status = json_string_member(*response, "status"); status && !status->empty()) {
             assistant.raw_stop_reason = *status;
         }
         apply_deepseek_usage(model, *response, assistant);
@@ -513,7 +475,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         apply_codex_usage(model, *response, assistant);
     }
 
-    const auto status = string_member(*response, "status").value_or(event_type == "response.done" ? "done" : "");
+    const auto status = json_string_member(*response, "status").value_or(event_type == "response.done" ? "done" : "");
     std::string_view normalized = status;
     if (dialect == ResponsesDialect::Codex) {
         normalized = "done";
@@ -546,13 +508,13 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         AssistantMessage& assistant,
         AssistantEventSink& sink,
         bool& saw_terminal) {
-    const auto type = string_member(event, "type");
+    const auto type = json_string_member(event, "type");
     if (!type) {
         return ResponsesProcessOutcome{};
     }
     if (*type == "response.created") {
-        if (const auto* response = object_member(event, "response")) {
-            if (const auto id = string_member(*response, "id"); id && !id->empty()) {
+        if (const auto* response = json_object_member(event, "response")) {
+            if (const auto id = json_string_member(*response, "id"); id && !id->empty()) {
                 assistant.response_id = std::string{*id};
             }
         }
@@ -560,7 +522,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
     }
     if (*type == "response.output_item.added") {
         const auto index = output_index(event);
-        const auto* item = object_member(event, "item");
+        const auto* item = json_object_member(event, "item");
         if (index && item) {
             if (auto created = create_slot(*index, *item, slots, assistant, sink); !created) {
                 return std::unexpected(created.error());
@@ -605,7 +567,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         if (*type == "response.failed" && delivery == ResponsesDelivery::WebSocket) {
             // Codex WebSocket failures carry retryable codes under response.error;
             // SSE retains its historical top-level error extraction.
-            if (const auto* response = object_member(event, "response")) {
+            if (const auto* response = json_object_member(event, "response")) {
                 auto response_failure = provider_error(*response);
                 if (!failure.code) {
                     failure.code = std::move(response_failure.code);

@@ -1,12 +1,13 @@
 #include "RetryPolicy.hpp"
 
+#include "ai/Headers.hpp"
+#include "ai/JsonAccess.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <chrono>
-#include <cctype>
 #include <cstdint>
 #include <ctime>
 #include <iomanip>
@@ -20,24 +21,6 @@ namespace cch::ai::providers {
 namespace {
 
 constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
-
-[[nodiscard]] bool equal_ascii_case_insensitive(std::string_view left, std::string_view right) {
-    return std::ranges::equal(left, right, [](char left_character, char right_character) {
-        return std::tolower(static_cast<unsigned char>(left_character)) ==
-               std::tolower(static_cast<unsigned char>(right_character));
-    });
-}
-
-[[nodiscard]] std::optional<std::string_view> header(
-    const ProviderHeaders& headers,
-    std::string_view name) {
-    for (const auto& [candidate, value] : headers) {
-        if (equal_ascii_case_insensitive(candidate, name)) {
-            return value;
-        }
-    }
-    return std::nullopt;
-}
 
 [[nodiscard]] InferenceFailureKind effective_failure_kind(const ProviderFailure& failure) noexcept {
     if (failure.inference_failure) {
@@ -120,14 +103,14 @@ constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
 } // namespace
 
 std::optional<std::uint64_t> provider_backoff_hint_ms(const ProviderFailure& failure, std::int64_t now_epoch_ms) {
-    if (const auto retry_after_ms = header(failure.headers, "retry-after-ms")) {
+    if (const auto retry_after_ms = find_header(failure.headers, "retry-after-ms")) {
         if (const auto parsed = parse_number(*retry_after_ms)) {
             if (const auto delay = non_negative_delay_ms(*parsed, 1.0)) {
                 return delay;
             }
         }
     }
-    if (const auto retry_after = header(failure.headers, "retry-after")) {
+    if (const auto retry_after = find_header(failure.headers, "retry-after")) {
         if (const auto seconds = parse_number(*retry_after)) {
             if (const auto delay = non_negative_delay_ms(*seconds, 1000.0)) {
                 return delay;
@@ -190,48 +173,41 @@ std::optional<std::uint64_t> provider_backoff_hint_ms(std::string_view payload, 
 
 InferenceFailureKind inference_failure_kind_from_provider_code(
     std::string_view provider_code) noexcept {
-    if (equal_ascii_case_insensitive(provider_code, "invalid_api_key") ||
-        equal_ascii_case_insensitive(provider_code, "authentication_error") ||
-        equal_ascii_case_insensitive(provider_code, "permission_error") ||
-        equal_ascii_case_insensitive(provider_code, "unauthorized") ||
-        equal_ascii_case_insensitive(provider_code, "unauthorized_error") ||
-        equal_ascii_case_insensitive(provider_code, "invalid_token")) {
+    if (header_name_equal(provider_code, "invalid_api_key") ||
+            header_name_equal(provider_code, "authentication_error") ||
+            header_name_equal(provider_code, "permission_error") || header_name_equal(provider_code, "unauthorized") ||
+            header_name_equal(provider_code, "unauthorized_error") ||
+            header_name_equal(provider_code, "invalid_token")) {
         return InferenceFailureKind::Unauthorized;
     }
-    if (equal_ascii_case_insensitive(provider_code, "rate_limit_exceeded") ||
-        equal_ascii_case_insensitive(provider_code, "rate_limited") ||
-        equal_ascii_case_insensitive(provider_code, "rate_limit_error") ||
-        equal_ascii_case_insensitive(provider_code, "too_many_requests")) {
+    if (header_name_equal(provider_code, "rate_limit_exceeded") || header_name_equal(provider_code, "rate_limited") ||
+            header_name_equal(provider_code, "rate_limit_error") ||
+            header_name_equal(provider_code, "too_many_requests")) {
         return InferenceFailureKind::RateLimited;
     }
-    if (equal_ascii_case_insensitive(provider_code, "context_length_exceeded") ||
-        equal_ascii_case_insensitive(provider_code, "request_too_large") ||
-        equal_ascii_case_insensitive(provider_code, "prompt_too_long") ||
-        equal_ascii_case_insensitive(provider_code, "context_window_exceeded")) {
+    if (header_name_equal(provider_code, "context_length_exceeded") ||
+            header_name_equal(provider_code, "request_too_large") ||
+            header_name_equal(provider_code, "prompt_too_long") ||
+            header_name_equal(provider_code, "context_window_exceeded")) {
         return InferenceFailureKind::ContextOverflow;
     }
-    if (equal_ascii_case_insensitive(provider_code, "insufficient_quota") ||
-        equal_ascii_case_insensitive(provider_code, "quota_exceeded") ||
-        equal_ascii_case_insensitive(provider_code, "billing_error") ||
-        equal_ascii_case_insensitive(provider_code, "budget_exceeded") ||
-        equal_ascii_case_insensitive(provider_code, "out_of_budget") ||
-        equal_ascii_case_insensitive(provider_code, "usage_limit_reached") ||
-        equal_ascii_case_insensitive(provider_code, "free_usage_limit_error") ||
-        equal_ascii_case_insensitive(provider_code, "go_usage_limit_error")) {
+    if (header_name_equal(provider_code, "insufficient_quota") || header_name_equal(provider_code, "quota_exceeded") ||
+            header_name_equal(provider_code, "billing_error") || header_name_equal(provider_code, "budget_exceeded") ||
+            header_name_equal(provider_code, "out_of_budget") ||
+            header_name_equal(provider_code, "usage_limit_reached") ||
+            header_name_equal(provider_code, "free_usage_limit_error") ||
+            header_name_equal(provider_code, "go_usage_limit_error")) {
         return InferenceFailureKind::InvalidRequest;
     }
-    if (equal_ascii_case_insensitive(provider_code, "overloaded") ||
-        equal_ascii_case_insensitive(provider_code, "overloaded_error") ||
-        equal_ascii_case_insensitive(provider_code, "server_error") ||
-        equal_ascii_case_insensitive(provider_code, "internal_server_error") ||
-        equal_ascii_case_insensitive(provider_code, "service_unavailable") ||
-        equal_ascii_case_insensitive(provider_code, "resource_exhausted") ||
-        equal_ascii_case_insensitive(provider_code, "timeout") ||
-        equal_ascii_case_insensitive(provider_code, "temporarily_unavailable")) {
+    if (header_name_equal(provider_code, "overloaded") || header_name_equal(provider_code, "overloaded_error") ||
+            header_name_equal(provider_code, "server_error") ||
+            header_name_equal(provider_code, "internal_server_error") ||
+            header_name_equal(provider_code, "service_unavailable") ||
+            header_name_equal(provider_code, "resource_exhausted") || header_name_equal(provider_code, "timeout") ||
+            header_name_equal(provider_code, "temporarily_unavailable")) {
         return InferenceFailureKind::TransientTransportFailure;
     }
-    if (equal_ascii_case_insensitive(provider_code, "cancelled") ||
-        equal_ascii_case_insensitive(provider_code, "canceled")) {
+    if (header_name_equal(provider_code, "cancelled") || header_name_equal(provider_code, "canceled")) {
         return InferenceFailureKind::Cancelled;
     }
     return InferenceFailureKind::InvalidRequest;
@@ -277,17 +253,8 @@ std::optional<std::string> provider_error_code_from_payload(
     if (!object) {
         return std::nullopt;
     }
-    const auto string_member = [](const support::JsonValue::object_t& value,
-                                  std::string_view name) -> std::optional<std::string> {
-        const auto found = value.find(std::string{name});
-        if (found == value.end()) {
-            return std::nullopt;
-        }
-        const auto* text = found->second.get_if<std::string>();
-        return text ? std::optional<std::string>{*text} : std::nullopt;
-    };
-    if (auto code = string_member(*object, "code")) {
-        return code;
+    if (auto code = json_string_member(*object, "code")) {
+        return std::string{*code};
     }
     const auto error = object->find("error");
     if (error == object->end()) {
@@ -297,10 +264,13 @@ std::optional<std::string> provider_error_code_from_payload(
     if (!error_object) {
         return std::nullopt;
     }
-    if (auto code = string_member(*error_object, "code")) {
-        return code;
+    if (auto code = json_string_member(*error_object, "code")) {
+        return std::string{*code};
     }
-    return string_member(*error_object, "type");
+    if (auto type = json_string_member(*error_object, "type")) {
+        return std::string{*type};
+    }
+    return std::nullopt;
 }
 
 bool is_retryable_provider_failure(const ProviderFailure& failure) {
@@ -311,7 +281,7 @@ bool is_retryable_provider_failure(const ProviderFailure& failure) {
             return false;
         }
     }
-    if (const auto should_retry = header(failure.headers, "x-should-retry")) {
+    if (const auto should_retry = find_header(failure.headers, "x-should-retry")) {
         if (*should_retry == "true") {
             return true;
         }

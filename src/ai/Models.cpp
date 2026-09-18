@@ -1,7 +1,9 @@
 #include <cch/ai/Models.hpp>
 
 #include "support/AsyncResultBridge.hpp"
+#include "ai/Headers.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/Timestamps.hpp"
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "ai/providers/ComposedProvider.hpp"
@@ -37,15 +39,8 @@ namespace {
 constexpr std::chrono::milliseconds kOAuthMinimumValidity{std::chrono::minutes{5}};
 constexpr std::size_t kMaxPublicErrorBytes = 1024;
 
-[[nodiscard]] TimestampMs current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
 [[nodiscard]] bool expires_soon(const OAuthCredential& credential) {
-    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    return credential.expires <= now + kOAuthMinimumValidity.count();
+    return credential.expires <= current_timestamp_ms() + kOAuthMinimumValidity.count();
 }
 
 [[nodiscard]] support::Error categorized_error(
@@ -161,47 +156,6 @@ invoke_async_operation(Operation operation) {
             std::move(websocket_transport));
 }
 
-[[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
-    return std::ranges::equal(
-        left,
-        right,
-        [](char left_character, char right_character) {
-            const auto lower = [](char character) {
-                if (character >= 'A' && character <= 'Z') {
-                    return static_cast<char>(character - 'A' + 'a');
-                }
-                return character;
-            };
-            return lower(left_character) == lower(right_character);
-        });
-}
-
-template <typename Headers>
-void erase_header(Headers& target, std::string_view name) {
-    std::erase_if(target, [&name](const auto& entry) {
-        return header_name_equal(entry.first, name);
-    });
-}
-
-void merge_headers(ProviderHeaders& target, const ModelHeaders& overrides) {
-    for (const auto& [name, value] : overrides) {
-        erase_header(target, name);
-        target.emplace(name, value);
-    }
-}
-
-void merge_request_headers(RequestHeaders& target, const RequestHeaders& overrides) {
-    for (const auto& [name, value] : overrides) {
-        erase_header(target, name);
-        target.emplace(name, value);
-    }
-}
-
-void set_request_header(RequestHeaders& target, std::string name, std::string value) {
-    erase_header(target, name);
-    target.emplace(std::move(name), std::move(value));
-}
-
 [[nodiscard]] RequestHeaders request_headers_from_auth(const ModelAuth& auth) {
     RequestHeaders result;
     for (const auto& [name, value] : auth.headers) {
@@ -229,18 +183,6 @@ void set_request_header(RequestHeaders& target, std::string name, std::string va
         }
     }
     return result;
-}
-
-[[nodiscard]] bool has_non_empty_header(
-    const ProviderHeaders& headers,
-    std::string_view expected_name) {
-    return std::ranges::any_of(headers, [&expected_name](const auto& entry) {
-        return header_name_equal(entry.first, expected_name) &&
-               std::ranges::any_of(entry.second, [](char character) {
-                   return character != ' ' && character != '\t' &&
-                          character != '\r' && character != '\n';
-               });
-    });
 }
 
 [[nodiscard]] support::ExpectedVoid assert_request_auth(
@@ -316,14 +258,14 @@ struct PreparedProviderRequest {
         if (model.api == "openai-codex-responses") {
             const auto codex_session_id =
                 detail::clamp_openai_prompt_cache_key(*request_session_id);
-            set_request_header(request_headers, "session-id", codex_session_id);
-            set_request_header(request_headers, "x-client-request-id", codex_session_id);
+            set_header(request_headers, "session-id", codex_session_id);
+            set_header(request_headers, "x-client-request-id", codex_session_id);
         } else if (model.api == "openai-responses") {
-            set_request_header(request_headers, "session_id", *request_session_id);
-            set_request_header(request_headers, "x-client-request-id", *request_session_id);
+            set_header(request_headers, "session_id", *request_session_id);
+            set_header(request_headers, "x-client-request-id", *request_session_id);
         }
     }
-    merge_request_headers(request_headers, options.headers);
+    merge_headers(request_headers, options.headers);
     auto transformed_headers = transform_request_headers(
         std::move(request_headers), options.transform_headers);
     if (!transformed_headers) {

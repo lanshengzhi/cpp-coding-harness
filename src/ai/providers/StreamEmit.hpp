@@ -15,4 +15,15 @@ namespace cch::ai::providers {
     return sink(event);
 }
 
+/// Emits the one AssistantStartEvent for a stream attempt, flipping `started`
+/// so repeat calls are no-ops.
+[[nodiscard]] inline support::ExpectedVoid emit_start(
+        ai::AssistantEventSink& sink, const ai::AssistantMessage& assistant, bool& started) {
+    if (started) {
+        return {};
+    }
+    started = true;
+    return emit(sink, ai::AssistantStartEvent{.partial = assistant});
+}
+
 } // namespace cch::ai::providers

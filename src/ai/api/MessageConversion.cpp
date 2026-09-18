@@ -1,6 +1,7 @@
 #include "MessageConversion.hpp"
 
 #include "ai/SimpleOptions.hpp"
+#include "ai/Utf8.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -29,64 +30,6 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
     return std::ranges::find(model.input, ModelInput::Image) != model.input.end();
 }
 
-[[nodiscard]] std::size_t utf8_sequence_length(unsigned char lead) {
-    if (lead <= 0x7f) {
-        return 1;
-    }
-    if (lead >= 0xc2 && lead <= 0xdf) {
-        return 2;
-    }
-    if (lead >= 0xe0 && lead <= 0xef) {
-        return 3;
-    }
-    if (lead >= 0xf0 && lead <= 0xf4) {
-        return 4;
-    }
-    return 0;
-}
-
-[[nodiscard]] bool valid_utf8_sequence(
-    std::string_view text,
-    std::size_t index,
-    std::size_t length) {
-    if (index + length > text.size()) {
-        return false;
-    }
-    for (std::size_t offset = 1; offset < length; ++offset) {
-        const auto continuation = static_cast<unsigned char>(text[index + offset]);
-        if (continuation < 0x80 || continuation > 0xbf) {
-            return false;
-        }
-    }
-    const auto lead = static_cast<unsigned char>(text[index]);
-    if (length == 3) {
-        const auto second = static_cast<unsigned char>(text[index + 1]);
-        return !((lead == 0xe0 && second < 0xa0) ||
-                 (lead == 0xed && second >= 0xa0));
-    }
-    if (length == 4) {
-        const auto second = static_cast<unsigned char>(text[index + 1]);
-        return !((lead == 0xf0 && second < 0x90) ||
-                 (lead == 0xf4 && second >= 0x90));
-    }
-    return true;
-}
-
-[[nodiscard]] std::uint32_t decode_utf8_code_point(
-    std::string_view value,
-    std::size_t index,
-    std::size_t length) {
-    const auto lead = static_cast<unsigned char>(value[index]);
-    if (length == 1) {
-        return lead;
-    }
-    std::uint32_t result = lead & (length == 2 ? 0x1fU : length == 3 ? 0x0fU : 0x07U);
-    for (std::size_t offset = 1; offset < length; ++offset) {
-        result = (result << 6U) | (static_cast<unsigned char>(value[index + offset]) & 0x3fU);
-    }
-    return result;
-}
-
 [[nodiscard]] std::string sanitize_text(std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -98,7 +41,7 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
             ++index;
             continue;
         }
-        if (!valid_utf8_sequence(text, index, length)) {
+        if (!utf8_valid_sequence(text, index, length)) {
             result += kUtf8Replacement;
             std::size_t consumed = 1;
             while (consumed < length && index + consumed < text.size()) {
@@ -120,10 +63,10 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
 [[nodiscard]] bool blank(std::string_view text) {
     for (std::size_t index = 0; index < text.size();) {
         const auto length = utf8_sequence_length(static_cast<unsigned char>(text[index]));
-        if (length == 0 || !valid_utf8_sequence(text, index, length)) {
+        if (length == 0 || !utf8_valid_sequence(text, index, length)) {
             return false;
         }
-        const auto code_point = decode_utf8_code_point(text, index, length);
+        const auto code_point = utf8_decode_code_point(text, index, length);
         const bool whitespace = code_point == 0x0009U || code_point == 0x000aU ||
                                 code_point == 0x000bU || code_point == 0x000cU ||
                                 code_point == 0x000dU || code_point == 0x0020U ||
@@ -155,11 +98,8 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
             continue;
         }
         const auto length = utf8_sequence_length(character);
-        const bool valid = length != 0 && valid_utf8_sequence(value, index, length);
-        const auto replacement_count = valid &&
-                decode_utf8_code_point(value, index, length) > 0xffffU
-            ? 2U
-            : 1U;
+        const bool valid = length != 0 && utf8_valid_sequence(value, index, length);
+        const auto replacement_count = valid && utf8_decode_code_point(value, index, length) > 0xffffU ? 2U : 1U;
         result.append(std::min<std::size_t>(replacement_count, 64 - result.size()), '_');
         index += valid ? length : 1;
     }
@@ -446,12 +386,12 @@ struct ParsedTextSignature {
     };
     for (std::size_t index = 0; index < value.size();) {
         const auto length = utf8_sequence_length(static_cast<unsigned char>(value[index]));
-        if (length == 0 || !valid_utf8_sequence(value, index, length)) {
+        if (length == 0 || !utf8_valid_sequence(value, index, length)) {
             mix(0xfffdU);
             ++index;
             continue;
         }
-        const auto code_point = decode_utf8_code_point(value, index, length);
+        const auto code_point = utf8_decode_code_point(value, index, length);
         if (code_point <= 0xffffU) {
             mix(code_point);
         } else {
@@ -472,12 +412,12 @@ struct ParsedTextSignature {
     std::size_t result = 0;
     for (std::size_t index = 0; index < value.size();) {
         const auto length = utf8_sequence_length(static_cast<unsigned char>(value[index]));
-        if (length == 0 || !valid_utf8_sequence(value, index, length)) {
+        if (length == 0 || !utf8_valid_sequence(value, index, length)) {
             ++result;
             ++index;
             continue;
         }
-        result += decode_utf8_code_point(value, index, length) > 0xffffU ? 2 : 1;
+        result += utf8_decode_code_point(value, index, length) > 0xffffU ? 2 : 1;
         index += length;
     }
     return result;

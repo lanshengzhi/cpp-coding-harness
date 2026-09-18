@@ -1,6 +1,8 @@
 #include "OpenAIResponsesAdapter.hpp"
 
 #include "MessageConversion.hpp"
+#include "ai/Headers.hpp"
+#include "ai/Timestamps.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
@@ -11,11 +13,9 @@
 
 #include <boost/asio/use_awaitable.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -24,41 +24,6 @@ namespace cch::ai::api {
 namespace {
 
 using JsonObject = support::JsonValue::object_t;
-
-[[nodiscard]] TimestampMs current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
-}
-
-[[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
-    return std::ranges::equal(left, right, [](char left_character, char right_character) {
-        const auto lower = [](char character) {
-            return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
-        };
-        return lower(left_character) == lower(right_character);
-    });
-}
-
-template <typename Headers> void set_header(Headers& headers, std::string name, std::string value) {
-    std::erase_if(headers, [&name](const auto& header) { return header_name_equal(header.first, name); });
-    headers.emplace(std::move(name), std::move(value));
-}
-
-template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers, std::string_view name) {
-    return std::ranges::any_of(headers,
-            [name](const auto& header) { return header_name_equal(header.first, name) && !header.second.empty(); });
-}
-
-[[nodiscard]] bool header_deleted(const ProviderStreamOptions& options, std::string_view name) {
-    return std::ranges::any_of(
-            options.deleted_headers, [name](const auto& header) { return header_name_equal(header, name); });
-}
-
-[[nodiscard]] support::Error stream_error(std::string message, std::string detail = {}) {
-    return support::make_error(support::ErrorCode::Stream,
-            providers::bounded_provider_error_detail(std::move(message)),
-            providers::bounded_provider_error_detail(std::move(detail)));
-}
 
 [[nodiscard]] std::string responses_url(std::string_view base_url) {
     std::string result{base_url};
@@ -132,11 +97,12 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
         std::string detail = provider_error.code.value_or("unknown");
         detail += ": ";
         detail += provider_error.message.value_or("no message");
-        return std::unexpected(stream_error(std::move(detail)));
+        return std::unexpected(providers::make_stream_error(std::move(detail)));
     }
     const auto code = provider_error.code.value_or("unknown");
     const auto message = provider_error.message.value_or("Unknown error");
-    return std::unexpected(stream_error("Error Code " + std::string{code} + ": " + std::string{message}));
+    return std::unexpected(
+            providers::make_stream_error("Error Code " + std::string{code} + ": " + std::string{message}));
 }
 
 [[nodiscard]] support::ExpectedVoid process_sse_event(
@@ -157,19 +123,20 @@ template <typename Headers> [[nodiscard]] bool has_header(const Headers& headers
                 .suggested_backoff_ms = providers::provider_backoff_hint_ms(event.data, current_timestamp_ms()),
                 .provider_code = provider_code,
         };
-        return std::unexpected(stream_error(event.data));
+        return std::unexpected(providers::make_stream_error(event.data));
     }
     auto parsed = support::read_json(event.data);
     if (!parsed) {
         if (event.event != "message" && !event.event.starts_with("response.")) {
             return {};
         }
-        return std::unexpected(stream_error("Malformed OpenAI Responses SSE event", parsed.error().detail));
+        return std::unexpected(
+                providers::make_stream_error("Malformed OpenAI Responses SSE event", parsed.error().detail));
     }
     auto* event_object = parsed->get_if<JsonObject>();
     if (!event_object) {
-        return std::unexpected(
-                stream_error("Malformed OpenAI Responses SSE event", "event data must be a JSON object"));
+        return std::unexpected(providers::make_stream_error(
+                "Malformed OpenAI Responses SSE event", "event data must be a JSON object"));
     }
     return process_json_event(
         processor,
@@ -195,13 +162,14 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
     ProviderStreamOptions options,
     AssistantEventSink sink) {
     if (!transport_) {
-        co_return std::unexpected(stream_error("OpenAI Responses adapter requires a stream transport"));
+        co_return std::unexpected(providers::make_stream_error("OpenAI Responses adapter requires a stream transport"));
     }
     if (model.api != "openai-responses") {
-        co_return std::unexpected(stream_error("OpenAI Responses adapter received the wrong Model API"));
+        co_return std::unexpected(
+                providers::make_stream_error("OpenAI Responses adapter received the wrong Model API"));
     }
     if (model.base_url.empty()) {
-        co_return std::unexpected(stream_error("OpenAI Responses Model base URL is required"));
+        co_return std::unexpected(providers::make_stream_error("OpenAI Responses Model base URL is required"));
     }
     if (options.stop_token.stop_requested()) {
         co_return std::unexpected(support::make_error(
@@ -211,7 +179,7 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
     if ((!options.auth.api_key || options.auth.api_key->empty()) &&
             !has_header(options.auth.headers, "authorization") &&
             !has_header(options.auth.headers, "cf-aig-authorization")) {
-        co_return std::unexpected(stream_error("No API key for provider: " + model.provider));
+        co_return std::unexpected(providers::make_stream_error("No API key for provider: " + model.provider));
     }
 
     CCH_TRY(request, build_stream_request(model, context, options));

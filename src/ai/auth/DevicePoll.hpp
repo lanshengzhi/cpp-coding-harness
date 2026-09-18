@@ -1,21 +1,15 @@
 #pragma once
 
+#include "ai/CancellationBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/bind_cancellation_slot.hpp>
-#include <boost/asio/cancellation_signal.hpp>
-#include <boost/asio/post.hpp>
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -66,36 +60,12 @@ struct DevicePollOptions {
 
 namespace detail {
 
+/// Device-flow sleep between polls: wakes early with the frozen Cancelled
+/// message when the login stop token fires.
 [[nodiscard]] inline boost::asio::awaitable<support::ExpectedVoid> abortable_sleep(
     std::chrono::milliseconds duration,
     std::stop_token stop_token) {
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            std::string{kDeviceCancelMessage}));
-    }
-    auto executor = co_await boost::asio::this_coro::executor;
-    // The stop callback captures only shared state and posts to the executor
-    // (never a coroutine-local timer), so a cross-thread request_stop cannot
-    // race this frame's destruction (same pattern as BoostBeast transports).
-    auto cancellation_signal =
-        std::make_shared<boost::asio::cancellation_signal>();
-    std::stop_callback cancellation{stop_token, [executor, cancellation_signal] {
-        boost::asio::post(executor, [cancellation_signal] {
-            cancellation_signal->emit(boost::asio::cancellation_type::all);
-        });
-    }};
-    boost::asio::steady_timer timer(executor, duration);
-    boost::system::error_code error;
-    co_await timer.async_wait(boost::asio::bind_cancellation_slot(
-        cancellation_signal->slot(),
-        boost::asio::redirect_error(boost::asio::use_awaitable, error)));
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            std::string{kDeviceCancelMessage}));
-    }
-    co_return support::ExpectedVoid{};
+    co_return co_await interruptible_sleep(duration, stop_token, std::string{kDeviceCancelMessage});
 }
 
 } // namespace detail

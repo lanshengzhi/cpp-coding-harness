@@ -4,6 +4,9 @@
 #include "PartialJson.hpp"
 #include "Termination.hpp"
 #include "UsageNormalization.hpp"
+#include "ai/Headers.hpp"
+#include "ai/JsonAccess.hpp"
+#include "ai/Timestamps.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
@@ -15,9 +18,7 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <cstdint>
-#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -40,87 +41,10 @@ struct BlockSlot {
     std::string partial_arguments;
 };
 
-[[nodiscard]] TimestampMs current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
-[[nodiscard]] const JsonObject* object(const support::JsonValue& value) {
-    return value.get_if<JsonObject>();
-}
-
-[[nodiscard]] const support::JsonValue* member(
-    const JsonObject& value,
-    std::string_view name) {
-    const auto found = value.find(std::string{name});
-    return found == value.end() ? nullptr : &found->second;
-}
-
-[[nodiscard]] const JsonObject* object_member(
-    const JsonObject& value,
-    std::string_view name) {
-    const auto* found = member(value, name);
-    return found ? found->get_if<JsonObject>() : nullptr;
-}
-
-[[nodiscard]] std::optional<std::string_view> string_member(
-    const JsonObject& value,
-    std::string_view name) {
-    const auto* found = member(value, name);
-    const auto* text = found ? found->get_if<std::string>() : nullptr;
-    return text ? std::optional<std::string_view>{*text} : std::nullopt;
-}
-
-[[nodiscard]] std::optional<std::int64_t> integer_member(
-    const JsonObject& value,
-    std::string_view name) {
-    const auto* found = member(value, name);
-    const auto* number = found ? found->get_if<double>() : nullptr;
-    if (!number || !std::isfinite(*number) || *number < 0 ||
-        *number > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
-        return std::nullopt;
-    }
-    return static_cast<std::int64_t>(*number);
-}
-
 [[nodiscard]] std::optional<std::size_t> block_index(const JsonObject& event) {
-    const auto index = integer_member(event, "index");
+    const auto index = json_integer_member(event, "index");
     return index ? std::optional<std::size_t>{static_cast<std::size_t>(*index)}
                  : std::nullopt;
-}
-
-[[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
-    return std::ranges::equal(left, right, [](char left_character, char right_character) {
-        const auto lower = [](char character) {
-            return character >= 'A' && character <= 'Z'
-                ? static_cast<char>(character - 'A' + 'a')
-                : character;
-        };
-        return lower(left_character) == lower(right_character);
-    });
-}
-
-template <typename Headers>
-void set_header(Headers& headers, std::string name, std::string value) {
-    std::erase_if(headers, [&name](const auto& header) {
-        return header_name_equal(header.first, name);
-    });
-    headers.emplace(std::move(name), std::move(value));
-}
-
-template <typename Headers>
-[[nodiscard]] bool has_header(const Headers& headers, std::string_view name) {
-    return std::ranges::any_of(headers, [name](const auto& header) {
-        return header_name_equal(header.first, name) && !header.second.empty();
-    });
-}
-
-[[nodiscard]] bool header_deleted(
-    const ProviderStreamOptions& options,
-    std::string_view name) {
-    return std::ranges::any_of(options.deleted_headers, [name](const auto& header) {
-        return header_name_equal(header, name);
-    });
 }
 
 [[nodiscard]] std::string messages_url(std::string_view base_url) {
@@ -188,13 +112,6 @@ template <typename Headers>
     return request;
 }
 
-[[nodiscard]] support::Error stream_error(std::string message, std::string detail = {}) {
-    return support::make_error(
-        support::ErrorCode::Stream,
-        providers::bounded_provider_error_detail(std::move(message)),
-        providers::bounded_provider_error_detail(std::move(detail)));
-}
-
 [[nodiscard]] support::Expected<support::JsonValue> parse_event_json(
     const providers::SseEvent& event) {
     if (auto parsed = support::read_json(event.data)) {
@@ -204,9 +121,8 @@ template <typename Headers>
     if (auto parsed = support::read_json(repaired)) {
         return std::move(*parsed);
     }
-    return std::unexpected(stream_error(
-        "Could not parse Anthropic SSE event " + event.event,
-        event.data));
+    return std::unexpected(
+            providers::make_stream_error("Could not parse Anthropic SSE event " + event.event, event.data));
 }
 
 [[nodiscard]] AnthropicUsageUpdate usage_update(const JsonObject& usage) {
@@ -214,23 +130,22 @@ template <typename Headers>
     // the provider omits `cache_creation` (anthropic-messages.ts
     // `cache_creation?.ephemeral_1h_input_tokens || 0`).
     std::optional<std::int64_t> cache_write_1h = 0;
-    if (const auto* cache_creation = object_member(usage, "cache_creation")) {
-        cache_write_1h =
-            integer_member(*cache_creation, "ephemeral_1h_input_tokens");
+    if (const auto* cache_creation = json_object_member(usage, "cache_creation")) {
+        cache_write_1h = json_integer_member(*cache_creation, "ephemeral_1h_input_tokens");
         if (!cache_write_1h) {
             cache_write_1h = 0;
         }
     }
     AnthropicUsageUpdate update{
-        .input = integer_member(usage, "input_tokens"),
-        .output = integer_member(usage, "output_tokens"),
-        .cache_read = integer_member(usage, "cache_read_input_tokens"),
-        .cache_write = integer_member(usage, "cache_creation_input_tokens"),
-        .cache_write_1h = cache_write_1h,
-        .reasoning = std::nullopt,
+            .input = json_integer_member(usage, "input_tokens"),
+            .output = json_integer_member(usage, "output_tokens"),
+            .cache_read = json_integer_member(usage, "cache_read_input_tokens"),
+            .cache_write = json_integer_member(usage, "cache_creation_input_tokens"),
+            .cache_write_1h = cache_write_1h,
+            .reasoning = std::nullopt,
     };
-    if (const auto* output_details = object_member(usage, "output_tokens_details")) {
-        update.reasoning = integer_member(*output_details, "thinking_tokens");
+    if (const auto* output_details = json_object_member(usage, "output_tokens_details")) {
+        update.reasoning = json_integer_member(*output_details, "thinking_tokens");
     }
     return update;
 }
@@ -241,19 +156,19 @@ template <typename Headers>
     AssistantMessage& assistant,
     AssistantEventSink& sink) {
     const auto provider_index = block_index(event);
-    const auto* content = object_member(event, "content_block");
+    const auto* content = json_object_member(event, "content_block");
     if (!provider_index || !content || slots.contains(*provider_index)) {
         return {};
     }
-    const auto type = string_member(*content, "type");
+    const auto type = json_string_member(*content, "type");
     if (!type) {
         return {};
     }
     const auto content_index = assistant.content.size();
     if (*type == "text") {
         assistant.content.emplace_back(TextContent{
-            .text = std::string{string_member(*content, "text").value_or("")},
-            .text_signature = std::nullopt,
+                .text = std::string{json_string_member(*content, "text").value_or("")},
+                .text_signature = std::nullopt,
         });
         slots.emplace(*provider_index, BlockSlot{
             .kind = BlockSlot::Kind::Text,
@@ -267,10 +182,9 @@ template <typename Headers>
     }
     if (*type == "thinking") {
         assistant.content.emplace_back(ThinkingContent{
-            .thinking = std::string{string_member(*content, "thinking").value_or("")},
-            .thinking_signature = std::string{
-                string_member(*content, "signature").value_or("")},
-            .redacted = false,
+                .thinking = std::string{json_string_member(*content, "thinking").value_or("")},
+                .thinking_signature = std::string{json_string_member(*content, "signature").value_or("")},
+                .redacted = false,
         });
         slots.emplace(*provider_index, BlockSlot{
             .kind = BlockSlot::Kind::Thinking,
@@ -284,10 +198,9 @@ template <typename Headers>
     }
     if (*type == "redacted_thinking") {
         assistant.content.emplace_back(ThinkingContent{
-            .thinking = "[Reasoning redacted]",
-            .thinking_signature = std::string{
-                string_member(*content, "data").value_or("")},
-            .redacted = true,
+                .thinking = "[Reasoning redacted]",
+                .thinking_signature = std::string{json_string_member(*content, "data").value_or("")},
+                .redacted = true,
         });
         slots.emplace(*provider_index, BlockSlot{
             .kind = BlockSlot::Kind::Thinking,
@@ -300,16 +213,16 @@ template <typename Headers>
         });
     }
     if (*type == "tool_use") {
-        const auto* input = member(*content, "input");
+        const auto* input = json_member(*content, "input");
         assistant.content.emplace_back(ToolCallContent{
-            .id = std::string{string_member(*content, "id").value_or("")},
-            .name = std::string{string_member(*content, "name").value_or("")},
-            .arguments = input ? std::optional<support::JsonValue>{*input}
-                               : std::optional<support::JsonValue>{support::JsonValue::object_t{}},
-            .raw_arguments = {},
-            .thought_signature = std::nullopt,
-            .arguments_valid = true,
-            .argument_error = std::nullopt,
+                .id = std::string{json_string_member(*content, "id").value_or("")},
+                .name = std::string{json_string_member(*content, "name").value_or("")},
+                .arguments = input ? std::optional<support::JsonValue>{*input}
+                                   : std::optional<support::JsonValue>{support::JsonValue::object_t{}},
+                .raw_arguments = {},
+                .thought_signature = std::nullopt,
+                .arguments_valid = true,
+                .argument_error = std::nullopt,
         });
         slots.emplace(*provider_index, BlockSlot{
             .kind = BlockSlot::Kind::ToolCall,
@@ -330,18 +243,18 @@ template <typename Headers>
     AssistantMessage& assistant,
     AssistantEventSink& sink) {
     const auto provider_index = block_index(event);
-    const auto* delta = object_member(event, "delta");
+    const auto* delta = json_object_member(event, "delta");
     if (!provider_index || !delta) {
         return {};
     }
     const auto found = slots.find(*provider_index);
-    const auto type = string_member(*delta, "type");
+    const auto type = json_string_member(*delta, "type");
     if (found == slots.end() || !type) {
         return {};
     }
     auto& slot = found->second;
     if (*type == "text_delta" && slot.kind == BlockSlot::Kind::Text) {
-        const auto text = string_member(*delta, "text").value_or("");
+        const auto text = json_string_member(*delta, "text").value_or("");
         auto& block = std::get<TextContent>(assistant.content[slot.content_index]);
         block.text += text;
         return providers::emit(sink, TextDeltaEvent{
@@ -351,7 +264,7 @@ template <typename Headers>
         });
     }
     if (*type == "thinking_delta" && slot.kind == BlockSlot::Kind::Thinking) {
-        const auto thinking = string_member(*delta, "thinking").value_or("");
+        const auto thinking = json_string_member(*delta, "thinking").value_or("");
         auto& block = std::get<ThinkingContent>(assistant.content[slot.content_index]);
         block.thinking += thinking;
         return providers::emit(sink, ThinkingDeltaEvent{
@@ -361,14 +274,14 @@ template <typename Headers>
         });
     }
     if (*type == "signature_delta" && slot.kind == BlockSlot::Kind::Thinking) {
-        const auto signature = string_member(*delta, "signature").value_or("");
+        const auto signature = json_string_member(*delta, "signature").value_or("");
         auto& block = std::get<ThinkingContent>(assistant.content[slot.content_index]);
         block.thinking_signature = block.thinking_signature.value_or("") +
                                    std::string{signature};
         return {};
     }
     if (*type == "input_json_delta" && slot.kind == BlockSlot::Kind::ToolCall) {
-        const auto partial = string_member(*delta, "partial_json").value_or("");
+        const auto partial = json_string_member(*delta, "partial_json").value_or("");
         slot.partial_arguments += partial;
         auto& block = std::get<ToolCallContent>(assistant.content[slot.content_index]);
         block.raw_arguments = slot.partial_arguments;
@@ -436,20 +349,20 @@ template <typename Headers>
     bool& saw_message_start,
     bool& saw_message_stop,
     std::optional<TerminationResult>& termination) {
-    const auto type = string_member(event, "type");
+    const auto type = json_string_member(event, "type");
     if (!type) {
         return {};
     }
     if (*type == "message_start") {
         saw_message_start = true;
-        const auto* message = object_member(event, "message");
+        const auto* message = json_object_member(event, "message");
         if (!message) {
             return {};
         }
-        if (const auto id = string_member(*message, "id"); id && !id->empty()) {
+        if (const auto id = json_string_member(*message, "id"); id && !id->empty()) {
             assistant.response_id = std::string{*id};
         }
-        if (const auto* usage = object_member(*message, "usage")) {
+        if (const auto* usage = json_object_member(*message, "usage")) {
             apply_anthropic_usage_start(model, assistant.usage, usage_update(*usage));
         }
         return {};
@@ -464,13 +377,13 @@ template <typename Headers>
         return stop_content_block(event, slots, assistant, sink);
     }
     if (*type == "message_delta") {
-        const auto* delta = object_member(event, "delta");
+        const auto* delta = json_object_member(event, "delta");
         if (delta) {
-            if (const auto reason = string_member(*delta, "stop_reason")) {
+            if (const auto reason = json_string_member(*delta, "stop_reason")) {
                 assistant.raw_stop_reason = std::string{*reason};
                 std::optional<std::string_view> explanation;
-                if (const auto* details = object_member(*delta, "stop_details")) {
-                    explanation = string_member(*details, "explanation");
+                if (const auto* details = json_object_member(*delta, "stop_details")) {
+                    explanation = json_string_member(*details, "explanation");
                 }
                 auto mapped = map_anthropic_termination(*reason, explanation);
                 if (!mapped) {
@@ -481,7 +394,7 @@ template <typename Headers>
                 assistant.error_message = termination->error_message;
             }
         }
-        if (const auto* usage = object_member(event, "usage")) {
+        if (const auto* usage = json_object_member(event, "usage")) {
             apply_anthropic_usage_delta(model, assistant.usage, usage_update(*usage));
         }
         return {};
@@ -520,7 +433,7 @@ template <typename Headers>
                 .suggested_backoff_ms = providers::provider_backoff_hint_ms(event.data, current_timestamp_ms()),
                 .provider_code = provider_code,
         };
-        return std::unexpected(stream_error(event.data));
+        return std::unexpected(providers::make_stream_error(event.data));
     }
     if (!known_anthropic_event(event.event)) {
         return {};
@@ -529,11 +442,10 @@ template <typename Headers>
     if (!parsed) {
         return std::unexpected(parsed.error());
     }
-    const auto* event_object = object(*parsed);
+    const auto* event_object = json_object(*parsed);
     if (!event_object) {
-        return std::unexpected(stream_error(
-            "Could not parse Anthropic SSE event " + event.event,
-            "event data must be a JSON object"));
+        return std::unexpected(providers::make_stream_error(
+                "Could not parse Anthropic SSE event " + event.event, "event data must be a JSON object"));
     }
     return process_json_event(
         model,
@@ -562,16 +474,15 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
     ProviderStreamOptions options,
     AssistantEventSink sink) {
     if (!transport_) {
-        co_return std::unexpected(stream_error(
-            "Anthropic Messages adapter requires a stream transport"));
+        co_return std::unexpected(
+                providers::make_stream_error("Anthropic Messages adapter requires a stream transport"));
     }
     if (model.api != "anthropic-messages") {
-        co_return std::unexpected(stream_error(
-            "Anthropic Messages adapter received the wrong Model API"));
+        co_return std::unexpected(
+                providers::make_stream_error("Anthropic Messages adapter received the wrong Model API"));
     }
     if (model.base_url.empty()) {
-        co_return std::unexpected(stream_error(
-            "Anthropic Messages Model base URL is required"));
+        co_return std::unexpected(providers::make_stream_error("Anthropic Messages Model base URL is required"));
     }
     if (options.stop_token.stop_requested()) {
         co_return std::unexpected(support::make_error(
@@ -582,8 +493,7 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
         !has_header(options.auth.headers, "authorization") &&
         !has_header(options.auth.headers, "x-api-key") &&
         !has_header(options.auth.headers, "cf-aig-authorization")) {
-        co_return std::unexpected(stream_error(
-            "No API key for provider: " + model.provider));
+        co_return std::unexpected(providers::make_stream_error("No API key for provider: " + model.provider));
     }
 
     CCH_TRY(request, build_stream_request(model, context, options));
@@ -626,18 +536,17 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
 
     auto finalize_hook = [attempt_state](AssistantMessage& assistant) -> support::ExpectedVoid {
         if (!attempt_state->saw_message_stop) {
-            return std::unexpected(stream_error(attempt_state->saw_message_start
-                ? "Anthropic stream ended before message_stop"
-                : "Anthropic stream ended without message_stop"));
+            return std::unexpected(providers::make_stream_error(
+                    attempt_state->saw_message_start ? "Anthropic stream ended before message_stop"
+                                                     : "Anthropic stream ended without message_stop"));
         }
         if (assistant.stop_reason == AssistantStopReason::Pending) {
-            return std::unexpected(stream_error(
-                "Anthropic stream ended without a stop reason"));
+            return std::unexpected(providers::make_stream_error("Anthropic stream ended without a stop reason"));
         }
         if (attempt_state->termination && attempt_state->termination->reason == AssistantStopReason::Error) {
             assistant.stop_reason = AssistantStopReason::Error;
-            return std::unexpected(stream_error(
-                attempt_state->termination->error_message.value_or("Anthropic Messages request failed")));
+            return std::unexpected(providers::make_stream_error(
+                    attempt_state->termination->error_message.value_or("Anthropic Messages request failed")));
         }
         if (attempt_state->termination) {
             assistant.stop_reason = attempt_state->termination->reason;

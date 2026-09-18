@@ -1,5 +1,6 @@
 #include "SimpleOptions.hpp"
 
+#include "ai/Utf8.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -17,30 +18,6 @@ namespace {
 constexpr std::uint64_t kCharactersPerToken = 4;
 constexpr std::uint64_t kEstimatedImageCharacters = 4800;
 constexpr std::uint64_t kContextSafetyTokens = 4096;
-
-[[nodiscard]] std::size_t utf8_character_bytes(
-    std::string_view text,
-    std::size_t index) {
-    const auto lead = static_cast<unsigned char>(text[index]);
-    std::size_t length = 1;
-    if (lead >= 0xc2 && lead <= 0xdf) {
-        length = 2;
-    } else if (lead >= 0xe0 && lead <= 0xef) {
-        length = 3;
-    } else if (lead >= 0xf0 && lead <= 0xf4) {
-        length = 4;
-    }
-    if (index + length > text.size()) {
-        return 1;
-    }
-    for (std::size_t offset = 1; offset < length; ++offset) {
-        const auto continuation = static_cast<unsigned char>(text[index + offset]);
-        if (continuation < 0x80 || continuation > 0xbf) {
-            return 1;
-        }
-    }
-    return length;
-}
 
 [[nodiscard]] std::uint64_t estimated_text_tokens(std::string_view text) {
     return (static_cast<std::uint64_t>(text.size()) + kCharactersPerToken - 1) /

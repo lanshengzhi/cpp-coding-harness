@@ -9,6 +9,7 @@
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/support/Error.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <stop_token>
@@ -65,5 +66,17 @@ public:
     /// concurrency contract.
     [[nodiscard]] virtual ModelStream stream(Model model, AiContext context, ProviderStreamOptions options) = 0;
 };
+
+/// True when `name` (any casing) is listed in the options' deleted headers.
+[[nodiscard]] inline bool header_deleted(const ProviderStreamOptions& options, std::string_view name) {
+    return std::ranges::any_of(options.deleted_headers, [name](const std::string& header) {
+        const auto lower = [](char character) {
+            return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
+        };
+        return std::ranges::equal(header, name, [&lower](char left_character, char right_character) {
+            return lower(left_character) == lower(right_character);
+        });
+    });
+}
 
 } // namespace cch::ai
