@@ -173,42 +173,47 @@ std::optional<std::uint64_t> provider_backoff_hint_ms(std::string_view payload, 
 
 InferenceFailureKind inference_failure_kind_from_provider_code(
     std::string_view provider_code) noexcept {
-    if (header_name_equal(provider_code, "invalid_api_key") ||
-            header_name_equal(provider_code, "authentication_error") ||
-            header_name_equal(provider_code, "permission_error") || header_name_equal(provider_code, "unauthorized") ||
-            header_name_equal(provider_code, "unauthorized_error") ||
-            header_name_equal(provider_code, "invalid_token")) {
-        return InferenceFailureKind::Unauthorized;
-    }
-    if (header_name_equal(provider_code, "rate_limit_exceeded") || header_name_equal(provider_code, "rate_limited") ||
-            header_name_equal(provider_code, "rate_limit_error") ||
-            header_name_equal(provider_code, "too_many_requests")) {
-        return InferenceFailureKind::RateLimited;
-    }
-    if (header_name_equal(provider_code, "context_length_exceeded") ||
-            header_name_equal(provider_code, "request_too_large") ||
-            header_name_equal(provider_code, "prompt_too_long") ||
-            header_name_equal(provider_code, "context_window_exceeded")) {
-        return InferenceFailureKind::ContextOverflow;
-    }
-    if (header_name_equal(provider_code, "insufficient_quota") || header_name_equal(provider_code, "quota_exceeded") ||
-            header_name_equal(provider_code, "billing_error") || header_name_equal(provider_code, "budget_exceeded") ||
-            header_name_equal(provider_code, "out_of_budget") ||
-            header_name_equal(provider_code, "usage_limit_reached") ||
-            header_name_equal(provider_code, "free_usage_limit_error") ||
-            header_name_equal(provider_code, "go_usage_limit_error")) {
-        return InferenceFailureKind::InvalidRequest;
-    }
-    if (header_name_equal(provider_code, "overloaded") || header_name_equal(provider_code, "overloaded_error") ||
-            header_name_equal(provider_code, "server_error") ||
-            header_name_equal(provider_code, "internal_server_error") ||
-            header_name_equal(provider_code, "service_unavailable") ||
-            header_name_equal(provider_code, "resource_exhausted") || header_name_equal(provider_code, "timeout") ||
-            header_name_equal(provider_code, "temporarily_unavailable")) {
-        return InferenceFailureKind::TransientTransportFailure;
-    }
-    if (header_name_equal(provider_code, "cancelled") || header_name_equal(provider_code, "canceled")) {
-        return InferenceFailureKind::Cancelled;
+    struct CodeGroup {
+        InferenceFailureKind kind;
+        std::initializer_list<std::string_view> codes;
+    };
+    static constexpr CodeGroup kGroups[] = {
+            {InferenceFailureKind::Unauthorized,
+                    {"invalid_api_key",
+                            "authentication_error",
+                            "permission_error",
+                            "unauthorized",
+                            "unauthorized_error",
+                            "invalid_token"}},
+            {InferenceFailureKind::RateLimited,
+                    {"rate_limit_exceeded", "rate_limited", "rate_limit_error", "too_many_requests"}},
+            {InferenceFailureKind::ContextOverflow,
+                    {"context_length_exceeded", "request_too_large", "prompt_too_long", "context_window_exceeded"}},
+            {InferenceFailureKind::InvalidRequest,
+                    {"insufficient_quota",
+                            "quota_exceeded",
+                            "billing_error",
+                            "budget_exceeded",
+                            "out_of_budget",
+                            "usage_limit_reached",
+                            "free_usage_limit_error",
+                            "go_usage_limit_error"}},
+            {InferenceFailureKind::TransientTransportFailure,
+                    {"overloaded",
+                            "overloaded_error",
+                            "server_error",
+                            "internal_server_error",
+                            "service_unavailable",
+                            "resource_exhausted",
+                            "timeout",
+                            "temporarily_unavailable"}},
+            {InferenceFailureKind::Cancelled, {"cancelled", "canceled"}},
+    };
+    for (const auto& group : kGroups) {
+        if (std::ranges::any_of(group.codes,
+                    [provider_code](std::string_view code) { return header_name_equal(provider_code, code); })) {
+            return group.kind;
+        }
     }
     return InferenceFailureKind::InvalidRequest;
 }

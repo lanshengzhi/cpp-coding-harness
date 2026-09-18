@@ -508,6 +508,22 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         AssistantMessage& assistant,
         AssistantEventSink& sink,
         bool& saw_terminal) {
+    static constexpr std::string_view kDeltaEvents[] = {
+            "response.reasoning_summary_text.delta",
+            "response.reasoning_text.delta",
+            "response.output_text.delta",
+            "response.refusal.delta",
+            "response.function_call_arguments.delta",
+    };
+    static constexpr std::string_view kTerminalEvents[] = {
+            "response.completed",
+            "response.done",
+            "response.incomplete",
+    };
+    static constexpr std::string_view kFailureEvents[] = {
+            "response.failed",
+            "error",
+    };
     const auto type = json_string_member(event, "type");
     if (!type) {
         return ResponsesProcessOutcome{};
@@ -530,9 +546,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         }
         return ResponsesProcessOutcome{};
     }
-    if (*type == "response.reasoning_summary_text.delta" || *type == "response.reasoning_text.delta" ||
-            *type == "response.output_text.delta" || *type == "response.refusal.delta" ||
-            *type == "response.function_call_arguments.delta") {
+    if (std::ranges::contains(kDeltaEvents, *type)) {
         if (auto processed = append_delta(event, *type, slots, assistant, sink); !processed) {
             return std::unexpected(processed.error());
         }
@@ -556,10 +570,10 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         }
         return ResponsesProcessOutcome{};
     }
-    if (*type == "response.completed" || *type == "response.done" || *type == "response.incomplete") {
+    if (std::ranges::contains(kTerminalEvents, *type)) {
         return finalize_response(model, dialect, event, *type, assistant, saw_terminal);
     }
-    if (*type == "response.failed" || *type == "error") {
+    if (std::ranges::contains(kFailureEvents, *type)) {
         if (dialect == ResponsesDialect::DeepSeek && *type == "response.failed") {
             return finalize_response(model, dialect, event, *type, assistant, saw_terminal);
         }

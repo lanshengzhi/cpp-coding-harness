@@ -340,6 +340,23 @@ struct BlockSlot {
     });
 }
 
+/// Block-level events dispatch to handlers with one shared signature; the
+/// message-level events keep bespoke bodies below.
+using BlockHandler = support::ExpectedVoid (*)(
+        const JsonObject&, std::map<std::size_t, BlockSlot>&, AssistantMessage&, AssistantEventSink&);
+
+constexpr std::pair<std::string_view, BlockHandler> kBlockHandlers[] = {
+        {"content_block_start", &start_content_block},
+        {"content_block_delta", &append_content_delta},
+        {"content_block_stop", &stop_content_block},
+};
+
+constexpr std::string_view kMessageEvents[] = {
+        "message_start",
+        "message_delta",
+        "message_stop",
+};
+
 [[nodiscard]] support::ExpectedVoid process_json_event(
     const Model& model,
     const JsonObject& event,
@@ -352,6 +369,11 @@ struct BlockSlot {
     const auto type = json_string_member(event, "type");
     if (!type) {
         return {};
+    }
+    for (const auto& [name, handler] : kBlockHandlers) {
+        if (*type == name) {
+            return handler(event, slots, assistant, sink);
+        }
     }
     if (*type == "message_start") {
         saw_message_start = true;
@@ -366,15 +388,6 @@ struct BlockSlot {
             apply_anthropic_usage_start(model, assistant.usage, usage_update(*usage));
         }
         return {};
-    }
-    if (*type == "content_block_start") {
-        return start_content_block(event, slots, assistant, sink);
-    }
-    if (*type == "content_block_delta") {
-        return append_content_delta(event, slots, assistant, sink);
-    }
-    if (*type == "content_block_stop") {
-        return stop_content_block(event, slots, assistant, sink);
     }
     if (*type == "message_delta") {
         const auto* delta = json_object_member(event, "delta");
@@ -406,9 +419,8 @@ struct BlockSlot {
 }
 
 [[nodiscard]] bool known_anthropic_event(std::string_view event) {
-    return event == "message_start" || event == "message_delta" ||
-           event == "message_stop" || event == "content_block_start" ||
-           event == "content_block_delta" || event == "content_block_stop";
+    return std::ranges::contains(kMessageEvents, event) ||
+           std::ranges::any_of(kBlockHandlers, [event](const auto& entry) { return entry.first == event; });
 }
 
 [[nodiscard]] support::ExpectedVoid process_sse_event(
