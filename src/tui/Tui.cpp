@@ -380,13 +380,13 @@ support::ExpectedVoid Tui::render() {
         // changed. A Preview Frame that changes nothing prepares nothing (#711).
         const bool rows_reusable = !first_render && !width_changed;
         const auto prepare_frame_rows = [&](std::vector<std::string>& lines,
-                                            const std::vector<std::string>& previous_prepared,
-                                            const std::vector<std::string>& previous_raw,
-                                            std::vector<std::string>& next_raw) -> support::ExpectedVoid {
+                                                const std::vector<std::string>& previous_prepared,
+                                                const std::vector<std::string>& previous_raw,
+                                                std::vector<std::string>& next_raw) -> support::ExpectedVoid {
             next_raw.resize(lines.size());
             for (std::size_t index = 0; index < lines.size(); ++index) {
                 const bool reusable = rows_reusable && index < previous_prepared.size() &&
-                        index < previous_raw.size() && lines[index] == previous_raw[index];
+                                      index < previous_raw.size() && lines[index] == previous_raw[index];
                 // The composed bytes move into the raw cache either way, so the
                 // raw cache mirrors the prepared cache for the next comparison.
                 next_raw[index] = std::move(lines[index]);
@@ -406,8 +406,7 @@ support::ExpectedVoid Tui::render() {
             }
             return {};
         };
-        if (auto result =
-                        prepare_frame_rows(new_lines, previous_lines_, previous_raw_lines_, next_raw_lines);
+        if (auto result = prepare_frame_rows(new_lines, previous_lines_, previous_raw_lines_, next_raw_lines);
                 !result) {
             return std::unexpected(result.error());
         }
