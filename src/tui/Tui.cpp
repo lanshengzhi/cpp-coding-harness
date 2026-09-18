@@ -354,6 +354,15 @@ support::ExpectedVoid Tui::render() {
         }
     }
 
+    // The one full reset per composed row lives here, after component
+    // rendering, after padding, after the background hook, and after overlay
+    // compositing (pi `applyLineResets` after `render()` and after
+    // `compositeOverlays()`). Nothing before this point emits a full reset, so
+    // a reset can never land inside a background span (#707). The dock lines
+    // are composed rows on this layout and get the same single reset.
+    detail::apply_line_resets(new_lines);
+    detail::apply_line_resets(new_dock_lines);
+
     const auto width_changed = dimensions.columns != previous_dimensions_.columns;
     const auto height_changed = dimensions.rows != previous_dimensions_.rows;
     // A viewport/dock re-partition (overlay, autocomplete, editor wrap) moves

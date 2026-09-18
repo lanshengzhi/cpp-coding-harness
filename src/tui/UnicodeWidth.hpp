@@ -39,6 +39,10 @@ struct AnsiStyleState {
     [[nodiscard]] std::string get_active_codes() const;
     [[nodiscard]] bool has_active_codes() const;
     [[nodiscard]] bool has_sgr_codes() const;
+    /// The reset a component or a wrap break emits inside a physical line:
+    /// underline off (`\x1b[24m`) plus the OSC 8 close. It never carries a
+    /// full reset, so it cannot cancel an enclosing background span (pi
+    /// `AnsiCodeTracker.getLineEndReset`).
     [[nodiscard]] std::string get_line_end_reset() const;
     void process_ansi(std::string_view code);
     void reset();
@@ -92,5 +96,13 @@ struct TerminalToken {
 [[nodiscard]] support::Expected<std::string> prepare_rendered_line(
     std::string_view line,
     std::size_t width);
+
+/// pi's `SEGMENT_RESET` (tui.ts at the frozen baseline): the one full reset a
+/// composed row carries, appended after component rendering, after padding,
+/// after the background hook, and after overlay compositing.
+inline constexpr std::string_view kSegmentReset{"\x1b[0m\x1b]8;;\x07"};
+
+/// Append `kSegmentReset` to every composed row (pi `TuiBase.applyLineResets`).
+void apply_line_resets(std::vector<std::string>& lines);
 
 } // namespace cch::tui::detail

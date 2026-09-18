@@ -1,4 +1,5 @@
 #include <cch/tui/Markdown.hpp>
+#include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -404,4 +405,52 @@ TEST_CASE("Markdown applies configured padding and background to every cell", "[
         for (const auto& cell : row) CHECK(cell.style.bg_color == "44");
     }
     CHECK(terminal.final_style() == tui::VirtualTerminalStyle{});
+}
+
+TEST_CASE("Markdown background survives inline styling and code blocks on every cell",
+        "[tui][markdown][background][issue707][spec]") {
+    // Regression for #707: a wrapped line with inline styling used to end in a
+    // full reset emitted by the wrapping utility, which cancelled the enclosing
+    // Markdown background so its padding lost the tint.
+    auto background = [](std::string text) { return "\x1b[44m" + std::move(text) + "\x1b[49m"; };
+    // The bold run stays open across the first break, which is where the old
+    // wrapping utility emitted a full reset and cut the background at the end
+    // of the text.
+    const std::string source = "**bold words that wrap across the line** and `code` and [link](https://example.com)\n"
+                               "```cpp\nint answer = 42;\n```";
+
+    // Render once through the component to pin the exact composed row count, so
+    // the VirtualTerminal has no trailing empty rows to pollute the per-cell
+    // assertion. padding_x makes the right margin land after the wrapped line
+    // content, which is where the old reset used to cut the background.
+    tui::Markdown probe(source, 1, 0, ansi_style(), tui::SyntaxHighlightHook{}, background);
+    const auto probe_lines = probe.render(20);
+    REQUIRE(probe_lines);
+    const auto row_count = probe_lines->lines.size();
+    REQUIRE(row_count > 0);
+
+    tui::VirtualTerminal terminal({.columns = 20, .rows = row_count});
+    tui::Tui tui(terminal);
+    auto markdown = std::make_unique<tui::Markdown>(source, 1, 0, ansi_style(), tui::SyntaxHighlightHook{}, background);
+    REQUIRE(tui.add_child(std::move(markdown)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Every cell of every row — the wrapped inline-styled paragraph rows and
+    // the fenced-code rows — carries the configured background.
+    REQUIRE(terminal.cells().size() == row_count);
+    for (const auto& row : terminal.cells()) {
+        REQUIRE(row.size() == 20);
+        for (const auto& cell : row)
+            CHECK(cell.style.bg_color == "44");
+    }
+
+    // Each composed Markdown row ends with the one full reset at its true end.
+    std::size_t background_rows = 0;
+    for (const auto& row : terminal.output()) {
+        if (row.find("\x1b[44m") == std::string::npos) continue;
+        ++background_rows;
+        CHECK(row.ends_with("\x1b[0m\x1b]8;;\x07"));
+    }
+    CHECK(background_rows == row_count);
 }

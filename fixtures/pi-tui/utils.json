@@ -224,6 +224,26 @@
         "de-width-0.2.0/READM",
         "E.md now"
       ]
+    },
+    {
+      "name": "styled-cjk-open-across-break",
+      "input": "\u001b[31m中文测试中文测试",
+      "width": 4,
+      "output": [
+        "\u001b[31m中文",
+        "\u001b[31m测试",
+        "\u001b[31m中文",
+        "\u001b[31m测试"
+      ]
+    },
+    {
+      "name": "styled-underline-across-break",
+      "input": "\u001b[4mhello world",
+      "width": 7,
+      "output": [
+        "\u001b[4mhello\u001b[24m",
+        "\u001b[4mworld"
+      ]
     }
   ],
   "slice": [

@@ -198,9 +198,10 @@ TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", 
     tui::RenderResult output{.lines = std::vector<std::string>{"\x1b[31mRED!"}};
     REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
 
-    // The prefix keeps its style and reset, and the suffix replays the active
-    // red style before "D!" and closes it at the line end.
-    CHECK(output.lines[0].starts_with("\x1b[31mR\x1b[0mX\x1b[31mD!\x1b[0m"));
+    // The prefix keeps its style and closes it before the splice reset; the
+    // suffix replays the active red style before "D!" and leaves it for the
+    // composed-row reset, so the row no longer ends in a component full reset.
+    CHECK(output.lines[0] == "\x1b[31mR\x1b[0mX\x1b[31mD!      ");
     CHECK(tui::visible_width(output.lines[0]) == 10);
 }
 

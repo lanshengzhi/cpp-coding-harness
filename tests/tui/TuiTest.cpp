@@ -403,10 +403,11 @@ TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][i
     // Text pads content to full width
     const std::vector<std::string> expected_screen{"hello   ", ""};
     CHECK(terminal.screen() == expected_screen);
-    // Synchronized update markers wrap the rendered line on first render
+    // Synchronized update markers wrap the rendered line on first render.
+    // The composed row carries the one full reset at its true end.
     REQUIRE(terminal.output().size() == 3);
     CHECK(terminal.output()[0] == "\x1b[?2026h");
-    CHECK(terminal.output()[1] == "hello   ");
+    CHECK(terminal.output()[1] == "hello   \x1b[0m\x1b]8;;\x07");
     CHECK(terminal.output()[2] == "\x1b[?2026l");
     const cch::tui::CursorPosition expected_cursor{.column = 0, .row = 0};
     CHECK(terminal.cursor() == expected_cursor);

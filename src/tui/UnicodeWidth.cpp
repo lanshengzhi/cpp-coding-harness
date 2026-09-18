@@ -414,9 +414,14 @@ bool AnsiStyleState::has_active_codes() const {
 }
 
 std::string AnsiStyleState::get_line_end_reset() const {
+    // pi `AnsiCodeTracker.getLineEndReset`: underline must be closed so it
+    // cannot bleed into padding, and an active OSC 8 hyperlink is closed and
+    // reopened on the next line by `get_active_codes`. Foreground, background,
+    // and the full reset are left to the enclosing background span and to the
+    // one per-row reset appended at the composed-line boundary.
     std::string result;
+    if (underline) result += "\x1b[24m";
     if (!hyperlink.empty()) result += "\x1b]8;;\x07";
-    if (has_sgr_codes()) result += "\x1b[0m";
     return result;
 }
 
@@ -524,14 +529,17 @@ support::Expected<std::string> prepare_rendered_line(std::string_view line, std:
             "TUI component rendered a line wider than its width bound",
             std::format("line width {} exceeds visible width {}", *line_width, width)));
     }
+    // The component boundary carries no reset: the single per-row full reset
+    // belongs to the composed-line boundary in `Tui::render` (pi's component
+    // boundary is also reset-free), and the only in-line reset a component
+    // emits is the underline/hyperlink `get_line_end_reset`.
+    return normalized_text(*tokens);
+}
 
-    AnsiStyleState style;
-    auto result = normalized_text(*tokens);
-    for (const auto& token : *tokens) {
-        if (token.kind != TerminalTokenKind::Grapheme) style.process_ansi(token.text);
+void apply_line_resets(std::vector<std::string>& lines) {
+    for (auto& line : lines) {
+        line += kSegmentReset;
     }
-    result += style.get_line_end_reset();
-    return result;
 }
 
 } // namespace cch::tui::detail
