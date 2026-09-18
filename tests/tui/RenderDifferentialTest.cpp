@@ -3,6 +3,8 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
+#include "tui/TuiTestHooks.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -416,4 +418,40 @@ TEST_CASE("Pending render request is consumed on render call", "[tui][render][is
     REQUIRE(tui.render());
     const std::vector<std::string> expected_screen{"bye ", ""};
     CHECK(terminal.screen() == expected_screen);
+}
+
+TEST_CASE("A Preview Frame that changes nothing prepares no composed rows", "[tui][render][issue711][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 6});
+    cch::tui::Tui tui(terminal);
+
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("alpha\nbravo\ncharlie", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 3);
+    const std::vector<std::string> first_screen = terminal.screen();
+
+    // No view change: every composed row is byte-identical, so the frame
+    // reuses the previous finalized rows instead of re-preparing them.
+    REQUIRE(tui.render());
+    CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 0);
+    CHECK(terminal.screen() == first_screen);
+}
+
+TEST_CASE("A one-row view change prepares only the changed composed row", "[tui][render][issue711][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 8});
+    cch::tui::Tui tui(terminal);
+
+    auto text = std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive\nsix", 0, 0);
+    auto* text_ptr = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 6);
+
+    // Six composed rows are on screen; only the last one changes. Preparation
+    // follows the change, not the transcript length.
+    text_ptr->set_text("one\ntwo\nthree\nfour\nfive\nSIX");
+    REQUIRE(tui.render());
+    CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 1);
+    CHECK(terminal.screen().front() == "one       ");
 }

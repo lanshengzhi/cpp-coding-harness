@@ -276,11 +276,13 @@ TEST_CASE("AnsiStyleState closes an active hyperlink at the line end", "[tui][is
     CHECK(state.get_line_end_reset() == "\x1b[24m\x1b]8;;\x07");
 }
 
-TEST_CASE("apply_line_resets appends one segment reset per composed row", "[tui][issue46][unicode][spec]") {
-    std::vector<std::string> lines{"plain", "\x1b[31mred"};
-    apply_line_resets(lines);
-    CHECK(lines[0] == "plain\x1b[0m\x1b]8;;\x07");
-    CHECK(lines[1] == "\x1b[31mred\x1b[0m\x1b]8;;\x07");
+TEST_CASE("apply_line_reset appends the segment reset to a composed row", "[tui][issue46][unicode][spec]") {
+    std::string plain{"plain"};
+    std::string styled{"\x1b[31mred"};
+    apply_line_reset(plain);
+    apply_line_reset(styled);
+    CHECK(plain == "plain\x1b[0m\x1b]8;;\x07");
+    CHECK(styled == "\x1b[31mred\x1b[0m\x1b]8;;\x07");
     CHECK(kSegmentReset == "\x1b[0m\x1b]8;;\x07");
 }
 

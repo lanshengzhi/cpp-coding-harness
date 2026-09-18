@@ -37,12 +37,8 @@ inline constexpr auto kBytes = [] {
 inline constexpr std::string_view kSegmentReset{
         segment_reset_detail::kBytes.data(), segment_reset_detail::kBytes.size()};
 
-/// Append `kSegmentReset` to every composed row (pi `TuiBase.applyLineResets`).
-inline void apply_line_resets(std::vector<std::string>& lines) {
-    for (auto& line : lines) {
-        line += kSegmentReset;
-    }
-}
+/// Append the one full reset a composed row carries to a single row.
+inline void apply_line_reset(std::string& line) { line += kSegmentReset; }
 
 [[nodiscard]] inline support::Expected<std::reference_wrapper<Component>> attach_child(
     std::vector<std::unique_ptr<Component>>& children,
