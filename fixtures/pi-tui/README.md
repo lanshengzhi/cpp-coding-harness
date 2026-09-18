@@ -96,6 +96,12 @@ outputs for a fixed corpus (plain, ANSI-bearing, CJK, emoji/flag/combining, OSC 
 `PiTuiDifferentialTest` byte-compares `visible_width`, `truncate_text` (including pi's always-on
 `\x1b[0m` ellipsis resets), `wrap_text`, `slice_by_column`, and `strip_terminal_sequences`.
 
+The `wrap` corpus carries the #705 break-point cases: a CJK run starting behind a partially
+filled line for every script in pi's `cjkBreakRegex` set (Han; Hiragana with attached combining
+marks; Katakana; Hangul; Bopomofo), a mark-bearing cluster whose base is outside the set, a
+styled span whose style closes inside its physical line, and an over-long token after a partial
+line. Reset placement across a break is #707's surface and stays out of this corpus.
+
 ### Fuzzy corpus (`fuzzy.json`)
 
 `fuzzyMatch` scores and `fuzzyFilter` rankings for a fixed corpus (exact-match bonus,
@@ -150,6 +156,11 @@ from. Regenerate with:
 ```
 
 `PI_CHECKOUT` overrides the default sibling `../pi`.
+
+`capture/generate-cjk-break-ranges.mts` derives `src/tui/CjkBreakRanges.inc` (pi's CJK
+line-break code points, #705) from the same frozen checkout with the same refusal guard: it
+imports `cjkBreakRegex`, asserts its source text is the recorded one, and emits the ranges the
+regex matches. The generated file carries its own provenance header and regeneration command.
 
 ## Manual evidence (automation-unreachable surfaces)
 
@@ -290,9 +301,10 @@ decode layer dropped `$`-final legacy shift sequences (`\x1b[2$` … `\x1b[8$`) 
 (`detail::printable_text`); all three now carry regression rows in `TuiTest`/`EditorTest` and are
 pinned by the input-decode corpus. The `truncate_text` ellipsis now always carries pi's `\x1b[0m`
 resets. Recorded renderer-side divergences that the corpus intentionally scopes out (documented
-in the README rows above): CJK-with-space long-run wrapping differs from pi's
-`wrapTextWithAnsi` (`UtilsTest` pins the C++ behavior), and pi's multi-line `visibleWidth` sums
-graphemes where the C++ widest-line reading is the deliberate C++ idiom.
+in the README rows above): whitespace on a line with no visible content yet, followed by an
+over-long token, is emitted by pi as an empty line where the C++ `wrap_text` drops it, and pi's
+multi-line `visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++
+idiom.
 
 Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate report below).
 
@@ -329,8 +341,9 @@ Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate r
 3. **Markdown and wrap byte-parity are scoped to the recorded parity surface**: markdown corpus
    cases cover streamed-fence trimming, strict strikethrough, code-block border/indent, and
    capability-aware links (headings are excluded — pi composes per-level bold/underline where the
-   C++ role hook is single-composition); the CJK-with-space wrap case is excluded and pinned by
-   the C++ `UtilsTest` instead.
+   C++ role hook is single-composition); wrap break points, including the CJK break opportunities
+   and the over-long-token path, are byte-parity in the corpus, while reset placement across a
+   break belongs to #707 and stays on the C++ `UtilsTest` surface.
 4. **Overlay anchors are caller-set in the C++ model** (the Tui does not default them to the
    viewport); the golden rows set the anchor explicitly, matching pi's position options.
 5. **No live-terminal or network validation** — all evidence is deterministic per the repo

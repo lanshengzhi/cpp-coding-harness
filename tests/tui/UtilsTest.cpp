@@ -215,6 +215,21 @@ TEST_CASE("wrap_text prefers word boundaries and falls back for long words", "[t
     CHECK((*long_word)[0] == "abc");
     CHECK((*long_word)[1] == "def");
     CHECK((*long_word)[2] == "gh");
+
+    // A token longer than the width starts on a fresh line and is chunked at
+    // exactly the width, rather than filling the remainder of the current one
+    // (pi wrapSingleLine + breakLongWord, utils.ts at the frozen baseline).
+    const auto long_after_partial = wrap_text("abc https://example.com/releases/index.html", 8);
+    REQUIRE(long_after_partial);
+    const std::vector<std::string> expected_long{
+            "abc",
+            "https://",
+            "example.",
+            "com/rele",
+            "ases/ind",
+            "ex.html",
+    };
+    CHECK(*long_after_partial == expected_long);
 }
 
 TEST_CASE("wrap_text wraps long ASCII text", "[tui][issue46][unicode][spec]") {
@@ -264,7 +279,15 @@ TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", 
     CHECK(*linked == expected_linked);
 }
 
-TEST_CASE("wrap_text fills the current line before breaking a long CJK run", "[tui][issue46][unicode][spec]") {
+TEST_CASE("wrap_text fills the current line with CJK break opportunities", "[tui][issue46][unicode][spec]") {
+    // A CJK run behind a partially filled line continues on that line one
+    // grapheme at a time: every grapheme in pi's CJK break set is its own break
+    // opportunity, so the run no longer moves to the next line whole.
+    const auto minimal = wrap_text("abcdefghijklm 中文测试", 20);
+    REQUIRE(minimal);
+    const std::vector<std::string> expected_minimal{"abcdefghijklm 中文测", "试"};
+    CHECK(*minimal == expected_minimal);
+
     const std::string text = "This is an example 中文汉字测试段落内容中文汉字测试段落内容.";
     const auto result = wrap_text(text, 40);
     REQUIRE(result);
@@ -290,6 +313,8 @@ TEST_CASE("wrap_text handles CJK word wrapping", "[tui][issue46][unicode][spec]"
         "\xe4\xb8\xad\xe5\x9b\xbd\xe4\xb8\xad\xe5\x9b\xbd"; // 中国中国
     auto r = wrap_text(long_cjk, 4);
     REQUIRE(r);
+    const std::vector<std::string> expected_cjk{"中国", "中国", "中国", "中国"};
+    CHECK(*r == expected_cjk);
     for (const auto& line : *r) {
         CHECK(visible_width(line) <= 4);
     }

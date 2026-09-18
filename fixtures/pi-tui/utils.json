@@ -149,6 +149,81 @@
         "😀",
         "cd"
       ]
+    },
+    {
+      "name": "cjk-han-after-partial-line",
+      "input": "abcdefghijklm 中文测试",
+      "width": 20,
+      "output": [
+        "abcdefghijklm 中文测",
+        "试"
+      ]
+    },
+    {
+      "name": "cjk-hiragana-marks-after-partial-line",
+      "input": "abcdefghijklm がぎぐ",
+      "width": 18,
+      "output": [
+        "abcdefghijklm がぎ",
+        "ぐ"
+      ]
+    },
+    {
+      "name": "cjk-katakana-after-partial-line",
+      "input": "abcdefghijklm カタカナテスト",
+      "width": 20,
+      "output": [
+        "abcdefghijklm カタカ",
+        "ナテスト"
+      ]
+    },
+    {
+      "name": "cjk-hangul-after-partial-line",
+      "input": "abcdefghijklm 안녕하세요",
+      "width": 20,
+      "output": [
+        "abcdefghijklm 안녕하",
+        "세요"
+      ]
+    },
+    {
+      "name": "cjk-bopomofo-after-partial-line",
+      "input": "abcdefghijklm ㄅㄆㄇㄈㄉㄊ",
+      "width": 20,
+      "output": [
+        "abcdefghijklm ㄅㄆㄇ",
+        "ㄈㄉㄊ"
+      ]
+    },
+    {
+      "name": "cjk-mark-cluster-break-opportunity",
+      "input": "abcdef g゙h",
+      "width": 8,
+      "output": [
+        "abcdef g゙",
+        "h"
+      ]
+    },
+    {
+      "name": "cjk-styled-span-before-long-token",
+      "input": "\u001b[31m中文\u001b[0m abcdefghijklmnop",
+      "width": 10,
+      "output": [
+        "\u001b[31m中文\u001b[0m",
+        "abcdefghij",
+        "klmnop"
+      ]
+    },
+    {
+      "name": "long-path-after-partial-line",
+      "input": "see /usr/share/doc/unicode-width-0.2.0/README.md now",
+      "width": 20,
+      "output": [
+        "see",
+        "/usr/share/doc/unico",
+        "de-width-0.2.0/READM",
+        "E.md now"
+      ]
     }
   ],
   "slice": [

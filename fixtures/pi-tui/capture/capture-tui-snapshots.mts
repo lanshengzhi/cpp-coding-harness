@@ -454,6 +454,21 @@ const utils = {
 		{ name: "ansi", input: "\x1b[31mred\x1b[0m and blue", width: 10, output: wrapTextWithAnsi("\x1b[31mred\x1b[0m and blue", 10) },
 		{ name: "newlines", input: "one\ntwo", width: 20, output: wrapTextWithAnsi("one\ntwo", 20) },
 		{ name: "wide-grapheme", input: "ab 😀 cd", width: 3, output: wrapTextWithAnsi("ab 😀 cd", 3) },
+		// Issue #705: CJK break opportunities (one case per script in
+		// `cjkBreakRegex`) behind a partially filled line, a mark-bearing
+		// cluster, a styled run before a long token, and a long token after a
+		// partial line. Every styled input closes its style inside a physical
+		// line; reset placement across a break belongs to #707, not here.
+		{ name: "cjk-han-after-partial-line", input: "abcdefghijklm 中文测试", width: 20, output: wrapTextWithAnsi("abcdefghijklm 中文测试", 20) },
+		{ name: "cjk-hiragana-marks-after-partial-line", input: "abcdefghijklm か\u3099き\u3099く\u3099", width: 18, output: wrapTextWithAnsi("abcdefghijklm か\u3099き\u3099く\u3099", 18) },
+		{ name: "cjk-katakana-after-partial-line", input: "abcdefghijklm カタカナテスト", width: 20, output: wrapTextWithAnsi("abcdefghijklm カタカナテスト", 20) },
+		{ name: "cjk-hangul-after-partial-line", input: "abcdefghijklm 안녕하세요", width: 20, output: wrapTextWithAnsi("abcdefghijklm 안녕하세요", 20) },
+		{ name: "cjk-bopomofo-after-partial-line", input: "abcdefghijklm ㄅㄆㄇㄈㄉㄊ", width: 20, output: wrapTextWithAnsi("abcdefghijklm ㄅㄆㄇㄈㄉㄊ", 20) },
+		// The cluster is the unit pi tests: a base outside the set carrying a
+		// mark inside it is a break opportunity, and the cluster is never split.
+		{ name: "cjk-mark-cluster-break-opportunity", input: "abcdef g\u3099h", width: 8, output: wrapTextWithAnsi("abcdef g\u3099h", 8) },
+		{ name: "cjk-styled-span-before-long-token", input: "\x1b[31m中文\x1b[0m abcdefghijklmnop", width: 10, output: wrapTextWithAnsi("\x1b[31m中文\x1b[0m abcdefghijklmnop", 10) },
+		{ name: "long-path-after-partial-line", input: "see /usr/share/doc/unicode-width-0.2.0/README.md now", width: 20, output: wrapTextWithAnsi("see /usr/share/doc/unicode-width-0.2.0/README.md now", 20) },
 	],
 	slice: [
 		{ name: "plain", input: "abcdef", start: 1, length: 3, strict: false, output: sliceByColumn("abcdef", 1, 3) },
