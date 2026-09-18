@@ -5,7 +5,7 @@ This context names the concepts used to describe the harness as a product. It is
 ## Language
 
 **Supported Capability**:
-A pi capability that this harness explicitly claims to provide and for which it accepts a Semantic Parity obligation.
+A capability that this harness explicitly claims to provide as an intentional product decision.
 _Avoid_: Implemented feature, partial placeholder
 
 **Deferred Capability**:
@@ -29,30 +29,18 @@ Linux on x86-64 with glibc, the only platform on which this harness accepts buil
 _Avoid_: Development host, portable source, rolling latest, best-effort platform
 
 **Semantic Parity**:
-For a Supported Capability, preservation of pi's externally observable meanings and state transitions while allowing an idiomatic C++ API shape.
+For a capability aligned with pi, preservation of its externally observable meanings and state transitions while allowing an idiomatic C++ API shape.
 _Avoid_: API-shape parity, mechanical translation
 
-**Parity Baseline** (historical; superseded by ADR 0053 — see Product Architecture Contract):
-The recorded pi revision against which Supported Capabilities, intentional differences, fixtures, and drift are evaluated until an explicit baseline advance.
-_Avoid_: Latest pi, upstream HEAD
-
-**Parity Ownership Map**:
-The recorded mapping from C++ packages to the pi capability owners they represent at the Parity Baseline, preserving pi ownership and dependency direction without requiring package-shape identity.
-_Avoid_: Package isomorphism, live upstream graph
-
-**Parity Package Graph**:
-The directed dependency graph among the pi package owners of Supported Capabilities at the Parity Baseline. C++ targets may split within an owner but never introduce a reverse owner dependency.
-_Avoid_: Current CMake graph, package-shape parity
-
 **Configured Package Graph**:
-The per-configuration direct target dependencies, interface visibility, project-header inclusion, and source ownership produced by CMake and classified by owner and role. It is checked against the Product Architecture Contract (the Parity Package Graph before ADR 0053) rather than inferred from CMake source formatting or a transitive build graph.
+The per-configuration direct target dependencies, interface visibility, project-header inclusion, and source ownership produced by CMake and classified by owner and role, checked against the Product Architecture Contract rather than inferred from CMake source formatting or a transitive build graph.
 _Avoid_: CMakeLists layout, build-order graph
 
 **Product Architecture Contract**:
-The machine-readable boundary set the architecture gate enforces since ADR 0053, succeeding pi parity as the authority. Its manifest carries two rules, both of them include-level and each scoped to one side: the Headless core must not include frontend headers, and session-module sources under `src/agent/` must not include `cch_ai` private headers — they reach the AI Owner only through `<cch/ai/...>` Owner Interface headers. Neither rule asserts what a module defines internally. It evolves by ADR.
+The machine-readable boundary set enforced by the architecture gate since ADR 0053, succeeding pi parity as the authority. It enforces dependency and include boundaries between owners (e.g. keeping the Headless Core independent of frontends and restricting private owner reach-throughs) without asserting internal module definitions. It evolves by ADR.
 _Avoid_: pi parity, ad-hoc dependency review
 
-**Compat Layer** (`compat/pi`):
+**Compat Layer**:
 The edge layer holding pi's session format, config format, and data shapes, consumed only by the one-time import command. Never a runtime fallback, never a dual-format load path, never a design basis for the internal domain model.
 _Avoid_: Runtime dual-read, deprecation shims, shared default directories
 
@@ -69,41 +57,24 @@ The repository-internal header contract of a Capability Owner Package, living un
 _Avoid_: Public SDK header, installed consumer surface, umbrella header
 
 **Parity Architecture Manifest**:
-The baseline-pinned machine-readable authority for the Parity Package Graph, Capability Owner Packages, role classification rules, and capability-evidence references. It defines the policy grammar rather than duplicating the configured target inventory; build validation and Parity Drift analysis consume this one policy source.
+The machine-readable authority for the Capability Owner Packages, role classification rules, and architectural boundary definitions. It defines the policy grammar rather than duplicating the configured target inventory; build validation consumes this one policy source.
 _Avoid_: CMake comment, target allowlist, duplicated policy
 
 **Parity Architecture Gate**:
-The required fail-closed validation that every configured production target, source, dependency, interface exposure, and project-header inclusion conforms to the Parity Architecture Manifest in every supported configuration on the Supported Platform. It remains mandatory independently of optional test builds.
+The required fail-closed validation that every configured production target, source, dependency, interface exposure, and project-header inclusion conforms to the Product Architecture Contract in every supported configuration on the Supported Platform. It remains mandatory independently of optional test builds.
 _Avoid_: Advisory architecture test, source-format style check, optional CI job
 
-**Parity Drift**:
-An observed difference between the Parity Baseline and another pi revision; it is advisory until an explicit baseline advance accepts or classifies it.
-_Avoid_: Contract failure, latest-pi obligation
-
 **Focused Validation**:
-The during-implementation validation tier: after a code edit, build the owning
-test shard and run the smallest CTest name/label selection that can fail,
-excluding the whole-graph architecture gate tests by default; architecture-
-sensitive changes additionally select the architecture label.
-_Avoid_: full suite after every edit, bootstrap run, default validation
+The during-implementation validation tier: after a code edit, build the owning test shard and run the smallest targeted test selection that can fail.
+_Avoid_: Full suite after every edit, bootstrap run, default validation
 
 **Full Validation**:
-The pre-delivery validation tier: an incremental build followed by the complete
-unfiltered offline CTest suite on the default Debug preset, including every
-architecture gate test; required once before delivering any code change.
-_Avoid_: fresh bootstrap, per-edit validation, release qualification
+The pre-delivery validation tier: an incremental build followed by the complete unfiltered offline test suite, including every architecture gate test.
+_Avoid_: Fresh bootstrap, per-edit validation, release qualification
 
 **Fresh Validation**:
-The environment-level validation tier: `scripts/bootstrap.sh` (host precheck and
-from-scratch pinned vcpkg bootstrap) followed by `cmake --preset vcpkg --fresh`,
-a full build, and the unfiltered CTest suite, reserved for clean checkouts,
-vcpkg-baseline or toolchain changes, configure-orchestration changes, or
-explicit user request.
-_Avoid_: daily check, default development loop, standard test run
-
-**AsyncResult**:
-The one lazy, move-only, single-consumption asynchronous operation contract (`cch::support::AsyncResult<T, E>`) returned by fallible asynchronous Owner operations: consumed exactly once by callback start or move-only `co_await`, with ordinary failure carried as `std::expected<T, E>` and cancellation supplied explicitly as `std::stop_token`.
-_Avoid_: Boost.Asio awaitable in an Owner Interface, exposed executor or scheduler, copyable operation
+The environment-level validation tier: a clean host precheck and from-scratch bootstrap, reserved for clean checkouts, baseline/toolchain changes, or explicit request.
+_Avoid_: Daily check, default development loop, standard test run
 
 **Runtime Root**:
 The one concrete coding-agent-owned Runtime object per CLI invocation. It owns the private event loop, the bounded worker pool, and the bounded FIFO mailboxes of the state-owning runtime objects, and it survives Agent Session replacement until final application Close.
@@ -198,7 +169,7 @@ The execution lifecycle of one tool call from admission through its Tool Call Ou
 _Avoid_: Tool Call Batch, Tool Call Outcome
 
 **Agent Stream Flow**:
-The Agent's consumption of one model stream within an Agent Turn through the provider's `streamSimple` surface: the per-turn request-option set (reasoning, sessionId, cacheRetention, timeoutMs, maxRetries, maxRetryDelayMs, headers, signal), the terminal-error-event contract (exactly one error or aborted terminal event plus a final assistant message carrying stopReason and errorMessage), and the six-category error channel carried through the single Expected outcome.
+The Agent's consumption of one model stream within an Agent Turn: the per-turn stream request options, the single terminal outcome contract (success or classified error with assistant stop state), and structured error delivery back to the turn machine.
 _Avoid_: Provider request, per-adapter option struct, second exception hierarchy
 
 **Thinking Level**:
@@ -286,8 +257,8 @@ The user-controlled authorization decision governing whether project-authored re
 _Avoid_: Workspace configuration, project self-approval
 
 **Agent Config Directory**:
-The user-level root for durable harness state shared across workspaces; it is pi's own directory, so this harness and a pi installation interoperably share one credential and model-configuration store.
-_Avoid_: Config home, user profile directory, harness-private state root
+The user-level root for durable harness state shared across workspaces, located at `~/.pike/agent` (overridable via `PIKE_CODING_AGENT_DIR`), retaining compatibility only for project-level `.pi/` resources.
+_Avoid_: Config home, user profile directory, shared pi user root
 
 **User Settings**:
 User-level preferences following pi's two-scope `settings.json` contract: a global file in the Agent Config Directory deep-merged with a project file that loads only under Project Trust. Settings never carry secrets or secret references; model selection defaults use pi's `defaultProvider`/`defaultModel` vocabulary.
@@ -298,7 +269,7 @@ One of the two `settings.json` layers — global or project — with project win
 _Avoid_: Profile, level
 
 **Runtime API Key Override**:
-A process-lifetime API key supplied through `ModelRuntime::set_runtime_api_key` or CLI `--api-key`, never persisted, taking the highest precedence in Request Authentication.
+A process-lifetime API key supplied via the host or CLI `--api-key`, never persisted, taking the highest precedence in Request Authentication.
 _Avoid_: Saved key, default key
 
 **Configured API Key**:
@@ -314,7 +285,7 @@ The host-supplied, cancellable interaction object through which an OAuth login f
 _Avoid_: Login callback, rendered dialog, provider UI
 
 **OAuth Login**:
-An explicit, user-invoked login flow that produces a Credential through provider-owned steps (browser callback or device code) and persists it via `CredentialStore::modify`. Never triggered by Session creation or ordinary requests.
+An explicit, user-invoked login flow that produces a Credential through provider-owned steps (browser callback or device code) and persists it in the credential store. Never triggered by Session creation or ordinary requests.
 _Avoid_: Auto-login, implicit authentication, login snapshot
 
 **Login Cancellation**:
@@ -334,7 +305,7 @@ The session policy that starts another Agent Run with exponential backoff after 
 _Avoid_: Infinite retry, silent retry, adapter-level retry
 
 **OAuth Callback Server**:
-The local loopback HTTP server used by the Codex browser login flow on `127.0.0.1:1455` (`PI_OAUTH_CALLBACK_HOST`) to receive the authorization-code redirect, raced against manual code entry.
+The local loopback HTTP server used by the Codex browser login flow to receive the authorization-code redirect, raced against manual code entry.
 _Avoid_: Webhook, remote endpoint
 
 **Adapter**:
@@ -354,7 +325,7 @@ The protocol feature that lets a provider correlate requests from one session �
 _Avoid_: Session metadata, resume state
 
 **Print Mode**:
-The one-shot text frontend selected by `--print`/`-p`, a non-TTY stream, or `--mode text`: it subscribes to nothing and prints only the final assistant message's text content blocks, reports terminal error/aborted outcomes to stderr with exit 1, and handles SIGTERM/SIGHUP with pi's dispose-and-exit semantics. Piped stdin, `@file` text, and sequential positionals merge into the initial prompt in pi's order.
+The one-shot non-interactive text frontend for piped or scripted runs: it subscribes to no interactive events, prints the final assistant text blocks to stdout, routes errors and cancellation to stderr with appropriate exit status, and merges piped input, referenced files, and CLI arguments into the initial prompt.
 _Avoid_: Event stream, JSON event print, one-shot slash dispatch
 
 **User Bash**:
@@ -374,11 +345,11 @@ The startup presentation listing the Project Context Files, skills, and Prompt T
 _Avoid_: Startup banner, resource log
 
 **Interrupt Admission**:
-The Native TUI decision of how an interrupt request applies to the current activity: which channel it targets (the active Agent run, the running User Bash, or a pending User Bash submission) and whether the request is stale relative to the active prompt generation. The decision is made against activity facts supplied at request time; the owning frontend performs the routed effect. It is the C++ translation of pi's app.interrupt precedence at the parity baseline.
+The Native TUI decision of how an interrupt request applies to current activity: which channel it targets (the active Agent run, running User Bash, or a pending submission) and whether the request is stale relative to the active prompt generation.
 _Avoid_: Escape handling, keybinding dispatch
 
 **Generic Selector**:
-The reusable string-list selection overlay used by the login auth-type picker ("Sign in with an account" / "API key"), `select`-type AuthPrompts, and the boot Project Trust prompt. pi's `extension-selector` component is not extension-only; it carries this non-extension role in the C++ app layer.
+The reusable string-list selection overlay used by interactive selection prompts (such as auth-type selection, interactive auth prompts, and boot-time project trust prompts).
 _Avoid_: Extension selector, provider-specific dialog
 
 **TUI Toolkit**:
@@ -390,11 +361,11 @@ The TUI Toolkit's single decode of raw terminal escape sequences into typed KeyE
 _Avoid_: Raw string matching, per-consumer escape parsing
 
 **Resolved Keybinding Registry**:
-The immutable, resolution-time keybinding table consumed by dispatch, help, and hints alike: the 30 assembled `tui.*` actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) with pi's default keys at the parity baseline, one startup `keybindings.json` read with replace-all-defaults and empty-array unbind, and bounded redacted diagnostics. `tui.input.copy` and the six `tui.altScreen.*` ids are recognized-but-unassembled: diagnosed as known-but-unbound, never no-op bindings, because their only active behavior is alt-screen selection copy.
+The immutable, resolution-time keybinding table consumed by dispatch, help, and hints alike: maps assembled TUI actions to their configured key combinations, populated from default keys and user `keybindings.json` overrides.
 _Avoid_: Mutable global manager, no-op bindings, per-consumer key tables
 
 **Theme**:
-A pi-format theme asset: a JSON document with an optional `$schema`, a required `name`, optional `vars` (resolved recursively with pi's circular-reference error), and a `colors` object over pi's 52-token set — 50 required tokens plus optional `scrollbarThumb` and `thinkingMax` with their fallbacks. Validation and missing-token diagnostics use pi's verbatim wording; theme names containing `/` are rejected.
+A theme asset defining visual styling: a document naming the theme, optional color variables, and a color map over the supported semantic token set with validation and circular-reference rejection.
 _Avoid_: Theme catalog, custom theme format, palette
 
 **Theme Setting**:
@@ -412,6 +383,14 @@ _Avoid_: Escape sequences in render lines, component-owned protocol bytes
 **Main-Screen Scrollback Flow**:
 The TUI Toolkit's main-screen rendering model (pi `TuiMainScreen` parity) in which the renderer writes the full composed buffer to the terminal's main screen, lets overflow advance into the terminal's native scrollback, and tracks a viewport top over the buffer instead of clipping to the visible height; the terminal's own scrollback is the history surface, and a resize full-redraw clears screen and scrollback together. Startup content stays visible until the buffer grows past one screen, then scrolls away with it.
 _Avoid_: Viewport-clip redraw, in-place line rewrite, alt-screen scrolling
+
+**Counted Frame**:
+The authoritative Native TUI render: the frame the renderer produces on the frame ticker's schedule. Only counted frames advance pacing and convergence accounting.
+_Avoid_: Immediate frame, per-event render
+
+**Preview Frame**:
+The uncounted, coalesced Native TUI render that paints the newest view state when a view change arrives between ticker frames: at most one preview frame is in flight at a time, and it consumes neither the ticker's schedule nor the projection stream's pacing. It exists to keep input and streaming latency low between counted frames.
+_Avoid_: Ticker-only pacing, throttled render, synchronous view hook
 
 **Headless Core**:
 The authoritative agent engine, session store, tool runners, and model inference loops, strictly devoid of layout, ANSI escape sequences, terminal geometries, UI components, or presentation threads. It exposes its state only through the Projection Stream.
