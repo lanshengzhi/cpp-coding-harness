@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <format>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,6 +19,44 @@ namespace {
 
 /// The ANSI SGR reset pi's truncateToWidth always emits around the ellipsis.
 constexpr std::string_view kSgrReset{"\x1b[0m"};
+
+/// One closed code-point range of pi's CJK line-break set.
+struct CjkBreakRange {
+    char32_t first{0};
+    char32_t last{0};
+};
+
+/// pi's CJK line-break code points as generated range data: utf8proc exposes
+/// no Script_Extensions property, so the set cannot be re-derived here. The
+/// generated include carries pi's regex text, the pinned revision, and its
+/// generator command.
+constexpr CjkBreakRange kCjkBreakRanges[]{
+#define CCH_CJK_BREAK_RANGE(first, last) {first, last},
+#include "tui/CjkBreakRanges.inc"
+#undef CCH_CJK_BREAK_RANGE
+};
+
+/// True when the code point is in pi's CJK break set. The generated ranges are
+/// sorted and non-overlapping, so the first one ending at or after the code
+/// point is the only candidate.
+[[nodiscard]] bool is_cjk_break_codepoint(char32_t codepoint) {
+    const auto range = std::ranges::lower_bound(kCjkBreakRanges, codepoint, {}, &CjkBreakRange::last);
+    return range != std::end(kCjkBreakRanges) && codepoint >= range->first;
+}
+
+/// True when any code point of the grapheme cluster is in pi's CJK break set.
+/// pi tests the whole grapheme segment, so a base carrying such a combining
+/// mark is a break opportunity and a cluster is never broken apart.
+[[nodiscard]] bool is_cjk_break_cluster(std::string_view cluster) {
+    std::size_t position = 0;
+    while (position < cluster.size()) {
+        const auto [codepoint, bytes] = detail::decode_utf8(cluster, position);
+        if (bytes == 0) break;
+        if (is_cjk_break_codepoint(codepoint)) return true;
+        position += bytes;
+    }
+    return false;
+}
 
 } // namespace
 
@@ -51,6 +90,9 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
         return codepoint == ' ' || category == UTF8PROC_CATEGORY_ZS ||
                category == UTF8PROC_CATEGORY_ZL || category == UTF8PROC_CATEGORY_ZP;
+    };
+    const auto is_cjk_break_token = [](const detail::TerminalToken& token) {
+        return token.kind == detail::TerminalTokenKind::Grapheme && is_cjk_break_cluster(token.text);
     };
 
     std::vector<std::string> lines;
@@ -114,17 +156,25 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             continue;
         }
 
+        // pi splits every grapheme matching its CJK break set into a token of
+        // its own (`splitIntoTokensWithAnsi`, utils.ts at the frozen baseline),
+        // so such a grapheme is a break opportunity by itself; every other
+        // token runs to the next whitespace, CJK grapheme, or newline.
         auto word_end = index;
         std::size_t word_width = 0;
-        std::size_t first_grapheme_width = 0;
-        while (word_end < tokens->size()) {
-            const auto& word_token = (*tokens)[word_end];
-            if (word_token.kind == detail::TerminalTokenKind::Newline || is_whitespace(word_token)) break;
-            if (first_grapheme_width == 0 && word_token.kind == detail::TerminalTokenKind::Grapheme) {
-                first_grapheme_width = word_token.width;
-            }
-            word_width += word_token.width;
+        if (is_cjk_break_token(token)) {
+            word_width = token.width;
             ++word_end;
+        } else {
+            while (word_end < tokens->size()) {
+                const auto& word_token = (*tokens)[word_end];
+                if (word_token.kind == detail::TerminalTokenKind::Newline || is_whitespace(word_token) ||
+                        is_cjk_break_token(word_token)) {
+                    break;
+                }
+                word_width += word_token.width;
+                ++word_end;
+            }
         }
 
         if (word_width <= width) {
@@ -138,9 +188,12 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             continue;
         }
 
-        if (line_width + pending_width + first_grapheme_width <= width) {
-            replay_pending(true);
-        } else if (line_width != 0) {
+        // A token longer than the width starts on a fresh line: pi pushes the
+        // current line (trailing whitespace trimmed, then its line-end reset)
+        // and chunks the token at exactly the width from the new line
+        // (`wrapSingleLine` and `breakLongWord`, utils.ts at the frozen
+        // baseline); it never fills the remainder of the current line.
+        if (line_width != 0) {
             finish_before_pending();
         } else {
             replay_pending(false);
