@@ -482,6 +482,17 @@ const utils = {
 		{ name: "long-token-after-underline-space-prefix", input: "\x1b[4m ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b[4m ABCDEFGH", 4) },
 		{ name: "long-token-after-hyperlink-space-prefix", input: "\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", 4) },
 		{ name: "long-token-after-staged-control", input: " \x1b[31mABCDEFGH", width: 4, output: wrapTextWithAnsi(" \x1b[31mABCDEFGH", 4) },
+		// Over-long ANSI-bearing whitespace is a non-whitespace token in pi:
+		// it must take breakLongWord before the following word is processed.
+		...[
+			["underline", "\x1b[4m     ABCDEFGH"],
+			["foreground", "\x1b[31m     ABCDEFGH"],
+			["hyperlink", "\x1b]8;;u\x07     ABCDEFGH"],
+			["plain", "     ABCDEFGH"],
+			["staged-control", "     \x1b[31mABCDEFGH"],
+			["fitting-word", "\x1b[4m     ab"],
+			["trailing", "\x1b[4m     "],
+		].map(([name, input]) => ({ name: `overlong-space-prefix-${name}`, input, width: 4, output: wrapTextWithAnsi(input!, 4) })),
 		// A word that fits still pushes the deferred-whitespace line when the
 		// whitespace already fills the width: pi breaks at
 		// `currentVisibleLength > 0`, which the appended whitespace satisfies.

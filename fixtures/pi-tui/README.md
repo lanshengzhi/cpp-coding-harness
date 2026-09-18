@@ -109,6 +109,17 @@ where the deferred whitespace already fills the width ahead of a word that would
 (plain, wider, underlined, and control-staged, against the fitted line that keeps its whitespace),
 the trailing-whitespace trim of a wrapped input line against a fitting input line that keeps its
 whitespace, and the logical-newline cases where underline and hyperlink stay open.
+The over-long whitespace-prefix cases cover underline, foreground, hyperlink, plain text,
+a control attached to the following word, a fitting following word, and trailing whitespace.
+They pin both the chunk boundaries and reset bytes; the focused width regression independently
+checks that the originally reported underlined prefix cannot exceed the requested width.
+
+**#704 review scope correction:** the original #705 statement that existing whitespace handling
+already matched pi was disproved by the frozen oracle. The reviewed correction deliberately
+retains pi's empty first row for `wrap_text("  ab", 3)` (`["", "ab"]`, rather than `["ab"]`).
+This is an intentional whitespace behavior change within the text-parity fix, not a claim that
+whitespace behavior is unchanged. The fixture baseline remains `83114817`; no layout or padding
+policy is changed.
 
 ### Fuzzy corpus (`fuzzy.json`)
 

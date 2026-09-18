@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,7 +19,17 @@ namespace cch::tests {
 [[nodiscard]] inline cch::tui::BackgroundHook background_hook(
         std::string_view open, std::string_view close = "\x1b[49m") {
     return [open = std::string(open), close = std::string(close)](
-                   std::string text) { return open + std::move(text) + close; };
+                   std::string text) { return std::format("{}{}{}", open, text, close); };
+}
+
+inline void check_background_cells(
+        const cch::tui::VirtualTerminal& terminal, std::size_t rows, std::size_t columns, std::string_view color) {
+    CHECK(terminal.cells().size() == rows);
+    for (const auto& row : terminal.cells()) {
+        CHECK(row.size() == columns);
+        for (const auto& cell : row)
+            CHECK(cell.style.bg_color == color);
+    }
 }
 
 [[nodiscard]] inline std::string strip_ansi(std::string_view text) {

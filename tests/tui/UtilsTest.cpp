@@ -340,6 +340,14 @@ TEST_CASE("wrap_text pushes a whitespace-only prefix before a long token", "[tui
     CHECK(*staged == expected_staged);
 }
 
+TEST_CASE("wrap_text bounds styled whitespace before a long token", "[tui][issue704][unicode][spec]") {
+    const auto wrapped = wrap_text("\x1b[4m     ABCDEFGH", 4);
+    REQUIRE(wrapped);
+    for (const auto& line : *wrapped) {
+        CHECK(visible_width(line) <= 4);
+    }
+}
+
 TEST_CASE("wrap_text trims the trailing whitespace of a wrapped input line", "[tui][issue704][unicode][spec]") {
     // pi `wrapSingleLine` trims every line of an input line that wrapped.
     const auto wrapped = wrap_text("abcdefg  ", 5);

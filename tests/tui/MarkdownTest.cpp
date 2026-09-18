@@ -441,12 +441,7 @@ TEST_CASE("Markdown background survives inline styling and code blocks on every 
 
     // Every cell of every row — the wrapped inline-styled paragraph rows and
     // the fenced-code rows — carries the configured background.
-    CHECK(terminal.cells().size() == row_count);
-    for (const auto& row : terminal.cells()) {
-        CHECK(row.size() == 20);
-        for (const auto& cell : row)
-            CHECK(cell.style.bg_color == "44");
-    }
+    tests::check_background_cells(terminal, row_count, 20, "44");
 
     // Each composed Markdown row ends with the one full reset at its true end.
     std::size_t background_rows = 0;

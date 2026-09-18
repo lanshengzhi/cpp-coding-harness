@@ -193,12 +193,7 @@ TEST_CASE("Box background covers every cell of a styled row", "[tui][box][backgr
 
     // Every cell of every row — top and bottom padding, the dim-styled content
     // row, and the unstyled content row — carries the configured background.
-    CHECK(terminal.cells().size() == 4);
-    for (const auto& row : terminal.cells()) {
-        CHECK(row.size() == 8);
-        for (const auto& cell : row)
-            CHECK(cell.style.bg_color == "48;5;22");
-    }
+    cch::tests::check_background_cells(terminal, 4, 8, "48;5;22");
 
     // Exactly one full reset lands per composed row, after padding and after
     // the background hook; the background hook's own reset stays before it.

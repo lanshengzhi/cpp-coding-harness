@@ -282,6 +282,77 @@
       ]
     },
     {
+      "name": "overlong-space-prefix-underline",
+      "input": "\u001b[4m     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b[4m    \u001b[24m",
+        "\u001b[4m \u001b[24m",
+        "\u001b[4mABCD\u001b[24m",
+        "\u001b[4mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-foreground",
+      "input": "\u001b[31m     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b[31m",
+        "\u001b[31m",
+        "\u001b[31mABCD",
+        "\u001b[31mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-hyperlink",
+      "input": "\u001b]8;;u\u0007     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b]8;;u\u0007    \u001b]8;;\u0007",
+        "\u001b]8;;u\u0007 \u001b]8;;\u0007",
+        "\u001b]8;;u\u0007ABCD\u001b]8;;\u0007",
+        "\u001b]8;;u\u0007EFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-plain",
+      "input": "     ABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "ABCD",
+        "EFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-staged-control",
+      "input": "     \u001b[31mABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "\u001b[31mABCD",
+        "\u001b[31mEFGH"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-fitting-word",
+      "input": "\u001b[4m     ab",
+      "width": 4,
+      "output": [
+        "\u001b[4m    \u001b[24m",
+        "\u001b[4m ab"
+      ]
+    },
+    {
+      "name": "overlong-space-prefix-trailing",
+      "input": "\u001b[4m     ",
+      "width": 4,
+      "output": [
+        "\u001b[4m    \u001b[24m",
+        "\u001b[4m"
+      ]
+    },
+    {
       "name": "space-prefix-break",
       "input": "  ab",
       "width": 3,

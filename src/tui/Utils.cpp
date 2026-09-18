@@ -31,7 +31,7 @@ struct CjkBreakRange {
 /// generated include carries pi's regex text, the pinned revision, and its
 /// generator command.
 constexpr CjkBreakRange kCjkBreakRanges[]{
-#define CCH_CJK_BREAK_RANGE(first, last) {first, last},
+#define CCH_CJK_BREAK_RANGE(range_first, range_last) {.first = range_first, .last = range_last},
 #include "tui/CjkBreakRanges.inc"
 #undef CCH_CJK_BREAK_RANGE
 };
@@ -143,11 +143,14 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
     // boundary (`AnsiCodeTracker.getLineEndReset`); the full reset belongs to
     // the composed row. A caller that breaks on a word boundary trims the line
     // first, the other two break sites push it as-is.
-    const auto push_wrapped_line = [&]() {
-        line += style.get_line_end_reset();
+    const auto push_line = [&]() {
         lines.push_back(std::move(line));
         line = style.get_active_codes();
         line_width = 0;
+    };
+    const auto push_wrapped_line = [&]() {
+        line += style.get_line_end_reset();
+        push_line();
         input_line_wrapped = true;
     };
     const auto replay_pending = [&](bool keep_whitespace) {
@@ -196,14 +199,40 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             // pi splits the input on `\r\n|\r|\n` and prefixes each line with
             // the previous line's active codes: a logical line boundary is not a
             // wrap break, so it carries no line-end reset.
-            lines.push_back(std::move(line));
-            line = style.get_active_codes();
-            line_width = 0;
+            push_line();
             finish_input_line();
             ++index;
             continue;
         }
-        if (is_whitespace(token)) {
+        // pi attaches ANSI controls to the following whitespace token. Such a
+        // token is not `token.trim() === ""`: when over-long it must use the
+        // same grapheme chunking as a word, rather than an unbounded separator
+        // replay (#704). Inspect a whitespace run only once, before staging it.
+        auto styled_space_end = index;
+        std::size_t styled_space_width = 0;
+        if (is_whitespace(token) && pending_separator.empty()) {
+            bool has_control = index > 0 && (*tokens)[index - 1].kind != detail::TerminalTokenKind::Grapheme &&
+                               (*tokens)[index - 1].kind != detail::TerminalTokenKind::Newline;
+            has_control = has_control || (line_width == 0 && !line.empty());
+            bool pending_control = false;
+            auto position = index;
+            while (position < tokens->size()) {
+                const auto& candidate = (*tokens)[position];
+                if (candidate.kind == detail::TerminalTokenKind::Newline) break;
+                if (candidate.kind == detail::TerminalTokenKind::Grapheme) {
+                    if (!is_whitespace(candidate)) break;
+                    styled_space_width += candidate.width;
+                    styled_space_end = position + 1;
+                    has_control = has_control || pending_control;
+                    pending_control = false;
+                } else {
+                    pending_control = true;
+                }
+                ++position;
+            }
+            if (!has_control || styled_space_width <= width) styled_space_end = index;
+        }
+        if (is_whitespace(token) && styled_space_end == index) {
             pending_separator.push_back(token);
             pending_width += token.width;
             ++index;
@@ -222,7 +251,10 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         // token runs to the next whitespace, CJK grapheme, or newline.
         auto word_end = index;
         std::size_t word_width = 0;
-        if (is_cjk_break_token(token)) {
+        if (styled_space_end != index) {
+            word_width = styled_space_width;
+            word_end = styled_space_end;
+        } else if (is_cjk_break_token(token)) {
             word_width = token.width;
             ++word_end;
         } else {
@@ -271,6 +303,10 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         // composed surface observes a control's position within a row.
         if (line_width != 0 || !pending_separator.empty()) {
             replay_pending_prefix();
+            // A pure whitespace separator may itself exceed the width. pi
+            // drops its overflowing whitespace before the long-word push;
+            // trim before the reset, which otherwise protects those spaces.
+            if (line_width > width) trim_end_whitespace(line);
             push_wrapped_line();
         }
         replay_pending(false);

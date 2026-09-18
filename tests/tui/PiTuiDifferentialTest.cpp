@@ -25,6 +25,7 @@
 #include "support/ImageCapabilitiesGuard.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "support/Json.hpp"
+#include "support/RenderedScreen.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_message.hpp>
@@ -582,9 +583,7 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
         INFO(context);
 
         if (field(object, "background") != nullptr) {
-            markdown.set_background_hook([background_prefix, background_suffix](std::string text) {
-                return background_prefix + text + background_suffix;
-            });
+            markdown.set_background_hook(tests::background_hook(background_prefix, background_suffix));
         } else {
             markdown.set_background_hook({});
         }
