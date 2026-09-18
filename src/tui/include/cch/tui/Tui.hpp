@@ -14,6 +14,8 @@
 
 namespace cch::tui {
 
+class Tui;
+
 /// Notification that a render should be scheduled. Calls are coalesced until
 /// the next successful render; the sink must return promptly and must not render inline.
 /// A reported failure is a best-effort scheduling notification: it is not recorded and
@@ -24,6 +26,14 @@ namespace detail {
 class TerminalStreamDecoder;
 class OverlayCompositor;
 } // namespace detail
+
+namespace detail::testing {
+
+/// Test-only accessor for the frame-level line preparation count of the last
+/// render. Defined in `Tui.cpp`; see `TuiTestHooks.hpp`.
+[[nodiscard]] std::size_t frame_prepare_call_count(const Tui& tui) noexcept;
+
+} // namespace detail::testing
 
 class Tui final {
 public:
@@ -63,6 +73,8 @@ public:
     [[nodiscard]] support::ExpectedVoid restore_overlay(Overlay* overlay);
 
 private:
+    friend std::size_t detail::testing::frame_prepare_call_count(const Tui& tui) noexcept;
+
     struct ActiveImage {
         TerminalImageHandle handle;
         CellRegion region;
@@ -98,6 +110,14 @@ private:
     bool pending_render_{false};
     std::vector<std::string> previous_lines_;
     std::vector<std::string> previous_dock_lines_;
+    /// Composed rows of the previous render before frame-level preparation
+    /// (normalization, width validation, padding, per-row reset). A row whose
+    /// composed bytes are unchanged reuses its previous finalized row instead
+    /// of being prepared again (#711).
+    std::vector<std::string> previous_raw_lines_;
+    std::vector<std::string> previous_raw_dock_lines_;
+    /// Frame-level `prepare_rendered_line` calls performed by the last render.
+    std::size_t frame_prepare_call_count_{0};
     /// Viewport rows above the pinned dock on the previous render (#597: a
     /// re-partition between scrollback viewport and dock leaves stale pixels
     /// outside both differentials, so the render reflows like a resize).

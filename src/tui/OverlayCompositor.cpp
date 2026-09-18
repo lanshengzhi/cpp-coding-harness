@@ -348,6 +348,10 @@ void OverlayCompositor::clear_focus_history() {
     focus_history_.clear();
 }
 
+bool OverlayCompositor::has_visible_overlays(TerminalDimensions viewport) const {
+    return !sorted_visible(viewport).empty();
+}
+
 std::vector<Overlay*> OverlayCompositor::sorted_visible(TerminalDimensions viewport) const {
     std::vector<Overlay*> visible;
     for (const auto& overlay : overlays_) {

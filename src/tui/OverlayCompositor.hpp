@@ -64,6 +64,11 @@ public:
         const TerminalCapabilities& capabilities,
         RenderResult& output) const;
 
+    /// Whether any overlay is visible at these dimensions. Rows are only
+    /// reusable while this is false: compositing splices overlays into
+    /// composed rows, so the buffer must stay in its prepared form.
+    [[nodiscard]] bool has_visible_overlays(TerminalDimensions dimensions) const;
+
     // --- Input ---
 
     /// Dispatch to visible capturing InputHandler overlays (reverse z-order).

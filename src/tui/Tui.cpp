@@ -285,6 +285,8 @@ support::ExpectedVoid Tui::clear_screen() {
     (void)terminal_.reset_scroll_margins();
     previous_dock_lines_.clear();
     previous_lines_.clear();
+    previous_raw_dock_lines_.clear();
+    previous_raw_lines_.clear();
     previous_dimensions_ = {};
     previous_viewport_height_ = 0;
     viewport_top_ = 0;
@@ -337,31 +339,10 @@ support::ExpectedVoid Tui::render() {
             has_dock && viewport_height >= 1 ? dimensions.rows - viewport_height : dimensions.rows;
     const std::size_t dock_skip = dock_height > dock_capacity ? dock_height - dock_capacity : 0;
 
-    // The full composed buffer is written to the terminal's main screen with
-    // no viewport clipping; overflow advances into the terminal's native
-    // scrollback (pi TuiMainScreen). Lines are padded so the first-diff
-    // comparison is byte-stable across renders.
-    for (auto& line : new_lines) {
-        if (line.size() < dimensions.columns) {
-            line.append(dimensions.columns - line.size(), ' ');
-        }
-    }
-    if (has_dock) {
-        for (auto& line : new_dock_lines) {
-            if (line.size() < dimensions.columns) {
-                line.append(dimensions.columns - line.size(), ' ');
-            }
-        }
-    }
-
-    // The one full reset per composed row lives here, after component
-    // rendering, after padding, after the background hook, and after overlay
-    // compositing (pi `applyLineResets` after `render()` and after
-    // `compositeOverlays()`). Nothing before this point emits a full reset, so
-    // a reset can never land inside a background span (#707). The dock lines
-    // are composed rows on this layout and get the same single reset.
-    detail::apply_line_resets(new_lines);
-    detail::apply_line_resets(new_dock_lines);
+    // Frame-level preparation (normalization, the width bound, padding, and the
+    // one per-row reset) is deferred to `finalize_rows` below, after the
+    // differential state is known, so unchanged rows can reuse the previous
+    // frame's finalized text (#711).
 
     const auto width_changed = dimensions.columns != previous_dimensions_.columns;
     const auto height_changed = dimensions.rows != previous_dimensions_.rows;
@@ -370,6 +351,54 @@ support::ExpectedVoid Tui::render() {
     // new partition so orphaned rows rejoin with buffer content (#597).
     const auto viewport_height_changed = !first_render_ && viewport_height != previous_viewport_height_;
     const auto first_render = first_render_;
+
+    // A row is reusable only when this is not the first render, the width is
+    // unchanged, and no overlay is visible: compositing splices overlays into
+    // composed rows, so an active overlay keeps the whole buffer prepared.
+    const bool rows_reusable =
+            !first_render && !width_changed && !compositor_->has_visible_overlays(dimensions);
+
+    // Frame-level preparation, in the order pi composes a main-screen row: the
+    // component boundary carries no reset and no padding, so each composed row
+    // is normalized, checked against the width bound, padded to the terminal
+    // width (which keeps the first-diff comparison byte-stable across renders),
+    // and given the single full reset a composed row carries (pi
+    // `applyLineResets` after `render()` and after `compositeOverlays()`, so a
+    // reset can never land inside a background span, #707). Only rows whose
+    // composed bytes changed are prepared, so a Preview Frame that changes
+    // nothing prepares nothing (#711).
+    frame_prepare_call_count_ = 0;
+    const auto finalize_rows = [&](std::vector<std::string>& lines,
+                                   const std::vector<std::string>& previous_final,
+                                   std::vector<std::string>& previous_raw) -> support::ExpectedVoid {
+        previous_raw.resize(lines.size());
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            if (rows_reusable && index < previous_final.size() && lines[index] == previous_raw[index]) {
+                lines[index] = previous_final[index];
+                continue;
+            }
+            ++frame_prepare_call_count_;
+            previous_raw[index] = std::move(lines[index]);
+            auto prepared = detail::prepare_rendered_line(previous_raw[index], dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            auto finalized = std::move(prepared->text);
+            if (finalized.size() < dimensions.columns) {
+                finalized.append(dimensions.columns - finalized.size(), ' ');
+            }
+            finalized += detail::kSegmentReset;
+            lines[index] = std::move(finalized);
+        }
+        return {};
+    };
+    if (auto result = finalize_rows(new_lines, previous_lines_, previous_raw_lines_); !result) {
+        return std::unexpected(result.error());
+    }
+    if (has_dock) {
+        if (auto result = finalize_rows(new_dock_lines, previous_dock_lines_, previous_raw_dock_lines_);
+                !result) {
+            return std::unexpected(result.error());
+        }
+    }
 
     const auto supports_sync = capabilities.synchronized_output;
     const auto initial_viewport_top = viewport_top_;
@@ -673,9 +702,7 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
         if (!rendered) return std::unexpected(rendered.error());
         const auto row_offset = output.lines.size();
         for (auto& line : rendered->lines) {
-            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            output.lines.push_back(std::move(prepared->text));
+            output.lines.push_back(std::move(line));
         }
         for (auto& image : rendered->images) {
             image.region.row += row_offset;
@@ -685,9 +712,7 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
             output.viewport_height = rendered->viewport_height;
         }
         for (auto& line : rendered->dock_lines) {
-            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            output.dock_lines.push_back(std::move(prepared->text));
+            output.dock_lines.push_back(std::move(line));
         }
     }
     return output;
@@ -924,5 +949,11 @@ std::optional<CursorPosition> Tui::resolve_cursor_location() const {
     if (!focusable->focused()) return std::nullopt;
     return focusable->cursor_location();
 }
+
+namespace detail::testing {
+
+std::size_t frame_prepare_call_count(const Tui& tui) noexcept { return tui.frame_prepare_call_count_; }
+
+} // namespace detail::testing
 
 } // namespace cch::tui
