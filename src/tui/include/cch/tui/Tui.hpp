@@ -83,7 +83,7 @@ private:
     };
 
     [[nodiscard]] bool owns(const Component* component) const;
-    [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions);
+    [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions, bool prepare_rows);
     [[nodiscard]] support::ExpectedVoid remove_active_images();
     [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
     [[nodiscard]] support::ExpectedVoid remove_stale_images(

@@ -3,9 +3,9 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include "tui/TuiTestHooks.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <memory>
 #include <string>

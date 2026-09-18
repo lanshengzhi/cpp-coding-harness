@@ -309,7 +309,13 @@ support::ExpectedVoid Tui::render() {
     }
 
     const auto capabilities = terminal_.capabilities();
-    auto rendered = render_children(dimensions);
+    // An overlay splices into prepared composed rows, so a visible overlay keeps
+    // the pre-#711 order: prepare -> composite -> pad -> reset. Without one,
+    // compositing leaves the composed rows untouched and preparation can follow
+    // the differential state, so only changed rows are prepared (#711).
+    const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
+    frame_prepare_call_count_ = 0;
+    auto rendered = render_children(dimensions, compose_overlays);
     if (!rendered) return std::unexpected(rendered.error());
     // Main-screen images are buffer-absolute and follow content into the
     // terminal's scrollback (fork-B image-follows-content): they are not
@@ -339,11 +345,6 @@ support::ExpectedVoid Tui::render() {
             has_dock && viewport_height >= 1 ? dimensions.rows - viewport_height : dimensions.rows;
     const std::size_t dock_skip = dock_height > dock_capacity ? dock_height - dock_capacity : 0;
 
-    // Frame-level preparation (normalization, the width bound, padding, and the
-    // one per-row reset) is deferred to `finalize_rows` below, after the
-    // differential state is known, so unchanged rows can reuse the previous
-    // frame's finalized text (#711).
-
     const auto width_changed = dimensions.columns != previous_dimensions_.columns;
     const auto height_changed = dimensions.rows != previous_dimensions_.rows;
     // A viewport/dock re-partition (overlay, autocomplete, editor wrap) moves
@@ -352,51 +353,70 @@ support::ExpectedVoid Tui::render() {
     const auto viewport_height_changed = !first_render_ && viewport_height != previous_viewport_height_;
     const auto first_render = first_render_;
 
-    // A row is reusable only when this is not the first render, the width is
-    // unchanged, and no overlay is visible: compositing splices overlays into
-    // composed rows, so an active overlay keeps the whole buffer prepared.
-    const bool rows_reusable =
-            !first_render && !width_changed && !compositor_->has_visible_overlays(dimensions);
-
-    // Frame-level preparation, in the order pi composes a main-screen row: the
-    // component boundary carries no reset and no padding, so each composed row
-    // is normalized, checked against the width bound, padded to the terminal
-    // width (which keeps the first-diff comparison byte-stable across renders),
-    // and given the single full reset a composed row carries (pi
+    // Padding and the one full reset a composed row carries (pi
     // `applyLineResets` after `render()` and after `compositeOverlays()`, so a
-    // reset can never land inside a background span, #707). Only rows whose
-    // composed bytes changed are prepared, so a Preview Frame that changes
-    // nothing prepares nothing (#711).
-    frame_prepare_call_count_ = 0;
-    const auto finalize_rows = [&](std::vector<std::string>& lines,
-                                   const std::vector<std::string>& previous_final,
-                                   std::vector<std::string>& previous_raw) -> support::ExpectedVoid {
-        previous_raw.resize(lines.size());
-        for (std::size_t index = 0; index < lines.size(); ++index) {
-            if (rows_reusable && index < previous_final.size() && lines[index] == previous_raw[index]) {
-                lines[index] = previous_final[index];
-                continue;
+    // reset can never land inside a background span, #707). Padding keeps the
+    // first-diff comparison byte-stable across renders.
+    const auto pad_and_reset_rows = [&](std::vector<std::string>& lines) {
+        for (auto& line : lines) {
+            if (line.size() < dimensions.columns) {
+                line.append(dimensions.columns - line.size(), ' ');
             }
-            ++frame_prepare_call_count_;
-            previous_raw[index] = std::move(lines[index]);
-            auto prepared = detail::prepare_rendered_line(previous_raw[index], dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            auto finalized = std::move(prepared->text);
-            if (finalized.size() < dimensions.columns) {
-                finalized.append(dimensions.columns - finalized.size(), ' ');
-            }
-            finalized += detail::kSegmentReset;
-            lines[index] = std::move(finalized);
+            detail::apply_line_reset(line);
         }
-        return {};
     };
-    if (auto result = finalize_rows(new_lines, previous_lines_, previous_raw_lines_); !result) {
-        return std::unexpected(result.error());
-    }
-    if (has_dock) {
-        if (auto result = finalize_rows(new_dock_lines, previous_dock_lines_, previous_raw_dock_lines_);
+
+    std::vector<std::string> next_raw_lines;
+    std::vector<std::string> next_raw_dock_lines;
+    if (compose_overlays) {
+        // Preparation already ran before compositing: an overlay splices into
+        // prepared composed rows, so that frame keeps the original order.
+        pad_and_reset_rows(new_lines);
+        pad_and_reset_rows(new_dock_lines);
+    } else {
+        // Frame-level preparation follows the differential state: a composed row
+        // is normalized, checked against the width bound, padded to the terminal
+        // width, and given its single reset — but only when its composed bytes
+        // changed. A Preview Frame that changes nothing prepares nothing (#711).
+        const bool rows_reusable = !first_render && !width_changed;
+        const auto prepare_frame_rows = [&](std::vector<std::string>& lines,
+                                            const std::vector<std::string>& previous_prepared,
+                                            const std::vector<std::string>& previous_raw,
+                                            std::vector<std::string>& next_raw) -> support::ExpectedVoid {
+            next_raw.resize(lines.size());
+            for (std::size_t index = 0; index < lines.size(); ++index) {
+                const bool reusable = rows_reusable && index < previous_prepared.size() &&
+                        index < previous_raw.size() && lines[index] == previous_raw[index];
+                // The composed bytes move into the raw cache either way, so the
+                // raw cache mirrors the prepared cache for the next comparison.
+                next_raw[index] = std::move(lines[index]);
+                if (reusable) {
+                    lines[index] = previous_prepared[index];
+                    continue;
+                }
+                ++frame_prepare_call_count_;
+                auto prepared = detail::prepare_rendered_line(next_raw[index], dimensions.columns);
+                if (!prepared) return std::unexpected(prepared.error());
+                auto prepared_row = std::move(prepared->text);
+                if (prepared_row.size() < dimensions.columns) {
+                    prepared_row.append(dimensions.columns - prepared_row.size(), ' ');
+                }
+                detail::apply_line_reset(prepared_row);
+                lines[index] = std::move(prepared_row);
+            }
+            return {};
+        };
+        if (auto result =
+                        prepare_frame_rows(new_lines, previous_lines_, previous_raw_lines_, next_raw_lines);
                 !result) {
             return std::unexpected(result.error());
+        }
+        if (has_dock) {
+            if (auto result = prepare_frame_rows(
+                        new_dock_lines, previous_dock_lines_, previous_raw_dock_lines_, next_raw_dock_lines);
+                    !result) {
+                return std::unexpected(result.error());
+            }
         }
     }
 
@@ -685,6 +705,11 @@ support::ExpectedVoid Tui::render() {
     // Update cached state
     previous_lines_ = std::move(new_lines);
     previous_dock_lines_ = std::move(new_dock_lines);
+    // The raw caches commit with the prepared caches: a failed render must leave
+    // both describing the same frame, or a later matching row would reuse a
+    // prepared row the terminal never received.
+    previous_raw_lines_ = std::move(next_raw_lines);
+    previous_raw_dock_lines_ = std::move(next_raw_dock_lines);
     previous_viewport_height_ = viewport_height;
     previous_dimensions_ = dimensions;
     first_render_ = false;
@@ -692,7 +717,7 @@ support::ExpectedVoid Tui::render() {
     return {};
 }
 
-support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions) {
+support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions, bool prepare_rows) {
     RenderResult output;
     for (const auto& child : children_) {
         if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child.get())) {
@@ -702,7 +727,17 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
         if (!rendered) return std::unexpected(rendered.error());
         const auto row_offset = output.lines.size();
         for (auto& line : rendered->lines) {
-            output.lines.push_back(std::move(line));
+            if (!prepare_rows) {
+                // Frame-level preparation follows the differential state in
+                // `render`; only an overlay frame prepares here, before
+                // compositing splices into these rows (#711).
+                output.lines.push_back(std::move(line));
+                continue;
+            }
+            ++frame_prepare_call_count_;
+            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            output.lines.push_back(std::move(prepared->text));
         }
         for (auto& image : rendered->images) {
             image.region.row += row_offset;
@@ -712,7 +747,14 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
             output.viewport_height = rendered->viewport_height;
         }
         for (auto& line : rendered->dock_lines) {
-            output.dock_lines.push_back(std::move(line));
+            if (!prepare_rows) {
+                output.dock_lines.push_back(std::move(line));
+                continue;
+            }
+            ++frame_prepare_call_count_;
+            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            output.dock_lines.push_back(std::move(prepared->text));
         }
     }
     return output;
