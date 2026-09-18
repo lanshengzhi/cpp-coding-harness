@@ -43,15 +43,18 @@ TEST_CASE("JsonValue serializes numbers byte-identically to the Glaze path", "[s
     }
 }
 
-TEST_CASE("JsonValue serializes only the Glaze escape set, raw otherwise", "[support][json][t6][compat-pi]") {
+TEST_CASE("JsonValue serializes control characters as unicode escapes and the rest raw",
+        "[support][json][t6][compat-pi]") {
     const auto escaped = support::write_json(support::JsonValue{std::string{"a\"b\\c\n\r\t\b\f"}});
     REQUIRE(escaped);
     CHECK(*escaped == R"("a\"b\\c\n\r\t\b\f")");
 
-    // Control bytes and UTF-8 pass through raw, matching Glaze's writer.
+    // RFC 8259 forbids a raw control character inside a string, so every byte
+    // below 0x20 is unicode-escaped; 0x7f and UTF-8 stay raw, matching pi's
+    // JSON.stringify (#724).
     const auto controls = support::write_json(support::JsonValue{std::string{"a\x01\x1f\x7f", 4}});
     REQUIRE(controls);
-    CHECK(*controls == std::string{"\"a\x01\x1f\x7f\""});
+    CHECK(*controls == std::string{"\"a\\u0001\\u001F\x7f\""});
 
     const auto utf8 = support::write_json(support::JsonValue{std::string{"caf\xc3\xa9 \xf0\x9f\x98\x80"}});
     REQUIRE(utf8);
@@ -123,7 +126,9 @@ TEST_CASE("JsonValue parser decodes Unicode escapes with surrogate pairs", "[sup
     REQUIRE(escaped);
     const auto serialized = support::write_json(*escaped);
     REQUIRE(serialized);
-    CHECK(*serialized == std::string{"\"\xc3\xa9\xf0\x9f\x98\x80\x1b\""});
+    // The ESC escapes as \u001B: Glaze's writer escapes to uppercase hex, while
+    // pi's JSON.stringify uses lowercase; both read identically (#724).
+    CHECK(*serialized == std::string{"\"\xc3\xa9\xf0\x9f\x98\x80\\u001B\""});
     // Lone surrogates are rejected, matching Glaze.
     CHECK_FALSE(support::read_json(R"("\uD800")"));
     CHECK_FALSE(support::read_json(R"("\uDC00")"));
