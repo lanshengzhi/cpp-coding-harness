@@ -154,45 +154,6 @@ wait)"};
     CHECK(elapsed < std::chrono::seconds{3});
 }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("process runner contains a throwing callback and keeps both pipes draining",
-        "[harness][process][issue484][spec]") {
-    harness::DefaultAsyncProcessRunner runner;
-    harness::ProcessRequest request;
-    request.executable = "/bin/bash";
-    request.arguments = {"-c", R"((head -c 262144 /dev/zero | tr '\0' 'A') &
-(head -c 65536 /dev/zero | tr '\0' 'B' >&2) &
-wait)"};
-    std::error_code current_path_error;
-    request.working_directory = std::filesystem::current_path(current_path_error);
-    REQUIRE_FALSE(current_path_error);
-    request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 1000000};
-
-    std::size_t stderr_bytes = 0;
-    request.on_stdout = [](std::string_view) -> support::ExpectedVoid {
-        throw 1;
-    };
-    // The capture remains alive until run_awaitable drives the process to quiescence.
-    request.on_stderr = [&](std::string_view chunk) -> support::ExpectedVoid {
-        stderr_bytes += chunk.size();
-        return {};
-    };
-
-    const auto started = std::chrono::steady_clock::now();
-    auto result = run_awaitable<harness::ProcessResult>([&]() {
-        return runner.run(std::move(request));
-    });
-    const auto elapsed = std::chrono::steady_clock::now() - started;
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == support::ErrorCode::Process);
-    CHECK(result.error().message.find("callback") != std::string::npos);
-    CHECK(stderr_bytes == 65536);
-    CHECK(elapsed < std::chrono::seconds{3});
-}
-#endif
-
 TEST_CASE("process runner timeout includes inherited output pipes after child exit",
         "[harness][process][issue484][spec]") {
     tests::TempWorkspace workspace;

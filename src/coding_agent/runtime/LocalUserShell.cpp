@@ -55,13 +55,9 @@ namespace {
     request.merge_stderr = true;
     if (update_sink) {
         request.on_stdout.emplace(
-            // The process runner owns this callback only until the awaited run
-            // completes; these references point into this coroutine frame.
-            [&update_sink, &sink_error, &cancel_source](std::string_view chunk)
-                -> support::ExpectedVoid {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                try {
-#endif
+                // The process runner owns this callback only until the awaited run
+                // completes; these references point into this coroutine frame.
+                [&update_sink, &sink_error, &cancel_source](std::string_view chunk) -> support::ExpectedVoid {
                     if (sink_error) {
                         return {};
                     }
@@ -71,16 +67,7 @@ namespace {
                         return std::unexpected(std::move(delivered.error()));
                     }
                     return {};
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (...) {
-                    sink_error = support::make_error(
-                        support::ErrorCode::Unknown,
-                        "user shell update sink threw");
-                    cancel_source.request_stop();
-                    return std::unexpected(*sink_error);
-                }
-#endif
-            });
+                });
     }
 
     harness::DefaultAsyncProcessRunner runner;

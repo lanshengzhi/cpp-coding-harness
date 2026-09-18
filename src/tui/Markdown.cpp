@@ -201,13 +201,10 @@ struct ParseState {
 
 int enter_block(MD_BLOCKTYPE type, void* detail, void* userdata) noexcept {
     auto& state = *static_cast<ParseState*>(userdata);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (type == MD_BLOCK_DOC) {
-            state.blocks.push_back(&state.root);
-            return 0;
-        }
+    if (type == MD_BLOCK_DOC) {
+        state.blocks.push_back(&state.root);
+        return 0;
+    }
         if (state.blocks.empty()) return 1;
         auto node = std::make_unique<BlockNode>();
         node->kind = block_kind(type);
@@ -244,12 +241,6 @@ int enter_block(MD_BLOCKTYPE type, void* detail, void* userdata) noexcept {
         state.blocks.back()->children.push_back(std::move(node));
         state.blocks.push_back(node_pointer);
         return 0;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        state.failed = true;
-        return 1;
-    }
-#endif
 }
 
 int leave_block(MD_BLOCKTYPE, void*, void* userdata) noexcept {
@@ -261,23 +252,18 @@ int leave_block(MD_BLOCKTYPE, void*, void* userdata) noexcept {
 
 int enter_span(MD_SPANTYPE type, void* detail, void* userdata) noexcept {
     auto& state = *static_cast<ParseState*>(userdata);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (state.blocks.empty()) return 1;
-        auto node = std::make_unique<InlineNode>();
-        node->kind = inline_kind(type);
-        if (type == MD_SPAN_A) {
-            const auto& link_detail = *static_cast<MD_SPAN_A_DETAIL*>(detail);
-            node->destination = attribute_text(link_detail.href);
-            node->autolink = link_detail.is_autolink != 0;
-        } else if (type == MD_SPAN_IMG) {
-            node->destination = attribute_text(static_cast<MD_SPAN_IMG_DETAIL*>(detail)->src);
-        } else if (type == MD_SPAN_DEL &&
-                   state.strikethrough_index < state.strict_strikethrough.size()) {
-            node->strict_strikethrough =
-                state.strict_strikethrough[state.strikethrough_index++];
-        }
+    if (state.blocks.empty()) return 1;
+    auto node = std::make_unique<InlineNode>();
+    node->kind = inline_kind(type);
+    if (type == MD_SPAN_A) {
+        const auto& link_detail = *static_cast<MD_SPAN_A_DETAIL*>(detail);
+        node->destination = attribute_text(link_detail.href);
+        node->autolink = link_detail.is_autolink != 0;
+    } else if (type == MD_SPAN_IMG) {
+        node->destination = attribute_text(static_cast<MD_SPAN_IMG_DETAIL*>(detail)->src);
+    } else if (type == MD_SPAN_DEL && state.strikethrough_index < state.strict_strikethrough.size()) {
+        node->strict_strikethrough = state.strict_strikethrough[state.strikethrough_index++];
+    }
         auto* node_pointer = node.get();
         if (state.inlines.empty()) {
             state.blocks.back()->inlines.push_back(std::move(node));
@@ -286,12 +272,6 @@ int enter_span(MD_SPANTYPE type, void* detail, void* userdata) noexcept {
         }
         state.inlines.push_back(node_pointer);
         return 0;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        state.failed = true;
-        return 1;
-    }
-#endif
 }
 
 int leave_span(MD_SPANTYPE, void*, void* userdata) noexcept {
@@ -303,19 +283,16 @@ int leave_span(MD_SPANTYPE, void*, void* userdata) noexcept {
 
 int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userdata) noexcept {
     auto& state = *static_cast<ParseState*>(userdata);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (state.blocks.empty()) return 1;
-        auto& block = *state.blocks.back();
-        if (block.kind == BlockKind::Code || block.kind == BlockKind::Html) {
-            if (type == MD_TEXT_NULLCHAR) {
-                block.text += "\xef\xbf\xbd";
-            } else {
-                block.text.append(text, size);
-            }
-            return 0;
+    if (state.blocks.empty()) return 1;
+    auto& block = *state.blocks.back();
+    if (block.kind == BlockKind::Code || block.kind == BlockKind::Html) {
+        if (type == MD_TEXT_NULLCHAR) {
+            block.text += "\xef\xbf\xbd";
+        } else {
+            block.text.append(text, size);
         }
+        return 0;
+    }
 
         auto node = std::make_unique<InlineNode>();
         node->kind = InlineKind::Text;
@@ -334,12 +311,6 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
             state.inlines.back()->children.push_back(std::move(node));
         }
         return 0;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        state.failed = true;
-        return 1;
-    }
-#endif
 }
 
 [[nodiscard]] support::Expected<BlockNode> parse_markdown(std::string_view text) {
@@ -984,29 +955,12 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
         return std::unexpected(parsed.error());
     }
     const auto render_content = [&]() -> RenderedLines {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            return render_block(
-                document,
+        return render_block(document,
                 content_width,
                 RenderContext{
-                    .style = impl_->style,
-                    .syntax_highlighter = impl_->syntax_highlighter,
+                        .style = impl_->style,
+                        .syntax_highlighter = impl_->syntax_highlighter,
                 });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception&) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "TUI Markdown callback failed",
-                "the styling or syntax-highlighting callback threw an exception"));
-        } catch (...) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "TUI Markdown callback failed",
-                "the styling or syntax-highlighting callback threw an unknown exception"));
-        }
-#endif
     };
     std::vector<std::string> content;
     if (auto rendered = render_content(); rendered) {

@@ -29,18 +29,7 @@ template <typename T, typename Executor> struct AwaitableTerminal<boost::asio::a
 
 template <typename AwaitableFactory, typename Terminal>
 [[nodiscard]] boost::asio::awaitable<Terminal> invoke_awaitable(std::shared_ptr<AwaitableFactory> shared) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-        co_return co_await (*shared)();
-    } catch (const std::exception& error) {
-        co_return std::unexpected(
-                cch::support::make_error(cch::support::ErrorCode::Unknown, "async operation failed", error.what()));
-    } catch (...) {
-        co_return std::unexpected(cch::support::make_error(cch::support::ErrorCode::Unknown, "async operation failed"));
-    }
-#else
     co_return co_await (*shared)();
-#endif
 }
 
 /// The executor of the coroutine currently consuming an `AsyncResult`. Set
@@ -99,44 +88,20 @@ template <typename AwaitableFactory>
                             cch::support::AsyncCompletion<Value, cch::support::Error> completion) mutable noexcept {
                         using Completion = cch::support::AsyncCompletion<Value, cch::support::Error>;
                         std::shared_ptr<Completion> completion_owner;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        // The staged build still permits setup exceptions; convert them before
-                        // the producer's no-exception completion contract takes over.
-                        try {
-#endif
-                            completion_owner = std::make_shared<Completion>(std::move(completion));
-                            boost::asio::co_spawn(executor,
-                                    invoke_awaitable<AwaitableFactory, Terminal>(shared),
-                                    boost::asio::bind_executor(executor,
-                                            [shared, completion_owner](
-                                                    std::exception_ptr exception, Terminal result) mutable noexcept {
-                                                if (exception) {
-#if defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                                    // Asio cannot produce an exception pointer in this mode. A
-                                                    // non-null value is a Runtime invariant violation.
-                                                    std::terminate();
-#else
-                                    // The staged exception-enabled build retains the same
-                                    // explicit error channel without rethrowing across the bridge.
-                                    std::move(*completion_owner)(std::unexpected(cch::support::make_error(
-                                        cch::support::ErrorCode::Unknown,
-                                        "async operation failed")));
-#endif
-                                                    return;
-                                                }
-                                                std::move (*completion_owner)(std::move(result));
-                                            }));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        } catch (...) {
-                            auto failure = std::unexpected(cch::support::make_error(
-                                    cch::support::ErrorCode::Unknown, "async operation initiation failed"));
-                            if (completion_owner) {
-                                std::move (*completion_owner)(std::move(failure));
-                            } else {
-                                completion(std::move(failure));
-                            }
-                        }
-#endif
+                        completion_owner = std::make_shared<Completion>(std::move(completion));
+                        boost::asio::co_spawn(executor,
+                                invoke_awaitable<AwaitableFactory, Terminal>(shared),
+                                boost::asio::bind_executor(executor,
+                                        [shared, completion_owner](
+                                                std::exception_ptr exception, Terminal result) mutable noexcept {
+                                            if (exception) {
+                                                // Asio cannot produce an exception pointer in this mode. A
+                                                // non-null value is a Runtime invariant violation.
+                                                std::terminate();
+                                                return;
+                                            }
+                                            std::move (*completion_owner)(std::move(result));
+                                        }));
                     }}};
 }
 

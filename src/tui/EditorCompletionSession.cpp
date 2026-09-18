@@ -32,15 +32,7 @@ namespace {
 
 void cancel_timer(const std::shared_ptr<AutocompleteDebounceTimer>& timer) noexcept {
     if (!timer) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        timer->cancel();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Timer cancellation is best effort; it cannot veto a serialized edit.
-    }
-#endif
+    timer->cancel();
 }
 
 void request_stop(std::stop_source& source) noexcept {
@@ -53,12 +45,6 @@ struct RenderNotificationFrame {
 };
 
 thread_local RenderNotificationFrame* current_render_notification = nullptr;
-
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-[[nodiscard]] support::Error provider_failure(std::string detail) {
-    return support::make_error(support::ErrorCode::Unknown, "Editor autocomplete provider failed", std::move(detail));
-}
-#endif
 
 } // namespace
 
@@ -378,20 +364,11 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::drain_p
         }
 
         AutocompleteApplyResult result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            result = provider->apply_completion(view.lines,
-                    view.cursor_line,
-                    view.cursor_column,
-                    pending.result->items.front(),
-                    pending.result->prefix);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            cancel_current_lifecycle(control, timer);
-            return std::unexpected(provider_failure("the autocomplete application threw an exception"));
-        }
-#endif
+        result = provider->apply_completion(view.lines,
+                view.cursor_line,
+                view.cursor_column,
+                pending.result->items.front(),
+                pending.result->prefix);
         cancel_current_lifecycle(control, timer);
         return EditorCompletionEffect{
                 .menu = {},
@@ -457,63 +434,45 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::start_r
             .stop_token = stop_token,
     };
     const auto weak_control = std::weak_ptr<EditorCompletionSession::Impl::Control>{control};
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        provider->get_suggestions(request,
-                [weak_control, request_id, snapshot_text, snapshot_cursor, intent](
-                        std::optional<AutocompleteSuggestions> result) -> support::ExpectedVoid {
-                    if (const auto state = weak_control.lock()) {
-                        bool accepted = false;
-                        {
-                            std::lock_guard lock(state->mutex);
-                            if (state->open && state->request_id == request_id &&
-                                    (!state->delivered_request_id || *state->delivered_request_id != request_id)) {
-                                state->delivered_request_id = request_id;
-                                state->pending = EditorCompletionSession::Impl::PendingDelivery{
-                                        .request_id = request_id,
-                                        .intent = intent,
-                                        .snapshot_text = snapshot_text,
-                                        .snapshot_cursor = snapshot_cursor,
-                                        .result = std::move(result),
-                                };
-                                accepted = true;
-                            }
-                        }
-                        if (accepted && state->render_request && state->begin_render_notification()) {
-                            // The render request re-enters the editor's serialized
-                            // domain, so delivery must already be executor-affine;
-                            // the composition root enforces that for
-                            // worker-thread providers (#609).
-                            RenderNotificationFrame frame{
-                                    .control = state.get(),
-                                    .previous = current_render_notification,
+    provider->get_suggestions(request,
+            [weak_control, request_id, snapshot_text, snapshot_cursor, intent](
+                    std::optional<AutocompleteSuggestions> result) -> support::ExpectedVoid {
+                if (const auto state = weak_control.lock()) {
+                    bool accepted = false;
+                    {
+                        std::lock_guard lock(state->mutex);
+                        if (state->open && state->request_id == request_id &&
+                                (!state->delivered_request_id || *state->delivered_request_id != request_id)) {
+                            state->delivered_request_id = request_id;
+                            state->pending = EditorCompletionSession::Impl::PendingDelivery{
+                                    .request_id = request_id,
+                                    .intent = intent,
+                                    .snapshot_text = snapshot_text,
+                                    .snapshot_cursor = snapshot_cursor,
+                                    .result = std::move(result),
                             };
-                            current_render_notification = &frame;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                            try {
-#endif
-                                if (auto requested = state->render_request(); !requested) {
-                                    state->disable_render_notification();
-                                }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                            } catch (...) {
-                                // Rendering is a best-effort weak observer; deactivate it after failure.
-                                state->disable_render_notification();
-                            }
-#endif
-                            current_render_notification = frame.previous;
-                            state->end_render_notification();
+                            accepted = true;
                         }
                     }
-                    return {};
-                });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        cancel_current_lifecycle(control, timer);
-        return std::unexpected(provider_failure("the autocomplete provider threw an exception"));
-    }
-#endif
+                    if (accepted && state->render_request && state->begin_render_notification()) {
+                        // The render request re-enters the editor's serialized
+                        // domain, so delivery must already be executor-affine;
+                        // the composition root enforces that for
+                        // worker-thread providers (#609).
+                        RenderNotificationFrame frame{
+                                .control = state.get(),
+                                .previous = current_render_notification,
+                        };
+                        current_render_notification = &frame;
+                        if (auto requested = state->render_request(); !requested) {
+                            state->disable_render_notification();
+                        }
+                        current_render_notification = frame.previous;
+                        state->end_render_notification();
+                    }
+                }
+                return {};
+            });
     return drain_pending(control, timer, view);
 }
 
@@ -531,15 +490,7 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::handle_
 
     if (refresh.intent.force) {
         bool allowed = false;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            allowed = provider->should_trigger_file_completion(view.lines, view.cursor_line, view.cursor_column);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            return std::unexpected(provider_failure("the file-completion gate threw an exception"));
-        }
-#endif
+        allowed = provider->should_trigger_file_completion(view.lines, view.cursor_line, view.cursor_column);
         if (!allowed) {
             std::lock_guard lock(control->mutex);
             return control->effect_locked();
@@ -557,39 +508,22 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::handle_
 
     const auto weak_control = std::weak_ptr<EditorCompletionSession::Impl::Control>{control};
     const auto generation = admission->generation;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        timer->start(refresh.debounce, [weak_control, generation]() -> support::ExpectedVoid {
-            if (const auto state = weak_control.lock()) {
-                bool current = false;
-                {
-                    std::lock_guard lock(state->mutex);
-                    if (state->open && state->due && state->due->generation == generation) {
-                        state->due->ready = true;
-                        current = true;
-                    }
-                }
-                if (current && state->on_wake) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    try {
-#endif
-                        (void)state->on_wake();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    } catch (...) {
-                        // A stale or unavailable serialized entry is a benign drop.
-                    }
-#endif
+    timer->start(refresh.debounce, [weak_control, generation]() -> support::ExpectedVoid {
+        if (const auto state = weak_control.lock()) {
+            bool current = false;
+            {
+                std::lock_guard lock(state->mutex);
+                if (state->open && state->due && state->due->generation == generation) {
+                    state->due->ready = true;
+                    current = true;
                 }
             }
-            return {};
-        });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        cancel_current_lifecycle(control, timer);
-        return std::unexpected(provider_failure("the autocomplete debounce timer failed"));
-    }
-#endif
+            if (current && state->on_wake) {
+                (void)state->on_wake();
+            }
+        }
+        return {};
+    });
     std::lock_guard lock(control->mutex);
     return control->effect_locked();
 }
@@ -648,16 +582,7 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::handle_
     }
 
     AutocompleteApplyResult result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        result = provider->apply_completion(view.lines, view.cursor_line, view.cursor_column, item, prefix);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        cancel_current_lifecycle(control, timer);
-        return std::unexpected(provider_failure("the autocomplete application threw an exception"));
-    }
-#endif
+    result = provider->apply_completion(view.lines, view.cursor_line, view.cursor_column, item, prefix);
     cancel_current_lifecycle(control, timer);
     return EditorCompletionEffect{
             .menu = {},

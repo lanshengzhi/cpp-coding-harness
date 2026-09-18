@@ -342,46 +342,35 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     prompt_settled_signal_->expires_at(std::chrono::steady_clock::time_point::max());
 
     support::ExpectedVoid result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        ai::UserMessage user_message = detail::make_admitted_user_message(
-                std::move(prompt), skills_, templates_, std::move(images), expand_prompt_templates);
+    ai::UserMessage user_message = detail::make_admitted_user_message(
+            std::move(prompt), skills_, templates_, std::move(images), expand_prompt_templates);
 
-        // pi `prompt()` auth preflight: a real model whose provider has no
-        // configured auth fails with pi's verbatim re-auth guidance
-        // before the run starts (the `kDefaultModel` placeholder is
-        // skipped and keeps its ordinary "Unknown provider: unknown"
-        // streaming failure).
-        if (auto admitted = co_await preflight_auth_guidance(); !admitted) {
-            result = std::unexpected(admitted.error());
-        } else {
-            // pi AgentSession.prompt pre-send compaction check (catches
-            // aborted responses and unhandled error terminals from the
-            // previous run): the last assistant message may still push context
-            // over the threshold. The user's new prompt below is the
-            // continuation, so no retry is performed here (pi: "do not call
-            // agent.continue() here").
-            const auto last_assistant = last_assistant_message_from(agent_->state().messages);
-            if (last_assistant) {
-                const auto preflight_outcome =
-                        co_await check_auto_compaction(*last_assistant, /*skip_aborted_check=*/false);
-                (void)preflight_outcome;
-            }
-            // pi resets the overflow-recovery attempt when a new user message
-            // starts; the pre-prompt check above still observes the previous
-            // attempt's state.
-            overflow_recovery_attempted_ = false;
-            result = co_await run_agent_loop(std::move(user_message), *active_stop_source_);
+    // pi `prompt()` auth preflight: a real model whose provider has no
+    // configured auth fails with pi's verbatim re-auth guidance
+    // before the run starts (the `kDefaultModel` placeholder is
+    // skipped and keeps its ordinary "Unknown provider: unknown"
+    // streaming failure).
+    if (auto admitted = co_await preflight_auth_guidance(); !admitted) {
+        result = std::unexpected(admitted.error());
+    } else {
+        // pi AgentSession.prompt pre-send compaction check (catches
+        // aborted responses and unhandled error terminals from the
+        // previous run): the last assistant message may still push context
+        // over the threshold. The user's new prompt below is the
+        // continuation, so no retry is performed here (pi: "do not call
+        // agent.continue() here").
+        const auto last_assistant = last_assistant_message_from(agent_->state().messages);
+        if (last_assistant) {
+            const auto preflight_outcome =
+                    co_await check_auto_compaction(*last_assistant, /*skip_aborted_check=*/false);
+            (void)preflight_outcome;
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        result = std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session prompt coroutine failed", error.what()));
-    } catch (...) {
-        result = std::unexpected(support::make_error(support::ErrorCode::Unknown, "session prompt coroutine failed"));
+        // pi resets the overflow-recovery attempt when a new user message
+        // starts; the pre-prompt check above still observes the previous
+        // attempt's state.
+        overflow_recovery_attempted_ = false;
+        result = co_await run_agent_loop(std::move(user_message), *active_stop_source_);
     }
-#endif
 
     active_stop_source_.reset();
     // The whole run (including steering and follow-up continuations) has
@@ -537,9 +526,6 @@ void AgentSession::Impl::emit_session_event(const AgentSessionEvent& event) {
         if (!subscriber->delivery_enabled || !subscriber->sink) {
             continue;
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
             if (auto observed = subscriber->sink(event); !observed) {
                 // A failing observer is deactivated and never vetoes retry
                 // progress or persistence (ADR 0017); its failure is recorded
@@ -552,21 +538,6 @@ void AgentSession::Impl::emit_session_event(const AgentSessionEvent& event) {
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
             }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception& exception) {
-            detail::record_session_observer_diagnostic(
-                    session_event_diagnostics_, support::make_error(support::ErrorCode::Unknown, exception.what()));
-            update_projection();
-            subscriber->registered = false;
-            subscriber->delivery_enabled = false;
-        } catch (...) {
-            detail::record_session_observer_diagnostic(
-                    session_event_diagnostics_, support::make_error(support::ErrorCode::Unknown, "unknown exception"));
-            update_projection();
-            subscriber->registered = false;
-            subscriber->delivery_enabled = false;
-        }
-#endif
     }
     std::erase_if(session_event_observers_,
             [](const std::shared_ptr<SessionSubscriber>& subscriber) { return !subscriber->registered; });
@@ -750,15 +721,7 @@ boost::asio::awaitable<void> AgentSession::Impl::finalize_close_after_active_wor
     }
     auto owned_filesystem = release_close_resources();
     if (owned_filesystem) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            (void)co_await support::detail::await_async_result(owned_filesystem->cleanup());
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            // cleanup() is best-effort and must not make close fallible.
-        }
-#endif
+        (void)co_await support::detail::await_async_result(owned_filesystem->cleanup());
     }
     lifecycle_ = Lifecycle::Closed;
 }
@@ -780,43 +743,19 @@ void AgentSession::Impl::finalize_close() noexcept {
     // assembled without a Runtime root falls back to the shared system
     // executor.
     if (owned_filesystem) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            // post() prevents a cleanup coroutine from executing inline on the
-            // close() stack before its first suspension point.
-            const auto cleanup_executor = services_.runtime_target
-                                                  ? services_.runtime_target->executor()
-                                                  : boost::asio::any_io_executor{boost::asio::system_executor{}};
-            boost::asio::post(cleanup_executor, [filesystem = std::move(owned_filesystem), cleanup_executor]() mutable {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                try {
-#endif
-                    boost::asio::co_spawn(
-                            cleanup_executor,
-                            [filesystem = std::move(filesystem)]() -> boost::asio::awaitable<void> {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                try {
-#endif
-                                    (void)co_await support::detail::await_async_result(filesystem->cleanup());
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                } catch (...) {
-                                    // cleanup() is best-effort and must not make close fallible.
-                                }
-#endif
-                            },
-                            boost::asio::detached);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (...) {
-                    // Launch remains best-effort after close has released ownership.
-                }
-#endif
-            });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            // Scheduling is also best-effort; close remains noexcept.
-        }
-#endif
+        // post() prevents a cleanup coroutine from executing inline on the
+        // close() stack before its first suspension point.
+        const auto cleanup_executor = services_.runtime_target
+                                              ? services_.runtime_target->executor()
+                                              : boost::asio::any_io_executor{boost::asio::system_executor{}};
+        boost::asio::post(cleanup_executor, [filesystem = std::move(owned_filesystem), cleanup_executor]() mutable {
+            boost::asio::co_spawn(
+                    cleanup_executor,
+                    [filesystem = std::move(filesystem)]() -> boost::asio::awaitable<void> {
+                        (void)co_await support::detail::await_async_result(filesystem->cleanup());
+                    },
+                    boost::asio::detached);
+        });
     }
 }
 
@@ -829,18 +768,7 @@ boost::asio::awaitable<support::ExpectedVoid> detail::session_prompt(std::shared
     if (!impl) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        co_return co_await impl->run_prompt(std::move(text), std::move(images), expand_prompt_templates);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session prompt coroutine failed", error.what()));
-    } catch (...) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Unknown, "session prompt coroutine failed"));
-    }
-#endif
+    co_return co_await impl->run_prompt(std::move(text), std::move(images), expand_prompt_templates);
 }
 
 boost::asio::awaitable<support::ExpectedVoid> detail::session_wait_for_idle(std::shared_ptr<AgentSession::Impl> impl) {

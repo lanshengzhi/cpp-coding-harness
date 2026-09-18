@@ -5,6 +5,8 @@ status: accepted
 # Adopt a strict no-exception core with private asynchronous bridges
 
 > Refined by [ADR 0046](0046-move-pi-neutral-mechanics-from-cch-ai-to-cch-support.md): the `AsyncResult` completion bridge moved from `src/ai/` to `src/support/` as a private support header, so bridge machinery no longer lives inside a capability Owner while being consumed across Owner boundaries. The Owner-Interface clause below is unchanged: no Owner contract exposes exception or Boost.Asio types.
+>
+> Final state ([#720](https://github.com/lanshengzhi/cpp-coding-harness/issues/720), under [#714](https://github.com/lanshengzhi/cpp-coding-harness/issues/714)): the exception-enabled fallback is retired. No `#if !defined(BOOST_ASIO_NO_EXCEPTIONS)` guards remain in project sources; the strict no-exception path is the only path, and the bridge's non-null `std::exception_ptr` outcome is unconditionally a `std::terminate` Runtime invariant violation.
 
 The project-owned production and test targets are moving to a strict no-exception core. Ordinary failure is represented by `cch::support::Expected<T>`, `ExpectedVoid`, and `std::error_code`; an exception is not a second error channel. Runtime invariant violations remain `std::terminate` contracts in every build mode.
 
@@ -18,7 +20,7 @@ Owner Interfaces contain only value-based expected/error contracts. They do not 
 
 ## Private Boost.Asio bridge
 
-Boost.Asio remains an implementation dependency of the private asynchronous completion bridge. Its awaitables, executors, and completion machinery do not cross an Owner boundary. The bridge may receive `std::exception_ptr` from `co_spawn`'s completion signature because that is Boost.Asio's private completion representation. In the staged exception-enabled build it maps a non-null pointer directly to the operation's generic `Expected` error without rethrowing; when `BOOST_ASIO_NO_EXCEPTIONS` is active, a non-null pointer is impossible and terminates as a Runtime invariant violation. It must never call `std::rethrow_exception`, expose the pointer, or use it as an application-level error channel. The exact temporary source allowlist is recorded in `cmake/parity/manifest.json` and enforced by strict Gate validation.
+Boost.Asio remains an implementation dependency of the private asynchronous completion bridge. Its awaitables, executors, and completion machinery do not cross an Owner boundary. The bridge may receive `std::exception_ptr` from `co_spawn`'s completion signature because that is Boost.Asio's private completion representation. A non-null pointer is impossible in the no-exception build and terminates as a Runtime invariant violation. It must never call `std::rethrow_exception`, expose the pointer, or use it as an application-level error channel. The exact source allowlist is recorded in `cmake/parity/manifest.json` and enforced by strict Gate validation.
 
 The pinned Boost.Asio headers support the no-exception configuration through Boost configuration and `BOOST_ASIO_NO_EXCEPTIONS`; the private `cch_ai` hook for Boost's no-exception `throw_exception` entry point terminates if that invariant is reached. A minimal `co_spawn` translation unit and the bridge tests have been validated with `-fno-exceptions`. The bridge remains private so replacing Asio later cannot change an Owner contract.
 
@@ -45,7 +47,7 @@ CLI11 is not part of the eventual runtime compile graph. Its pinned headers cont
 
 - Error paths become explicit, inspectable, and compatible with `-fno-exceptions`.
 - Asio remains usable as private machinery without imposing its completion representation on the architecture.
-- The staged Gate detects exception-enabled compile commands and unauthorized exception bridge usage instead of silently accepting them.
+- The Gate detects exception-enabled compile commands and unauthorized exception bridge usage instead of silently accepting them.
 - Migration tickets must preserve the existing lifecycle and observer semantics while removing exception propagation.
 
 ## References

@@ -111,27 +111,11 @@ template <typename T, typename Coroutine>
     auto future = boost::asio::co_spawn(
         io, std::move(coroutine)(terminal), boost::asio::use_future);
     io.run();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        auto result = future.get();
-        if (!result) {
-            return std::unexpected(result.error());
-        }
-        return std::move(*result);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "startup UI failed",
-            error.what()));
-    } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "startup UI failed",
-            "unknown exception"));
+    auto result = future.get();
+    if (!result) {
+        return std::unexpected(result.error());
     }
-#endif
+    return std::move(*result);
 }
 
 } // namespace

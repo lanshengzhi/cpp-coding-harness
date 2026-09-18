@@ -17,10 +17,6 @@
 #include <utility>
 #include <vector>
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-#error "ModelStream bridge tests must compile Boost.Asio with exceptions disabled"
-#endif
-
 namespace {
 
 template <typename T>

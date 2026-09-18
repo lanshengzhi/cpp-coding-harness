@@ -472,31 +472,11 @@ template <typename T> void invoke_input(T& impl, std::string input) {
         sink = impl.input_sink;
     }
     if (!sink || !*sink) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (auto delivered = (*sink)(std::move(input)); !delivered) {
-            record_worker_error(impl, std::move(delivered.error()));
-            std::lock_guard lock(impl.mutex);
-            if (impl.input_sink == sink) impl.input_sink.reset();
-        }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception&) {
-        record_worker_error(impl,
-                support::make_error(support::ErrorCode::Unknown,
-                        "Process Terminal input sink failed",
-                        "the input callback threw an exception"));
-        std::lock_guard lock(impl.mutex);
-        if (impl.input_sink == sink) impl.input_sink.reset();
-    } catch (...) {
-        record_worker_error(impl,
-                support::make_error(support::ErrorCode::Unknown,
-                        "Process Terminal input sink failed",
-                        "the input callback threw an unknown exception"));
+    if (auto delivered = (*sink)(std::move(input)); !delivered) {
+        record_worker_error(impl, std::move(delivered.error()));
         std::lock_guard lock(impl.mutex);
         if (impl.input_sink == sink) impl.input_sink.reset();
     }
-#endif
 }
 
 /// True while the terminal session is still live, i.e. teardown has not begun.
@@ -532,31 +512,11 @@ template <typename T> void deliver_resize_if_changed(T& impl) {
         sink = impl.resize_sink;
     }
     if (!sink || !*sink) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (auto delivered = (*sink)(dimensions); !delivered) {
-            record_worker_error(impl, std::move(delivered.error()));
-            std::lock_guard lock(impl.mutex);
-            if (impl.resize_sink == sink) impl.resize_sink.reset();
-        }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception&) {
-        record_worker_error(impl,
-                support::make_error(support::ErrorCode::Unknown,
-                        "Process Terminal resize sink failed",
-                        "the resize callback threw an exception"));
-        std::lock_guard lock(impl.mutex);
-        if (impl.resize_sink == sink) impl.resize_sink.reset();
-    } catch (...) {
-        record_worker_error(impl,
-                support::make_error(support::ErrorCode::Unknown,
-                        "Process Terminal resize sink failed",
-                        "the resize callback threw an unknown exception"));
+    if (auto delivered = (*sink)(dimensions); !delivered) {
+        record_worker_error(impl, std::move(delivered.error()));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     }
-#endif
 }
 
 template <typename T> void enable_modify_other_keys(T& impl) {
@@ -764,31 +724,11 @@ template <typename T> void apply_cell_size_response(T& impl, const detail::CellS
         dimensions = impl.dimensions;
     }
     if (!sink || !*sink) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (auto delivered = (*sink)(dimensions); !delivered) {
-            record_worker_error(impl, std::move(delivered.error()));
-            std::lock_guard lock(impl.mutex);
-            if (impl.resize_sink == sink) impl.resize_sink.reset();
-        }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception&) {
-        record_worker_error(impl,
-                support::make_error(support::ErrorCode::Unknown,
-                        "Process Terminal resize sink failed",
-                        "the resize callback threw an exception"));
-        std::lock_guard lock(impl.mutex);
-        if (impl.resize_sink == sink) impl.resize_sink.reset();
-    } catch (...) {
-        record_worker_error(impl,
-                support::make_error(support::ErrorCode::Unknown,
-                        "Process Terminal resize sink failed",
-                        "the resize callback threw an unknown exception"));
+    if (auto delivered = (*sink)(dimensions); !delivered) {
+        record_worker_error(impl, std::move(delivered.error()));
         std::lock_guard lock(impl.mutex);
         if (impl.resize_sink == sink) impl.resize_sink.reset();
     }
-#endif
 }
 
 template <typename T>
@@ -1128,16 +1068,6 @@ template <typename T> void abandon_startup(T& impl) {
     impl.worker_error.reset();
 }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-[[nodiscard]] support::Error startup_exception_error(const std::exception& exception) {
-    return support::make_error(support::ErrorCode::Process, "Process Terminal startup failed", exception.what());
-}
-
-[[nodiscard]] support::Error startup_unknown_exception_error() {
-    return support::make_error(support::ErrorCode::Process, "Process Terminal startup failed", "unknown exception");
-}
-#endif
-
 } // namespace
 
 ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::make_shared<Impl>(options)) {
@@ -1194,18 +1124,8 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
 
     std::shared_ptr<TerminalInputSink> owned_input_sink;
     std::shared_ptr<TerminalResizeSink> owned_resize_sink;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
-        owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& exception) {
-        return fail_startup(startup_exception_error(exception));
-    } catch (...) {
-        return fail_startup(startup_unknown_exception_error());
-    }
-#endif
+    owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
+    owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
 
     auto raw = original;
     ::cfmakeraw(&raw);
@@ -1321,17 +1241,7 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     impl_->resize_sink = std::move(owned_resize_sink);
     impl_->dimensions = *dimensions;
     impl_->modes.started = true;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        impl_->session_alive = std::make_shared<std::atomic_bool>(true);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& exception) {
-        return fail_startup(startup_exception_error(exception));
-    } catch (...) {
-        return fail_startup(startup_unknown_exception_error());
-    }
-#endif
+    impl_->session_alive = std::make_shared<std::atomic_bool>(true);
 
     auto startup_input = std::move(impl_->startup_input);
     impl_->startup_input.clear();
@@ -1339,34 +1249,24 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     // A restart must not inherit the previous session's decoder fragment,
     // negotiation deadline, or flush flag (#613); the startup probe's
     // color-scheme reply stays authoritative over late background replies.
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        impl_->input_state = InputState{};
-        impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
-        if (!startup_input.empty()) {
-            impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
-            auto decoded = impl_->input_state.decoder.feed(startup_input);
-            apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
-            if (!decoded.forwarded_input.empty()) {
-                invoke_input(*impl_, std::move(decoded.forwarded_input));
-                impl_->input_state.needs_input_flush = true;
-            }
+    impl_->input_state = InputState{};
+    impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
+    if (!startup_input.empty()) {
+        impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
+        auto decoded = impl_->input_state.decoder.feed(startup_input);
+        apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
+        if (!decoded.forwarded_input.empty()) {
+            invoke_input(*impl_, std::move(decoded.forwarded_input));
+            impl_->input_state.needs_input_flush = true;
         }
+    }
         lock.lock();
         prepare_async_io(*impl_);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& exception) {
-        return fail_startup(startup_exception_error(exception));
-    } catch (...) {
-        return fail_startup(startup_unknown_exception_error());
-    }
-#endif
-    // The preparation phase above has no outstanding asynchronous operations.
-    // From this call onward initiation is in progress; exceptions intentionally
-    // follow the post-initiation contract rather than rolling state back.
-    start_async_io(*impl_);
-    return {};
+        // The preparation phase above has no outstanding asynchronous operations.
+        // From this call onward initiation is in progress; exceptions intentionally
+        // follow the post-initiation contract rather than rolling state back.
+        start_async_io(*impl_);
+        return {};
 }
 
 support::ExpectedVoid ProcessTerminal::stop() {

@@ -496,9 +496,6 @@ struct ScopedQuery {
     std::stop_token stop_token) {
     if (stop_token.stop_requested()) return {};
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
         const auto scoped_query = resolve_scoped_fuzzy_query(base_path, query);
         const auto fd_base_dir = scoped_query ? scoped_query->base_dir : base_path;
         const auto fd_query = scoped_query ? scoped_query->query : std::string{query};
@@ -542,11 +539,6 @@ struct ScopedQuery {
             });
         }
         return suggestions;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        return {};
-    }
-#endif
 }
 
 /// Extract the `@` prefix for fuzzy file suggestions (pi `extractAtPrefix`).

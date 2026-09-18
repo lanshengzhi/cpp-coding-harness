@@ -63,21 +63,7 @@ inline void apply_line_resets(std::vector<std::string>& lines) {
         BackgroundHook& background_hook, PreparedRenderedLine line, std::size_t width, std::string_view owner) {
     if (!background_hook) return std::move(line.text);
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        line.text = background_hook(std::move(line.text));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception&) {
-        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
-                std::format("TUI {} background hook failed", owner),
-                "the background callback threw an exception"));
-    } catch (...) {
-        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
-                std::format("TUI {} background hook failed", owner),
-                "the background callback threw an unknown exception"));
-    }
-#endif
+    line.text = background_hook(std::move(line.text));
 
     auto prepared = prepare_rendered_line(line.text, width);
     if (!prepared) return std::unexpected(prepared.error());

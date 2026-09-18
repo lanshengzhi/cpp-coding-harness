@@ -128,19 +128,7 @@ ParsedSessionQuery parse_session_search_query(std::string_view query) {
             parsed.regex_error = "Invalid regular expression";
             return parsed;
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            (void)std::regex{
-                std::string{pattern_trimmed},
-                std::regex::ECMAScript | std::regex::icase};
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::regex_error& error) {
-            parsed.regex_mode = true;
-            parsed.regex_error = error.what();
-            return parsed;
-        }
-#endif
+        (void)std::regex{std::string{pattern_trimmed}, std::regex::ECMAScript | std::regex::icase};
         parsed.regex_mode = true;
         parsed.regex_pattern = std::string{pattern_trimmed};
         return parsed;

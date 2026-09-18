@@ -250,12 +250,6 @@ BoostBeastWebSocketTransport::async_connect(
             ec.message());
     };
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    // The staged build still permits setup exceptions (e.g. the throwing
-    // `set_verify_mode` / `set_option` surface); convert them before the
-    // no-exception completion contract takes over.
-    try {
-#endif
         TransportResolver resolver(executor);
         {
             ssl::context ctx(ssl::context::tls_client);
@@ -301,22 +295,6 @@ BoostBeastWebSocketTransport::async_connect(
             connect_timer.cancel();
             co_return make_connection(std::move(socket), request.stop_token, request.idle_timeout);
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const boost::system::system_error& error) {
-        co_return std::unexpected(setup_failure(error.code()));
-    } catch (const std::exception& error) {
-        if (connect_timed_out) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Timeout,
-                "WebSocket connect timeout after " +
-                    std::to_string(request.connect_timeout.count()) + "ms"));
-        }
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Network,
-            "WebSocket connect failure",
-            error.what()));
-    }
-#endif
 }
 
 } // namespace cch::ai::providers

@@ -31,44 +31,20 @@ template <typename AwaitableFactory>
         [shared](AssistantEventSink sink, ModelStreamCompletion completion) mutable noexcept {
             std::shared_ptr<ModelStreamCompletion> completion_owner;
             const auto executor = support::detail::t_initiating_executor;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            // Preserve the staged build's setup-failure outcome until all
-            // exception-enabled callers have migrated.
-            try {
-#endif
-                completion_owner = std::make_shared<ModelStreamCompletion>(std::move(completion));
-                boost::asio::co_spawn(executor,
-                        (*shared)(std::move(sink)),
-                        boost::asio::bind_executor(executor,
-                                [shared, completion_owner](std::exception_ptr eptr,
-                                        support::Expected<AssistantMessage> result) mutable noexcept {
-                                    if (eptr) {
-#if defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                        // A non-null Asio exception pointer is impossible when
-                                        // exceptions are disabled and therefore terminates the Runtime.
-                                        std::terminate();
-#else
-                                    // Preserve the staged build's explicit stream error without
-                                    // rethrowing an implementation exception across the bridge.
-                                    std::move (*completion_owner)(std::unexpected(
-                                            support::make_error(support::ErrorCode::Stream, "model stream failed")));
-#endif
-                                        return;
-                                    }
-                                    std::move (*completion_owner)(std::move(result));
-                                }));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                auto failure = std::unexpected(support::make_error(
-                    support::ErrorCode::Stream,
-                    "model stream initiation failed"));
-                if (completion_owner) {
-                    std::move(*completion_owner)(std::move(failure));
-                } else {
-                    completion(std::move(failure));
-                }
-            }
-#endif
+            completion_owner = std::make_shared<ModelStreamCompletion>(std::move(completion));
+            boost::asio::co_spawn(executor,
+                    (*shared)(std::move(sink)),
+                    boost::asio::bind_executor(executor,
+                            [shared, completion_owner](std::exception_ptr eptr,
+                                    support::Expected<AssistantMessage> result) mutable noexcept {
+                                if (eptr) {
+                                    // A non-null Asio exception pointer is impossible when
+                                    // exceptions are disabled and therefore terminates the Runtime.
+                                    std::terminate();
+                                    return;
+                                }
+                                std::move (*completion_owner)(std::move(result));
+                            }));
         }}};
 }
 

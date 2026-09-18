@@ -828,15 +828,7 @@ void Tui::invalidate() {
     }
     compositor_->invalidate_all();
     if (request_render && render_request_sink_) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            (void)render_request_sink_();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            // Scheduling notifications cannot make terminal input delivery fail.
-        }
-#endif
+        (void)render_request_sink_();
     }
 }
 

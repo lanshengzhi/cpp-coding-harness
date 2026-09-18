@@ -104,17 +104,9 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     void emit_change(const SettingItem& item) {
         auto sink = on_change;
         if (!sink || !*sink) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto changed = (*sink)(item.id, item.current_value); !changed) {
-                callback_error = std::move(changed.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            report_callback_failure("TUI SettingsList change callback failed");
+        if (auto changed = (*sink)(item.id, item.current_value); !changed) {
+            callback_error = std::move(changed.error());
         }
-#endif
     }
 
     void close_submenu(std::size_t parent_selection) {
@@ -154,16 +146,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
                 return {};
             };
             std::unique_ptr<Component> created;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                created = submenu_factory(*item, std::move(done));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                report_callback_failure("TUI SettingsList submenu factory failed");
-                return;
-            }
-#endif
+            created = submenu_factory(*item, std::move(done));
             if (*finished) return;
             if (!created) {
                 callback_error = support::make_error(
@@ -398,17 +381,9 @@ InputAdmissionOutcome SettingsList::handle_input(const InputEventVariant& input)
     if (action == "tui.select.cancel") {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return InputAdmissionOutcome::Consumed;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto cancelled = (*sink)(); !cancelled) {
-                impl->callback_error = std::move(cancelled.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            impl->report_callback_failure("TUI SettingsList cancel callback failed");
+        if (auto cancelled = (*sink)(); !cancelled) {
+            impl->callback_error = std::move(cancelled.error());
         }
-#endif
         return InputAdmissionOutcome::Consumed;
     }
     if (!impl->search_enabled || !impl->search_input) return InputAdmissionOutcome::Unhandled;

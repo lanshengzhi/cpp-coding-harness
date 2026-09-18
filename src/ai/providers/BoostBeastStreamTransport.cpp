@@ -66,16 +66,6 @@ namespace {
         "transport operation was cancelled");
 }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-[[nodiscard]] support::Error exception_error(const std::exception& error) {
-    std::string detail = error.what();
-    auto code = detail.find("timeout") != std::string::npos || detail.find("timed out") != std::string::npos
-        ? support::ErrorCode::Timeout
-        : support::ErrorCode::Network;
-    return support::make_error(code, "stream transport failure", std::move(detail));
-}
-#endif
-
 } // namespace
 
 boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransport::async_stream(
@@ -93,16 +83,11 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
     }
 
     auto response_header_timed_out = std::make_shared<bool>(false);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        http::verb verb = http::string_to_verb(request_method(request));
-        if (verb == http::verb::unknown) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "unsupported HTTP method",
-                std::string(request_method(request))));
-        }
+    http::verb verb = http::string_to_verb(request_method(request));
+    if (verb == http::verb::unknown) {
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "unsupported HTTP method", std::string(request_method(request))));
+    }
 
         const auto executor = transport_executor(co_await asio::this_coro::executor);
         if (request.stop_token.stop_requested()) {
@@ -284,21 +269,6 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
         }
 
         co_return response;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const boost::system::system_error& error) {
-        if (*response_header_timed_out) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Timeout,
-                "response header timeout",
-                error.code().message()));
-        }
-        co_return std::unexpected(network_error(
-            "stream transport failure",
-            error.code()));
-    } catch (const std::exception& error) {
-        co_return std::unexpected(exception_error(error));
-    }
-#endif
 }
 
 } // namespace cch::ai::providers

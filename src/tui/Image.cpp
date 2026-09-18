@@ -362,23 +362,7 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
 
     if (impl_->options.fallback_style) {
         const auto original_width = visible_width(fallback);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            fallback = impl_->options.fallback_style(std::move(fallback));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception&) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "TUI Image fallback style failed",
-                "the style callback threw an exception"));
-        } catch (...) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "TUI Image fallback style failed",
-                "the style callback threw an unknown exception"));
-        }
-#endif
+        fallback = impl_->options.fallback_style(std::move(fallback));
         if (visible_width(fallback) != original_width) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Validation,

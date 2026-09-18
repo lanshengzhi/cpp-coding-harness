@@ -54,16 +54,6 @@ public:
     std::vector<harness::ProcessRequest> requests;
 };
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-class ThrowingAsyncProcessRunner final : public harness::AsyncProcessRunner {
-public:
-    boost::asio::awaitable<support::Expected<harness::ProcessResult>> run(harness::ProcessRequest) override {
-        throw std::runtime_error{"output callback failed"};
-        co_return harness::ProcessResult{};
-    }
-};
-#endif
-
 template <typename T, typename Start> support::Expected<T> run_awaitable(Start start) {
     boost::asio::io_context io;
     std::optional<support::Expected<T>> result;
@@ -356,21 +346,6 @@ TEST_CASE(
     CHECK(result.error().code == harness::ExecutionErrorCode::CallbackError);
     CHECK(result.error().message == "output sink failed");
 }
-
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("local shell adapter classifies an exceptional process completion",
-        "[harness][shell][process][issue484][spec]") {
-    tests::TempWorkspace workspace;
-    auto runner = std::make_shared<ThrowingAsyncProcessRunner>();
-    harness::AsyncLocalShell shell(test_runtime_target(), workspace.path(), true, {}, {}, runner);
-
-    auto result = run_awaitable_pi(shell.exec("printf output"));
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == harness::ExecutionErrorCode::CallbackError);
-    CHECK(result.error().message == "output callback failed");
-}
-#endif
 
 TEST_CASE("cancelling exec terminates the process group and reaps the shell",
         "[harness][async][process][issue40][spec]") {

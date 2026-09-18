@@ -432,23 +432,8 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
             };
             manual_prompt.stop_token = manual_state->manual_stop.get_token();
             support::Expected<std::string> result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                result = co_await cch::support::detail::await_async_result(
-                        interaction_shared->prompt(std::move(manual_prompt)));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (const std::exception& error) {
-                result = std::unexpected(support::make_error(
-                    support::ErrorCode::OAuth,
-                    "login prompt failed",
-                    error.what()));
-            } catch (...) {
-                result = std::unexpected(support::make_error(
-                    support::ErrorCode::OAuth,
-                    "login prompt failed"));
-            }
-#endif
+            result = co_await cch::support::detail::await_async_result(
+                    interaction_shared->prompt(std::move(manual_prompt)));
             {
                 std::scoped_lock lock(manual_state->mutex);
                 if (result) {

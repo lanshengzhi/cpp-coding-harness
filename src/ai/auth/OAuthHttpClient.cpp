@@ -60,12 +60,6 @@ BoostBeastOAuthHttpClient::post(
         co_return std::unexpected(parsed.error());
     }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    // The staged build still permits setup exceptions (e.g. the throwing
-    // `set_verify_mode` surface); convert them before the no-exception
-    // completion contract takes over.
-    try {
-#endif
         auto executor = transport_executor(co_await asio::this_coro::executor);
         if (stop_token.stop_requested()) {
             co_return std::unexpected(
@@ -157,21 +151,9 @@ BoostBeastOAuthHttpClient::post(
     }
 
     co_return OAuthHttpResponse{
-        .status_code = static_cast<int>(response.result_int()),
-        .body = std::move(response.body()),
+            .status_code = static_cast<int>(response.result_int()),
+            .body = std::move(response.body()),
     };
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const boost::system::system_error& error) {
-        co_return std::unexpected(network_error(
-            "OAuth HTTP request failure",
-            error.code()));
-    } catch (const std::exception& error) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Network,
-            "OAuth HTTP request failure",
-            error.what()));
-    }
-#endif
 }
 
 } // namespace cch::ai::auth

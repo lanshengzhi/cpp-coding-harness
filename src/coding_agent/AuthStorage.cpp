@@ -609,12 +609,9 @@ struct AuthStorage::Impl {
         // The guarded conversion only preserves the staged exception-enabled
         // build; the strict build's file operations are already error-code
         // based and cannot throw ordinary failures.
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto ensured = ensure_storage_path(auth_path_); !ensured) {
-                return;
-            }
+        if (auto ensured = ensure_storage_path(auth_path_); !ensured) {
+            return;
+        }
             auto lease = acquire_lock_sync(auth_path_);
             if (!lease) {
                 return;
@@ -624,11 +621,6 @@ struct AuthStorage::Impl {
                 return;
             }
             set_snapshot(std::move(*parsed));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            // A reload is best-effort by contract: retain the last valid view.
-        }
-#endif
     }
 
     [[nodiscard]] std::optional<ai::Credential> read(std::string_view provider_id) const {
@@ -665,30 +657,7 @@ struct AuthStorage::Impl {
             : credential_from_json(current_it->second);
 
         support::Expected<std::optional<ai::Credential>> next_result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            next_result = co_await cch::support::detail::await_async_result(modifier(current));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const boost::system::system_error& exception) {
-            if (exception.code() == boost::asio::error::operation_aborted) {
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Cancelled,
-                    "credential modification was cancelled"));
-            }
-            co_return std::unexpected(storage_error(
-                "credential modifier failed",
-                auth_path_,
-                "credential modifier raised an asynchronous exception"));
-        } catch (const std::exception&) {
-            co_return std::unexpected(storage_error(
-                "credential modifier failed",
-                auth_path_,
-                "credential modifier raised an exception"));
-        } catch (...) {
-            co_return std::unexpected(storage_error("credential modifier failed", auth_path_));
-        }
-#endif
+        next_result = co_await cch::support::detail::await_async_result(modifier(current));
         CCH_TRY(next, std::move(next_result));
         if (!next) {
             set_snapshot(std::move(current_data));

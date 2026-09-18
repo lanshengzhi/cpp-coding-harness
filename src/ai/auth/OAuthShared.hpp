@@ -28,18 +28,9 @@ struct OAuthToken {
 }
 
 /// Best-effort display: notify never vetoes login. The hook is contractually
-/// non-throwing (AuthNotifyHook); the guarded conversion only preserves the
-/// staged exception-enabled build.
+/// non-throwing (AuthNotifyHook).
 template <typename Event> void notify_best_effort(ai::AuthNotifyHook& notify, Event&& event) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        notify(ai::AuthEvent{std::forward<Event>(event)});
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Best-effort display: notify never vetoes login.
-    }
-#endif
+    notify(ai::AuthEvent{std::forward<Event>(event)});
 }
 
 /// Binds one OAuth implementation's login/refresh/to_auth coroutines to the

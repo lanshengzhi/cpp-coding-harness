@@ -21,9 +21,7 @@
 
 #include <algorithm>
 #include <chrono>
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 #include <exception>
-#endif
 #include <map>
 #include <memory>
 #include <optional>
@@ -39,15 +37,7 @@ namespace cch::ai {
 namespace {
 
 [[nodiscard]] std::vector<Model> safe_provider_models(const Provider& provider_value) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-        return provider_value.models();
-    } catch (...) {
-        return {};
-    }
-#else
     return provider_value.models();
-#endif
 }
 
 [[nodiscard]] std::shared_ptr<Provider> make_default_provider(ProviderDefinition definition) {

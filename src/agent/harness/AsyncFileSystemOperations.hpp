@@ -63,16 +63,6 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
     };
 }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-[[nodiscard]] inline FileError unknown_file_error(std::optional<std::string> path = std::nullopt) {
-    return FileError{
-            .code = FileErrorCode::Unknown,
-            .message = "filesystem operation could not be scheduled",
-            .path = std::move(path),
-    };
-}
-#endif
-
 template <typename T> struct FileOperationState {
     std::optional<RuntimeTarget::Admission> admission;
     support::AsyncCompletion<T, FileError> completion;
@@ -112,14 +102,10 @@ template <typename T, typename Operation>
                 // Keep admission out-of-line across state allocation so a
                 // setup failure releases it through the ordered mailbox.
                 std::optional<RuntimeTarget::Admission> admission;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                bool terminal_posted = false;
-                try {
-#endif
-                    if (stop_token.stop_requested()) {
-                        completion(std::unexpected(aborted_file_error(std::move(path))));
-                        return;
-                    }
+                if (stop_token.stop_requested()) {
+                    completion(std::unexpected(aborted_file_error(std::move(path))));
+                    return;
+                }
                     if (!runtime_target) {
                         completion(std::unexpected(busy_file_error(std::move(path))));
                         return;
@@ -141,32 +127,14 @@ template <typename T, typename Operation>
                                                                   stop_token,
                                                                   path = std::move(path),
                                                                   operation = std::move(operation)]() mutable noexcept {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                try {
-#endif
-                                    if (stop_token.stop_requested()) {
-                                        state->outcome = std::unexpected(aborted_file_error(std::move(path)));
-                                    } else {
-                                        // Once the operation starts, return its actual outcome. In
-                                        // particular, cancellation cannot rewrite a committed write,
-                                        // remove, or temporary-resource creation as Aborted.
-                                        state->outcome = operation(*filesystem);
-                                    }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                } catch (const std::exception& error) {
-                                    state->outcome = std::unexpected(FileError{
-                                            .code = FileErrorCode::Unknown,
-                                            .message = error.what(),
-                                            .path = std::move(path),
-                                    });
-                                } catch (...) {
-                                    state->outcome = std::unexpected(FileError{
-                                            .code = FileErrorCode::Unknown,
-                                            .message = "filesystem operation failed",
-                                            .path = std::move(path),
-                                    });
+                                if (stop_token.stop_requested()) {
+                                    state->outcome = std::unexpected(aborted_file_error(std::move(path)));
+                                } else {
+                                    // Once the operation starts, return its actual outcome. In
+                                    // particular, cancellation cannot rewrite a committed write,
+                                    // remove, or temporary-resource creation as Aborted.
+                                    state->outcome = operation(*filesystem);
                                 }
-#endif
                                 std::move(*state->admission).complete([state]() mutable noexcept {
                                     state->completion(std::move(*state->outcome));
                                 });
@@ -175,45 +143,7 @@ template <typename T, typename Operation>
                         std::move(*state->admission).complete([state, path = std::move(path)]() mutable noexcept {
                             state->completion(std::unexpected(busy_file_error(std::move(path))));
                         });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        terminal_posted = true;
-#endif
                     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (const std::exception& error) {
-                    const FileError failure{
-                            .code = FileErrorCode::Unknown,
-                            .message = error.what(),
-                            .path = std::nullopt,
-                    };
-                    if (state && !terminal_posted) {
-                        std::move(*state->admission).complete([state, failure = failure]() mutable noexcept {
-                            state->completion(std::unexpected(std::move(failure)));
-                        });
-                    } else if (admission) {
-                        std::move(*admission)
-                                .complete([completion = std::move(completion), failure = failure]() mutable noexcept {
-                                    completion(std::unexpected(std::move(failure)));
-                                });
-                    } else {
-                        completion(std::unexpected(failure));
-                    }
-                } catch (...) {
-                    const auto failure = unknown_file_error();
-                    if (state && !terminal_posted) {
-                        std::move(*state->admission).complete([state, failure = failure]() mutable noexcept {
-                            state->completion(std::unexpected(std::move(failure)));
-                        });
-                    } else if (admission) {
-                        std::move(*admission)
-                                .complete([completion = std::move(completion), failure = failure]() mutable noexcept {
-                                    completion(std::unexpected(failure));
-                                });
-                    } else {
-                        completion(std::unexpected(failure));
-                    }
-                }
-#endif
             }}};
 }
 

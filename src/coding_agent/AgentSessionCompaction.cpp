@@ -47,18 +47,7 @@ boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::Impl::
     }
 
     support::Expected<CompactionResult> result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        result = co_await compact_impl(std::move(custom_instructions));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        result = std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session compact coroutine failed", error.what()));
-    } catch (...) {
-        result = std::unexpected(support::make_error(support::ErrorCode::Unknown, "session compact coroutine failed"));
-    }
-#endif
+    result = co_await compact_impl(std::move(custom_instructions));
     compaction_active_ = false;
     emit_session_event(CompactionEndEvent{
             .reason = "manual",
@@ -425,18 +414,7 @@ boost::asio::awaitable<support::Expected<CompactionResult>> detail::session_comp
     if (!impl) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        co_return co_await impl->compact(std::move(custom_instructions));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session compact coroutine failed", error.what()));
-    } catch (...) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Unknown, "session compact coroutine failed"));
-    }
-#endif
+    co_return co_await impl->compact(std::move(custom_instructions));
 }
 
 } // namespace cch::coding_agent

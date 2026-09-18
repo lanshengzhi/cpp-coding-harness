@@ -62,13 +62,7 @@ struct ShellRun {
                     std::move(command),
                     // The capture targets remain alive until io.run() drains this operation.
                     [&](std::string_view update) -> support::ExpectedVoid {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        if (throw_updates) {
-                            throw std::runtime_error{"update sink threw"};
-                        }
-#else
                         (void)throw_updates;
-#endif
                         if (fail_updates) {
                             return std::unexpected(
                                     support::make_error(support::ErrorCode::Unknown, "update sink rejected output"));
@@ -233,23 +227,3 @@ TEST_CASE("Local User Shell reports update-sink failure as an infrastructure err
     const auto run = run_user_shell(shell, "printf 'rejected\\n'", std::nullopt, true);
     REQUIRE_FALSE(run.result);
 }
-
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("Local User Shell contains a throwing update sink and stops the process",
-        "[coding_agent][runtime][shell][issue484][spec]") {
-    tests::TempWorkspace workspace;
-    runtime::LocalUserShell shell{workspace.path(), {}, {}};
-
-    const auto run = run_user_shell(
-        shell,
-        "printf 'rejected\\n'; sleep 30",
-        std::nullopt,
-        false,
-        true);
-
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().message == "user shell update sink threw");
-    CHECK(run.elapsed < std::chrono::seconds{3});
-}
-#endif
-

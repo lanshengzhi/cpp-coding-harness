@@ -21,9 +21,7 @@
 
 #include <algorithm>
 #include <chrono>
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 #include <exception>
-#endif
 #include <map>
 #include <memory>
 #include <optional>

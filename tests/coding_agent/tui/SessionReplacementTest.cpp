@@ -199,14 +199,7 @@ public:
                     std::stop_callback cancellation{stop_token, [state] {
                                                         ++state->cancellation_requests;
                                                         if (state->gate) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                                            try {
-#endif
-                                                                (void)state->gate->cancel();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                                            } catch (...) {
-                                                            }
-#endif
+                                                            (void)state->gate->cancel();
                                                         }
                                                     }};
                     boost::system::error_code error;

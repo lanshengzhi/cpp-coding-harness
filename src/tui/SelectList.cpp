@@ -164,17 +164,9 @@ struct SelectList::Impl {
         const auto* item = selected();
         auto sink = on_selection_change;
         if (item == nullptr || !sink || !*sink) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto observed = (*sink)(*item); !observed) {
-                callback_error = std::move(observed.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            report_callback_failure("TUI SelectList selection callback failed");
+        if (auto observed = (*sink)(*item); !observed) {
+            callback_error = std::move(observed.error());
         }
-#endif
     }
 
     /// The value of the currently selected item, when one is selected.
@@ -243,16 +235,7 @@ struct SelectList::Impl {
         const auto query = query_text();
         if (search_filter_hook) {
             std::vector<std::size_t> matched;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                matched = search_filter_hook(query, items);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                report_callback_failure("TUI SelectList search filter hook failed");
-                return;
-            }
-#endif
+            matched = search_filter_hook(query, items);
             // The hook fully replaces fuzzy ranking; defensively drop
             // out-of-range and duplicate indices while honoring its order.
             filtered_indices.clear();
@@ -338,23 +321,7 @@ struct SelectList::Impl {
         const auto text = std::string(display_value(item));
         std::string transformed = text;
         if (layout.truncate_primary) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                transformed = layout.truncate_primary(
-                    text,
-                    max_width,
-                    column_width,
-                    item,
-                    is_selected);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Unknown,
-                    "TUI SelectList truncation hook failed",
-                    "the truncation callback threw an exception"));
-            }
-#endif
+            transformed = layout.truncate_primary(text, max_width, column_width, item, is_selected);
         }
         return truncate_text(transformed, max_width, "");
     }
@@ -643,33 +610,17 @@ InputAdmissionOutcome SelectList::handle_input(const InputEventVariant& input) {
         const auto* item = impl->selected();
         auto sink = impl->on_select;
         if (item == nullptr || !sink || !*sink) return InputAdmissionOutcome::Consumed;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto selected = (*sink)(*item); !selected) {
-                impl->callback_error = std::move(selected.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            impl->report_callback_failure("TUI SelectList select callback failed");
+        if (auto selected = (*sink)(*item); !selected) {
+            impl->callback_error = std::move(selected.error());
         }
-#endif
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.select.cancel") {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return InputAdmissionOutcome::Consumed;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto cancelled = (*sink)(); !cancelled) {
-                impl->callback_error = std::move(cancelled.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            impl->report_callback_failure("TUI SelectList cancel callback failed");
+        if (auto cancelled = (*sink)(); !cancelled) {
+            impl->callback_error = std::move(cancelled.error());
         }
-#endif
         return InputAdmissionOutcome::Consumed;
     }
     if (!impl->search_enabled || !impl->search_input) return InputAdmissionOutcome::Unhandled;

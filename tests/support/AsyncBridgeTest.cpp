@@ -13,10 +13,6 @@
 #include <optional>
 #include <utility>
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-#error "Async bridge tests must compile Boost.Asio with exceptions disabled"
-#endif
-
 namespace {
 
 template <typename T> struct SpawnResult {

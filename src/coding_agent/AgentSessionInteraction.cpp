@@ -197,9 +197,6 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         return support::make_error(support::ErrorCode::Cancelled, "session reload cancelled");
     };
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
         std::stop_callback stop_bridge(stop_token, [this]() noexcept { (void)reload_stop_source_.request_stop(); });
 
         // pi `AgentSession.reload()`: `settingsManager.reload()` first
@@ -262,22 +259,6 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         result.theme_diagnostics = config_.theme_diagnostics;
         result.themes = std::move(loading->resources.themes);
         co_return co_await finish_reload(std::move(result));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        reload_active_ = false;
-        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_ && !compaction_active_) {
-            finalize_close();
-        }
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session reload coroutine failed", error.what()));
-    } catch (...) {
-        reload_active_ = false;
-        if (lifecycle_ == Lifecycle::Closing && !prompt_active_ && !user_bash_active_ && !compaction_active_) {
-            finalize_close();
-        }
-        co_return std::unexpected(support::make_error(support::ErrorCode::Unknown, "session reload coroutine failed"));
-    }
-#endif
 }
 
 void AgentSession::Impl::refresh_bash_session_environment() {
@@ -326,16 +307,7 @@ void AgentSession::Impl::flush_pending_user_bash() {
             entry->commit_result = std::unexpected(
                     support::make_error(support::ErrorCode::Validation, "session Agent is unavailable"));
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            (void)entry->committed_signal.cancel();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            // Releasing the awaiting coroutine is best-effort; the commitment
-            // above is the authoritative outcome.
-        }
-#endif
+        (void)entry->committed_signal.cancel();
     }
 }
 
@@ -357,79 +329,38 @@ boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>> AgentSess
     support::Expected<runtime::UserShellResult> shell_result =
             std::unexpected(support::make_error(support::ErrorCode::Unknown, "User Shell execution did not finish"));
     if (progress_sink) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto started = progress_sink(runtime::UserBashProgress{
+        if (auto started = progress_sink(runtime::UserBashProgress{
+                    .command = recorded_command,
+                    .output = {},
+                    .exclude_from_context = exclude_from_context,
+                    .exit_code = {},
+                    .full_output_path = {},
+            });
+                !started) {
+            active_user_bash_stop_source_.reset();
+            user_bash_active_ = false;
+            co_return std::unexpected(std::move(started.error()));
+        }
+    }
+    runtime::UserBashOutputAccumulator output;
+    shell_result = co_await support::detail::await_async_result(services_.user_shell->execute(
+            std::move(command),
+            [recorded_command, exclude_from_context, &output, &progress_sink](
+                    std::string_view update) -> support::ExpectedVoid {
+                output.append(update);
+                if (!progress_sink) return {};
+                return progress_sink(runtime::UserBashProgress{
                         .command = recorded_command,
-                        .output = {},
+                        .output = output.tail(),
                         .exclude_from_context = exclude_from_context,
                         .exit_code = {},
                         .full_output_path = {},
                 });
-                    !started) {
-                active_user_bash_stop_source_.reset();
-                user_bash_active_ = false;
-                co_return std::unexpected(std::move(started.error()));
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception& error) {
-            active_user_bash_stop_source_.reset();
-            user_bash_active_ = false;
-            co_return std::unexpected(support::make_error(support::ErrorCode::Unknown,
-                    "User Bash progress callback failed",
-                    bounded_redacted_presentation(error.what())));
-        } catch (...) {
-            active_user_bash_stop_source_.reset();
-            user_bash_active_ = false;
-            co_return std::unexpected(
-                    support::make_error(support::ErrorCode::Unknown, "User Bash progress callback failed"));
-        }
-#endif
+            },
+            active_user_bash_stop_source_->get_token()));
+    if (shell_result) {
+        output.finish();
     }
-    runtime::UserBashOutputAccumulator output;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        shell_result = co_await support::detail::await_async_result(services_.user_shell->execute(
-                std::move(command),
-                [recorded_command, exclude_from_context, &output, &progress_sink](
-                        std::string_view update) -> support::ExpectedVoid {
-                    output.append(update);
-                    if (!progress_sink) return {};
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    try {
-#endif
-                        return progress_sink(runtime::UserBashProgress{
-                                .command = recorded_command,
-                                .output = output.tail(),
-                                .exclude_from_context = exclude_from_context,
-                                .exit_code = {},
-                                .full_output_path = {},
-                        });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                    } catch (const std::exception& error) {
-                        return std::unexpected(support::make_error(
-                                support::ErrorCode::Unknown, "User Bash progress callback failed", error.what()));
-                    } catch (...) {
-                        return std::unexpected(
-                                support::make_error(support::ErrorCode::Unknown, "User Bash progress callback failed"));
-                    }
-#endif
-                },
-                active_user_bash_stop_source_->get_token()));
-        if (shell_result) {
-            output.finish();
-        }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        shell_result = std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "User Shell execution failed", error.what()));
-    } catch (...) {
-        shell_result = std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "User Shell execution failed", "unknown exception"));
-    }
-#endif
 
     active_user_bash_stop_source_.reset();
     user_bash_active_ = false;
@@ -468,25 +399,16 @@ boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>> AgentSess
         pending->committed_signal.expires_at(std::chrono::steady_clock::time_point::max());
         pending_user_bash_.push_back(pending);
         if (progress_sink) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                (void)progress_sink(runtime::UserBashProgress{
-                        .command = recorded_command,
-                        .output = output.tail(),
-                        .exclude_from_context = exclude_from_context,
-                        .awaiting_commitment = true,
-                        .exit_code = pending->completion.message.exit_code,
-                        .cancelled = pending->completion.message.cancelled,
-                        .truncated = pending->completion.message.truncated,
-                        .full_output_path = pending->completion.message.full_output_path,
-                });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                // Execution already completed; a presentation failure must not
-                // lose the pending commitment.
-            }
-#endif
+            (void)progress_sink(runtime::UserBashProgress{
+                    .command = recorded_command,
+                    .output = output.tail(),
+                    .exclude_from_context = exclude_from_context,
+                    .awaiting_commitment = true,
+                    .exit_code = pending->completion.message.exit_code,
+                    .cancelled = pending->completion.message.cancelled,
+                    .truncated = pending->completion.message.truncated,
+                    .full_output_path = pending->completion.message.full_output_path,
+            });
         }
         boost::system::error_code wait_error;
         co_await pending->committed_signal.async_wait(
@@ -1494,19 +1416,7 @@ boost::asio::awaitable<support::ExpectedVoid> detail::session_set_model(
     if (!impl) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        co_return co_await impl->set_model(std::move(model));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session set_model coroutine failed", error.what()));
-    } catch (...) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session set_model coroutine failed"));
-    }
-#endif
+    co_return co_await impl->set_model(std::move(model));
 }
 
 boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> detail::session_cycle_model(
@@ -1514,19 +1424,7 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> detai
     if (!impl) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        co_return co_await impl->cycle_model(std::move(direction));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session cycle_model coroutine failed", error.what()));
-    } catch (...) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session cycle_model coroutine failed"));
-    }
-#endif
+    co_return co_await impl->cycle_model(std::move(direction));
 }
 
 boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> detail::session_reload(
@@ -1534,18 +1432,7 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> detail::sess
     if (!impl) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        co_return co_await impl->reload(stop_token);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Unknown, "session reload coroutine failed", error.what()));
-    } catch (...) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Unknown, "session reload coroutine failed"));
-    }
-#endif
+    co_return co_await impl->reload(stop_token);
 }
 
 // ── AgentSessionInteractiveAccess (the one private Native TUI seam) ─────────
