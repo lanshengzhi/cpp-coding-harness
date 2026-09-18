@@ -58,11 +58,13 @@ support::Expected<RenderResult> TruncatedText::render(std::size_t width) {
 
     std::string padded(padding_x_, ' ');
     padded += *truncated;
-    const auto visible = visible_width(padded);
-    if (visible < width) padded.append(width - visible, ' ');
     auto prepared = detail::prepare_rendered_line(padded, width);
     if (!prepared) return std::unexpected(prepared.error());
-    result.push_back(std::move(*prepared));
+    if (prepared->width < width) {
+        prepared->text.append(width - prepared->width, ' ');
+        prepared->width = width;
+    }
+    result.push_back(std::move(prepared->text));
 
     for (std::size_t index = 0; index < padding_y_; ++index) {
         result.emplace_back(width, ' ');

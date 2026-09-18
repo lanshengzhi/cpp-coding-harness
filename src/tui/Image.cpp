@@ -388,20 +388,20 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
     auto prepared = detail::prepare_rendered_line(fallback, width);
     if (!prepared) return std::unexpected(prepared.error());
 
-    RenderResult output{.lines = {*prepared}};
+    RenderResult output{.lines = {prepared->text}};
     if (dimensions) {
         output.images.push_back({
-            .resource_id = impl_->resource_id,
-            .revision = impl_->revision,
-            .encoded_data = impl_->content.encoded_data,
-            .mime_type = impl_->content.mime_type,
-            .filename = impl_->content.filename,
-            .pixel_width = dimensions->width,
-            .pixel_height = dimensions->height,
-            .max_width = impl_->options.constraints.max_width,
-            .max_height = impl_->options.constraints.max_height,
-            .fallback_text = *prepared,
-            .region = {.column = 0, .row = 0, .columns = 1, .rows = 1},
+                .resource_id = impl_->resource_id,
+                .revision = impl_->revision,
+                .encoded_data = impl_->content.encoded_data,
+                .mime_type = impl_->content.mime_type,
+                .filename = impl_->content.filename,
+                .pixel_width = dimensions->width,
+                .pixel_height = dimensions->height,
+                .max_width = impl_->options.constraints.max_width,
+                .max_height = impl_->options.constraints.max_height,
+                .fallback_text = prepared->text,
+                .region = {.column = 0, .row = 0, .columns = 1, .rows = 1},
         });
     }
 

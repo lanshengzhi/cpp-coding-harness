@@ -85,21 +85,30 @@ void trim_end_whitespace(std::string& text) {
 
 } // namespace
 
-std::size_t visible_width(std::string_view text) {
-    auto tokens = detail::tokenize_terminal_output(text);
-    if (!tokens) return 0;
+namespace detail {
+
+VisibleWidthMeasurement measure_visible_width(std::string_view text) {
+    const auto is_printable_ascii = [](unsigned char byte) { return byte >= 0x20 && byte <= 0x7E; };
+    if (std::ranges::all_of(text, is_printable_ascii)) return {.width = text.size(), .used_tokenizer = false};
+
+    auto tokens = tokenize_terminal_output(text, TokenizeMode::WidthOnly);
+    if (!tokens) return {.width = 0, .used_tokenizer = true};
     std::size_t maximum = 0;
     std::size_t current = 0;
     for (const auto& token : *tokens) {
-        if (token.kind == detail::TerminalTokenKind::Newline) {
+        if (token.kind == TerminalTokenKind::Newline) {
             maximum = std::max(maximum, current);
             current = 0;
         } else {
             current += token.width;
         }
     }
-    return std::max(maximum, current);
+    return {.width = std::max(maximum, current), .used_tokenizer = true};
 }
+
+} // namespace detail
+
+std::size_t visible_width(std::string_view text) { return detail::measure_visible_width(text).width; }
 
 support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std::size_t width) {
     if (width == 0) {

@@ -147,6 +147,13 @@ TEST_CASE("ChatContainer completed messages transition to Committed state with c
     CHECK(chat.cache_hit_count() == 3); // item 0 hit (2nd time), item 1 hit (1st time)
     CHECK(chat.is_item_cache_valid(2));
     CHECK(chat.committed_item_count() == 3);
+
+    // A following frame reuses the committed message and tool-block output,
+    // rather than composing either block again.
+    auto render4 = chat.render(80);
+    REQUIRE(render4);
+    CHECK(chat.cold_render_count() == 3);
+    CHECK(chat.cache_hit_count() == 6);
 }
 
 TEST_CASE("ChatContainer keeps initialized streaming assistant active for subsequent updates",
