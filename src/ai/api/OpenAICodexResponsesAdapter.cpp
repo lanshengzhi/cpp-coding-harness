@@ -252,6 +252,57 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
     };
 }
 
+/// The completed-WS-attempt terminal: cancelled, assistant-level error, or
+/// the success Done event.
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> finish_ws_completed(
+        AssistantMessage assistant, bool started, const std::stop_token& stop_token, AssistantEventSink& sink) {
+    if (stop_token.stop_requested()) {
+        co_return complete_failure(assistant,
+                support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
+                sink,
+                InferenceFailure{
+                        .kind = InferenceFailureKind::Cancelled,
+                        .output_started = started,
+                },
+                started);
+    }
+    if (assistant.stop_reason == AssistantStopReason::Error) {
+        co_return complete_failure(assistant,
+                providers::make_stream_error(assistant.error_message.value_or("Codex request failed")),
+                sink,
+                std::nullopt,
+                started);
+    }
+    CCH_TRY_VOID(providers::emit(sink,
+            AssistantDoneEvent{
+                    .reason = assistant.stop_reason,
+                    .message = assistant,
+            }));
+    co_return assistant;
+}
+
+/// pi codex websocket retry policy: a previous_response_not_found miss and a
+/// pre-start connection-limit rejection each retry exactly once.
+[[nodiscard]] bool should_retry_ws_failure(const WsAttemptOutcome& outcome,
+        bool websocket_started,
+        bool& retried_previous_response,
+        bool& retried_connection_limit) {
+    const bool connection_limit_before_start = !websocket_started && outcome.failure_kind == CodexFailureKind::Api &&
+                                               outcome.api_code == kWebSocketConnectionLimitReached;
+    const bool previous_response_not_found =
+            outcome.failure_kind == CodexFailureKind::Api && outcome.api_code == kPreviousResponseNotFound;
+    const bool aborted = outcome.failure_kind == CodexFailureKind::Cancelled;
+    if (!aborted && previous_response_not_found && !retried_previous_response) {
+        retried_previous_response = true;
+        return true;
+    }
+    if (!aborted && connection_limit_before_start && !retried_connection_limit) {
+        retried_connection_limit = true;
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 struct OpenAICodexResponsesAdapter::Impl {
@@ -349,98 +400,47 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
         bool retried_previous_response = false;
         bool retried_connection_limit = false;
         while (true) {
-            auto outcome = co_await run_ws_attempt(
-                ws_transport_,
-                model,
-                options,
-                payload,
-                ws_request,
-                cache_session_id,
-                account_id,
-                cache,
-                assistant,
-                started,
-                guarded_sink);
-            if (!outcome) {
-                co_return std::unexpected(outcome.error());
-            }
-            started = outcome->output_started;
-            const bool websocket_started = outcome->websocket_started;
-            if (outcome->completed) {
-                if (options.stop_token.stop_requested()) {
-                    co_return complete_failure(
+            CCH_TRY(outcome,
+                    co_await run_ws_attempt(ws_transport_,
+                            model,
+                            options,
+                            payload,
+                            ws_request,
+                            cache_session_id,
+                            account_id,
+                            cache,
                             assistant,
-                            support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
-                            guarded_sink,
-                            InferenceFailure{
-                                    .kind = InferenceFailureKind::Cancelled,
-                                    .output_started = started,
-                            },
-                            started);
-                }
-                if (assistant.stop_reason == AssistantStopReason::Error) {
-                    co_return complete_failure(assistant,
-                            providers::make_stream_error(assistant.error_message.value_or("Codex request failed")),
-                            guarded_sink,
-                            std::nullopt,
-                            started);
-                }
-                CCH_TRY_VOID(providers::emit(
-                    guarded_sink,
-                    AssistantDoneEvent{
-                        .reason = assistant.stop_reason,
-                        .message = assistant,
-                    }));
-                co_return assistant;
+                            started,
+                            guarded_sink));
+            started = outcome.output_started;
+            const bool websocket_started = outcome.websocket_started;
+            if (outcome.completed) {
+                co_return co_await finish_ws_completed(std::move(assistant), started, options.stop_token, guarded_sink);
             }
 
+            if (should_retry_ws_failure(
+                        outcome, websocket_started, retried_previous_response, retried_connection_limit) &&
+                    !options.stop_token.stop_requested()) {
+                continue;
+            }
             const bool aborted =
-                options.stop_token.stop_requested() ||
-                outcome->failure_kind == CodexFailureKind::Cancelled;
-            const bool connection_limit_before_start =
-                !websocket_started &&
-                outcome->failure_kind == CodexFailureKind::Api &&
-                outcome->api_code == kWebSocketConnectionLimitReached;
-            const bool previous_response_not_found =
-                outcome->failure_kind == CodexFailureKind::Api &&
-                outcome->api_code == kPreviousResponseNotFound;
-            if (!aborted && previous_response_not_found &&
-                !retried_previous_response) {
-                retried_previous_response = true;
-                continue;
+                    options.stop_token.stop_requested() || outcome.failure_kind == CodexFailureKind::Cancelled;
+            const bool connection_limit_before_start = !websocket_started &&
+                                                       outcome.failure_kind == CodexFailureKind::Api &&
+                                                       outcome.api_code == kWebSocketConnectionLimitReached;
+            const bool terminal_api = aborted || ((outcome.failure_kind == CodexFailureKind::Api ||
+                                                          outcome.failure_kind == CodexFailureKind::Protocol) &&
+                                                         !connection_limit_before_start);
+            if (!terminal_api) {
+                // Transport failures carry the diagnostic and, without a
+                // session, fall through to the SSE path below.
+                append_transport_diagnostic(assistant, outcome.error, "auto", websocket_started, body_json.size());
+                if (cache_session_id) {
+                    sse_fallback_sessions.insert(std::string{*cache_session_id});
+                }
             }
-            if (!aborted && connection_limit_before_start &&
-                !retried_connection_limit) {
-                retried_connection_limit = true;
-                continue;
-            }
-            if (aborted ||
-                ((outcome->failure_kind == CodexFailureKind::Api ||
-                  outcome->failure_kind == CodexFailureKind::Protocol) &&
-                 !connection_limit_before_start)) {
-                co_return complete_failure(
-                        assistant,
-                        outcome->error,
-                        guarded_sink,
-                        outcome->inference_failure,
-                        started);
-            }
-            append_transport_diagnostic(
-                assistant,
-                outcome->error,
-                "auto",
-                websocket_started,
-                body_json.size());
-            if (cache_session_id) {
-                sse_fallback_sessions.insert(std::string{*cache_session_id});
-            }
-            if (websocket_started) {
-                co_return complete_failure(
-                        assistant,
-                        outcome->error,
-                        guarded_sink,
-                        outcome->inference_failure,
-                        started);
+            if (terminal_api || websocket_started) {
+                co_return complete_failure(assistant, outcome.error, guarded_sink, outcome.inference_failure, started);
             }
             break;
         }
