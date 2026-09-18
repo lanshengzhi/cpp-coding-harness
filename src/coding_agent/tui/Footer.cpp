@@ -134,10 +134,9 @@ support::Expected<cch::tui::RenderResult> Footer::render(std::size_t width) {
     const auto& model_name = data_.model_id.empty() ? "no-model" : data_.model_id;
     std::string right_side_without_provider = model_name;
     if (data_.model_reasoning) {
-        right_side_without_provider =
-            data_.thinking_level == "off"
-                ? model_name + " \xc2\xb7 thinking off"
-                : model_name + " \xc2\xb7 " + data_.thinking_level;
+        right_side_without_provider = data_.thinking_level == "off"
+                                              ? model_name + " \xe2\x80\xa2 thinking off"
+                                              : model_name + " \xe2\x80\xa2 " + data_.thinking_level;
     }
     std::string right_side = right_side_without_provider;
     if (data_.available_provider_count > 1 && !data_.provider.empty()) {
