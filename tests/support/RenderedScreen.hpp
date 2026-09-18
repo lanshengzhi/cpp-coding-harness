@@ -7,8 +7,18 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace cch::tests {
+
+/// A background hook that wraps a padded line in one SGR pair, the way pi's
+/// `applyBackgroundToLine` applies a background: `open` before the text and
+/// `close` after it (SGR 49 by default).
+[[nodiscard]] inline cch::tui::BackgroundHook background_hook(
+        std::string_view open, std::string_view close = "\x1b[49m") {
+    return [open = std::string(open), close = std::string(close)](
+                   std::string text) { return open + std::move(text) + close; };
+}
 
 [[nodiscard]] inline std::string strip_ansi(std::string_view text) {
     std::string stripped;

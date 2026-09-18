@@ -421,7 +421,7 @@ std::string AnsiStyleState::get_line_end_reset() const {
     // one per-row reset appended at the composed-line boundary.
     std::string result;
     if (underline) result += "\x1b[24m";
-    if (!hyperlink.empty()) result += "\x1b]8;;\x07";
+    if (!hyperlink.empty()) result += kOsc8LinkClose;
     return result;
 }
 
@@ -534,12 +534,6 @@ support::Expected<std::string> prepare_rendered_line(std::string_view line, std:
     // boundary is also reset-free), and the only in-line reset a component
     // emits is the underline/hyperlink `get_line_end_reset`.
     return normalized_text(*tokens);
-}
-
-void apply_line_resets(std::vector<std::string>& lines) {
-    for (auto& line : lines) {
-        line += kSegmentReset;
-    }
 }
 
 } // namespace cch::tui::detail

@@ -2,6 +2,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Utils.hpp>
 
+#include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>

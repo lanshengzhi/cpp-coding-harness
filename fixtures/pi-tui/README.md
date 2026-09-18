@@ -102,7 +102,11 @@ marks; Katakana; Hangul; Bopomofo), a mark-bearing cluster whose base is outside
 styled span whose style closes inside its physical line, and an over-long token after a partial
 line. It also carries the #707 reset cases: an open foreground style across CJK breaks and an
 open underline across a word break, both reaching the final line, so the corpus pins that only
-underline/hyperlink close at a break and the final line carries no reset.
+underline/hyperlink close at a break and the final line carries no reset. The #704 review fixes
+add the `wrapSingleLine` push and trim cases: a whitespace-only prefix ahead of an over-long token
+(plain, underline, and hyperlink), a control staged after that whitespace, the trailing-whitespace
+trim of a wrapped input line against a fitting input line that keeps its whitespace, and the
+logical-newline cases where underline and hyperlink stay open.
 
 ### Fuzzy corpus (`fuzzy.json`)
 
@@ -304,11 +308,12 @@ decode layer dropped `$`-final legacy shift sequences (`\x1b[2$` … `\x1b[8$`) 
 (`\x00` → ctrl+space), and typed uppercase letters lost their case at insertion
 (`detail::printable_text`); all three now carry regression rows in `TuiTest`/`EditorTest` and are
 pinned by the input-decode corpus. The `truncate_text` ellipsis now always carries pi's `\x1b[0m`
-resets. Recorded renderer-side divergences that the corpus intentionally scopes out (documented
-in the README rows above): whitespace on a line with no visible content yet, followed by an
-over-long token, is emitted by pi as an empty line where the C++ `wrap_text` drops it, and pi's
-multi-line `visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++
-idiom.
+resets. Recorded renderer-side divergences (documented in the README rows above): pi's multi-line
+`visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++ idiom, and
+the `truncate_text` fits path closes underline/hyperlink before padding where pi pads inside the
+still-open span (`truncateToWidth("\x1b[4mabc", 8, "", true)` is `"\x1b[4mabc     "` in pi and
+`"\x1b[4mabc\x1b[24m     "` here); that fits path is pre-existing, invisible in every shipped
+surface, and the spec's "Padding is not changed" decision excludes it.
 
 Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate report below).
 

@@ -447,6 +447,11 @@ const utils = {
 		{ name: "no-ellipsis", input: "abcdef", width: 4, ellipsis: "", pad: false, output: truncateToWidth("abcdef", 4, "") },
 		{ name: "cjk", input: "你好世界", width: 5, ellipsis: "", pad: false, output: truncateToWidth("你好世界", 5, "") },
 		{ name: "zero", input: "abc", width: 0, ellipsis: "...", pad: false, output: truncateToWidth("abc", 0) },
+		// Issue #704 review fix: `finalizeTruncatedResult` is
+		// `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"`, with no underline or
+		// hyperlink close before the always-on reset.
+		{ name: "underline", input: "\x1b[4mabcdefgh", width: 4, ellipsis: "...", pad: false, output: truncateToWidth("\x1b[4mabcdefgh", 4) },
+		{ name: "hyperlink", input: "\x1b]8;;u\x07abcdefgh\x1b]8;;\x07", width: 4, ellipsis: "...", pad: false, output: truncateToWidth("\x1b]8;;u\x07abcdefgh\x1b]8;;\x07", 4) },
 	],
 	wrap: [
 		{ name: "plain", input: "hello world foo bar", width: 8, output: wrapTextWithAnsi("hello world foo bar", 8) },
@@ -469,6 +474,18 @@ const utils = {
 		{ name: "cjk-mark-cluster-break-opportunity", input: "abcdef g\u3099h", width: 8, output: wrapTextWithAnsi("abcdef g\u3099h", 8) },
 		{ name: "cjk-styled-span-before-long-token", input: "\x1b[31m中文\x1b[0m abcdefghijklmnop", width: 10, output: wrapTextWithAnsi("\x1b[31m中文\x1b[0m abcdefghijklmnop", 10) },
 		{ name: "long-path-after-partial-line", input: "see /usr/share/doc/unicode-width-0.2.0/README.md now", width: 20, output: wrapTextWithAnsi("see /usr/share/doc/unicode-width-0.2.0/README.md now", 20) },
+		// Issue #704 review fixes: `wrapSingleLine` pushes the current line
+		// whenever it holds anything (`if (currentLine)`), attaches an escape
+		// sequence to the next visible grapheme, and trims every line of an
+		// input line that wrapped.
+		{ name: "long-token-after-space-prefix", input: "  ABCDEFGH", width: 4, output: wrapTextWithAnsi("  ABCDEFGH", 4) },
+		{ name: "long-token-after-underline-space-prefix", input: "\x1b[4m ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b[4m ABCDEFGH", 4) },
+		{ name: "long-token-after-hyperlink-space-prefix", input: "\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", 4) },
+		{ name: "long-token-after-staged-control", input: " \x1b[31mABCDEFGH", width: 4, output: wrapTextWithAnsi(" \x1b[31mABCDEFGH", 4) },
+		{ name: "wrapped-line-trims-trailing-whitespace", input: "abcdefg  ", width: 5, output: wrapTextWithAnsi("abcdefg  ", 5) },
+		{ name: "fitted-line-keeps-trailing-whitespace", input: "abc  ", width: 5, output: wrapTextWithAnsi("abc  ", 5) },
+		{ name: "newline-keeps-underline-open", input: "\x1b[4mone\ntwo", width: 10, output: wrapTextWithAnsi("\x1b[4mone\ntwo", 10) },
+		{ name: "newline-keeps-hyperlink-open", input: "\x1b]8;;u\x07one\ntwo", width: 10, output: wrapTextWithAnsi("\x1b]8;;u\x07one\ntwo", 10) },
 		// Issue #707: the reset surface across a break. Only underline and the
 		// OSC 8 hyperlink close at a break; foreground and background stay open
 		// for the enclosing span, and the final line carries no reset at all.

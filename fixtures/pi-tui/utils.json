@@ -98,6 +98,22 @@
       "ellipsis": "...",
       "pad": false,
       "output": ""
+    },
+    {
+      "name": "underline",
+      "input": "\u001b[4mabcdefgh",
+      "width": 4,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "\u001b[4ma\u001b[0m...\u001b[0m"
+    },
+    {
+      "name": "hyperlink",
+      "input": "\u001b]8;;u\u0007abcdefgh\u001b]8;;\u0007",
+      "width": 4,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "\u001b]8;;u\u0007a\u001b[0m...\u001b[0m"
     }
   ],
   "wrap": [
@@ -223,6 +239,81 @@
         "/usr/share/doc/unico",
         "de-width-0.2.0/READM",
         "E.md now"
+      ]
+    },
+    {
+      "name": "long-token-after-space-prefix",
+      "input": "  ABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "ABCD",
+        "EFGH"
+      ]
+    },
+    {
+      "name": "long-token-after-underline-space-prefix",
+      "input": "\u001b[4m ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b[4m \u001b[24m",
+        "\u001b[4mABCD\u001b[24m",
+        "\u001b[4mEFGH"
+      ]
+    },
+    {
+      "name": "long-token-after-hyperlink-space-prefix",
+      "input": "\u001b]8;;u\u0007 \u001b]8;;\u0007ABCDEFGH",
+      "width": 4,
+      "output": [
+        "\u001b]8;;u\u0007 \u001b]8;;\u0007",
+        "\u001b]8;;u\u0007\u001b]8;;\u0007ABCD",
+        "EFGH"
+      ]
+    },
+    {
+      "name": "long-token-after-staged-control",
+      "input": " \u001b[31mABCDEFGH",
+      "width": 4,
+      "output": [
+        "",
+        "\u001b[31mABCD",
+        "\u001b[31mEFGH"
+      ]
+    },
+    {
+      "name": "wrapped-line-trims-trailing-whitespace",
+      "input": "abcdefg  ",
+      "width": 5,
+      "output": [
+        "abcde",
+        "fg"
+      ]
+    },
+    {
+      "name": "fitted-line-keeps-trailing-whitespace",
+      "input": "abc  ",
+      "width": 5,
+      "output": [
+        "abc  "
+      ]
+    },
+    {
+      "name": "newline-keeps-underline-open",
+      "input": "\u001b[4mone\ntwo",
+      "width": 10,
+      "output": [
+        "\u001b[4mone",
+        "\u001b[4mtwo"
+      ]
+    },
+    {
+      "name": "newline-keeps-hyperlink-open",
+      "input": "\u001b]8;;u\u0007one\ntwo",
+      "width": 10,
+      "output": [
+        "\u001b]8;;u\u0007one",
+        "\u001b]8;;u\u0007two"
       ]
     },
     {

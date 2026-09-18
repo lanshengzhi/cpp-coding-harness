@@ -97,12 +97,9 @@ struct TerminalToken {
     std::string_view line,
     std::size_t width);
 
-/// pi's `SEGMENT_RESET` (tui.ts at the frozen baseline): the one full reset a
-/// composed row carries, appended after component rendering, after padding,
-/// after the background hook, and after overlay compositing.
-inline constexpr std::string_view kSegmentReset{"\x1b[0m\x1b]8;;\x07"};
-
-/// Append `kSegmentReset` to every composed row (pi `TuiBase.applyLineResets`).
-void apply_line_resets(std::vector<std::string>& lines);
+/// pi's OSC 8 hyperlink close sequence (`utils.ts`/`tui.ts` at the frozen
+/// baseline): the shared tail of the in-line line-end reset and of pi's
+/// `SEGMENT_RESET`.
+inline constexpr std::string_view kOsc8LinkClose{"\x1b]8;;\x07"};
 
 } // namespace cch::tui::detail

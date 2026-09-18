@@ -6,9 +6,12 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/RenderedScreen.hpp"
+
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -178,10 +181,10 @@ TEST_CASE("Box background covers every cell of a styled row", "[tui][box][backgr
     // Regression for #707: a styled child line used to carry a full reset from
     // the component boundary, which cancelled the enclosing background so the
     // tint stopped where the text stopped.
-    auto background = [](std::string text) { return "\x1b[48;5;22m" + std::move(text) + "\x1b[49m"; };
+    auto background = cch::tests::background_hook("\x1b[48;5;22m");
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
     cch::tui::Tui tui(terminal);
-    auto box = std::make_unique<cch::tui::Box>(1, 1, background);
+    auto box = std::make_unique<cch::tui::Box>(1, 1, std::move(background));
     REQUIRE(box->add_child(std::make_unique<RawLineComponent>("\x1b[2mdim")));
     REQUIRE(box->add_child(std::make_unique<RawLineComponent>("plain")));
     REQUIRE(tui.add_child(std::move(box)));
@@ -190,9 +193,9 @@ TEST_CASE("Box background covers every cell of a styled row", "[tui][box][backgr
 
     // Every cell of every row — top and bottom padding, the dim-styled content
     // row, and the unstyled content row — carries the configured background.
-    REQUIRE(terminal.cells().size() == 4);
+    CHECK(terminal.cells().size() == 4);
     for (const auto& row : terminal.cells()) {
-        REQUIRE(row.size() == 8);
+        CHECK(row.size() == 8);
         for (const auto& cell : row)
             CHECK(cell.style.bg_color == "48;5;22");
     }

@@ -103,6 +103,26 @@ TEST_CASE("truncate_text preserves ANSI styling at truncation boundary", "[tui][
     CHECK(r->find("\x1b[0m") != std::string::npos);
 }
 
+TEST_CASE("truncate_text wraps the ellipsis in pi's resets", "[tui][issue704][unicode][spec]") {
+    // pi `finalizeTruncatedResult` is exactly
+    // `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"`: it never closes underline or
+    // the hyperlink before the always-on reset (utils.ts at the frozen
+    // baseline).
+    const std::string kHyperlinkOpen{"\x1b]8;;u\x07"};
+    const std::string kHyperlinkClose{"\x1b]8;;\x07"};
+    const auto underlined = truncate_text("\x1b[4mabcdefgh", 4, "...");
+    REQUIRE(underlined);
+    CHECK(*underlined == "\x1b[4ma\x1b[0m...\x1b[0m");
+
+    const auto linked = truncate_text(kHyperlinkOpen + "abcdefgh" + kHyperlinkClose, 4, "...");
+    REQUIRE(linked);
+    CHECK(*linked == kHyperlinkOpen + "a\x1b[0m...\x1b[0m");
+
+    const auto colored = truncate_text("\x1b[31mabcdefgh", 4, "...");
+    REQUIRE(colored);
+    CHECK(*colored == "\x1b[31ma\x1b[0m...\x1b[0m");
+}
+
 TEST_CASE("truncate_text handles zero width", "[tui][issue46][unicode][spec]") {
     auto r = truncate_text("hello", 0);
     REQUIRE(r);
@@ -260,6 +280,78 @@ TEST_CASE("wrap_text preserves literal newlines", "[tui][issue46][unicode][spec]
     auto r = wrap_text("hello\nworld", 10);
     REQUIRE(r);
     CHECK(r->size() == 2);
+}
+
+TEST_CASE("wrap_text emits no line-end reset at a logical newline", "[tui][issue704][unicode][spec]") {
+    // pi splits the input on `\r\n|\r|\n` and prefixes each line with the
+    // previous line's active codes, so a logical line boundary is not a wrap
+    // break and carries no reset.
+    const auto underlined = wrap_text("\x1b[4mone\ntwo", 10);
+    REQUIRE(underlined);
+    const std::vector<std::string> expected_underlined{"\x1b[4mone", "\x1b[4mtwo"};
+    CHECK(*underlined == expected_underlined);
+
+    const auto linked = wrap_text("\x1b]8;;u\x07one\ntwo", 10);
+    REQUIRE(linked);
+    const std::vector<std::string> expected_linked{
+            "\x1b]8;;u\x07one",
+            "\x1b]8;;u\x07two",
+    };
+    CHECK(*linked == expected_linked);
+}
+
+TEST_CASE("wrap_text pushes a whitespace-only prefix before a long token", "[tui][issue704][unicode][spec]") {
+    // pi pushes the current line whenever it holds anything at all
+    // (`wrapSingleLine`'s `if (currentLine)`), so a whitespace-only prefix
+    // produces a row of its own before the token starts on a fresh line.
+    const auto plain = wrap_text("  ABCDEFGH", 4);
+    REQUIRE(plain);
+    const std::vector<std::string> expected_plain{"", "ABCD", "EFGH"};
+    CHECK(*plain == expected_plain);
+
+    // The line-end reset appended after the pushed whitespace keeps it, so the
+    // styled prefix survives; the trailing reset closes underline only.
+    const auto underlined = wrap_text("\x1b[4m ABCDEFGH", 4);
+    REQUIRE(underlined);
+    const std::vector<std::string> expected_underlined{
+            "\x1b[4m \x1b[24m",
+            "\x1b[4mABCD\x1b[24m",
+            "\x1b[4mEFGH",
+    };
+    CHECK(*underlined == expected_underlined);
+
+    const std::string kHyperlinkOpen{"\x1b]8;;u\x07"};
+    const std::string kHyperlinkClose{"\x1b]8;;\x07"};
+    const auto linked = wrap_text(kHyperlinkOpen + " " + kHyperlinkClose + "ABCDEFGH", 4);
+    REQUIRE(linked);
+    const std::vector<std::string> expected_linked{
+            kHyperlinkOpen + " " + kHyperlinkClose,
+            kHyperlinkOpen + kHyperlinkClose + "ABCD",
+            "EFGH",
+    };
+    CHECK(*linked == expected_linked);
+
+    // pi attaches an escape sequence to the next visible grapheme, so a control
+    // staged after the whitespace belongs to the long token, not to the pushed
+    // row.
+    const auto staged = wrap_text(" \x1b[31mABCDEFGH", 4);
+    REQUIRE(staged);
+    const std::vector<std::string> expected_staged{"", "\x1b[31mABCD", "\x1b[31mEFGH"};
+    CHECK(*staged == expected_staged);
+}
+
+TEST_CASE("wrap_text trims the trailing whitespace of a wrapped input line", "[tui][issue704][unicode][spec]") {
+    // pi `wrapSingleLine` trims every line of an input line that wrapped.
+    const auto wrapped = wrap_text("abcdefg  ", 5);
+    REQUIRE(wrapped);
+    const std::vector<std::string> expected_wrapped{"abcde", "fg"};
+    CHECK(*wrapped == expected_wrapped);
+
+    // An input line that fits keeps its trailing whitespace.
+    const auto fitted = wrap_text("abc  ", 5);
+    REQUIRE(fitted);
+    const std::vector<std::string> expected_fitted{"abc  "};
+    CHECK(*fitted == expected_fitted);
 }
 
 TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", "[tui][issue46][unicode][spec]") {
