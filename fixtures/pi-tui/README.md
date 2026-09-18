@@ -104,9 +104,11 @@ line. It also carries the #707 reset cases: an open foreground style across CJK 
 open underline across a word break, both reaching the final line, so the corpus pins that only
 underline/hyperlink close at a break and the final line carries no reset. The #704 review fixes
 add the `wrapSingleLine` push and trim cases: a whitespace-only prefix ahead of an over-long token
-(plain, underline, and hyperlink), a control staged after that whitespace, the trailing-whitespace
-trim of a wrapped input line against a fitting input line that keeps its whitespace, and the
-logical-newline cases where underline and hyperlink stay open.
+(plain, underline, and hyperlink), a control staged after that whitespace, the fit-break push
+where the deferred whitespace already fills the width ahead of a word that would otherwise fit
+(plain, wider, underlined, and control-staged, against the fitted line that keeps its whitespace),
+the trailing-whitespace trim of a wrapped input line against a fitting input line that keeps its
+whitespace, and the logical-newline cases where underline and hyperlink stay open.
 
 ### Fuzzy corpus (`fuzzy.json`)
 
@@ -309,10 +311,17 @@ decode layer dropped `$`-final legacy shift sequences (`\x1b[2$` … `\x1b[8$`) 
 (`detail::printable_text`); all three now carry regression rows in `TuiTest`/`EditorTest` and are
 pinned by the input-decode corpus. The `truncate_text` ellipsis now always carries pi's `\x1b[0m`
 resets. Recorded renderer-side divergences (documented in the README rows above): pi's multi-line
-`visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++ idiom, and
-the `truncate_text` fits path closes underline/hyperlink before padding where pi pads inside the
+`visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++ idiom; the
+`truncate_text` fits path closes underline/hyperlink before padding where pi pads inside the
 still-open span (`truncateToWidth("\x1b[4mabc", 8, "", true)` is `"\x1b[4mabc     "` in pi and
-`"\x1b[4mabc\x1b[24m     "` here); that fits path is pre-existing, invisible in every shipped
+`"\x1b[4mabc\x1b[24m     "` here); a zero-width control staged immediately after visible content
+lands at the end of the pushed line in `wrap_text` where pi stages it on the continuation line
+(`wrap_text("中文\x1b[31mABCDEFGHIJ", 4)` is `["中文\x1b[31m", "\x1b[31mABCD", …]` here and
+`["中文", "\x1b[31mABCD", …]` in pi), so the rows render identically; and `truncate_text` keeps
+the control immediately preceding the first non-fitting grapheme before the always-on reset where
+pi drops it (`truncate_text("\x1b[4ma\x1b[31mbcdef", 4, "...")` is
+`"\x1b[4ma\x1b[31m\x1b[0m...\x1b[0m"` here and `"\x1b[4ma\x1b[0m...\x1b[0m"` in pi), invisible
+and pre-existing. The `truncate_text` fits path is pre-existing, invisible in every shipped
 surface, and the spec's "Padding is not changed" decision excludes it.
 
 Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate report below).

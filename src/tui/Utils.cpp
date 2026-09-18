@@ -239,7 +239,11 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
 
         if (word_width <= width) {
             if (line_width + pending_width + word_width > width) {
-                if (line_width != 0) {
+                // pi breaks here only when the line already carries visible
+                // content (`currentVisibleLength > 0`), and the whitespace it
+                // has already appended counts toward that, so a deferred
+                // whitespace-only prefix still pushes a row.
+                if (line_width != 0 || pending_width != 0) {
                     replay_pending_prefix();
                     // pi trims the line it breaks at, then appends the reset.
                     trim_end_whitespace(line);
@@ -259,6 +263,12 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         // exactly the width from the new line (`wrapSingleLine` and
         // `breakLongWord`, utils.ts at the frozen baseline); it never fills the
         // remainder of the current line.
+        // debt: a zero-width control staged immediately after visible content
+        // is emitted at the end of the pushed line, where pi stages it on the
+        // continuation line (`wrap_text("中文\x1b[31mABCDEFGHIJ", 4)` here is
+        // ["中文\x1b[31m", "\x1b[31mABCD", …] versus pi's ["中文",
+        // "\x1b[31mABCD", …]); the rows render identically. Upgrade when a
+        // composed surface observes a control's position within a row.
         if (line_width != 0 || !pending_separator.empty()) {
             replay_pending_prefix();
             push_wrapped_line();
@@ -336,6 +346,13 @@ support::Expected<std::string> truncate_text(
 
     std::string result;
     std::size_t collected_width = 0;
+    // debt: a zero-width control immediately preceding the first non-fitting
+    // grapheme is kept before the always-on reset, where pi holds it pending
+    // and drops it (`truncate_text("\x1b[4ma\x1b[31mbcdef", 4, "...")` here is
+    // "\x1b[4ma\x1b[31m\x1b[0m...\x1b[0m" versus pi's
+    // "\x1b[4ma\x1b[0m...\x1b[0m"); the rows render identically. Upgrade when
+    // a composed surface observes a control's position within a truncated
+    // line.
     for (const auto& token : *tokens) {
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
             result += token.text;

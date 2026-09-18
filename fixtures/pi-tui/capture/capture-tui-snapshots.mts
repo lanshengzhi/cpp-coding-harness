@@ -482,6 +482,14 @@ const utils = {
 		{ name: "long-token-after-underline-space-prefix", input: "\x1b[4m ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b[4m ABCDEFGH", 4) },
 		{ name: "long-token-after-hyperlink-space-prefix", input: "\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", width: 4, output: wrapTextWithAnsi("\x1b]8;;u\x07 \x1b]8;;\x07ABCDEFGH", 4) },
 		{ name: "long-token-after-staged-control", input: " \x1b[31mABCDEFGH", width: 4, output: wrapTextWithAnsi(" \x1b[31mABCDEFGH", 4) },
+		// A word that fits still pushes the deferred-whitespace line when the
+		// whitespace already fills the width: pi breaks at
+		// `currentVisibleLength > 0`, which the appended whitespace satisfies.
+		{ name: "space-prefix-break", input: "  ab", width: 3, output: wrapTextWithAnsi("  ab", 3) },
+		{ name: "wider-space-prefix-break", input: "     ab", width: 4, output: wrapTextWithAnsi("     ab", 4) },
+		{ name: "styled-space-prefix-break", input: "\x1b[4m abc", width: 3, output: wrapTextWithAnsi("\x1b[4m abc", 3) },
+		{ name: "space-then-control-break", input: "  \x1b[31mab", width: 3, output: wrapTextWithAnsi("  \x1b[31mab", 3) },
+		{ name: "space-prefix-word-fits", input: "  ab", width: 5, output: wrapTextWithAnsi("  ab", 5) },
 		{ name: "wrapped-line-trims-trailing-whitespace", input: "abcdefg  ", width: 5, output: wrapTextWithAnsi("abcdefg  ", 5) },
 		{ name: "fitted-line-keeps-trailing-whitespace", input: "abc  ", width: 5, output: wrapTextWithAnsi("abc  ", 5) },
 		{ name: "newline-keeps-underline-open", input: "\x1b[4mone\ntwo", width: 10, output: wrapTextWithAnsi("\x1b[4mone\ntwo", 10) },

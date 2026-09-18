@@ -354,6 +354,41 @@ TEST_CASE("wrap_text trims the trailing whitespace of a wrapped input line", "[t
     CHECK(*fitted == expected_fitted);
 }
 
+TEST_CASE("wrap_text pushes a whitespace-only line when the next word cannot fit", "[tui][issue704][unicode][spec]") {
+    // pi breaks when the incoming word would exceed the width and the line
+    // already carries visible content (`wrapSingleLine`'s
+    // `currentVisibleLength > 0`); the whitespace pi has appended counts
+    // toward that, so a whitespace-only prefix pushes a row of its own.
+    const auto plain = wrap_text("  ab", 3);
+    REQUIRE(plain);
+    const std::vector<std::string> expected_plain{"", "ab"};
+    CHECK(*plain == expected_plain);
+
+    const auto wider = wrap_text("     ab", 4);
+    REQUIRE(wider);
+    const std::vector<std::string> expected_wider{"", "ab"};
+    CHECK(*wider == expected_wider);
+
+    // The reset appended after the trimmed whitespace keeps the styled row.
+    const auto underlined = wrap_text("\x1b[4m abc", 3);
+    REQUIRE(underlined);
+    const std::vector<std::string> expected_underlined{"\x1b[4m\x1b[24m", "\x1b[4mabc"};
+    CHECK(*underlined == expected_underlined);
+
+    // A control staged after the whitespace belongs to the next word, not to
+    // the pushed whitespace-only row.
+    const auto staged = wrap_text("  \x1b[31mab", 3);
+    REQUIRE(staged);
+    const std::vector<std::string> expected_staged{"", "\x1b[31mab"};
+    CHECK(*staged == expected_staged);
+
+    // A word that fits with the whitespace keeps the whole line.
+    const auto fitted = wrap_text("  ab", 5);
+    REQUIRE(fitted);
+    const std::vector<std::string> expected_fitted{"  ab"};
+    CHECK(*fitted == expected_fitted);
+}
+
 TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", "[tui][issue46][unicode][spec]") {
     const auto plain = wrap_text("abc 中文测", 4);
     REQUIRE(plain);

@@ -282,6 +282,50 @@
       ]
     },
     {
+      "name": "space-prefix-break",
+      "input": "  ab",
+      "width": 3,
+      "output": [
+        "",
+        "ab"
+      ]
+    },
+    {
+      "name": "wider-space-prefix-break",
+      "input": "     ab",
+      "width": 4,
+      "output": [
+        "",
+        "ab"
+      ]
+    },
+    {
+      "name": "styled-space-prefix-break",
+      "input": "\u001b[4m abc",
+      "width": 3,
+      "output": [
+        "\u001b[4m\u001b[24m",
+        "\u001b[4mabc"
+      ]
+    },
+    {
+      "name": "space-then-control-break",
+      "input": "  \u001b[31mab",
+      "width": 3,
+      "output": [
+        "",
+        "\u001b[31mab"
+      ]
+    },
+    {
+      "name": "space-prefix-word-fits",
+      "input": "  ab",
+      "width": 5,
+      "output": [
+        "  ab"
+      ]
+    },
+    {
       "name": "wrapped-line-trims-trailing-whitespace",
       "input": "abcdefg  ",
       "width": 5,
