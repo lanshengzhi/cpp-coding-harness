@@ -100,10 +100,26 @@ TEST_CASE("Footer renders pi's two lines: dim pwd with branch and the stats line
     CHECK(stats_line.find("$0.012") != std::string::npos);
     CHECK(stats_line.find("2.3%/200k (auto)") != std::string::npos);
     // The model with its thinking level is right-aligned.
-    CHECK(stats_line.find("claude-sonnet \xc2\xb7 medium") != std::string::npos);
+    CHECK(stats_line.find("claude-sonnet \xe2\x80\xa2 medium") != std::string::npos);
     // The stats line ends with the model (right-aligned) and is 80 wide.
     CHECK(tui::visible_width(stats_line) == 80);
-    CHECK(stats_line.find("claude-sonnet \xc2\xb7 medium") > stats_line.find("CH83.3%"));
+    CHECK(stats_line.find("claude-sonnet \xe2\x80\xa2 medium") > stats_line.find("CH83.3%"));
+}
+
+TEST_CASE(
+        "Footer joins the model and the off thinking level with pi's bullet", "[coding_agent][tui][footer][issue706]") {
+    auto fixture = FooterFixture{};
+    coding_agent::tui::FooterData data;
+    data.cwd = "/tmp";
+    data.context_window = 100000;
+    data.model_id = "claude-sonnet";
+    data.model_reasoning = true;
+    data.thinking_level = "off";
+    fixture.footer.set_data(std::move(data));
+
+    const auto [pwd_line, stats_line] = rendered_lines(fixture.footer, 80);
+    CHECK(pwd_line.starts_with("/tmp"));
+    CHECK(stats_line.find("claude-sonnet \xe2\x80\xa2 thinking off") != std::string::npos);
 }
 
 TEST_CASE("Footer omits zero stats parts like pi", "[coding_agent][tui][footer][issue411][spec]") {
