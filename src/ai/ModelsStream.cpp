@@ -151,6 +151,19 @@ struct PreparedProviderRequest {
     ProviderStreamOptions options{};
 };
 
+/// Per-API session headers for cache reuse: Codex clamps the prompt cache
+/// key and aliases it as session-id; openai-responses passes it through.
+void apply_session_headers(RequestHeaders& headers, std::string_view api, const std::string& session_id) {
+    if (api == "openai-codex-responses") {
+        const auto codex_session_id = detail::clamp_openai_prompt_cache_key(session_id);
+        set_header(headers, "session-id", codex_session_id);
+        set_header(headers, "x-client-request-id", codex_session_id);
+    } else if (api == "openai-responses") {
+        set_header(headers, "session_id", session_id);
+        set_header(headers, "x-client-request-id", session_id);
+    }
+}
+
 [[nodiscard]] support::Expected<PreparedProviderRequest> prepare_provider_request(
         Model model, const AiContext& context, AuthResult auth_result, SimpleStreamOptions options) {
     if (auth_result.auth.base_url) {
@@ -167,14 +180,7 @@ struct PreparedProviderRequest {
 
     auto request_headers = request_headers_from_auth(auth_result.auth);
     if (request_session_id) {
-        if (model.api == "openai-codex-responses") {
-            const auto codex_session_id = detail::clamp_openai_prompt_cache_key(*request_session_id);
-            set_header(request_headers, "session-id", codex_session_id);
-            set_header(request_headers, "x-client-request-id", codex_session_id);
-        } else if (model.api == "openai-responses") {
-            set_header(request_headers, "session_id", *request_session_id);
-            set_header(request_headers, "x-client-request-id", *request_session_id);
-        }
+        apply_session_headers(request_headers, model.api, *request_session_id);
     }
     merge_headers(request_headers, options.headers);
     auto transformed_headers = transform_request_headers(std::move(request_headers), options.transform_headers);
@@ -219,31 +225,9 @@ struct PreparedProviderRequest {
            code == support::ErrorCode::Auth || code == support::ErrorCode::OAuth;
 }
 
-[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> terminal_failure(const Model& model,
-        support::Error failure,
-        AssistantEventSink& sink,
-        AssistantStopReason reason = AssistantStopReason::Error) {
-    failure = safe_error(std::move(failure));
-
-    AssistantMessage message;
-    message.api = model.api;
-    message.provider = model.provider;
-    message.model = model.id;
-    message.stop_reason = reason;
-    message.error_message = public_error_diagnostic(failure);
-    message.timestamp = current_timestamp_ms();
-
-    CCH_TRY_VOID(emit_assistant_event(sink,
-            AssistantErrorEvent{
-                    .reason = reason,
-                    .error = message,
-                    .failure = failure,
-                    .inference_failure = inference_failure_for(failure, reason),
-            }));
-    co_return message;
-}
-
-[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> terminal_message_value(
+/// Sanitizes the failure, derives the public terminal message, and emits
+/// exactly one AssistantErrorEvent for it.
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> emit_terminal_error(
         AssistantMessage message, support::Error failure, AssistantEventSink& sink) {
     failure = safe_error(std::move(failure));
     message = safe_terminal_message(std::move(message), failure);
@@ -255,6 +239,19 @@ struct PreparedProviderRequest {
                     .inference_failure = inference_failure_for(failure, message.stop_reason),
             }));
     co_return message;
+}
+
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> terminal_failure(const Model& model,
+        support::Error failure,
+        AssistantEventSink& sink,
+        AssistantStopReason reason = AssistantStopReason::Error) {
+    AssistantMessage message;
+    message.api = model.api;
+    message.provider = model.provider;
+    message.model = model.id;
+    message.stop_reason = reason;
+    message.timestamp = current_timestamp_ms();
+    co_return co_await emit_terminal_error(std::move(message), std::move(failure), sink);
 }
 
 /// Private one-turn stream implementation (the former public `stream_simple`
@@ -368,7 +365,7 @@ struct PreparedProviderRequest {
                     reason == AssistantStopReason::Aborted ? "Request was aborted" : "Provider stream failed");
             auto message = std::move(*result);
             CCH_TRY(terminal,
-                    co_await terminal_message_value(std::move(message), support::make_error(code, diagnostic), sink));
+                    co_await emit_terminal_error(std::move(message), support::make_error(code, diagnostic), sink));
             co_return terminal;
         }
         CCH_TRY_VOID(emit_assistant_event(sink,

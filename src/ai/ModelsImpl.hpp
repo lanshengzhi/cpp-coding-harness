@@ -4,6 +4,8 @@
 
 #include "ModelsInternal.hpp"
 
+#include "support/ExpectedMacros.hpp"
+
 #include "providers/Provider.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -63,46 +65,13 @@ struct Models::Impl {
             const Provider& provider, OAuthAuth& auth, OAuthCredential credential) {
         const std::string provider_id{provider.id()};
         if (expires_soon(credential)) {
-            auto modified = co_await invoke_async_operation([&]() -> cch::support::AsyncResult<
-                                                                          std::optional<Credential>> {
-                return credentials->modify(provider_id,
-                        [&auth, provider_id](std::optional<Credential> current)
-                                -> cch::support::AsyncResult<std::optional<Credential>> {
-                            return support::detail::make_async_result(
-                                    [&auth, provider_id, current = std::move(current)]()
-                                            -> boost::asio::awaitable<support::Expected<std::optional<Credential>>> {
-                                        auto* current_oauth =
-                                                current ? std::get_if<OAuthCredential>(&*current) : nullptr;
-                                        if (current_oauth == nullptr || !expires_soon(*current_oauth)) {
-                                            co_return std::optional<Credential>{};
-                                        }
-                                        auto refreshed = co_await invoke_async_operation(
-                                                [&]() { return auth.refresh(*current_oauth); });
-                                        if (!refreshed) {
-                                            co_return std::unexpected(categorized_error(support::ErrorCode::OAuth,
-                                                    "OAuth refresh failed for " + provider_id,
-                                                    refreshed.error()));
-                                        }
-                                        co_return std::optional<Credential>{Credential{std::move(*refreshed)}};
-                                    });
-                        });
-            });
-            if (!modified) {
-                if (modified.error().code == support::ErrorCode::OAuth) {
-                    co_return std::unexpected(modified.error());
-                }
-                co_return std::unexpected(categorized_error(support::ErrorCode::Auth,
-                        "Credential store modify failed for " + provider_id,
-                        modified.error()));
-            }
-            if (!*modified) {
+            CCH_TRY(refreshed, co_await refresh_if_due(auth, provider_id));
+            if (!refreshed) {
+                // A concurrent writer already refreshed the stored credential;
+                // pi resolves to "no auth" rather than racing a second refresh.
                 co_return std::optional<AuthResult>{};
             }
-            const auto* refreshed = std::get_if<OAuthCredential>(&**modified);
-            if (refreshed == nullptr) {
-                co_return std::optional<AuthResult>{};
-            }
-            credential = *refreshed;
+            credential = std::move(*refreshed);
         }
 
         auto request_auth = co_await invoke_async_operation([&]() { return auth.to_auth(credential); });
@@ -116,6 +85,56 @@ struct Models::Impl {
                 .env = {},
                 .source = "OAuth",
         };
+    }
+
+private:
+    /// CredentialStore::modify callback for the OAuth refresh: refreshes only
+    /// a still-stored, still-expiring OAuth credential and yields an empty
+    /// optional when a concurrent writer already handled it.
+    [[nodiscard]] cch::support::AsyncResult<std::optional<Credential>> refresh_stored(
+            OAuthAuth& auth, std::string provider_id, std::optional<Credential> current) {
+        return support::detail::make_async_result(
+                [&auth, provider_id = std::move(provider_id), current = std::move(current)]()
+                        -> boost::asio::awaitable<support::Expected<std::optional<Credential>>> {
+                    auto* current_oauth = current ? std::get_if<OAuthCredential>(&*current) : nullptr;
+                    if (current_oauth == nullptr || !expires_soon(*current_oauth)) {
+                        co_return std::optional<Credential>{};
+                    }
+                    auto refreshed = co_await invoke_async_operation([&]() { return auth.refresh(*current_oauth); });
+                    if (!refreshed) {
+                        co_return std::unexpected(categorized_error(support::ErrorCode::OAuth,
+                                "OAuth refresh failed for " + provider_id,
+                                refreshed.error()));
+                    }
+                    co_return std::optional<Credential>{Credential{std::move(*refreshed)}};
+                });
+    }
+
+    /// The expiring-credential refresh round trip through the credential
+    /// store. OAuth-category failures propagate unwrapped; other store
+    /// failures are categorized as auth failures.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<OAuthCredential>>> refresh_if_due(
+            OAuthAuth& auth, std::string provider_id) {
+        auto modified = co_await invoke_async_operation([&]() {
+            return credentials->modify(provider_id, [&](std::optional<Credential> current) {
+                return refresh_stored(auth, provider_id, std::move(current));
+            });
+        });
+        if (!modified) {
+            if (modified.error().code == support::ErrorCode::OAuth) {
+                co_return std::unexpected(modified.error());
+            }
+            co_return std::unexpected(categorized_error(
+                    support::ErrorCode::Auth, "Credential store modify failed for " + provider_id, modified.error()));
+        }
+        if (!*modified) {
+            co_return std::optional<OAuthCredential>{};
+        }
+        const auto* refreshed = std::get_if<OAuthCredential>(&**modified);
+        if (refreshed == nullptr) {
+            co_return std::optional<OAuthCredential>{};
+        }
+        co_return std::optional<OAuthCredential>{*refreshed};
     }
 };
 
