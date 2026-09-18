@@ -469,6 +469,11 @@ const utils = {
 		{ name: "cjk-mark-cluster-break-opportunity", input: "abcdef g\u3099h", width: 8, output: wrapTextWithAnsi("abcdef g\u3099h", 8) },
 		{ name: "cjk-styled-span-before-long-token", input: "\x1b[31m中文\x1b[0m abcdefghijklmnop", width: 10, output: wrapTextWithAnsi("\x1b[31m中文\x1b[0m abcdefghijklmnop", 10) },
 		{ name: "long-path-after-partial-line", input: "see /usr/share/doc/unicode-width-0.2.0/README.md now", width: 20, output: wrapTextWithAnsi("see /usr/share/doc/unicode-width-0.2.0/README.md now", 20) },
+		// Issue #707: the reset surface across a break. Only underline and the
+		// OSC 8 hyperlink close at a break; foreground and background stay open
+		// for the enclosing span, and the final line carries no reset at all.
+		{ name: "styled-cjk-open-across-break", input: "\x1b[31m中文测试中文测试", width: 4, output: wrapTextWithAnsi("\x1b[31m中文测试中文测试", 4) },
+		{ name: "styled-underline-across-break", input: "\x1b[4mhello world", width: 7, output: wrapTextWithAnsi("\x1b[4mhello world", 7) },
 	],
 	slice: [
 		{ name: "plain", input: "abcdef", start: 1, length: 3, strict: false, output: sliceByColumn("abcdef", 1, 3) },
@@ -556,7 +561,7 @@ const markdownTheme = {
 	codeBlockIndent: "  ",
 };
 
-const markdownCases: Array<{ name: string; markdown: string; width: number }> = [
+const markdownCases: Array<{ name: string; markdown: string; width: number; background?: boolean }> = [
 	{
 		name: "plain-paragraph",
 		markdown: "A plain paragraph with some words to wrap across lines.",
@@ -610,15 +615,43 @@ const markdownCases: Array<{ name: string; markdown: string; width: number }> = 
 		markdown: "<div>plain html</div>",
 		width: 40,
 	},
+	// #707: backgrounded blocks via pi's `defaultTextStyle.bgColor`. The
+	// inline-styled paragraph wraps across lines (its leading wrapped lines
+	// carry an open style), and the fenced code block is the code/diff shape.
+	{
+		name: "background-inline-styles",
+		markdown: "**bold** and `code` and [link](https://example.com) that wraps across lines",
+		width: 20,
+		background: true,
+	},
+	{
+		name: "background-fenced-code",
+		markdown: "```cpp\nint answer = 42;\n```",
+		width: 24,
+		background: true,
+	},
 ];
 
+// The deterministic `defaultTextStyle.bgColor` the C++ differential test
+// rebuilds as the Markdown background hook.
+const markdownBackgroundStyle = { prefix: "\x1b[48;5;22m", suffix: "\x1b[49m" };
+const markdownBackground = (text: string) => `${markdownBackgroundStyle.prefix}${text}${markdownBackgroundStyle.suffix}`;
+
 const markdown = {
+	background: markdownBackgroundStyle,
 	styles: markdownStyles,
-	cases: markdownCases.map(({ name, markdown: source, width }) => ({
+	cases: markdownCases.map(({ name, markdown: source, width, background }) => ({
 		name,
 		markdown: source,
 		width,
-		lines: new Markdown(source, 0, 0, markdownTheme).render(width),
+		...(background ? { background: true } : {}),
+		lines: new Markdown(
+			source,
+			0,
+			0,
+			markdownTheme,
+			background ? { bgColor: markdownBackground } : undefined,
+		).render(width),
 	})),
 };
 

@@ -220,7 +220,9 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
 
     if (line_width + pending_width <= width) replay_pending(true);
     else replay_pending(false);
-    line += style.get_line_end_reset();
+    // pi `wrapSingleLine` appends the line-end reset only where it breaks a
+    // line: "No reset at end of final line - let caller handle it". The full
+    // reset for the row belongs to the composed-line boundary.
     lines.push_back(std::move(line));
     return lines;
 }

@@ -109,12 +109,15 @@ TEST_CASE("truncate_text handles zero width", "[tui][issue46][unicode][spec]") {
     CHECK(r->empty());
 }
 
-TEST_CASE("wrap_text keeps ANSI controls atomic and terminates every line", "[tui][issue46][unicode][spec]") {
+TEST_CASE("wrap_text keeps ANSI controls atomic across a break", "[tui][issue46][unicode][spec]") {
+    // A break closes underline/hyperlink only: foreground, background, and the
+    // full reset are left for the enclosing background span and the one
+    // composed-row reset, and the final line carries no reset at all.
     const auto result = wrap_text("\x1b[31mABCD", 2);
     REQUIRE(result);
     REQUIRE(result->size() == 2);
-    CHECK((*result)[0] == "\x1b[31mAB\x1b[0m");
-    CHECK((*result)[1] == "\x1b[31mCD\x1b[0m");
+    CHECK((*result)[0] == "\x1b[31mAB");
+    CHECK((*result)[1] == "\x1b[31mCD");
 }
 
 TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui][issue46][unicode][spec]") {
@@ -122,7 +125,8 @@ TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui
     REQUIRE(result);
     REQUIRE(result->size() == 2);
     CHECK((*result)[0] == "\x1b]8;;https://example.com\x07" "A\x1b]8;;\x07");
-    CHECK((*result)[1] == "\x1b]8;;https://example.com\x07" "B\x1b]8;;\x07");
+    CHECK((*result)[1] == "\x1b]8;;https://example.com\x07"
+                          "B");
 }
 
 TEST_CASE("wrap_text rejects a grapheme wider than the line", "[tui][issue46][unicode][spec]") {
@@ -178,7 +182,9 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     CHECK(trailing_terminal.cells()[0][2].grapheme == " ");
     CHECK(trailing_terminal.cells()[0][1].style.fg_color == "31");
     CHECK(trailing_terminal.cells()[0][2].style.fg_color == "31");
-    CHECK(trailing_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    // A raw wrap_text line leaves the enclosing foreground open; the composed
+    // row reset is what closes it.
+    CHECK(trailing_terminal.final_style().fg_color == "31");
 
     const auto wrapped = wrap_text("\x1b[31mA \x1b[0mB", 2);
     REQUIRE(wrapped);
@@ -188,7 +194,9 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
         [](std::string) -> cch::support::ExpectedVoid { return {}; },
         [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(wrapped_terminal.write((*wrapped)[0]));
-    CHECK(wrapped_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    // The break line carries no full reset, so the foreground stays open until
+    // the composed-row reset.
+    CHECK(wrapped_terminal.final_style().fg_color == "31");
     REQUIRE(wrapped_terminal.set_cursor({.column = 0, .row = 1}));
     REQUIRE(wrapped_terminal.write((*wrapped)[1]));
     CHECK(wrapped_terminal.cells()[0][0].style.fg_color == "31");
@@ -206,8 +214,8 @@ TEST_CASE("wrap_text prefers word boundaries and falls back for long words", "[t
     const auto styled = wrap_text("\x1b[31mhello world", 7);
     REQUIRE(styled);
     REQUIRE(styled->size() == 2);
-    CHECK((*styled)[0] == "\x1b[31mhello\x1b[0m");
-    CHECK((*styled)[1] == "\x1b[31mworld\x1b[0m");
+    CHECK((*styled)[0] == "\x1b[31mhello");
+    CHECK((*styled)[1] == "\x1b[31mworld");
 
     const auto long_word = wrap_text("abcdefgh", 3);
     REQUIRE(long_word);
@@ -263,9 +271,9 @@ TEST_CASE("wrap_text drops a separator when the next wide grapheme cannot fit", 
     const auto styled = wrap_text("abc \x1b[31m中文测", 4);
     REQUIRE(styled);
     const std::vector<std::string> expected_styled{
-        "abc",
-        "\x1b[31m中文\x1b[0m",
-        "\x1b[31m测\x1b[0m",
+            "abc",
+            "\x1b[31m中文",
+            "\x1b[31m测",
     };
     CHECK(*styled == expected_styled);
 
@@ -300,7 +308,7 @@ TEST_CASE("wrap_text fills the current line with CJK break opportunities", "[tui
     const auto styled = wrap_text("\x1b[31m" + text + "\x1b[0m", 40);
     REQUIRE(styled);
     REQUIRE(styled->size() == 2);
-    CHECK((*styled)[0] == "\x1b[31mThis is an example 中文汉字测试段落内容\x1b[0m");
+    CHECK((*styled)[0] == "\x1b[31mThis is an example 中文汉字测试段落内容");
     CHECK((*styled)[1] == "\x1b[31m中文汉字测试段落内容.\x1b[0m");
     CHECK(visible_width((*styled)[0]) <= 40);
     CHECK(visible_width((*styled)[1]) <= 40);

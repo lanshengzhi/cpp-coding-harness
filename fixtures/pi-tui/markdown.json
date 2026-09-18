@@ -1,5 +1,9 @@
 
 {
+  "background": {
+    "prefix": "\u001b[48;5;22m",
+    "suffix": "\u001b[49m"
+  },
   "styles": {
     "heading": {
       "prefix": "\u001b[36m",
@@ -145,6 +149,28 @@
       "width": 40,
       "lines": [
         "<div>plain html</div>                   "
+      ]
+    },
+    {
+      "name": "background-inline-styles",
+      "markdown": "**bold** and `code` and [link](https://example.com) that wraps across lines",
+      "width": 20,
+      "background": true,
+      "lines": [
+        "\u001b[48;5;22m\u001b[1mbold\u001b[22m and \u001b[33mcode\u001b[39m and   \u001b[49m",
+        "\u001b[48;5;22m\u001b]8;;https://example.com\u001b\\\u001b[4m\u001b[4mlink\u001b[24m\u001b[24m\u001b]8;;\u001b\\ that wraps     \u001b[49m",
+        "\u001b[48;5;22macross lines        \u001b[49m"
+      ]
+    },
+    {
+      "name": "background-fenced-code",
+      "markdown": "```cpp\nint answer = 42;\n```",
+      "width": 24,
+      "background": true,
+      "lines": [
+        "\u001b[48;5;22m\u001b[2m```cpp\u001b[22m                  \u001b[49m",
+        "\u001b[48;5;22m  \u001b[32mint answer = 42;\u001b[39m      \u001b[49m",
+        "\u001b[48;5;22m\u001b[2m```\u001b[22m                     \u001b[49m"
       ]
     }
   ]

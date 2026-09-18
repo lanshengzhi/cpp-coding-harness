@@ -100,7 +100,9 @@ The `wrap` corpus carries the #705 break-point cases: a CJK run starting behind 
 filled line for every script in pi's `cjkBreakRegex` set (Han; Hiragana with attached combining
 marks; Katakana; Hangul; Bopomofo), a mark-bearing cluster whose base is outside the set, a
 styled span whose style closes inside its physical line, and an over-long token after a partial
-line. Reset placement across a break is #707's surface and stays out of this corpus.
+line. It also carries the #707 reset cases: an open foreground style across CJK breaks and an
+open underline across a word break, both reaching the final line, so the corpus pins that only
+underline/hyperlink close at a break and the final line carries no reset.
 
 ### Fuzzy corpus (`fuzzy.json`)
 
@@ -115,10 +117,12 @@ Rendered output lines of pi's `Markdown` component (baseline `components/markdow
 observable parity surface (ADR 0035): plain paragraphs, inline emphasis/strong/strikethrough/code,
 **strict strikethrough**, fenced code blocks with border/indent, **streamed partial-closing-fence
 trimming**, lists, blockquotes, horizontal rules, **capability-aware OSC 8 link rendering**, and
-HTML passthrough. The recorded deterministic theme (a `styles` table in the snapshot) is rebuilt
+HTML passthrough. The #707 cases add pi's `defaultTextStyle.bgColor` backgrounded blocks — an
+inline-styled wrapping paragraph and a fenced code block — with the recorded `background`
+prefix/suffix. The recorded deterministic theme (a `styles` table in the snapshot) is rebuilt
 as equivalent hooks by `PiTuiDifferentialTest`, including the composition pi performs internally:
-link text gets `link(underline(…))` and blockquote text gets the quote style twice. Byte parity
-holds for every corpus case.
+link text gets `link(underline(…))` and blockquote text gets the quote style twice, and each
+`background` case gets the recorded hook. Byte parity holds for every corpus case.
 
 ### Screen-state goldens (`screen-state.json`) — fork-B evidence
 
@@ -339,11 +343,11 @@ Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate r
    `input-decode.json`; the C++ single-table decoder matches the legacy column by design (ADR
    0035 decoded-event divergence).
 3. **Markdown and wrap byte-parity are scoped to the recorded parity surface**: markdown corpus
-   cases cover streamed-fence trimming, strict strikethrough, code-block border/indent, and
-   capability-aware links (headings are excluded — pi composes per-level bold/underline where the
-   C++ role hook is single-composition); wrap break points, including the CJK break opportunities
-   and the over-long-token path, are byte-parity in the corpus, while reset placement across a
-   break belongs to #707 and stays on the C++ `UtilsTest` surface.
+   cases cover streamed-fence trimming, strict strikethrough, code-block border/indent,
+   capability-aware links, and the #707 backgrounded blocks (headings are excluded — pi composes
+   per-level bold/underline where the C++ role hook is single-composition); wrap break points,
+   including the CJK break opportunities, the over-long-token path, and the #707 styled-across-a-
+   break reset placement, are byte-parity in the corpus.
 4. **Overlay anchors are caller-set in the C++ model** (the Tui does not default them to the
    viewport); the golden rows set the anchor explicitly, matching pi's position options.
 5. **No live-terminal or network validation** — all evidence is deterministic per the repo
