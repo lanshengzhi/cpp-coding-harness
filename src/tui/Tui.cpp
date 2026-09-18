@@ -675,7 +675,7 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
         for (auto& line : rendered->lines) {
             auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
             if (!prepared) return std::unexpected(prepared.error());
-            output.lines.push_back(std::move(*prepared));
+            output.lines.push_back(std::move(prepared->text));
         }
         for (auto& image : rendered->images) {
             image.region.row += row_offset;
@@ -687,7 +687,7 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
         for (auto& line : rendered->dock_lines) {
             auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
             if (!prepared) return std::unexpected(prepared.error());
-            output.dock_lines.push_back(std::move(*prepared));
+            output.dock_lines.push_back(std::move(prepared->text));
         }
     }
     return output;

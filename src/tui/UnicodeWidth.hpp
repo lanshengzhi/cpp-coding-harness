@@ -56,13 +56,26 @@ enum class TerminalTokenKind {
     CursorMove,
 };
 
+enum class TokenizeMode {
+    PreserveText,
+    WidthOnly,
+};
+
 struct TerminalToken {
     TerminalTokenKind kind{TerminalTokenKind::Grapheme};
     std::string text;
     std::size_t width{0};
 };
 
-[[nodiscard]] support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text);
+[[nodiscard]] support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(
+        std::string_view text, TokenizeMode mode = TokenizeMode::PreserveText);
+
+struct VisibleWidthMeasurement {
+    std::size_t width{0};
+    bool used_tokenizer{false};
+};
+
+[[nodiscard]] VisibleWidthMeasurement measure_visible_width(std::string_view text);
 
 /// Shared width-module helpers (used by the public utility surface and by
 /// `prepare_rendered_line`).
@@ -93,9 +106,12 @@ struct TerminalToken {
 
 [[nodiscard]] support::Expected<std::string> normalize_terminal_output(std::string_view text);
 
-[[nodiscard]] support::Expected<std::string> prepare_rendered_line(
-    std::string_view line,
-    std::size_t width);
+struct PreparedRenderedLine {
+    std::string text;
+    std::size_t width{0};
+};
+
+[[nodiscard]] support::Expected<PreparedRenderedLine> prepare_rendered_line(std::string_view line, std::size_t width);
 
 /// pi's OSC 8 hyperlink close sequence (`utils.ts`/`tui.ts` at the frozen
 /// baseline): the shared tail of the in-line line-end reset and of pi's

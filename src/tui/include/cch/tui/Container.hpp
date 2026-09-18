@@ -5,12 +5,21 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace cch::tui {
+
+class Box;
+
+namespace detail::testing {
+
+[[nodiscard]] std::size_t box_tokenize_terminal_output_call_count(const Box& box) noexcept;
+
+} // namespace detail::testing
 
 /// A container that composes child components without padding or background.
 class Container final : public Component {
@@ -61,10 +70,23 @@ public:
     void invalidate() override;
 
 private:
+    friend std::size_t detail::testing::box_tokenize_terminal_output_call_count(const Box& box) noexcept;
+
+    void clear_cache();
+    void mark_children_changed();
+
     std::vector<std::unique_ptr<Component>> children_;
     std::size_t padding_x_;
     std::size_t padding_y_;
     BackgroundHook background_hook_;
+    RenderResult cached_result_;
+    std::size_t cached_width_{0};
+    std::uint64_t cached_children_revision_{0};
+    std::uint64_t cached_background_hook_revision_{0};
+    std::uint64_t children_revision_{0};
+    std::uint64_t background_hook_revision_{0};
+    std::size_t last_render_tokenize_calls_{0};
+    bool cache_valid_{false};
 };
 
 /// A Spacer renders empty lines.

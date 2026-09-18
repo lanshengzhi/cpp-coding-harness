@@ -1016,28 +1016,37 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
     }
 
     std::vector<std::string> result;
-    const auto make_line = [&](std::string line) -> support::Expected<std::string> {
-        line.insert(0, impl_->padding_x, ' ');
-        const auto visible = visible_width(line);
-        if (visible < width) line.append(width - visible, ' ');
-        return detail::apply_background(impl_->background_hook, std::move(line), width, "Markdown");
+    const auto make_line = [&](std::string line, std::size_t line_width) -> support::Expected<std::string> {
+        if (line_width > width) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "TUI Markdown composed a line wider than its width bound"));
+        }
+        line.append(width - line_width, ' ');
+        return detail::apply_background(impl_->background_hook,
+                detail::PreparedRenderedLine{.text = std::move(line), .width = width},
+                width,
+                "Markdown");
     };
     for (std::size_t index = 0; index < impl_->padding_y; ++index) {
-        if (auto line = make_line({}); line) {
+        if (auto line = make_line(std::string(width, ' '), width); line) {
             result.push_back(std::move(*line));
         } else {
             return std::unexpected(line.error());
         }
     }
     for (const auto& line : content) {
-        if (auto prepared = make_line(line); prepared) {
+        auto prepared_content = detail::prepare_rendered_line(line, width);
+        if (!prepared_content) return std::unexpected(prepared_content.error());
+        if (auto prepared = make_line(std::string(impl_->padding_x, ' ') + prepared_content->text,
+                    impl_->padding_x + prepared_content->width);
+                prepared) {
             result.push_back(std::move(*prepared));
         } else {
             return std::unexpected(prepared.error());
         }
     }
     for (std::size_t index = 0; index < impl_->padding_y; ++index) {
-        if (auto line = make_line({}); line) {
+        if (auto line = make_line(std::string(width, ' '), width); line) {
             result.push_back(std::move(*line));
         } else {
             return std::unexpected(line.error());

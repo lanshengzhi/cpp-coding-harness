@@ -78,24 +78,31 @@ support::Expected<RenderResult> Text::render(std::size_t width) {
     if (!wrapped) return std::unexpected(wrapped.error());
 
     std::vector<std::string> result;
-    const auto make_line = [&](std::string line) -> support::Expected<std::string> {
-        const auto visible = visible_width(line);
-        if (visible < width) line.append(width - visible, ' ');
-        return detail::apply_background(background_hook_, std::move(line), width, "Text");
+    const auto make_line = [&](std::string line, std::size_t line_width) -> support::Expected<std::string> {
+        if (line_width > width) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "TUI Text composed a line wider than its width bound"));
+        }
+        line.append(width - line_width, ' ');
+        return detail::apply_background(
+                background_hook_, detail::PreparedRenderedLine{.text = std::move(line), .width = width}, width, "Text");
     };
 
     for (std::size_t index = 0; index < padding_y_; ++index) {
-        auto line = make_line(std::string(width, ' '));
+        auto line = make_line(std::string(width, ' '), width);
         if (!line) return std::unexpected(line.error());
         result.push_back(std::move(*line));
     }
     for (const auto& line : *wrapped) {
-        auto prepared = make_line(std::string(padding_x_, ' ') + line);
+        auto prepared_content = detail::prepare_rendered_line(line, width);
+        if (!prepared_content) return std::unexpected(prepared_content.error());
+        auto prepared =
+                make_line(std::string(padding_x_, ' ') + prepared_content->text, padding_x_ + prepared_content->width);
         if (!prepared) return std::unexpected(prepared.error());
         result.push_back(std::move(*prepared));
     }
     for (std::size_t index = 0; index < padding_y_; ++index) {
-        auto line = make_line(std::string(width, ' '));
+        auto line = make_line(std::string(width, ' '), width);
         if (!line) return std::unexpected(line.error());
         result.push_back(std::move(*line));
     }

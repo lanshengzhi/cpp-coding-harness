@@ -1,6 +1,8 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "tui/UnicodeWidth.hpp"
+
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -8,6 +10,13 @@
 #include <vector>
 
 using namespace cch::tui;
+
+TEST_CASE("visible_width measures ASCII without tokenizing", "[tui][unicode][issue709][spec]") {
+    const auto measurement = cch::tui::detail::measure_visible_width("hello world");
+    CHECK(visible_width("hello world") == 11);
+    CHECK(measurement.width == 11);
+    CHECK_FALSE(measurement.used_tokenizer);
+}
 
 TEST_CASE("visible_width measures ASCII correctly", "[tui][issue46][unicode][spec]") {
     CHECK(visible_width("") == 0);

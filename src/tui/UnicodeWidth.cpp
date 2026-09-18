@@ -295,8 +295,10 @@ std::optional<AnsiCode> extract_ansi_code(std::string_view text, std::size_t pos
     return std::move(*parsed);
 }
 
-support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text) {
+support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text, TokenizeMode mode) {
     std::vector<TerminalToken> tokens;
+    tokens.reserve(text.size());
+    const bool preserve_text = mode == TokenizeMode::PreserveText;
     std::size_t position = 0;
     while (position < text.size()) {
         const auto byte = static_cast<unsigned char>(text[position]);
@@ -309,28 +311,44 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             } else if (!ansi->code.starts_with("\x1b[")) {
                 token_kind = TerminalTokenKind::Hyperlink;
             }
-            tokens.push_back(TerminalToken{
-                    .kind = token_kind,
-                    .text = std::move(ansi->code),
-                    .width = 0,
-            });
+            if (preserve_text) {
+                tokens.push_back(TerminalToken{
+                        .kind = token_kind,
+                        .text = std::move(ansi->code),
+                        .width = 0,
+                });
+            } else {
+                tokens.push_back(TerminalToken{.kind = token_kind, .text = {}, .width = 0});
+            }
             position += ansi->length;
             continue;
         }
         if (text[position] == '\r') {
             if (position + 1 < text.size() && text[position + 1] == '\n') ++position;
-            tokens.push_back({.kind = TerminalTokenKind::Newline, .text = "\n", .width = 0});
+            if (preserve_text) {
+                tokens.push_back({.kind = TerminalTokenKind::Newline, .text = "\n", .width = 0});
+            } else {
+                tokens.push_back({.kind = TerminalTokenKind::Newline, .text = {}, .width = 0});
+            }
             ++position;
             continue;
         }
         if (text[position] == '\n') {
-            tokens.push_back({.kind = TerminalTokenKind::Newline, .text = "\n", .width = 0});
+            if (preserve_text) {
+                tokens.push_back({.kind = TerminalTokenKind::Newline, .text = "\n", .width = 0});
+            } else {
+                tokens.push_back({.kind = TerminalTokenKind::Newline, .text = {}, .width = 0});
+            }
             ++position;
             continue;
         }
         if (text[position] == '\t') {
             for (std::size_t count = 0; count < 3; ++count) {
-                tokens.push_back({.kind = TerminalTokenKind::Grapheme, .text = " ", .width = 1});
+                if (preserve_text) {
+                    tokens.push_back({.kind = TerminalTokenKind::Grapheme, .text = " ", .width = 1});
+                } else {
+                    tokens.push_back({.kind = TerminalTokenKind::Grapheme, .text = {}, .width = 1});
+                }
             }
             ++position;
             continue;
@@ -339,11 +357,15 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
         const auto [codepoint, bytes] = decode_utf8(text, position);
         if (bytes == 0) break;
         if (codepoint == 0xFFFD) {
-            tokens.push_back({
-                .kind = TerminalTokenKind::Grapheme,
-                .text = "\xef\xbf\xbd",
-                .width = 1,
-            });
+            if (preserve_text) {
+                tokens.push_back({
+                        .kind = TerminalTokenKind::Grapheme,
+                        .text = "\xef\xbf\xbd",
+                        .width = 1,
+                });
+            } else {
+                tokens.push_back({.kind = TerminalTokenKind::Grapheme, .text = {}, .width = 1});
+            }
             position += bytes;
             continue;
         }
@@ -355,12 +377,17 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
         }
 
         const auto end = next_grapheme_end(text, position);
-        auto cluster = std::string(text.substr(position, end - position));
-        tokens.push_back({
-            .kind = TerminalTokenKind::Grapheme,
-            .text = std::move(cluster),
-            .width = grapheme_width(text.substr(position, end - position)),
-        });
+        const auto cluster = text.substr(position, end - position);
+        const auto width = grapheme_width(cluster);
+        if (preserve_text) {
+            tokens.push_back({
+                    .kind = TerminalTokenKind::Grapheme,
+                    .text = std::string(cluster),
+                    .width = width,
+            });
+        } else {
+            tokens.push_back({.kind = TerminalTokenKind::Grapheme, .text = {}, .width = width});
+        }
         position = end;
     }
     return tokens;
@@ -519,7 +546,7 @@ support::Expected<std::string> normalize_terminal_output(std::string_view text) 
     return normalized_text(*tokens);
 }
 
-support::Expected<std::string> prepare_rendered_line(std::string_view line, std::size_t width) {
+support::Expected<PreparedRenderedLine> prepare_rendered_line(std::string_view line, std::size_t width) {
     auto tokens = tokenize_terminal_output(line);
     if (!tokens) return std::unexpected(tokens.error());
     auto line_width = token_width(*tokens);
@@ -533,7 +560,10 @@ support::Expected<std::string> prepare_rendered_line(std::string_view line, std:
     // belongs to the composed-line boundary in `Tui::render` (pi's component
     // boundary is also reset-free), and the only in-line reset a component
     // emits is the underline/hyperlink `get_line_end_reset`.
-    return normalized_text(*tokens);
+    return PreparedRenderedLine{
+            .text = normalized_text(*tokens),
+            .width = *line_width,
+    };
 }
 
 } // namespace cch::tui::detail

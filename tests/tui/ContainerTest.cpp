@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "support/RenderedScreen.hpp"
+#include "tui/ContainerTestHooks.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -115,6 +116,31 @@ TEST_CASE("Box bounds throwing and overwide background hooks", "[tui][issue46][c
     });
     REQUIRE(overwide_box.add_child(std::make_unique<cch::tui::Text>("x", 0, 0)));
     CHECK_FALSE(overwide_box.render(4));
+}
+
+TEST_CASE("Box caches composed lines until its inputs are invalidated", "[tui][box][cache][issue709][spec]") {
+    cch::tui::Box box(1, 0);
+    REQUIRE(box.add_child(std::make_unique<RawLineComponent>("cached")));
+
+    const auto first = box.render(10);
+    REQUIRE(first);
+    REQUIRE_FALSE(first->lines.empty());
+    CHECK(cch::tui::detail::testing::box_tokenize_terminal_output_call_count(box) > 0);
+
+    const auto second = box.render(10);
+    REQUIRE(second);
+    CHECK(second->lines == first->lines);
+    CHECK(cch::tui::detail::testing::box_tokenize_terminal_output_call_count(box) == 0);
+
+    box.invalidate();
+    REQUIRE(box.render(10));
+    CHECK(cch::tui::detail::testing::box_tokenize_terminal_output_call_count(box) > 0);
+
+    box.set_background_hook([](std::string line) { return std::string("\x1b[44m") + line; });
+    const auto background = box.render(10);
+    REQUIRE(background);
+    CHECK(background->lines.front().starts_with("\x1b[44m"));
+    CHECK(cch::tui::detail::testing::box_tokenize_terminal_output_call_count(box) > 0);
 }
 
 TEST_CASE("Box owns a move-only background hook", "[tui][issue46][container][spec]") {

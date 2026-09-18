@@ -129,7 +129,7 @@ support::Expected<RenderResult> Overlay::render(std::size_t width) {
         for (auto& line : rendered->lines) {
             auto prepared = detail::prepare_rendered_line(line, effective_width);
             if (!prepared) return std::unexpected(prepared.error());
-            result.lines.push_back(std::move(*prepared));
+            result.lines.push_back(std::move(prepared->text));
         }
         for (auto& image : rendered->images) {
             image.region.row += row_offset;

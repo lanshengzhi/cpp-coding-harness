@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
-#include <cch/tui/Utils.hpp>
 
 #include "tui/UnicodeWidth.hpp"
 
@@ -61,39 +60,33 @@ inline void apply_line_resets(std::vector<std::string>& lines) {
 }
 
 [[nodiscard]] inline support::Expected<std::string> apply_background(
-    BackgroundHook& background_hook,
-    std::string line,
-    std::size_t width,
-    std::string_view owner) {
-    const auto input_width = visible_width(line);
-    const auto has_background = static_cast<bool>(background_hook);
-    if (background_hook) {
+        BackgroundHook& background_hook, PreparedRenderedLine line, std::size_t width, std::string_view owner) {
+    if (!background_hook) return std::move(line.text);
+
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
+    try {
 #endif
-            line = background_hook(std::move(line));
+        line.text = background_hook(std::move(line.text));
 #if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception&) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
+    } catch (const std::exception&) {
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
                 std::format("TUI {} background hook failed", owner),
                 "the background callback threw an exception"));
-        } catch (...) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
+    } catch (...) {
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
                 std::format("TUI {} background hook failed", owner),
                 "the background callback threw an unknown exception"));
-        }
-#endif
     }
-    auto prepared = prepare_rendered_line(line, width);
+#endif
+
+    auto prepared = prepare_rendered_line(line.text, width);
     if (!prepared) return std::unexpected(prepared.error());
-    if (has_background && visible_width(*prepared) != input_width) {
+    if (prepared->width != line.width) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
             std::format("TUI {} background hook changed visible width", owner)));
     }
-    return prepared;
+    return std::move(prepared->text);
 }
 
 } // namespace cch::tui::detail
