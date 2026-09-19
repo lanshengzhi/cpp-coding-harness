@@ -81,4 +81,6 @@ jobs:
           KIMI_API_KEY: ""
           OPENAI_API_KEY: ""
           ANTHROPIC_API_KEY: ""
-        run: ctest --preset vcpkg --no-tests=error
+        # Per-lane quarantine exclusion (issue #634 mechanism), matching the
+        # linux-toolchain lanes: owner #734; re-enable with the tag removal.
+        run: ctest --preset vcpkg --no-tests=error -LE quarantine
