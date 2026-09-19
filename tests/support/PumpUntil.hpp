@@ -56,10 +56,15 @@ inline void drain_ready(boost::asio::io_context& io,
 /// settling off-thread. Service one ready handler per iteration: `poll()` can
 /// never return when a loader or animation continually reposts render work,
 /// which would make the timeout ineffective under scheduler pressure.
-[[nodiscard]] inline bool pump_until(
-    boost::asio::io_context& io,
-    const std::atomic<bool>& done,
-    std::chrono::milliseconds budget = std::chrono::milliseconds{10000}) {
+///
+/// The default budget is a cap, not a wait: a passing test returns as soon
+/// as the outcome lands. It is sized for heavily oversubscribed CI lanes —
+/// multi-hop outcomes (persistence, Runtime worker, close quiescence)
+/// exceeded the original 10 s under full-suite load (issue #739: the Clang 22
+/// conformance and Arch lanes). A genuine stall still fails, only later.
+[[nodiscard]] inline bool pump_until(boost::asio::io_context& io,
+        const std::atomic<bool>& done,
+        std::chrono::milliseconds budget = std::chrono::milliseconds{60000}) {
     const auto deadline = std::chrono::steady_clock::now() + budget;
     while (!done.load(std::memory_order_acquire) &&
            std::chrono::steady_clock::now() < deadline) {
@@ -78,10 +83,9 @@ inline void drain_ready(boost::asio::io_context& io,
 /// one-shot handler that can never re-check. Ready work is serviced one
 /// handler at a time so the deadline remains effective when another handler
 /// continually reposts work.
-[[nodiscard]] inline bool pump_until(
-    boost::asio::io_context& io,
-    const std::function<bool()>& done,
-    std::chrono::milliseconds budget = std::chrono::milliseconds{10000}) {
+[[nodiscard]] inline bool pump_until(boost::asio::io_context& io,
+        const std::function<bool()>& done,
+        std::chrono::milliseconds budget = std::chrono::milliseconds{60000}) {
     const auto deadline = std::chrono::steady_clock::now() + budget;
     while (!done() && std::chrono::steady_clock::now() < deadline) {
         if (io.stopped()) {
