@@ -325,6 +325,44 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
     CHECK(null_data_custom->raw_line.find(R"("data":null)") != std::string::npos);
 }
 
+TEST_CASE("session entry reader accepts the control-character escapes its writer emits",
+        "[harness][session][issue724][compat-pi]") {
+    // pi escapes control characters in message text as \uXXXX. The decoded
+    // value must not then be re-validated as though it were raw JSON input:
+    // an escaped control character is legal, a raw one is not (#724).
+    harness::session::EntrySerializer serializer;
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{.text = "before\u0004after", .text_signature = std::nullopt});
+    assistant.content.emplace_back(ai::TextContent{.text = "esc\u001bafter", .text_signature = std::nullopt});
+    assistant.api = "openai-completions";
+    assistant.provider = "openai";
+    assistant.model = "gpt-test";
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    assistant.timestamp = 1718000000000;
+
+    const auto serialized = serializer.serialize_message_entry(assistant, std::nullopt);
+    if (!serialized) {
+        UNSCOPED_INFO("serialize_message_entry failed: " << serialized.error().message);
+    }
+    REQUIRE(serialized);
+    UNSCOPED_INFO("wire line: " << serialized->line);
+    // Glaze escapes control characters as \u00XX with uppercase hex; pi's
+    // JSON.stringify uses lowercase. Both are valid JSON and read identically,
+    // so the letter case is the one byte-level divergence from pi's output.
+    CHECK(serialized->line.find(R"(\u0004)") != std::string::npos);
+    CHECK(serialized->line.find(R"(\u001B)") != std::string::npos);
+
+    // The reader must accept what the writer emitted.
+    const auto parsed = serializer.parse_entry(serialized->line, 2);
+    REQUIRE(parsed);
+    REQUIRE(parsed->message.has_value());
+    const auto* round_trip = std::get_if<ai::AssistantMessage>(&*parsed->message);
+    REQUIRE(round_trip != nullptr);
+    REQUIRE(round_trip->content.size() == 2);
+    CHECK(std::get<ai::TextContent>(round_trip->content[0]).text == "before\u0004after");
+    CHECK(std::get<ai::TextContent>(round_trip->content[1]).text == "esc\u001bafter");
+}
+
 TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custom_message",
         "[harness][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;

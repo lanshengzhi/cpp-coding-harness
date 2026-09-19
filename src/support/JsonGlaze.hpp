@@ -20,6 +20,19 @@
 
 namespace cch::support {
 
+/// Glaze options for project DTO serialization. RFC 8259 forbids a raw control
+/// character inside a JSON string, and pi (`JSON.stringify`) escapes them, but
+/// Glaze emits them raw by default. That made every serialized DTO carrying a
+/// control character invalid JSON, and it is also why the generic -> DTO
+/// conversion rejected pi-captured `\uXXXX` content: Glaze re-serializes the
+/// generic through its own writer before reading the DTO, and the unescaped
+/// intermediate text fails its own reader (#724).
+struct JsonOptions : glz::opts {
+    bool escape_control_characters = true;
+};
+
+inline constexpr JsonOptions kJsonOptions{};
+
 [[nodiscard]] inline Error glaze_error(
     const glz::error_ctx& error,
     std::string_view json,
@@ -137,7 +150,7 @@ template <typename T>
 /// for `JsonValue` arguments.
 template <typename T>
 [[nodiscard]] Expected<std::string> write_json(const T& value) {
-    auto serialized = glz::write_json(value);
+    auto serialized = glz::write<kJsonOptions>(value);
     if (!serialized) {
         return std::unexpected(glaze_error(
             serialized.error(), {}, ErrorCode::JsonSerialize, "failed to serialize JSON"));
